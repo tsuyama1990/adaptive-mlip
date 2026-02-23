@@ -26,3 +26,9 @@ class WorkflowConfig(BaseModel):
     data_dir: str = Field(
         default="data", description="Directory to store training data and artifacts"
     )
+    active_learning_dir: str = Field(
+        default="active_learning", description="Directory for active learning iterations"
+    )
+    potentials_dir: str = Field(
+        default="potentials", description="Directory for storing trained potentials"
+    )

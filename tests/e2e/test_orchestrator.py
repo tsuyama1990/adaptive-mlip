@@ -45,7 +45,11 @@ class FakeTrainer(BaseTrainer):
         if not path.exists() or path.stat().st_size == 0:
             msg = "Training data file missing or empty"
             raise RuntimeError(msg)
-        return "fake_potential.yace"
+
+        # Create a dummy potential file so deployment works
+        pot_path = Path("fake_potential.yace")
+        pot_path.touch()
+        return pot_path
 
 
 class FakeEngine(BaseEngine):
@@ -85,7 +89,7 @@ def test_orchestrator_loop_with_fakes(
     # Safely change CWD to tmp_path to test relative path logic without polluting /app
     import os
 
-    original_cwd = os.getcwd()
+    original_cwd = Path.cwd()
     os.chdir(tmp_path)
 
     # Recreate config relative to new CWD for logging validation
@@ -108,13 +112,26 @@ def test_orchestrator_loop_with_fakes(
         assert orch.state_file.exists()
         assert "iteration" in orch.state_file.read_text()
 
-        # Verify data flow
-        data_dir = Path(config.workflow.data_dir)
-        assert data_dir.exists()
-        training_file = data_dir / "training_iter_1.xyz"
+        # Verify data flow (New Directory Structure)
+        active_learning_dir = Path(config.workflow.active_learning_dir)
+        assert active_learning_dir.exists()
+
+        iter_dir = active_learning_dir / "iter_001"
+        assert iter_dir.exists()
+        assert (iter_dir / "candidates").exists()
+        assert (iter_dir / "dft_calc").exists()
+        assert (iter_dir / "training").exists()
+        assert (iter_dir / "md_run").exists()
+
+        training_file = iter_dir / "training" / "training_data.xyz"
         assert training_file.exists()
         # Check if file content looks like XYZ (ase write)
         assert "Lattice" in training_file.read_text() or "Properties" in training_file.read_text()
+
+        # Verify deployed potential
+        potentials_dir = Path(config.workflow.potentials_dir)
+        assert potentials_dir.exists()
+        assert (potentials_dir / "generation_001.yace").exists()
 
         # Verify logging
         assert LOG_COMPUTED_PROPERTIES.format(count=10) in caplog.text

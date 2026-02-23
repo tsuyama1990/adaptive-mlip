@@ -69,14 +69,23 @@ def test_md_config_invalid_temperature() -> None:
 
 
 def test_workflow_config_valid() -> None:
-    config = WorkflowConfig(max_iterations=10, state_file_path="custom_state.json")
+    config = WorkflowConfig(
+        max_iterations=10,
+        state_file_path="custom_state.json",
+        active_learning_dir="my_al_dir",
+        potentials_dir="my_pots",
+    )
     assert config.max_iterations == 10
     assert config.state_file_path == "custom_state.json"
+    assert config.active_learning_dir == "my_al_dir"
+    assert config.potentials_dir == "my_pots"
 
 
 def test_workflow_config_default() -> None:
     config = WorkflowConfig(max_iterations=10)
     assert config.state_file_path == "state.json"
+    assert config.active_learning_dir == "active_learning"
+    assert config.potentials_dir == "potentials"
 
 
 def test_logging_config_valid() -> None:

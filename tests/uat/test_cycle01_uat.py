@@ -23,7 +23,7 @@ def create_config(tmp_path: Path, **overrides: Any) -> Path:
     for section, values in overrides.items():
         if section in defaults and isinstance(defaults[section], dict):
             # Explicitly cast to dict to satisfy mypy
-            section_dict: dict[str, Any] = defaults[section] # type: ignore
+            section_dict: dict[str, Any] = defaults[section]
             section_dict.update(values)
         else:
             defaults[section] = values
