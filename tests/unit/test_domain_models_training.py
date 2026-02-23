@@ -66,3 +66,13 @@ def test_training_config_active_set_size_invalid_negative() -> None:
             max_basis_size=1,
             active_set_size=-1,
         )
+
+def test_training_config_active_set_required() -> None:
+    with pytest.raises(ValidationError, match="active_set_size must be set"):
+        TrainingConfig(
+            potential_type="ace",
+            cutoff_radius=5.0,
+            max_basis_size=1,
+            active_set_optimization=True,
+            # active_set_size missing
+        )

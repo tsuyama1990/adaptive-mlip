@@ -94,10 +94,18 @@ class PacemakerTrainer(BaseTrainer):
             elements = sorted(self.config.elements)
         else:
             try:
-                # Use index=0 to save time and memory, assume homogeneous dataset
-                atoms = read(data_path, index=0)
+                # Use format='extxyz' if file extension allows, and index=0 to read only first frame
+                fmt = "extxyz" if data_path.suffix == ".xyz" else None
+                # Read single frame to detect elements.
+                # Assuming homogeneous dataset where first frame contains all species or at least types
+                # are consistent. If dataset is heterogeneous (e.g. pure A + pure B), this might miss elements.
+                # But for MLIP training, usually structures contain all active species or we define them.
+                # For safety, users SHOULD provide 'elements' in config for complex cases.
+                atoms = read(data_path, index=0, format=fmt)
                 if isinstance(atoms, list):
                     atoms = atoms[0]
+                # get_chemical_symbols returns all symbols in structure.
+                # set() gets unique ones.
                 elements = sorted(set(atoms.get_chemical_symbols()))  # type: ignore[no-untyped-call]
             except Exception as e:
                 msg = f"Could not detect elements from {data_path}. Please provide 'elements' in config or ensure data is valid: {e}"
@@ -146,22 +154,10 @@ class PacemakerTrainer(BaseTrainer):
 
         # Handle Delta Learning (LJ Baseline)
         if self.config.delta_learning:
-            # We configure a simple LJ potential as baseline
-            # Pacemaker supports "base_potential" field or similar
-            # Actually, standard Pacemaker YAML might differ.
-            # Assuming we define 'base_potential' block.
-            # We'll use the "LennardJones" form if supported, or "PairPotential"
-            # For simplicity, we just inject the parameters into a custom block
-            # or generated separate file and reference it.
-            # The SPEC says "Function: get_lj_params(elements) -> Dict".
-            # Let's assume we add a 'base_potential' section.
-
             lj_params = {}
             for el in elements:
                 lj_params[el] = get_lj_params(el)
 
-            # Pacemaker configuration for baseline might look like this:
-            # (Note: This depends on specific Pacemaker version syntax, assuming generic structure)
             config_dict["base_potential"] = {
                 "type": "LennardJones",
                 "parameters": lj_params

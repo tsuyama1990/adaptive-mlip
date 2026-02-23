@@ -1,3 +1,5 @@
+from typing import Any
+
 from pydantic import BaseModel, ConfigDict, Field, PositiveFloat, field_validator
 
 from pyacemaker.domain_models.defaults import FILENAME_POTENTIAL
@@ -40,3 +42,12 @@ class TrainingConfig(BaseModel):
     active_set_size: int | None = Field(
         None, description="Target number of structures for active set", gt=0
     )
+
+    @field_validator("active_set_size")
+    @classmethod
+    def validate_active_set_size(cls, v: int | None, info: Any) -> int | None:
+        """Ensures active_set_size is set if active_set_optimization is enabled."""
+        if info.data.get("active_set_optimization") and v is None:
+            msg = "active_set_size must be set when active_set_optimization is True"
+            raise ValueError(msg)
+        return v

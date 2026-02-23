@@ -28,7 +28,6 @@ def config() -> TrainingConfig:
 def trainer(config: TrainingConfig) -> PacemakerTrainer:
     return PacemakerTrainer(config)
 
-
 def test_train_success(trainer: PacemakerTrainer, tmp_path: Path) -> None:
     # Create dummy training data
     data_path = tmp_path / "train.xyz"
