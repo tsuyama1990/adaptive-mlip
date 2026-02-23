@@ -70,3 +70,18 @@ def test_engine_integration_workflow(tmp_path: Path, mock_md_config: MDConfig, m
     assert "units metal" in full_script
     assert "atom_style atomic" in full_script
     assert "pair_style hybrid/overlay" in full_script
+
+
+def test_engine_integration_lammps_failure(tmp_path: Path, mock_md_config: MDConfig, mock_lammps_module: Any) -> None:
+    """Tests proper error handling when LAMMPS crashes."""
+    potential_path = tmp_path / "potential.yace"
+    potential_path.touch()
+    atoms = Atoms("H", positions=[[0, 0, 0]], cell=[10, 10, 10], pbc=True)
+
+    # Simulate LAMMPS command failure
+    mock_lammps_module.return_value.command.side_effect = RuntimeError("LAMMPS Error")
+
+    engine = LammpsEngine(mock_md_config)
+
+    with pytest.raises(RuntimeError, match="LAMMPS execution failed"):
+        engine.run(atoms, potential_path)

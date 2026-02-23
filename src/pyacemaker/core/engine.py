@@ -1,3 +1,5 @@
+import logging
+import os
 import tempfile
 import uuid
 from pathlib import Path
@@ -12,6 +14,8 @@ from pyacemaker.domain_models.md import MDConfig, MDSimulationResult
 from pyacemaker.interfaces.lammps_driver import LammpsDriver
 from pyacemaker.utils.structure import get_species_order
 
+logger = logging.getLogger(__name__)
+
 
 class LammpsEngine(BaseEngine):
     """
@@ -25,28 +29,15 @@ class LammpsEngine(BaseEngine):
         """
         self.config = config
 
-    def _generate_input_script(
-        self,
-        structure: Atoms,
-        potential_path: str,
-        data_file: str,
-        dump_file: str,
-        elements: list[str],
-    ) -> str:
-        """
-        Generates the LAMMPS input script.
-        """
-        # 1. Basics
-        lines = [
-            "clear",
-            "units metal",
-            "atom_style atomic",
-            "boundary p p p",
-            f"read_data {data_file}",
-        ]
+        # Use RAM disk (/dev/shm) for temporary files if available to reduce I/O latency
+        self._temp_root: str | None = None
+        shm_path = Path("/dev/shm")  # noqa: S108
+        if shm_path.exists() and shm_path.is_dir() and os.access(shm_path, os.W_OK):
+            self._temp_root = str(shm_path)
 
-        # 2. Potential
-        # Ensure elements match the order in data file (specorder)
+    def _gen_potential(self, potential_path: Path, elements: list[str]) -> list[str]:
+        """Generates potential definition commands."""
+        lines = []
         species_str = " ".join(elements)
 
         if self.config.hybrid_potential:
@@ -59,13 +50,11 @@ class LammpsEngine(BaseEngine):
 
             # ZBL
             # Generate pair_coeff for all pairs (i, j) based on atomic numbers
-            # LAMMPS types are 1-based, corresponding to elements list order
             n_types = len(elements)
             for i in range(n_types):
                 el_i = elements[i]
                 z_i = atomic_numbers[el_i]
                 for j in range(i, n_types):
-                    # For ZBL, pair_coeff I J zbl Z_I Z_J
                     el_j = elements[j]
                     z_j = atomic_numbers[el_j]
                     lines.append(f"pair_coeff {i+1} {j+1} zbl {z_i} {z_j}")
@@ -74,27 +63,33 @@ class LammpsEngine(BaseEngine):
             lines.append("pair_style pace")
             lines.append(f"pair_coeff * * pace {potential_path} {species_str}")
 
-        # 3. Settings
-        lines.append("neighbor 2.0 bin")
+        return lines
+
+    def _gen_settings(self) -> list[str]:
+        """Generates general MD settings."""
+        lines = []
+        lines.append(f"neighbor {self.config.neighbor_skin} bin")
         lines.append("neigh_modify delay 0 every 1 check yes")
         lines.append(f"timestep {self.config.timestep}")
+        return lines
 
-        # 4. Compute / Fix Halt (Uncertainty Watchdog)
-        # compute pace returns per-atom gamma
+    def _gen_watchdog(self, potential_path: Path) -> list[str]:
+        """Generates Uncertainty Watchdog commands."""
+        lines = []
         lines.append(f"compute gamma all pace {potential_path}")
         lines.append("compute max_gamma all reduce max c_gamma")
         lines.append("variable max_g equal c_max_gamma")
 
-        # fix halt
-        # Check every check_interval steps
-        # If max_g > threshold, stop.
-        # error continue -> stop run but continue script
         lines.append(
             f"fix halt_check all halt {self.config.check_interval} "
             f"v_max_g > {self.config.uncertainty_threshold} error continue"
         )
+        return lines
 
-        # 5. MD / Minimization
+    def _gen_execution(self) -> list[str]:
+        """Generates minimization and MD run commands."""
+        lines = []
+
         if self.config.minimize:
             lines.append("minimize 1.0e-4 1.0e-6 100 1000")
 
@@ -108,18 +103,44 @@ class LammpsEngine(BaseEngine):
             f"iso {self.config.pressure} {self.config.pressure} {pdamp}"
         )
 
-        # 6. Output
+        lines.append(f"run {self.config.n_steps}")
+        return lines
+
+    def _gen_output(self, dump_file: Path) -> list[str]:
+        """Generates output settings."""
+        lines = []
         lines.append(f"thermo {self.config.thermo_freq}")
         lines.append("thermo_style custom step temp pe press v_max_g")
         lines.append(f"dump traj all custom {self.config.dump_freq} {dump_file} id type x y z c_gamma")
 
-        # 7. Run
-        lines.append(f"run {self.config.n_steps}")
-
-        # 8. Post-Run
-        # Check if halted.
+        # Check if halted
         lines.append("variable halted equal f_halt_check")
         lines.append("print 'Halted: ${halted}'")
+        return lines
+
+    def _generate_input_script(
+        self,
+        potential_path: Path,
+        data_file: Path,
+        dump_file: Path,
+        elements: list[str],
+    ) -> str:
+        """
+        Orchestrates LAMMPS input script generation.
+        """
+        lines = [
+            "clear",
+            "units metal",
+            "atom_style atomic",
+            "boundary p p p",
+            f"read_data {data_file}",
+        ]
+
+        lines.extend(self._gen_potential(potential_path, elements))
+        lines.extend(self._gen_settings())
+        lines.extend(self._gen_watchdog(potential_path))
+        lines.extend(self._gen_execution())
+        lines.extend(self._gen_output(dump_file))
 
         return "\n".join(lines)
 
@@ -131,8 +152,21 @@ class LammpsEngine(BaseEngine):
              msg = "Structure must be provided."
              raise ValueError(msg)
 
-        # Use temporary directory for intermediate files to prevent clutter/race conditions
-        with tempfile.TemporaryDirectory() as tmp_dir_str:
+        if len(structure) == 0:
+             msg = "Structure contains no atoms."
+             raise ValueError(msg)
+
+        if len(structure) > 10000:
+             logger.warning("Simulating large structure (%d atoms). Memory usage may be high.", len(structure))
+
+        # Validate potential path
+        potential_path = Path(potential)
+        if not potential_path.exists():
+             msg = f"Potential file not found: {potential_path}"
+             raise FileNotFoundError(msg)
+
+        # Use temporary directory (RAM disk if possible)
+        with tempfile.TemporaryDirectory(dir=self._temp_root) as tmp_dir_str:
             tmp_dir = Path(tmp_dir_str)
             run_id = uuid.uuid4().hex[:8]
 
@@ -140,7 +174,6 @@ class LammpsEngine(BaseEngine):
             data_file = tmp_dir / f"data_{run_id}.lmp"
 
             # Output files (in CWD for persistence)
-            # We want to return paths to files that persist after temp dir cleanup.
             cwd = Path.cwd()
             dump_file = cwd / f"dump_{run_id}.lammpstrj"
             log_file = cwd / f"log_{run_id}.lammps"
@@ -156,19 +189,14 @@ class LammpsEngine(BaseEngine):
                 raise RuntimeError(msg) from e
 
             # Generate script
-            # Note: LAMMPS script needs paths.
-            # If we pass absolute paths, it works regardless of CWD.
-            # data_file is absolute (tmp_dir).
-            # dump_file is absolute (cwd).
-            # potential_path might be relative. We should resolve it?
-            # Or assume LAMMPS runs in CWD?
-            # LammpsDriver runs in current process, so CWD is same.
-
             script = self._generate_input_script(
-                structure, str(potential), str(data_file), str(dump_file), elements
+                potential_path.resolve(), # Use absolute path
+                data_file,
+                dump_file,
+                elements
             )
 
-            # Initialize Driver with unique log file
+            # Initialize Driver
             driver = LammpsDriver(["-screen", "none", "-log", str(log_file)])
 
             # Run
@@ -185,7 +213,6 @@ class LammpsEngine(BaseEngine):
                 step = int(driver.extract_variable("step"))
                 max_gamma = driver.extract_variable("max_g")
             except Exception:
-                # If variables not available, return defaults
                 energy = 0.0
                 temperature = 0.0
                 step = 0
@@ -196,7 +223,7 @@ class LammpsEngine(BaseEngine):
             # Result
             return MDSimulationResult(
                 energy=energy,
-                forces=[[0.0, 0.0, 0.0]], # Placeholder as we dump trajectory
+                forces=[[0.0, 0.0, 0.0]],
                 halted=halted,
                 max_gamma=max_gamma,
                 n_steps=step,

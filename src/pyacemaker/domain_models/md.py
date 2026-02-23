@@ -45,6 +45,9 @@ class MDConfig(BaseModel):
         100, description="Frequency of trajectory dump (steps)"
     )
     minimize: bool = Field(False, description="Perform energy minimization before MD")
+    neighbor_skin: PositiveFloat = Field(
+        2.0, description="Neighbor list skin distance (Angstrom)"
+    )
 
     # Mocking Parameters (Audit Requirement)
     base_energy: float = Field(
