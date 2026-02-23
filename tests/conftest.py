@@ -5,7 +5,15 @@ import pytest
 from ase import Atoms
 from ase.calculators.calculator import Calculator, CalculatorSetupError
 
-from pyacemaker.domain_models import DFTConfig
+from pyacemaker.domain_models import (
+    DFTConfig,
+    LoggingConfig,
+    MDConfig,
+    PyAceConfig,
+    StructureConfig,
+    TrainingConfig,
+    WorkflowConfig,
+)
 
 
 @pytest.fixture
@@ -59,68 +67,73 @@ class MockCalculator(Calculator):
             "stress": np.array([0.0] * 6),
         }
 
+
 def create_test_config_dict(**overrides: Any) -> dict[str, Any]:
-    """Helper to create a valid config dictionary with optional overrides."""
-    base_config = {
-        "project_name": "TestProject",
-        "structure": {
-            "elements": ["Fe"],
-            "supercell_size": [1, 1, 1],
-            "adaptive_ratio": 0.5,
-            "defect_density": 0.01,
-            "strain_range": 0.05
-        },
-        "dft": {
-            "code": "qe",
-            "functional": "PBE",
-            "kpoints_density": 0.04,
-            "encut": 500.0,
-            "pseudopotentials": {"Fe": "Fe.UPF"},
-            "mixing_beta": 0.7,
-            "smearing_type": "mv",
-            "smearing_width": 0.1,
-            "diagonalization": "david"
-        },
-        "training": {
-            "potential_type": "ace",
-            "cutoff_radius": 5.0,
-            "max_basis_size": 500,
-            "delta_learning": True,
-            "active_set_optimization": True
-        },
-        "md": {
-            "temperature": 300.0,
-            "pressure": 0.0,
-            "timestep": 0.001,
-            "n_steps": 1000,
-            "uncertainty_threshold": 5.0,
-            "check_interval": 10
-        },
-        "workflow": {
-            "max_iterations": 10,
-            "convergence_energy": 0.001,
-            "convergence_force": 0.01,
-            "state_file_path": "state.json",
-            "batch_size": 5,
-            "n_candidates": 10,
-            "checkpoint_interval": 1,
-            "data_dir": "data",
-            "active_learning_dir": "active_learning",
-            "potentials_dir": "potentials"
-        },
-        "logging": {
-            "level": "INFO",
-            "log_file": "pyacemaker.log",
-            "max_bytes": 10485760,
-            "backup_count": 5
-        }
-    }
+    """
+    Helper to create a valid config dictionary using Pydantic defaults.
+    Ensures configuration is always valid and synced with domain models.
+    """
+    # 1. Create default components
+    structure = StructureConfig(
+        elements=["Fe"],
+        supercell_size=[1, 1, 1],
+        adaptive_ratio=0.5,
+        defect_density=0.01,
+        strain_range=0.05
+    )
+    dft = DFTConfig(
+        code="qe",
+        functional="PBE",
+        kpoints_density=0.04,
+        encut=500.0,
+        pseudopotentials={"Fe": "Fe.UPF"},
+        mixing_beta=0.7,
+        smearing_type="mv",
+        smearing_width=0.1,
+        diagonalization="david"
+    )
+    training = TrainingConfig(
+        potential_type="ace",
+        cutoff_radius=5.0,
+        max_basis_size=500,
+        delta_learning=True,
+        active_set_optimization=True
+    )
+    md = MDConfig(
+        temperature=300.0,
+        pressure=0.0,
+        timestep=0.001,
+        n_steps=1000,
+        uncertainty_threshold=5.0,
+        check_interval=10
+    )
+    workflow = WorkflowConfig(
+        max_iterations=10,
+        state_file_path="state.json",
+        active_learning_dir="active_learning",
+        potentials_dir="potentials"
+    )
+    logging = LoggingConfig()
 
-    # Simple deep merge for overrides
+    # 2. Assemble full config
+    full_config = PyAceConfig(
+        project_name="TestProject",
+        structure=structure,
+        dft=dft,
+        training=training,
+        md=md,
+        workflow=workflow,
+        logging=logging
+    )
+
+    # 3. Export to dict
+    config_dict = full_config.model_dump()
+
+    # 4. Apply overrides (Simple deep merge)
     for key, value in overrides.items():
-        if key in base_config and isinstance(base_config[key], dict) and isinstance(value, dict):
-             base_config[key].update(value)  # type: ignore[attr-defined]
+        if key in config_dict and isinstance(config_dict[key], dict) and isinstance(value, dict):
+             config_dict[key].update(value)
         else:
-             base_config[key] = value
+             config_dict[key] = value
 
-    return base_config
+    return config_dict

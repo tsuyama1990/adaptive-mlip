@@ -33,6 +33,10 @@ def embed_cluster(cluster: Atoms, buffer: float, copy: bool = True) -> Atoms:
         msg = "Cannot embed empty cluster"
         raise ValueError(msg)
 
+    if buffer <= 0:
+        msg = f"Buffer must be positive: {buffer}"
+        raise ValueError(msg)
+
     # Get bounding box (no copy)
     positions: NDArray[np.float64] = cluster.get_positions()  # type: ignore[no-untyped-call]
 
@@ -62,15 +66,14 @@ def embed_cluster(cluster: Atoms, buffer: float, copy: bool = True) -> Atoms:
     if copy:
         # Create a deep copy of the Atoms object to ensure positions are not shared
         target = cluster.copy()  # type: ignore[no-untyped-call]
-        # Explicitly copy positions array to be absolutely safe (though ase.copy() usually does)
         target.positions = target.positions.copy()
     else:
+        # In-place modification of the original object
         target = cluster
 
+    # Modify the target (whether it's the copy or original)
     target.set_cell(cell_lengths)
     target.set_pbc(True)
-
-    # In-place translation of the target object's positions
     target.positions += shift
 
     return target  # type: ignore[no-any-return]

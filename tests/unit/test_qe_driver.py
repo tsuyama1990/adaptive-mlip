@@ -24,51 +24,38 @@ def mock_dft_config() -> DFTConfig:
     )
 
 
-def test_qe_driver_get_calculator_kpoints(mock_dft_config: DFTConfig) -> None:
-    """Test k-point generation based on density."""
-    atoms = Atoms("H", cell=[10, 10, 10], pbc=True)
+@pytest.mark.parametrize(
+    ("pbc", "expected_factor"),
+    [
+        ([True, True, True], 1.0),
+        ([False, False, False], 0.0), # Factor 0.0 implies result is 1 (max(1, 0))
+        ([True, True, False], 1.0),
+    ],
+)
+def test_qe_driver_kpoints_parametrized(
+    mock_dft_config: DFTConfig, pbc: list[bool], expected_factor: float
+) -> None:
+    """Test k-point generation with various PBC settings."""
+    atoms = Atoms("H", cell=[10, 10, 10], pbc=pbc)
     driver = QEDriver()
 
     with patch("pyacemaker.interfaces.qe_driver.Espresso") as MockEspresso:
         driver.get_calculator(atoms, mock_dft_config)
-
-        # Verify k-points passed to Espresso
-        call_args = MockEspresso.call_args[1]
-        kpts = call_args.get("kpts")
+        kpts = MockEspresso.call_args[1].get("kpts")
         assert kpts is not None
 
-        assert isinstance(kpts, tuple | list)
-        assert len(kpts) == 3
+        # Calculate expected k
+        # If factor is 1.0 (PBC), use formula. If 0.0 (No PBC), expect 1.
+        k_val = int(np.ceil((RECIPROCAL_FACTOR / 0.04) / 10.0))
 
-        # Verify calculation:
-        # spacing = 0.04, factor = 2*pi / 0.04 ~ 157.08, L = 10
-        # N = ceil(157.08 / 10) = ceil(15.7) = 16
-        expected_k = int(np.ceil((RECIPROCAL_FACTOR / 0.04) / 10.0))
-        assert kpts == (expected_k, expected_k, expected_k)
+        expected_kpts = []
+        for _i, is_pbc in enumerate(pbc):
+            if is_pbc:
+                expected_kpts.append(k_val)
+            else:
+                expected_kpts.append(1)
 
-
-def test_qe_driver_kpoints_non_pbc(mock_dft_config: DFTConfig) -> None:
-    """Test k-point generation for non-periodic systems."""
-    # Isolated atom, pbc=False
-    atoms = Atoms("H", cell=[10, 10, 10], pbc=[False, False, False])
-    driver = QEDriver()
-
-    with patch("pyacemaker.interfaces.qe_driver.Espresso") as MockEspresso:
-        driver.get_calculator(atoms, mock_dft_config)
-        kpts = MockEspresso.call_args[1].get("kpts")
-        assert kpts == (1, 1, 1)
-
-    # Surface (slab), pbc=[True, True, False]
-    atoms = Atoms("H", cell=[10, 10, 10], pbc=[True, True, False])
-    with patch("pyacemaker.interfaces.qe_driver.Espresso") as MockEspresso:
-        driver.get_calculator(atoms, mock_dft_config)
-        kpts = MockEspresso.call_args[1].get("kpts")
-
-        # kx, ky should be calculated
-        expected_k = int(np.ceil((RECIPROCAL_FACTOR / 0.04) / 10.0))
-        assert kpts[0] == expected_k
-        assert kpts[1] == expected_k
-        assert kpts[2] == 1
+        assert kpts == tuple(expected_kpts)
 
 
 def test_qe_driver_parameters(mock_dft_config: DFTConfig) -> None:

@@ -49,19 +49,8 @@ class DFTManager(BaseOracle):
         """
         # Validate that structures is an iterator to enforce O(1) memory usage contract
         if not isinstance(structures, Iterator):
-            # We could just warn, but the audit requires "explicit validation"
-            # However, iter(list) returns an iterator.
-            # If the user passes a list, we technically process it.
-            # But the contract says "Iterator".
-            # Let's strictly check if it's an Iterator to prompt user to stream.
-            # But wait, Python's Iterator ABC is strict. A list is Iterable, not Iterator.
-            # So isinstance(list, Iterator) is False. This is correct.
-            import warnings
-            warnings.warn(
-                "Input 'structures' is not an Iterator. Ensure you are streaming data to avoid memory issues.",
-                UserWarning,
-                stacklevel=2
-            )
+            msg = "Input 'structures' must be an Iterator to ensure O(1) memory usage."
+            raise TypeError(msg)
 
         # Strict streaming: Process one by one.
         # We do NOT use batched() here to avoid even small batch materialization in memory
@@ -116,49 +105,36 @@ class DFTManager(BaseOracle):
         Raises:
             OracleError: If calculation fails after all retries and strategies.
         """
-        # Create a mutable copy of config
         current_config = self.config.model_copy()
-
         strategies = self._get_strategies()
         last_error: Exception | None = None
 
-        # Reusing calculator logic?
-        # ASE calculators are typically tied to specific parameters.
-        # Changing parameters (like mixing_beta) usually requires a new calculator instance
-        # or a heavy reset. Creating a new lightweight wrapper is safer and standard ASE usage.
-        # The 'Espresso' object is just a file-writer wrapper, the heavy lifting is the binary.
-
-        for _, strategy in enumerate(strategies):
+        for strategy in strategies:
             if strategy:
                 strategy(current_config)
 
             try:
-                # Create calculator with current config
-                # We create a new calculator for each attempt to ensure clean state
-                calc = self.driver.get_calculator(atoms, current_config.model_copy())
-
-                # Context manager for calculator lifecycle if supported (ASE calculators usually aren't context managers)
-                # But we can ensure we don't leave debris.
-                # atoms.calc takes ownership.
-                atoms.calc = calc
-
-                # Trigger calculation
-                # These calls trigger the actual I/O and execution
-                atoms.get_potential_energy()  # type: ignore[no-untyped-call]
-                atoms.get_forces()  # type: ignore[no-untyped-call]
-
-                # Try to get stress, ignore if not implemented
-                with contextlib.suppress(PropertyNotImplementedError, RuntimeError):
-                    atoms.get_stress()  # type: ignore[no-untyped-call]
-
+                self._run_calculator(atoms, current_config)
             except (RuntimeError, CalculatorSetupError) as e:
                 last_error = e
-                # Clean up calculator if possible (though GC handles it)
-                atoms.calc = None
+                atoms.calc = None  # Clean up failed calculator
                 continue
             else:
                 return atoms
 
-        # If we reach here, all attempts failed
-        msg = f"DFT calculation failed after {len(strategies)} attempts. Last error: {last_error}"
+        msg = f"DFT calculation failed after {len(strategies)} attempts."
         raise OracleError(msg) from last_error
+
+    def _run_calculator(self, atoms: Atoms, config: DFTConfig) -> None:
+        """Helper to run a single calculation attempt."""
+        # Create new calculator for clean state
+        calc = self.driver.get_calculator(atoms, config.model_copy())
+        atoms.calc = calc
+
+        # Trigger actual calculation
+        atoms.get_potential_energy()  # type: ignore[no-untyped-call]
+        atoms.get_forces()  # type: ignore[no-untyped-call]
+
+        # Try to get stress (optional)
+        with contextlib.suppress(PropertyNotImplementedError, RuntimeError):
+            atoms.get_stress()  # type: ignore[no-untyped-call]

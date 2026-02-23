@@ -53,20 +53,9 @@ def test_embed_cluster_empty() -> None:
 
 
 def test_embed_cluster_invalid_buffer() -> None:
-    """Test negative buffer logic (though implementation might allow it, logically it shrinks)."""
-    # Implementation adds buffer to dims. If buffer makes length <= 0, set_cell might fail or warn.
-    # Let's check behavior. If I have point particle (dim=0), buffer=-1.0 -> Length=-1.0.
-    # ASE set_cell usually doesn't like negative lengths.
+    """Test negative buffer raises error."""
     cluster = Atoms("H", positions=[[0, 0, 0]])
-    with pytest.raises(ValueError, match="Resulting cell dimensions must be positive"):
-         # Creating a cell with negative length usually fails or produces weirdness.
-         # Or our logic: cell_lengths = dims + buffer. 0 + (-1) = -1.
-         # embed_cluster -> target.set_cell([-1, -1, -1]) -> ASE might raise.
-         # Actually embed_cluster doesn't validate buffer > 0. But for this test let's see.
-         # If it doesn't raise, we might need to add validation.
-         # The audit asked to "Add tests for edge cases including ... invalid buffer values".
-         # So maybe I should add validation to code too?
-         # Let's assume invalid means "resulting cell <= 0".
+    with pytest.raises(ValueError, match="Buffer must be positive"):
          embed_cluster(cluster, buffer=-5.0)
 
 

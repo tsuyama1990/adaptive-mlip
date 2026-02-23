@@ -129,12 +129,44 @@ def test_dft_manager_strategies(mock_dft_config: DFTConfig) -> None:
     assert len(strategies) > 0
     assert strategies[0] is None # First attempt is vanilla
 
-    # Test strategy logic (e.g. reduced beta)
+    # Strategy 1: Reduce Beta
     strat_beta = strategies[1]
     assert strat_beta is not None
-
     config_copy = mock_dft_config.model_copy()
     original_beta = config_copy.mixing_beta
     strat_beta(config_copy)
-    # Using default factor 0.5
     assert config_copy.mixing_beta == original_beta * 0.5
+
+    # Strategy 2: Increase Smearing
+    strat_smearing = strategies[2]
+    assert strat_smearing is not None
+    config_copy = mock_dft_config.model_copy()
+    original_smearing = config_copy.smearing_width
+    strat_smearing(config_copy)
+    assert config_copy.smearing_width == original_smearing * 2.0
+
+    # Strategy 3: CG Diagonalization
+    strat_cg = strategies[3]
+    assert strat_cg is not None
+    config_copy = mock_dft_config.model_copy()
+    strat_cg(config_copy)
+    assert config_copy.diagonalization == "cg"
+
+def test_dft_manager_invalid_input(mock_dft_config: DFTConfig) -> None:
+    """Test compute raises TypeError for non-iterator input."""
+    manager = DFTManager(mock_dft_config)
+    atoms_list = [Atoms("H")]
+
+    with pytest.raises(TypeError, match="must be an Iterator"):
+        # We need to consume the generator for it to start execution
+        list(manager.compute(atoms_list))  # type: ignore[arg-type]
+
+def test_dft_manager_empty_iterator(mock_dft_config: DFTConfig) -> None:
+    """Test compute handles empty iterator correctly with warning."""
+    manager = DFTManager(mock_dft_config)
+    empty_iter: iter = iter([])  # type: ignore
+
+    with pytest.warns(UserWarning, match="Oracle received empty iterator"):
+        results = list(manager.compute(empty_iter))
+
+    assert len(results) == 0
