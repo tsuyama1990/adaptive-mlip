@@ -58,7 +58,7 @@ class FakeTrainer(BaseTrainer):
 
 
 class FakeEngine(BaseEngine):
-    def run(self, structure: Atoms, potential: Any) -> Any:
+    def run(self, structure: Atoms | None, potential: Any) -> Any:
         return {"status": "success", "trajectory": "path/to/traj"}
 
 

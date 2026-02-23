@@ -26,7 +26,21 @@ class LoggingConfig(BaseModel):
 
             try:
                 # Use strict resolve to follow symlinks and check traversal
-                abs_path = path.resolve(strict=False)
+                # If path does not exist, check if parent exists and is valid
+                if path.exists():
+                    abs_path = path.resolve(strict=True)
+                else:
+                    # Resolve parent directory strictly
+                    parent = path.parent
+                    if not parent.exists():
+                        # Create if doesn't exist? No, config validation shouldn't create dirs
+                        # But log setup might. Let's resolve what we can.
+                        # For security, we ensure the parent is within CWD
+                        pass
+
+                    # Resolve as much as possible relative to CWD
+                    abs_path = path.absolute().resolve(strict=False)
+
                 cwd = Path.cwd().resolve(strict=True)
             except (ValueError, RuntimeError, OSError) as e:
                 msg = f"Invalid log file path resolution: {e}"

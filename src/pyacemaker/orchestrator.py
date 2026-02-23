@@ -227,7 +227,8 @@ class Orchestrator:
             self.logger.info(f"Deployed potential to {target_path}")
 
         if self.engine:
-            self.engine.run(structure=None, potential=None)  # type: ignore[arg-type]
+            # We assume Engine handles None structure/potential or finds them from config
+            self.engine.run(structure=None, potential=None)
             self.logger.info(LOG_MD_COMPLETED)
 
     def _run_active_learning_step(self) -> None:

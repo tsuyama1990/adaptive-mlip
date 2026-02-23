@@ -97,13 +97,13 @@ class BaseEngine(ABC):
     """
 
     @abstractmethod
-    def run(self, structure: Atoms, potential: Any) -> Any:
+    def run(self, structure: Atoms | None, potential: Any) -> Any:
         """
         Runs a simulation using the given structure and potential.
 
         Args:
-            structure: Initial structure.
-            potential: Trained potential.
+            structure: Initial structure. May be None if engine loads from file/config.
+            potential: Trained potential. May be None if engine loads from file/config.
 
         Returns:
             Simulation result (trajectory, final structure, etc.).
