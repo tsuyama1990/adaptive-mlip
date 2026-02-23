@@ -294,8 +294,9 @@ class Orchestrator:
         # Append to training data
         training_file = paths["training"] / FILENAME_TRAINING
         count = 0
+        batch_size = self.config.workflow.batch_size
         with training_file.open("a") as f:
-             for batch in batched(labelled_gen, n=1):
+             for batch in batched(labelled_gen, n=batch_size):
                  write(f, batch, format="extxyz")
                  count += len(batch)
 
