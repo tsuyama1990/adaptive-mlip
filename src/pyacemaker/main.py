@@ -3,7 +3,11 @@ import logging
 import sys
 from pathlib import Path
 
-from pyacemaker.constants import LOG_CONFIG_LOADED, LOG_DRY_RUN_COMPLETE, LOG_PROJECT_INIT
+from pyacemaker.domain_models.defaults import (
+    LOG_CONFIG_LOADED,
+    LOG_DRY_RUN_COMPLETE,
+    LOG_PROJECT_INIT,
+)
 from pyacemaker.logger import setup_logger
 from pyacemaker.orchestrator import Orchestrator
 from pyacemaker.utils.io import load_config

@@ -1,13 +1,4 @@
-import math
-
-# Constants for PyAceMaker
-
-# File names
-FILENAME_CANDIDATES = "candidates.xyz"
-FILENAME_TRAINING = "training_data.xyz"
-FILENAME_POTENTIAL = "potential.yace"
-
-# Default Configuration Values
+# Configuration Defaults
 DEFAULT_STATE_FILE = "state.json"
 DEFAULT_DATA_DIR = "data"
 DEFAULT_ACTIVE_LEARNING_DIR = "active_learning"
@@ -16,11 +7,14 @@ DEFAULT_BATCH_SIZE = 5
 DEFAULT_N_CANDIDATES = 10
 DEFAULT_CHECKPOINT_INTERVAL = 1
 
-# Physics Constants (Exposed as constants but ideally should be configurable if they vary)
-# For now, these are physical constants or safe defaults
-RECIPROCAL_FACTOR = 2 * math.pi
-QE_KPOINT_TOLERANCE = 1e-3
-DEFAULT_STRAIN_RANGE = 0.05 # Fallback if not configured
+# File names
+FILENAME_CANDIDATES = "candidates.xyz"
+FILENAME_TRAINING = "training_data.xyz"
+FILENAME_POTENTIAL = "potential.yace"
+
+# Template strings
+TEMPLATE_ITER_DIR = "iter_{iteration:03d}"
+TEMPLATE_POTENTIAL_FILE = "generation_{iteration:03d}.yace"
 
 # Logging Messages
 LOG_PROJECT_INIT = "Project: {project_name} initialized."
@@ -49,15 +43,3 @@ ERR_PATH_NOT_FILE = "Path is not a file: {path}"
 ERR_PATH_TRAVERSAL = "Path traversal detected: {path} is outside {base}"
 ERR_YAML_PARSE = "Error parsing YAML file: {error}"
 ERR_YAML_NOT_DICT = "YAML file must contain a dictionary."
-
-# Template strings
-TEMPLATE_ITER_DIR = "iter_{iteration:03d}"
-TEMPLATE_POTENTIAL_FILE = "generation_{iteration:03d}.yace"
-
-# Embedding Constants
-EMBEDDING_TOLERANCE_CELL = 1e-6
-EMBEDDING_TOLERANCE_LENGTH = 1e-9
-
-# Test Constants
-TEST_ENERGY_H2O = -14.5
-TEST_ENERGY_GENERIC = -13.6

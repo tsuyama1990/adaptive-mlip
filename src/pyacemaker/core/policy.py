@@ -4,7 +4,7 @@ from collections.abc import Iterator
 import numpy as np
 from ase import Atoms
 
-from pyacemaker.constants import DEFAULT_STRAIN_RANGE
+from pyacemaker.domain_models.constants import DEFAULT_STRAIN_RANGE
 from pyacemaker.domain_models.structure import StrainMode, StructureConfig
 from pyacemaker.utils.perturbations import apply_strain, create_vacancy, rattle
 

@@ -28,7 +28,7 @@ def test_uat_03_01_generate_candidates() -> None:
     stream = generator.generate(n_candidates=10)
 
     # 3. Expectation
-    # Verify first few items
+    # Verify first few items using islice to avoid materializing all if N was large
     first_two = list(islice(stream, 2))
 
     assert len(first_two) == 2
@@ -45,9 +45,7 @@ def test_uat_03_01_generate_candidates() -> None:
     pos1 = first_two[1].positions  # type: ignore[no-untyped-call]
     assert not np.allclose(pos0, pos1)
 
-    # Verify total count without keeping objects
-    # Re-generate or count remaining? generator is consumed.
-    # Just verify we can consume rest.
+    # Verify we can consume the rest without keeping them
     remaining_count = sum(1 for _ in stream)
     assert remaining_count == 8 # 10 - 2
 

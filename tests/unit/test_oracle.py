@@ -3,11 +3,11 @@ from unittest.mock import MagicMock
 import pytest
 from ase import Atoms
 
-from pyacemaker.constants import TEST_ENERGY_GENERIC
 from pyacemaker.core.exceptions import OracleError
 from pyacemaker.core.oracle import DFTManager
 from pyacemaker.domain_models import DFTConfig
 from tests.conftest import MockCalculator
+from tests.constants import TEST_ENERGY_GENERIC
 
 
 @pytest.fixture

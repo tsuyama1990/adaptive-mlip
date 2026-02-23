@@ -6,11 +6,6 @@ from unittest.mock import Mock
 import pytest
 from ase import Atoms
 
-from pyacemaker.constants import (
-    LOG_COMPUTED_PROPERTIES,
-    LOG_ITERATION_COMPLETED,
-    LOG_POTENTIAL_TRAINED,
-)
 from pyacemaker.core.base import BaseEngine, BaseGenerator, BaseOracle, BaseTrainer
 from pyacemaker.domain_models import (
     DFTConfig,
@@ -20,6 +15,12 @@ from pyacemaker.domain_models import (
     StructureConfig,
     TrainingConfig,
     WorkflowConfig,
+)
+from pyacemaker.domain_models.defaults import (
+    FILENAME_TRAINING,
+    LOG_COMPUTED_PROPERTIES,
+    LOG_ITERATION_COMPLETED,
+    LOG_POTENTIAL_TRAINED,
 )
 from pyacemaker.factory import ModuleFactory
 from pyacemaker.orchestrator import Orchestrator
@@ -140,7 +141,7 @@ def test_integration_workflow_complete(
     assert (iter_dir / "training").exists()
     assert (iter_dir / "md_run").exists()
 
-    training_file = iter_dir / "training" / "training_data.xyz"
+    training_file = iter_dir / "training" / FILENAME_TRAINING
     assert training_file.exists()
     content = training_file.read_text()
     assert "Lattice" in content or "Properties" in content

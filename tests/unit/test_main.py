@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from pyacemaker.constants import (
+from pyacemaker.domain_models.defaults import (
     LOG_CONFIG_LOADED,
     LOG_DRY_RUN_COMPLETE,
     LOG_PROJECT_INIT,

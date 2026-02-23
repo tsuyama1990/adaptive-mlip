@@ -5,9 +5,9 @@ import pytest
 from ase import Atoms
 from ase.calculators.calculator import Calculator
 
-from pyacemaker.constants import TEST_ENERGY_H2O
 from pyacemaker.core.oracle import DFTManager
 from pyacemaker.domain_models import DFTConfig
+from tests.constants import TEST_ENERGY_H2O
 
 
 class UATMockCalculator(Calculator):

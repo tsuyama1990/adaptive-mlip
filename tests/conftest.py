@@ -5,7 +5,6 @@ import pytest
 from ase import Atoms
 from ase.calculators.calculator import Calculator, CalculatorSetupError
 
-from pyacemaker.constants import TEST_ENERGY_GENERIC
 from pyacemaker.domain_models import (
     DFTConfig,
     LoggingConfig,
@@ -16,6 +15,7 @@ from pyacemaker.domain_models import (
     WorkflowConfig,
 )
 from pyacemaker.domain_models.structure import ExplorationPolicy
+from tests.constants import TEST_ENERGY_GENERIC
 
 
 @pytest.fixture

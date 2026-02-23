@@ -1,6 +1,6 @@
 from pydantic import BaseModel, ConfigDict, Field, PositiveInt
 
-from pyacemaker.constants import (
+from pyacemaker.domain_models.defaults import (
     DEFAULT_ACTIVE_LEARNING_DIR,
     DEFAULT_BATCH_SIZE,
     DEFAULT_CHECKPOINT_INTERVAL,
