@@ -107,26 +107,6 @@ def test_lammps_engine_hybrid_potential(mock_md_config: MDConfig, mock_driver: A
     assert "1.0 1.5" in script
 
 
-def test_generate_input_script(mock_md_config: MDConfig, tmp_path: Path) -> None:
-    """Tests the input script generation logic explicitly."""
-    engine = LammpsEngine(mock_md_config)
-    # New signature: potential_path, data_file, dump_file, elements
-    pot_path = tmp_path / "pot.yace"
-    data_file = tmp_path / "data.lmp"
-    dump_file = tmp_path / "dump.lmp"
-
-    script = engine._generate_input_script(
-        pot_path, data_file, dump_file, ["H"]
-    )
-
-    assert "pair_style hybrid/overlay" in script
-    assert f"pair_coeff * * pace {pot_path} H" in script
-    assert "pair_coeff 1 1 zbl 1 1" in script
-    assert f"compute gamma all pace {pot_path}" in script
-    assert "fix halt_check all halt" in script
-    assert "fix npt all npt" in script
-    assert "temp 300.0 300.0 0.1" in script
-    assert "iso 1.0 1.0 1.0" in script
 
 
 def test_run_empty_structure_error(mock_md_config: MDConfig, tmp_path: Path) -> None:

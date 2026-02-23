@@ -1,5 +1,15 @@
+import os
+from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field, PositiveFloat, PositiveInt
+
+
+def _get_default_temp_dir() -> str | None:
+    """Returns /dev/shm if available and writable, else None."""
+    shm_path = Path("/dev/shm")  # noqa: S108
+    if shm_path.exists() and shm_path.is_dir() and os.access(shm_path, os.W_OK):
+        return str(shm_path)
+    return None
 
 
 class HybridParams(BaseModel):
@@ -47,6 +57,18 @@ class MDConfig(BaseModel):
     minimize: bool = Field(False, description="Perform energy minimization before MD")
     neighbor_skin: PositiveFloat = Field(
         2.0, description="Neighbor list skin distance (Angstrom)"
+    )
+
+    # Advanced Settings
+    temp_dir: str | None = Field(
+        default_factory=_get_default_temp_dir,
+        description="Directory for temporary files (e.g., /dev/shm for RAM disk)"
+    )
+    tdamp_factor: PositiveFloat = Field(
+        100.0, description="Temperature damping factor (multiplies timestep)"
+    )
+    pdamp_factor: PositiveFloat = Field(
+        1000.0, description="Pressure damping factor (multiplies timestep)"
     )
 
     # Mocking Parameters (Audit Requirement)
