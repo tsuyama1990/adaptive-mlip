@@ -57,6 +57,20 @@ def test_qe_driver_kpoints_parametrized(
 
         assert kpts == tuple(expected_kpts)
 
+def test_qe_driver_kpoints_zero_length(mock_dft_config: DFTConfig) -> None:
+    """Test k-point generation with zero-length cells (should default to 1)."""
+    # Cell with zero volume or very small dimensions
+    atoms = Atoms("H", cell=[0.0, 0.0, 0.0], pbc=True)
+    driver = QEDriver()
+
+    with patch("pyacemaker.interfaces.qe_driver.Espresso") as MockEspresso:
+        driver.get_calculator(atoms, mock_dft_config)
+        kpts = MockEspresso.call_args[1].get("kpts")
+
+        # Zero length -> treated as non-periodic direction or just handled safely
+        # Implementation uses mask (lengths >= 1e-3). So should be 1.
+        assert kpts == (1, 1, 1)
+
 def test_qe_driver_invalid_input(mock_dft_config: DFTConfig) -> None:
     """Test validation of invalid inputs."""
     driver = QEDriver()

@@ -120,6 +120,8 @@ class QEDriver:
         # Replace 0 lengths with 1.0 temporarily to avoid div/0 in pure numpy
         safe_lengths = np.where(lengths_arr < 1e-9, 1.0, lengths_arr)
 
+        # Use np.ceil which is efficient. Standard numpy vectorization avoids loops.
+        # Float to int conversion is negligible compared to the loop cost it replaces.
         k_vals = np.ceil(factor / safe_lengths).astype(int)
 
         # Apply mask: if valid, use k_vals, else 1

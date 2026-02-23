@@ -37,6 +37,10 @@ def embed_cluster(cluster: Atoms, buffer: float, copy: bool = True) -> Atoms:
         msg = f"Buffer must be positive: {buffer}"
         raise ValueError(msg)
 
+    if buffer > 1000.0:
+        msg = f"Buffer is excessively large: {buffer} (limit 1000.0)"
+        raise ValueError(msg)
+
     # Get bounding box (no copy)
     positions: NDArray[np.float64] = cluster.get_positions()  # type: ignore[no-untyped-call]
 
@@ -76,4 +80,8 @@ def embed_cluster(cluster: Atoms, buffer: float, copy: bool = True) -> Atoms:
     target.set_pbc(True)
     target.positions += shift
 
+    # Explicit cast to Atoms to satisfy type checker if ASE doesn't return strictly Atoms
+    # or just return as is, assuming target is Atoms.
+    # The ignore was because mypy thinks ASE methods might return something else?
+    # Actually ASE copy() returns 'Atoms' (or subclasses).
     return target  # type: ignore[no-any-return]
