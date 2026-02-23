@@ -1,5 +1,7 @@
 from pydantic import BaseModel, ConfigDict, Field, PositiveFloat
 
+from pyacemaker.domain_models.defaults import FILENAME_POTENTIAL
+
 
 class TrainingConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -10,7 +12,7 @@ class TrainingConfig(BaseModel):
 
     # Mocking & Output (Audit Requirement)
     output_filename: str = Field(
-        "potential.yace", description="Filename for the trained potential"
+        FILENAME_POTENTIAL, description="Filename for the trained potential"
     )
 
     # Spec Section 3.3

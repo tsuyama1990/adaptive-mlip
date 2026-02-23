@@ -2,6 +2,7 @@ from pathlib import Path
 from typing import Any
 
 from pyacemaker.core.base import BaseTrainer
+from pyacemaker.core.exceptions import TrainerError
 from pyacemaker.domain_models.training import TrainingConfig
 
 
@@ -34,18 +35,17 @@ class PacemakerTrainer(BaseTrainer):
             Path: The path to the generated potential file (e.g., potential.yace).
 
         Raises:
-            FileNotFoundError: If the training data file does not exist.
-            ValueError: If the file extension is not supported.
+            TrainerError: If the training data file does not exist or format is invalid.
         """
         path = Path(training_data_path)
         if not path.exists():
             msg = f"Training data not found: {path}"
-            raise FileNotFoundError(msg)
+            raise TrainerError(msg)
 
         # Validate extension
         if path.suffix not in {".pckl", ".xyz", ".extxyz", ".gzip"}:
             msg = f"Invalid training data format: {path.suffix}"
-            raise ValueError(msg)
+            raise TrainerError(msg)
 
         # Simulate training output
         # In a real implementation, we would run pace_train via subprocess

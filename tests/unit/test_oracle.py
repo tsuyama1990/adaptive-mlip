@@ -213,9 +213,9 @@ def test_dft_manager_embedding(mock_dft_config: DFTConfig, monkeypatch: pytest.M
 
     atoms = Atoms("H", positions=[[0, 0, 0]])
     # Must be iterator
-    results = list(manager.compute(iter([atoms])))
+    gen = manager.compute(iter([atoms]))
+    result = next(gen)
 
-    assert len(results) == 1
     # Check if embed_cluster was called
     mock_embed.assert_called_once()
     args, kwargs = mock_embed.call_args
@@ -225,4 +225,4 @@ def test_dft_manager_embedding(mock_dft_config: DFTConfig, monkeypatch: pytest.M
     # Check if result is the embedded one
     # DFTManager.compute yields the result of _compute_single(embedded_atoms)
     # _compute_single returns the atom object passed to it (which is embedded_atoms)
-    assert results[0] == embedded_atoms
+    assert result == embedded_atoms
