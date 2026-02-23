@@ -109,3 +109,26 @@ def test_generator_invalid_composition() -> None:
 
     with pytest.raises(GeneratorError, match="Failed to generate base structure"):
         next(generator.generate(1))
+
+
+def test_generate_local() -> None:
+    config = StructureConfig(
+        elements=["Fe"],
+        supercell_size=[2, 2, 2],
+        policy_name=ExplorationPolicy.COLD_START,
+        rattle_stdev=0.1
+    )
+    generator = StructureGenerator(config)
+
+    # Create dummy base structure
+    base = Atoms("Fe2", positions=[[0.0, 0.0, 0.0], [2.0, 0.0, 0.0]], cell=[4.0, 4.0, 4.0], pbc=True)
+
+    candidates = list(generator.generate_local(base, n_candidates=5))
+
+    assert len(candidates) == 5
+    for c in candidates:
+        assert len(c) == 2
+        # Check positions are slightly different
+        assert not np.allclose(c.positions, base.positions)
+        # But cell is same
+        assert np.allclose(c.cell, base.cell)

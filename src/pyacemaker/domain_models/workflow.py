@@ -6,9 +6,36 @@ from pyacemaker.domain_models.defaults import (
     DEFAULT_CHECKPOINT_INTERVAL,
     DEFAULT_DATA_DIR,
     DEFAULT_N_CANDIDATES,
+    DEFAULT_OTF_LOCAL_N_CANDIDATES,
+    DEFAULT_OTF_LOCAL_N_SELECT,
+    DEFAULT_OTF_MAX_RETRIES,
+    DEFAULT_OTF_UNCERTAINTY_THRESHOLD,
     DEFAULT_POTENTIALS_DIR,
     DEFAULT_STATE_FILE,
 )
+
+
+class OTFConfig(BaseModel):
+    """Configuration for On-The-Fly (OTF) Active Learning loop."""
+    model_config = ConfigDict(extra="forbid")
+
+    uncertainty_threshold: float = Field(
+        default=DEFAULT_OTF_UNCERTAINTY_THRESHOLD,
+        gt=0,
+        description="Gamma threshold to trigger halt and retraining."
+    )
+    local_n_candidates: PositiveInt = Field(
+        default=DEFAULT_OTF_LOCAL_N_CANDIDATES,
+        description="Number of local candidates to generate around halt structure."
+    )
+    local_n_select: PositiveInt = Field(
+        default=DEFAULT_OTF_LOCAL_N_SELECT,
+        description="Number of candidates to select via active set optimization."
+    )
+    max_retries: PositiveInt = Field(
+        default=DEFAULT_OTF_MAX_RETRIES,
+        description="Maximum number of retraining attempts per iteration."
+    )
 
 
 class WorkflowConfig(BaseModel):
@@ -44,4 +71,9 @@ class WorkflowConfig(BaseModel):
     )
     potentials_dir: str = Field(
         default=DEFAULT_POTENTIALS_DIR, description="Directory for storing trained potentials"
+    )
+
+    otf: OTFConfig = Field(
+        default_factory=OTFConfig,
+        description="Configuration for OTF loop."
     )

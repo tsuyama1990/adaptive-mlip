@@ -5,6 +5,8 @@ from typing import Any
 
 from ase import Atoms
 
+from pyacemaker.domain_models.md import MDSimulationResult
+
 
 class BaseGenerator(ABC):
     """
@@ -49,6 +51,20 @@ class BaseGenerator(ABC):
                         yield create_random_structure()
         """
 
+    @abstractmethod
+    def generate_local(self, base_structure: Atoms, n_candidates: int) -> Iterator[Atoms]:
+        """
+        Generates candidate structures by perturbing a base structure.
+        Used in OTF loops to explore the local neighborhood of a high-uncertainty configuration.
+
+        Args:
+            base_structure: The reference structure to perturb.
+            n_candidates: Number of structures to generate.
+
+        Returns:
+            Iterator yielding ASE Atoms objects.
+        """
+
 
 class BaseOracle(ABC):
     """
@@ -90,7 +106,11 @@ class BaseTrainer(ABC):
     """
 
     @abstractmethod
-    def train(self, training_data_path: str | Path) -> Any:
+    def train(
+        self,
+        training_data_path: str | Path,
+        initial_potential: str | Path | None = None
+    ) -> Any:
         """
         Trains a potential using the provided training data file.
 
@@ -99,6 +119,7 @@ class BaseTrainer(ABC):
 
         Args:
             training_data_path: Path to the file containing labelled structures (e.g., .xyz, .pckl).
+            initial_potential: Optional path to an existing potential to fine-tune from.
 
         Returns:
             Trained potential object or path to potential file.
@@ -109,8 +130,11 @@ class BaseTrainer(ABC):
 
         Example:
             class PacemakerTrainer(BaseTrainer):
-                def train(self, path):
-                    subprocess.run(["pace_train", "--dataset", str(path)])
+                def train(self, path, initial_potential=None):
+                    cmd = ["pace_train", "--dataset", str(path)]
+                    if initial_potential:
+                        cmd.extend(["--initial_potential", str(initial_potential)])
+                    subprocess.run(cmd)
                     return "potential.yace"
         """
 
@@ -122,7 +146,7 @@ class BaseEngine(ABC):
     """
 
     @abstractmethod
-    def run(self, structure: Atoms | None, potential: Any) -> Any:
+    def run(self, structure: Atoms | None, potential: Any) -> MDSimulationResult:
         """
         Runs a simulation using the given structure and potential.
 
@@ -131,7 +155,7 @@ class BaseEngine(ABC):
             potential: Trained potential. May be None if engine loads from file/config.
 
         Returns:
-            Simulation result (trajectory, final structure, etc.).
+            MDSimulationResult containing trajectory path, halt status, etc.
 
         Raises:
             RuntimeError: If simulation fails (e.g., segmentation fault, physics explosion).
@@ -141,5 +165,5 @@ class BaseEngine(ABC):
                 def run(self, structure, potential):
                     write_lammps_input(structure, potential)
                     subprocess.run(["lmp", ...])
-                    return read_trajectory("dump.lammpstrj")
+                    return MDSimulationResult(...)
         """

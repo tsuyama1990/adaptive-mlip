@@ -23,7 +23,7 @@ def test_generator_hybrid_potential(tmp_path: Path) -> None:
     script = generator.generate(pot_path, data_file, dump_file, ["H", "He"])
 
     assert "pair_style hybrid/overlay" in script
-    assert f"pair_coeff * * pace {pot_path} H He" in script
+    assert f'pair_coeff * * pace "{pot_path}" H He' in script
 
     # ZBL checks
     assert "pair_coeff 1 1 zbl 1 1" in script
@@ -51,7 +51,7 @@ def test_generator_pure_pace(tmp_path: Path) -> None:
 
     assert "pair_style pace" in script
     assert "pair_style hybrid" not in script
-    assert f"pair_coeff * * pace {pot_path} Al" in script
+    assert f'pair_coeff * * pace "{pot_path}" Al' in script
 
 
 def test_generator_damping(tmp_path: Path) -> None:
