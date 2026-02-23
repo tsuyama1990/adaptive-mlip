@@ -1,4 +1,3 @@
-import os
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field, PositiveFloat, field_validator
@@ -31,26 +30,39 @@ class DFTConfig(BaseModel):
     @classmethod
     def validate_pseudopotentials(cls, v: dict[str, str]) -> dict[str, str]:
         """
-        Validates that pseudopotential files exist.
+        Validates that pseudopotential files exist and are safe.
+        Enforces that relative paths are within the current working directory.
+        Uses resolve(strict=True) to ensure existence and handle symlinks safely.
         """
+        cwd = Path.cwd().resolve()
         for elem, path_str in v.items():
             if not path_str or not path_str.strip():
                 msg = f"Pseudopotential path for {elem} cannot be empty"
                 raise ValueError(msg)
 
-            # Robust path traversal check using resolve() logic without strict existence for relative
-            # We treat the path as if it were relative to a theoretical root.
-            # If it tries to go above that root using '..', it's risky.
+            try:
+                p = Path(path_str)
+                # resolve(strict=True) will raise FileNotFoundError if file doesn't exist.
+                # It also resolves symlinks.
+                resolved_path = p.resolve(strict=True)
 
-            norm_path = os.path.normpath(path_str)
-            if norm_path.startswith("..") or "/../" in norm_path.replace("\\", "/"):
-                 msg = f"Path traversal detected in pseudopotential path: {path_str}"
-                 raise ValueError(msg)
+                # Check path traversal
+                if not resolved_path.is_relative_to(cwd):
+                    msg = f"Path traversal detected: {path_str} resolves to {resolved_path}, which is outside {cwd}"
+                    raise ValueError(msg)  # noqa: TRY301
 
-            p = Path(path_str)
-            # If path is absolute, check existence
-            if p.is_absolute() and not p.exists():
-                msg = f"Pseudopotential file not found: {p}"
-                raise FileNotFoundError(msg)
+                # Check if it's a file
+                if not resolved_path.is_file():
+                    msg = f"Pseudopotential path is not a file: {resolved_path}"
+                    raise ValueError(msg)  # noqa: TRY301
+
+            except FileNotFoundError as e:
+                # Re-raise with informative message for Pydantic
+                msg = f"Pseudopotential file not found: {path_str}"
+                raise ValueError(msg) from e
+            except (ValueError, OSError) as e:
+                # Catch ValueError from is_relative_to (if not related) or OSError
+                msg = f"Invalid pseudopotential path {path_str}: {e}"
+                raise ValueError(msg) from e
 
         return v

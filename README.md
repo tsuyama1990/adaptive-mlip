@@ -1,133 +1,102 @@
-# PYACEMAKER
+# PyAceMaker
 
-**High-Efficiency MLIP Construction & Operation System**
+![Python](https://img.shields.io/badge/python-3.11+-blue.svg)
+![License](https://img.shields.io/badge/license-MIT-green.svg)
+![Status](https://img.shields.io/badge/status-Verified-brightgreen.svg)
 
-![Build Status](https://img.shields.io/badge/build-passing-brightgreen)
-![Python](https://img.shields.io/badge/python-3.11+-blue)
-![License](https://img.shields.io/badge/license-MIT-green)
+**Adaptive machine learning interatomic potentials construction orchestrator.**
 
-PYACEMAKER is an autonomous system designed to democratise the creation of Machine Learning Interatomic Potentials (MLIPs). By orchestrating the **Pacemaker** engine within a self-driving Active Learning loop, it allows researchers to generate State-of-the-Art potentials for complex alloys and interfaces with a "Zero-Config" workflow.
+## Overview
 
-**Current Status**: **System Verified (Cycle 02 - Oracle)**
+**PyAceMaker** is an automated workflow tool designed to construct robust Machine Learning Interatomic Potentials (MLIPs). It orchestrates the entire active learning loop: generating candidate structures, running DFT calculations (via Quantum Espresso), training potentials (e.g., ACE), and validating them through MD simulations.
 
----
+### Why PyAceMaker?
+Constructing MLIPs manually is tedious and error-prone. PyAceMaker automates the "Active Learning" cycle, ensuring that your potential is trained on the most relevant structures—those where the current model is uncertain—thereby maximizing accuracy while minimizing expensive DFT calls.
 
-## 🚀 Key Features
+## Features
 
-*   **Robust Configuration**: Utilizes **Pydantic V2** for strict schema validation, ensuring all inputs (temperatures, cutoffs, paths) are physically valid before execution.
-*   **Orchestration Core**: Centralized state machine designed to manage the "Explore-Label-Train-Run" lifecycle.
-*   **DFT Automation**: Fully automated interface for **Quantum Espresso**, handling input generation and execution.
-*   **Self-Healing Calculation**: Intelligent retry mechanism that automatically adjusts convergence parameters (e.g., `mixing_beta`, `smearing`) when DFT calculations fail.
-*   **Periodic Embedding**: Utility for embedding arbitrary atomic clusters into periodic simulation cells with automatic vacuum padding.
-*   **Structured Logging**: Automatic setup of console and file logging with rotation policies.
-*   **Modular Architecture**: Clean separation of concerns with Abstract Base Classes for Generator, Oracle, Trainer, and Engine.
+*   **Automated Workflow Orchestration**: Manages the loop of exploration, labeling, training, and validation.
+*   **Structure Exploration**:
+    *   **Cold Start**: Initial structure generation using M3GNet (or database lookup).
+    *   **Perturbation Policies**:
+        *   **Random Rattle**: Displaces atoms to sample local energy minima.
+        *   **Strain**: Applies volume and shear strain to sample elastic response.
+        *   **Defects**: Introduces vacancies to train for off-stoichiometry robustness.
+*   **DFT Management**:
+    *   Automated Quantum Espresso execution via ASE.
+    *   **Self-Healing**: Automatically retries failed calculations with adjusted parameters (e.g., mixing beta, smearing).
+    *   **Security**: Prevents path traversal and validates input configuration.
+*   **Scalability**:
+    *   **Streaming Data Processing**: Handles large datasets with O(1) memory usage.
+    *   **Resume Capability**: Checkpoints state to JSON, allowing workflows to pause and resume.
 
----
+## Requirements
 
-## 🛠 Prerequisites
+*   **Python**: >= 3.11
+*   **DFT Code**: Quantum Espresso (`pw.x` executable in PATH)
+*   **MLIP Trainer**: (e.g., `pace`, `mace`, etc. depending on plugin)
 
-*   **Python**: 3.11 or higher
-*   **Package Manager**: `uv` (recommended) or `pip`
-
-## 📦 Installation
-
-1.  **Clone the repository**
-    ```bash
-    git clone https://github.com/your-org/pyacemaker.git
-    cd pyacemaker
-    ```
-
-2.  **Install Dependencies**
-    Using `uv`:
-    ```bash
-    uv sync
-    ```
-    Using `pip`:
-    ```bash
-    pip install .
-    ```
-
-## ⚡ Usage
-
-### 1. Create a Configuration File
-Create a `config.yaml` file with the required sections:
-
-```yaml
-project_name: "FePt_Optimization"
-
-structure:
-  elements: ["Fe", "Pt"]
-  supercell_size: [2, 2, 2]
-
-dft:
-  code: "quantum_espresso"
-  encut: 500.0
-  kpoints_density: 0.04
-  # Self-Healing parameters (optional, defaults shown)
-  mixing_beta: 0.7
-  smearing_width: 0.1
-  pseudopotentials:
-    Fe: "Fe.pbe-n-kjpaw_psl.1.0.0.UPF"
-    Pt: "Pt.pbe-n-kjpaw_psl.1.0.0.UPF"
-
-training:
-  potential_type: "ace"
-  cutoff_radius: 5.0
-  max_basis_size: 500
-
-md:
-  temperature: 1000.0
-  n_steps: 1000
-
-workflow:
-  max_iterations: 10
-  convergence_energy: 0.001
-```
-
-### 2. Validate Configuration (Dry Run)
-Check if your configuration is valid without running any simulations:
+## Installation
 
 ```bash
-uv run python -m pyacemaker.main --config config.yaml --dry-run
-```
-*Output: "Configuration loaded successfully."*
-
-### 3. Run the Orchestrator
-Start the active learning loop (currently a skeleton loop for Cycle 01):
-
-```bash
-uv run python -m pyacemaker.main --config config.yaml
+git clone https://github.com/your-org/pyacemaker.git
+cd pyacemaker
+uv sync
 ```
 
-## 🏗 Architecture & File Structure
+## Usage
 
-```ascii
-pyacemaker/
-├── pyproject.toml              # Dependencies & Settings
-├── src/
-│   └── pyacemaker/
-│       ├── domain_models/      # Pydantic Schemas (Config, Structure, DFT, etc.)
-│       ├── core/               # Core Logic (DFTManager, etc.)
-│       ├── interfaces/         # External Interfaces (QEDriver)
-│       ├── utils/              # Utilities (IO, Embedding)
-│       ├── logger.py           # Logging setup
-│       ├── orchestrator.py     # Main Logic
-│       └── main.py             # CLI Entry Point
-└── tests/                      # Unit, E2E, and UAT tests
-```
+1.  **Prepare Configuration**:
+    Create a `config.yaml` file defining your project parameters.
 
-## 💻 Development
-
-*   **Testing**:
-    ```bash
-    uv run pytest
+    ```yaml
+    project_name: "FePt_Alloy"
+    structure:
+        elements: ["Fe", "Pt"]
+        supercell_size: [2, 2, 2]
+        policy_name: "random_rattle"
+        rattle_stdev: 0.1
+    dft:
+        code: "quantum_espresso"
+        functional: "PBE"
+        kpoints_density: 0.04
+        encut: 500.0
+        pseudopotentials:
+            Fe: "Fe.pbe-n-kjpaw_psl.1.0.0.UPF"
+            Pt: "Pt.pbe-n-kjpaw_psl.1.0.0.UPF"
+    training:
+        potential_type: "ace"
+        cutoff_radius: 5.0
+        max_basis_size: 500
+    md:
+        temperature: 1000.0
+        pressure: 0.0
+        timestep: 0.001
+        n_steps: 5000
+    workflow:
+        max_iterations: 10
+        checkpoint_interval: 1
     ```
-*   **Linting**:
+
+2.  **Run PyAceMaker**:
+
     ```bash
-    uv run ruff check .
-    uv run mypy .
+    # Dry run to validate config
+    uv run pyacemaker --config config.yaml --dry-run
+
+    # Start the active learning loop
+    uv run pyacemaker --config config.yaml
     ```
 
-## 📄 License
+## Architecture
 
-This project is licensed under the MIT License.
+```
+src/pyacemaker/
+├── core/               # Core business logic (Generator, Oracle, Trainer)
+├── domain_models/      # Pydantic data schemas and validation
+├── interfaces/         # External code drivers (Quantum Espresso)
+├── utils/              # Helper functions (I/O, perturbations)
+├── factory.py          # Dependency injection
+├── orchestrator.py     # Workflow state machine
+└── main.py             # CLI entry point
+```

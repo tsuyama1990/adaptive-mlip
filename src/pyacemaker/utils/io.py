@@ -3,14 +3,14 @@ from typing import Any
 
 import yaml
 
-from pyacemaker.constants import (
+from pyacemaker.domain_models import PyAceConfig
+from pyacemaker.domain_models.defaults import (
     ERR_CONFIG_NOT_FOUND,
     ERR_PATH_NOT_FILE,
     ERR_PATH_TRAVERSAL,
     ERR_YAML_NOT_DICT,
     ERR_YAML_PARSE,
 )
-from pyacemaker.domain_models import PyAceConfig
 
 
 def load_yaml(file_path: str | Path) -> dict[str, Any]:

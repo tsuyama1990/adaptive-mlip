@@ -2,7 +2,7 @@ import numpy as np
 from ase import Atoms
 from numpy.typing import NDArray
 
-from pyacemaker.constants import EMBEDDING_TOLERANCE_CELL
+from pyacemaker.domain_models.constants import EMBEDDING_TOLERANCE_CELL
 
 
 def embed_cluster(cluster: Atoms, buffer: float, copy: bool = True) -> Atoms:
