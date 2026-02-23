@@ -2,6 +2,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from pyacemaker.core.exceptions import ConfigError
 from pyacemaker.domain_models import PyAceConfig
 from pyacemaker.factory import Cycle01Engine, Cycle01Generator, Cycle01Trainer, ModuleFactory
 
@@ -49,5 +50,5 @@ def test_module_factory_invalid_config() -> None:
     config = MagicMock(spec=PyAceConfig)
     config.project_name = ""
 
-    with pytest.raises(ValueError, match="Project name is required"):
+    with pytest.raises(ConfigError, match="Project name is required"):
         ModuleFactory.create_modules(config)

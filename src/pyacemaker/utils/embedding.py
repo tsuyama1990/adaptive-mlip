@@ -1,5 +1,6 @@
 import numpy as np
 from ase import Atoms
+from numpy.typing import NDArray
 
 
 def embed_cluster(cluster: Atoms, buffer: float) -> Atoms:
@@ -29,7 +30,13 @@ def embed_cluster(cluster: Atoms, buffer: float) -> Atoms:
         raise ValueError(msg)
 
     # Get bounding box
-    positions = cluster.get_positions()
+    positions: NDArray[np.float64] = cluster.get_positions()
+
+    # Validation: Ensure positions is valid (redundant if ASE is valid, but good for type safety)
+    if positions.ndim != 2 or positions.shape[1] != 3:
+        msg = f"Invalid positions shape: {positions.shape}. Expected (N, 3)."
+        raise ValueError(msg)
+
     min_xyz = np.min(positions, axis=0)
     max_xyz = np.max(positions, axis=0)
 

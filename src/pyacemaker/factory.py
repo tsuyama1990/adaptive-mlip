@@ -5,6 +5,7 @@ from typing import Any
 from ase import Atoms
 
 from pyacemaker.core.base import BaseEngine, BaseGenerator, BaseOracle, BaseTrainer
+from pyacemaker.core.exceptions import ConfigError
 from pyacemaker.core.oracle import DFTManager
 from pyacemaker.domain_models import PyAceConfig
 
@@ -39,18 +40,29 @@ class ModuleFactory:
     def create_modules(
         config: PyAceConfig,
     ) -> tuple[BaseGenerator, BaseOracle, BaseTrainer, BaseEngine]:
+        """
+        Creates instances of core modules.
+
+        Raises:
+            ConfigError: If configuration is invalid.
+            RuntimeError: If module creation fails.
+        """
         # Validate configuration before module creation
         if not config.project_name:
             msg = "Project name is required for module initialization"
-            raise ValueError(msg)
+            raise ConfigError(msg)
 
-        # For Cycle 02, we use DFTManager for Oracle if configured
-        # config.dft is always present due to Pydantic model
-        oracle = DFTManager(config.dft)
+        try:
+            # For Cycle 02, we use DFTManager for Oracle if configured
+            # config.dft is always present due to Pydantic model
+            oracle = DFTManager(config.dft)
 
-        return (
-            Cycle01Generator(),
-            oracle,
-            Cycle01Trainer(),
-            Cycle01Engine(),
-        )
+            return (
+                Cycle01Generator(),
+                oracle,
+                Cycle01Trainer(),
+                Cycle01Engine(),
+            )
+        except Exception as e:
+            msg = f"Failed to create modules: {e}"
+            raise RuntimeError(msg) from e

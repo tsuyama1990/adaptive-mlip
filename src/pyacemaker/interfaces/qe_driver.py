@@ -6,6 +6,10 @@ from ase.calculators.espresso import Espresso
 
 from pyacemaker.domain_models import DFTConfig
 
+# Physics constant for Reciprocal Lattice Vector conversion
+# b_i = 2 * pi / a_i (for orthogonal cells)
+RECIPROCAL_FACTOR = 2 * math.pi
+
 
 class QEDriver:
     """
@@ -48,14 +52,6 @@ class QEDriver:
         }
 
         # Create calculator
-        # Note: command is typically set via ASE_ESPRESSO_COMMAND env var or profile
-        # We assume the user has set it up or passed it via config.code if we wanted to support custom commands.
-        # But ASE uses 'espresso' profile usually.
-        # Here we pass 'command' if needed, but usually ASE handles it.
-        # Spec says "code: str = Field(..., description='DFT code to use')".
-        # If config.code is just "pw.x", ASE might need explicit command if not in PATH.
-        # For now, we rely on ASE's default behavior or environment variables.
-
         return Espresso(
             input_data=input_data,
             pseudopotentials=config.pseudopotentials,
@@ -80,14 +76,10 @@ class QEDriver:
         pbc = atoms.get_pbc()
 
         # Optimize loop: direct computation
-        # Use generator expression for efficiency
-        kpts_list = []
+        kpts_list: list[int] = []
 
         # Precompute constant
-        # Avoid division by zero: if spacing is 0 (invalid), raise?
-        # But PositiveFloat handles > 0.
-
-        factor = 2 * math.pi / spacing
+        factor = RECIPROCAL_FACTOR / spacing
 
         for i in range(3):
             if not pbc[i] or lengths[i] < 1e-3:
