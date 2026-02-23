@@ -51,14 +51,10 @@ class DFTConfig(BaseModel):
                 # It also resolves symlinks to their target.
                 resolved_path = p.resolve(strict=True)
 
-                # Explicitly disallow symlinks if they point outside?
-                # resolve() already follows them. If resolved_path is outside CWD, is_relative_to catches it.
-                # But we might want to disallow symlinks entirely for stricter security.
+                # Explicitly disallow symlinks for security
                 if p.is_symlink():
-                     # Check if the symlink itself is safe? Or just disallow.
-                     # "Security: No SQL/Shell injection" -> Path traversal via symlink is the risk.
-                     # resolve() handles it. But let's be explicit if audit demanded "symlink resolution" check.
-                     pass
+                     msg = f"Symlinks are not allowed for pseudopotentials: {path_str}"
+                     raise ValueError(msg)  # noqa: TRY301
 
                 # Check path traversal
                 # Ensure we are comparing absolute paths

@@ -73,12 +73,13 @@ class MockCalculator(Calculator):
     Can simulate failures and setup errors.
     """
 
-    def __init__(self, fail_count: int = 0, setup_error: bool = False) -> None:
+    def __init__(self, fail_count: int = 0, setup_error: bool = False, test_energy: float | None = None) -> None:
         super().__init__()  # type: ignore[no-untyped-call]
         self.implemented_properties = ["energy", "forces", "stress"]
         self.fail_count = fail_count
         self.setup_error = setup_error
         self.attempts = 0
+        self.test_energy = test_energy if test_energy is not None else TEST_ENERGY_GENERIC
 
     def calculate(
         self,
@@ -98,7 +99,7 @@ class MockCalculator(Calculator):
             raise RuntimeError(msg)
 
         self.results = {
-            "energy": TEST_ENERGY_GENERIC,
+            "energy": self.test_energy,
             "forces": np.array([[0.0, 0.0, 0.0]] * (len(atoms) if atoms else 1)),
             "stress": np.array([0.0] * 6),
         }

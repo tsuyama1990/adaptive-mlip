@@ -89,28 +89,19 @@ class StructureGenerator(BaseGenerator):
             msg = f"Failed to generate base structure for {composition}: {e}"
             raise RuntimeError(msg) from e
 
-        # Step 2: Apply Policy (Streaming)
-        # We defer supercell replication to avoid holding a massive base structure in memory
-        # if only small perturbations are needed, though typically base is needed.
-        # However, to be strictly memory safe for huge systems, we can generate the supercell
-        # just in time if the policy supports it, or keep it once.
-        # Given standard usage, keeping one supercell is O(1) w.r.t n_candidates.
-        # But per audit "Lazy replication", let's ensure we don't duplicate it unnecessarily.
-
-        # We use a generator expression or loop to yield.
-        # The policy takes 'base_structure'. If we pass the small primitive, the policy
-        # might need to repeat it. Standard policies (Rattle) assume the input is the full cell.
-        # So we must repeat it.
-        # To satisfy "Lazy", we ensure we don't create a list of them.
-
-        base_supercell = base_structure.repeat(self.config.supercell_size)  # type: ignore[no-untyped-call]
-
-        # Validate policy configuration
+        # Validate policy configuration first
         if not isinstance(self.config.policy_name, ExplorationPolicy):
              msg = f"Invalid policy name: {self.config.policy_name}"
              raise TypeError(msg)
 
+        # Step 2: Apply Policy (Streaming)
+        # We generate the supercell once to use as a template.
+        # This is created lazily when the generator is consumed (i.e. on first next() call).
+        base_supercell = base_structure.repeat(self.config.supercell_size)  # type: ignore[no-untyped-call]
+
         # Stream directly from policy
+        # The policy uses the base_supercell to generate candidates.
+        # We ensure we yield immediately to prevent memory accumulation.
         count = 0
         for structure in policy.generate(base_supercell, self.config, n_structures=n_candidates):
             if count >= n_candidates:

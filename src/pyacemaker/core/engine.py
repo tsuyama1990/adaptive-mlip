@@ -39,7 +39,7 @@ class LammpsEngine(BaseEngine):
 
         # Simulate result based on config
         # Use temperature to simulate some variation
-        base_energy = -100.0
+        base_energy = self.config.base_energy
         thermal_noise = self.config.temperature * 0.001 # 1 meV per K
 
         simulated_energy = base_energy + thermal_noise

@@ -46,5 +46,5 @@ class PacemakerTrainer(BaseTrainer):
         # In a real implementation, we would run pace_train via subprocess
 
         # Return a path to a potential file in the same directory (or configured output dir)
-        # For simulation, we assume 'potential.yace' is created.
-        return path.parent / "potential.yace"
+        # For simulation, we assume configured filename is created.
+        return path.parent / self.config.output_filename

@@ -12,6 +12,11 @@ class MDConfig(BaseModel):
     timestep: PositiveFloat = Field(..., description="Timestep in ps")
     n_steps: int = Field(..., gt=0, description="Number of MD steps")
 
+    # Mocking Parameters (Audit Requirement)
+    base_energy: float = Field(
+        -100.0, description="Baseline energy for mock simulation"
+    )
+
     # Spec Section 3.4 (Hybrid Potential & OTF)
     hybrid_potential: bool = Field(
         False, description="Use hybrid potential (ACE + LJ/ZBL)"
