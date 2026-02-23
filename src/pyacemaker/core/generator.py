@@ -6,13 +6,7 @@ from ase import Atoms
 from pyacemaker.core.base import BaseGenerator
 from pyacemaker.core.exceptions import GeneratorError
 from pyacemaker.core.m3gnet_wrapper import M3GNetWrapper
-from pyacemaker.core.policy import (
-    BasePolicy,
-    ColdStartPolicy,
-    DefectPolicy,
-    RattlePolicy,
-    StrainPolicy,
-)
+from pyacemaker.core.policy_factory import PolicyFactory
 from pyacemaker.domain_models.structure import ExplorationPolicy, StructureConfig
 
 
@@ -43,22 +37,6 @@ class StructureGenerator(BaseGenerator):
             raise TypeError(msg)
         self.config = config
 
-    def _get_policy(self) -> BasePolicy:
-        """Selects the appropriate policy based on configuration."""
-        policies: dict[ExplorationPolicy, type[BasePolicy]] = {
-            ExplorationPolicy.COLD_START: ColdStartPolicy,
-            ExplorationPolicy.RANDOM_RATTLE: RattlePolicy,
-            ExplorationPolicy.STRAIN: StrainPolicy,
-            ExplorationPolicy.DEFECTS: DefectPolicy,
-        }
-
-        policy_cls = policies.get(self.config.policy_name)
-        if not policy_cls:
-            msg = f"Unknown policy: {self.config.policy_name}"
-            raise ValueError(msg)
-
-        return policy_cls()
-
     def generate(self, n_candidates: int) -> Iterator[Atoms]:
         """
         Generates candidate structures.
@@ -84,7 +62,7 @@ class StructureGenerator(BaseGenerator):
             return
 
         # Policy Selection
-        policy = self._get_policy()
+        policy = PolicyFactory.get_policy(self.config)
 
         # Step 1: Base Structure Generation (Lazy)
         # We define composition here but don't call prediction yet

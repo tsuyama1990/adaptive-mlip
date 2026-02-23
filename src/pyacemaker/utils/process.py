@@ -27,6 +27,24 @@ def run_command(
         subprocess.CalledProcessError: If command fails and check=True.
         FileNotFoundError: If executable is not found.
     """
+    # Strict Argument Validation (Allowlist)
+    # We allow alphanumeric, dot, dash, underscore, slash, equal, comma, colon.
+    # This covers paths, simple options, and numbers.
+    # Special characters (like &, ;, |, $) which are dangerous in shells are rejected.
+    import re
+    # More permissive regex for typical file paths and CLI args, but blocking shell metachars
+    # Allowing spaces in paths is tricky but " " is safe if not parsed by shell.
+    # However, since shell=False, the main risk is the command itself being malicious if arguments are passed to a sub-shell.
+    # But here we just want to ensure "integrity" of arguments.
+
+    # Check for dangerous shell characters even if shell=False, as a defense-in-depth measure.
+    # This prevents arguments that might be interpreted by the executed program in a dangerous way.
+    dangerous_chars = re.compile(r"[;&|`$]")
+    for arg in cmd:
+        if dangerous_chars.search(arg):
+             msg = f"Argument contains potentially dangerous characters: {arg}"
+             raise ValueError(msg)
+
     # Mask potentially sensitive arguments (basic heuristic)
     # We redact arguments that look like they might be sensitive keys or very long strings
     safe_cmd = []

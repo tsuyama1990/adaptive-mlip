@@ -94,4 +94,27 @@ class DFTConfig(BaseModel):
                 msg = f"Invalid pseudopotential path {path_str}: {e}"
                 raise ValueError(msg) from e
 
+            # Content Validation: Check for UPF header
+            # We read the first few lines to ensure it looks like a pseudopotential file.
+            # Standard UPF files start with <UPF version="..."> or similar XML/text.
+            try:
+                with resolved_path.open("rb") as f:
+                    # Read first 100 bytes
+                    header = f.read(100)
+                    # Check for typical UPF signatures or at least that it's not binary garbage
+                    # UPF v1/v2 are text-based.
+                    # We check for '<UPF' or 'PP_HEADER' (older formats) or just ensure it's text.
+                    try:
+                        text_header = header.decode("utf-8")
+                        if "<UPF" not in text_header and "PP_HEADER" not in text_header:
+                             # Weak check, but better than nothing.
+                             # If neither present, maybe warn? For now, we just enforce utf-8 decodeable.
+                             pass
+                    except UnicodeDecodeError as e:
+                         msg = f"Pseudopotential file {path_str} does not appear to be a valid text-based UPF file."
+                         raise ValueError(msg) from e
+            except OSError as e:
+                 msg = f"Could not read pseudopotential file {path_str}: {e}"
+                 raise ValueError(msg) from e
+
         return v

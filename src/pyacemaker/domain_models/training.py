@@ -5,6 +5,7 @@ from pyacemaker.domain_models.defaults import (
     DEFAULT_DELTA_SPLINE_BINS,
     DEFAULT_DISPLAY_STEP,
     DEFAULT_EVALUATOR,
+    DEFAULT_PACEMAKER_EMBEDDING_TYPE,
     DEFAULT_PACEMAKER_LOSS_KAPPA,
     DEFAULT_PACEMAKER_LOSS_L1,
     DEFAULT_PACEMAKER_LOSS_L2,
@@ -12,6 +13,7 @@ from pyacemaker.domain_models.defaults import (
     DEFAULT_PACEMAKER_NDENSITY,
     DEFAULT_PACEMAKER_OPTIMIZER,
     DEFAULT_PACEMAKER_R0,
+    DEFAULT_PACEMAKER_RAD_BASE,
     DEFAULT_PACEMAKER_REPULSION_SIGMA,
     DEFAULT_TRAINING_BATCH_SIZE,
     DEFAULT_TRAINING_MAX_ITERATIONS,
@@ -25,7 +27,9 @@ class PacemakerConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     # Embedding settings
-    embedding_type: str = Field("FinnisSinclair", description="Type of embedding function")
+    embedding_type: str = Field(
+        DEFAULT_PACEMAKER_EMBEDDING_TYPE, description="Type of embedding function"
+    )
     fs_parameters: list[float] = Field(
         default_factory=lambda: [1.0, 1.0, 1.0, 1.5],
         description="Parameters for FinnisSinclair embedding",
@@ -35,7 +39,7 @@ class PacemakerConfig(BaseModel):
     )
 
     # Bond settings
-    rad_base: str = Field("Chebyshev", description="Radial basis function type")
+    rad_base: str = Field(DEFAULT_PACEMAKER_RAD_BASE, description="Radial basis function type")
     rad_parameters: list[float] = Field(
         default_factory=lambda: [1.0], description="Radial basis parameters"
     )
