@@ -39,4 +39,4 @@ tests/unit/test_streaming_io.py ...                                      [ 92%]
 tests/unit/test_trainer_pacemaker.py ......                              [ 95%]
 tests/unit/test_validator.py .......                                     [100%]
 
-============================= 166 passed in 0.94s ==============================
+============================= 166 passed in 0.99s ==============================
