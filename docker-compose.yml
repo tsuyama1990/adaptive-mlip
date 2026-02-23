@@ -2,12 +2,9 @@ version: '3.8'
 
 services:
   ac-cdd:
-    build: /home/tomo/project/ac-cdd
+    build: .
     image: ac-cdd
     container_name: ac-cdd-agent
-
-    env_file:
-      - .ac_cdd/.env
 
     # Mount current directory to /app
     volumes:
@@ -30,8 +27,24 @@ services:
 
       # SSH Agent forwarding (recommended for security)
       - SSH_AUTH_SOCK=${SSH_AUTH_SOCK}
+
       # GitHub Token (alternative to SSH)
-      # - GH_TOKEN=${GH_TOKEN}
+      # You can pass this via terminal: GITHUB_TOKEN=$(gh auth token) docker-compose run ...
+      - GITHUB_TOKEN=${GITHUB_TOKEN:-}
+
+      # -----------------------------------------------------------------------
+      # Key fix: redirect uv's venv to a container-only location.
+      # Without this, 'uv sync' inside Docker writes .venv at /app/.venv and
+      # the activate script hardcodes VIRTUAL_ENV="/app/.venv". When the user
+      # sources that venv on their host machine, uv warns about the path
+      # mismatch on every subsequent 'uv sync' run.
+      # By pointing UV_PROJECT_ENVIRONMENT to /opt/..., the host .venv is
+      # never touched by Docker, so the host venv stays clean.
+      - UV_PROJECT_ENVIRONMENT=/opt/ac_cdd_project_venv
+
+      # Flag for ac-cdd code to detect it is running inside Docker
+      - DOCKER_CONTAINER=true
+      # -----------------------------------------------------------------------
 
       # Configuration Examples (Override here if needed)
       # - AC_CDD_REVIEWER__SMART_MODEL=openrouter/anthropic/claude-3-5-sonnet
