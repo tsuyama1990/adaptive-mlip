@@ -5,8 +5,10 @@ from ase import Atoms
 from ase.calculators.calculator import CalculatorSetupError, PropertyNotImplementedError
 
 from pyacemaker.core.base import BaseOracle
+from pyacemaker.core.exceptions import OracleError
 from pyacemaker.domain_models import DFTConfig
 from pyacemaker.interfaces.qe_driver import QEDriver
+from pyacemaker.utils.misc import batched
 
 
 class DFTManager(BaseOracle):
@@ -30,9 +32,11 @@ class DFTManager(BaseOracle):
         """
         Computes DFT properties for stream of structures.
         """
-        # Note: batch_size is ignored for now as we process one by one
-        for atoms in structures:
-            yield self._compute_single(atoms)
+        # Process in batches to allow for future parallelization
+        for batch in batched(structures, batch_size):
+            # Currently serial execution, but grouped by batch
+            for atoms in batch:
+                yield self._compute_single(atoms)
 
     def _get_strategies(self) -> list[Callable[[DFTConfig], None] | None]:
         """
@@ -40,10 +44,14 @@ class DFTManager(BaseOracle):
         Each strategy is a callable that modifies the configuration in-place,
         or None (representing the initial attempt with unmodified config).
         """
+        # Use multipliers from config
+        beta_factor = self.config.mixing_beta_factor
+        smearing_factor = self.config.smearing_width_factor
+
         return [
             None,  # First attempt: no change
-            lambda c: setattr(c, "mixing_beta", c.mixing_beta * 0.5),
-            lambda c: setattr(c, "smearing_width", c.smearing_width * 2.0),
+            lambda c: setattr(c, "mixing_beta", c.mixing_beta * beta_factor),
+            lambda c: setattr(c, "smearing_width", c.smearing_width * smearing_factor),
             lambda c: setattr(c, "diagonalization", "cg"),
         ]
 
@@ -56,11 +64,6 @@ class DFTManager(BaseOracle):
 
         strategies = self._get_strategies()
         last_error: Exception | None = None
-
-        # We need a fresh atoms object if we want to be safe, but modifying atoms.calc is standard.
-        # However, if calculation fails, atoms.calc might be in bad state.
-        # But get_calculator creates a NEW calculator instance each time.
-        # So we just assign atoms.calc = new_calc.
 
         for _, strategy in enumerate(strategies):
             if strategy:
@@ -88,4 +91,4 @@ class DFTManager(BaseOracle):
 
         # If we reach here, all attempts failed
         msg = f"DFT calculation failed after {len(strategies)} attempts. Last error: {last_error}"
-        raise RuntimeError(msg) from last_error
+        raise OracleError(msg) from last_error

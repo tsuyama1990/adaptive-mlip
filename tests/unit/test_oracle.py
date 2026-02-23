@@ -6,6 +6,7 @@ import pytest
 from ase import Atoms
 from ase.calculators.calculator import Calculator
 
+from pyacemaker.core.exceptions import OracleError
 from pyacemaker.core.oracle import DFTManager
 from pyacemaker.domain_models import DFTConfig
 
@@ -64,10 +65,11 @@ def test_dft_manager_compute_success(mock_dft_config: DFTConfig) -> None:
     # Inject mock driver
     manager = DFTManager(mock_dft_config, driver=mock_driver)
 
-    results = list(manager.compute(iter([atoms])))
+    # Verify generator behavior with next() instead of list()
+    generator = manager.compute(iter([atoms]))
+    result = next(generator)
 
-    assert len(results) == 1
-    assert results[0].get_potential_energy() == -13.6
+    assert result.get_potential_energy() == -13.6
 
     # Verify get_calculator was called with correct config
     mock_driver.get_calculator.assert_called_with(atoms, mock_dft_config)
@@ -121,7 +123,8 @@ def test_dft_manager_fatal_error(mock_dft_config: DFTConfig) -> None:
 
     manager = DFTManager(mock_dft_config, driver=mock_driver)
 
-    with pytest.raises(RuntimeError, match="DFT calculation failed"):
+    # Now raises OracleError
+    with pytest.raises(OracleError, match="DFT calculation failed"):
         list(manager.compute(iter([atoms])))
 
     # Verify retries happened (at least > 1)

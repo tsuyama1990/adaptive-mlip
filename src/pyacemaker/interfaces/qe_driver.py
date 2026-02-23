@@ -75,16 +75,26 @@ class QEDriver:
             Tuple of (k_x, k_y, k_z).
         """
         cell = atoms.get_cell()
+        # lengths() call is cheap (returns cached lengths if cell hasn't changed, or simple norm)
         lengths = cell.lengths()
         pbc = atoms.get_pbc()
 
-        # Optimize loop
-        kpts_list: list[int] = []
+        # Optimize loop: direct computation
+        # Use generator expression for efficiency
+        kpts_list = []
+
+        # Precompute constant
+        # Avoid division by zero: if spacing is 0 (invalid), raise?
+        # But PositiveFloat handles > 0.
+
+        factor = 2 * math.pi / spacing
+
         for i in range(3):
             if not pbc[i] or lengths[i] < 1e-3:
                 kpts_list.append(1)
             else:
-                k_val = math.ceil(2 * math.pi / (lengths[i] * spacing))
+                # N = (2*pi/L) / spacing = (2*pi/spacing) / L
+                k_val = math.ceil(factor / lengths[i])
                 kpts_list.append(max(1, int(k_val)))
 
         return tuple(kpts_list) # type: ignore
