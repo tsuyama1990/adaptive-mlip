@@ -79,3 +79,16 @@ def load_config(file_path: str | Path) -> PyAceConfig:
     data = load_yaml(file_path)
     # Pydantic will raise ValidationError if data is invalid
     return PyAceConfig(**data)
+
+
+def dump_yaml(data: dict[str, Any], file_path: str | Path) -> None:
+    """
+    Writes a dictionary to a YAML file.
+
+    Args:
+        data: Dictionary to write.
+        file_path: Path to the output file.
+    """
+    path = Path(file_path)
+    with path.open("w") as f:
+        yaml.safe_dump(data, f)

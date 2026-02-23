@@ -20,3 +20,6 @@ class TrainingConfig(BaseModel):
     active_set_optimization: bool = Field(
         False, description="Use MaxVol selection for active set"
     )
+    active_set_size: int | None = Field(
+        None, description="Target number of structures for active set", gt=0
+    )

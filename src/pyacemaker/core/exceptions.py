@@ -15,3 +15,6 @@ class TrainerError(PyAceError):
 
 class EngineError(PyAceError):
     """MD Engine related errors."""
+
+class ActiveSetError(PyAceError):
+    """Active set selection errors."""

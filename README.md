@@ -26,6 +26,10 @@ Constructing MLIPs manually is tedious and error-prone. PyAceMaker automates the
     *   Automated Quantum Espresso execution via ASE.
     *   **Self-Healing**: Automatically retries failed calculations with adjusted parameters (e.g., mixing beta, smearing).
     *   **Security**: Prevents path traversal and validates input configuration.
+*   **Potential Training (Pacemaker)**:
+    *   **Delta Learning**: Fits the difference between DFT and a physics-based baseline (LJ/ZBL) for robustness.
+    *   **Active Set Optimization**: Uses D-optimality (MaxVol) to select the most informative structures, reducing training costs.
+    *   **Automated Configuration**: Generates optimal `input.yaml` for Pacemaker based on dataset composition.
 *   **Scalability**:
     *   **Streaming Data Processing**: Handles large datasets with O(1) memory usage.
     *   **Resume Capability**: Checkpoints state to JSON, allowing workflows to pause and resume.
@@ -34,7 +38,7 @@ Constructing MLIPs manually is tedious and error-prone. PyAceMaker automates the
 
 *   **Python**: >= 3.11
 *   **DFT Code**: Quantum Espresso (`pw.x` executable in PATH)
-*   **MLIP Trainer**: (e.g., `pace`, `mace`, etc. depending on plugin)
+*   **MLIP Trainer**: Pacemaker (`pace_train`, `pace_activeset` executables in PATH)
 
 ## Installation
 
@@ -68,6 +72,9 @@ uv sync
         potential_type: "ace"
         cutoff_radius: 5.0
         max_basis_size: 500
+        delta_learning: true
+        active_set_optimization: true
+        active_set_size: 100
     md:
         temperature: 1000.0
         pressure: 0.0

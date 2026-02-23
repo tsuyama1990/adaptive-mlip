@@ -22,7 +22,7 @@ pyacemaker/
 
 ### 3.1 Pacemaker Wrapper (`core/trainer.py`)
 Manages the `pace_train` execution.
-*   **Input**: `List[Atoms]` (labelled), `TrainingConfig`.
+*   **Input**: `List[Atoms]` (labelled), `TrainingConfig` (including `active_set_size`).
 *   **Output**: `potential.yace` file path.
 *   **Features**:
     *   Generates `input.yaml` for Pacemaker.
@@ -36,8 +36,8 @@ Calculates baseline parameters.
 
 ### 3.3 Active Set Selection (`core/active_set.py`)
 Wraps `pace_activeset`.
-*   **Function**: `select_active_set(candidates: List[Atoms], current_potential) -> List[Atoms]`
-*   **Logic**: Maximizes the determinant of the descriptor matrix.
+*   **Function**: `select_active_set(candidates: List[Atoms], current_potential, n_select: int) -> List[Atoms]`
+*   **Logic**: Maximizes the determinant of the descriptor matrix. The number of structures to select is controlled by `active_set_size` in `TrainingConfig`.
 
 ## 4. Implementation Approach
 
