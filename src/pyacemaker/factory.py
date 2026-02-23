@@ -1,25 +1,10 @@
-from pathlib import Path
-from typing import Any
-
-from ase import Atoms
-
 from pyacemaker.core.base import BaseEngine, BaseGenerator, BaseOracle, BaseTrainer
+from pyacemaker.core.engine import LammpsEngine
 from pyacemaker.core.exceptions import ConfigError
 from pyacemaker.core.generator import StructureGenerator
 from pyacemaker.core.oracle import DFTManager
+from pyacemaker.core.trainer import PacemakerTrainer
 from pyacemaker.domain_models import PyAceConfig
-
-
-class Cycle01Trainer(BaseTrainer):
-    def train(self, training_data_path: str | Path) -> Any:
-        """Placeholder trainer for Cycle 01."""
-        return None
-
-
-class Cycle01Engine(BaseEngine):
-    def run(self, structure: Atoms | None, potential: Any) -> Any:
-        """Placeholder engine for Cycle 01."""
-        return None
 
 
 class ModuleFactory:
@@ -44,18 +29,25 @@ class ModuleFactory:
             raise ConfigError(msg)
 
         try:
-            # For Cycle 02, we use DFTManager for Oracle if configured
+            # Oracle
             oracle = DFTManager(config.dft)
 
-            # For Cycle 03, we use StructureGenerator
+            # Generator
             generator = StructureGenerator(config.structure)
 
-            return (
-                generator,
-                oracle,
-                Cycle01Trainer(),
-                Cycle01Engine(),
-            )
+            # Trainer
+            trainer = PacemakerTrainer(config.training)
+
+            # Engine
+            engine = LammpsEngine(config.md)
+
         except Exception as e:
             msg = f"Failed to create modules: {e}"
             raise RuntimeError(msg) from e
+
+        return (
+            generator,
+            oracle,
+            trainer,
+            engine,
+        )

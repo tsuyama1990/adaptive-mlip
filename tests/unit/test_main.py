@@ -12,7 +12,7 @@ from pyacemaker.domain_models.defaults import (
 from pyacemaker.main import main
 
 
-def test_main_dry_run(caplog: Any, tmp_path: Path, monkeypatch) -> None:
+def test_main_dry_run(caplog: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
     # Create dummy pseudo
     (tmp_path / "Al.UPF").touch()
@@ -57,7 +57,7 @@ workflow:
     assert LOG_DRY_RUN_COMPLETE in caplog.text
 
 
-def test_main_file_not_found(monkeypatch, tmp_path) -> None:
+def test_main_file_not_found(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.chdir(tmp_path)
     with patch(
         "argparse.ArgumentParser.parse_args",
@@ -68,7 +68,7 @@ def test_main_file_not_found(monkeypatch, tmp_path) -> None:
         assert excinfo.value.code == 1
 
 
-def test_main_run(caplog: Any, tmp_path: Path, monkeypatch) -> None:
+def test_main_run(caplog: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
     (tmp_path / "Al.UPF").touch()
 

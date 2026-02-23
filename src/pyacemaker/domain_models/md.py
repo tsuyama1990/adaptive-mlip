@@ -1,4 +1,6 @@
 
+from typing import Any
+
 from pydantic import BaseModel, ConfigDict, Field, PositiveFloat
 
 
@@ -10,6 +12,13 @@ class MDConfig(BaseModel):
     timestep: PositiveFloat = Field(..., description="Timestep in ps")
     n_steps: int = Field(..., gt=0, description="Number of MD steps")
 
+    # Spec Section 3.4 (Hybrid Potential & OTF)
+    hybrid_potential: bool = Field(
+        False, description="Use hybrid potential (ACE + LJ/ZBL)"
+    )
+    hybrid_params: dict[str, Any] = Field(
+        default_factory=dict, description="Parameters for hybrid potential baseline"
+    )
 
     # Spec Section 3.4 (OTF)
     uncertainty_threshold: float = Field(

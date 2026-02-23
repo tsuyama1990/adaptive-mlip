@@ -8,6 +8,7 @@ from pyacemaker.core.base import BaseOracle
 from pyacemaker.core.exceptions import OracleError
 from pyacemaker.domain_models import DFTConfig
 from pyacemaker.interfaces.qe_driver import QEDriver
+from pyacemaker.utils.embedding import embed_cluster
 
 
 class DFTManager(BaseOracle):
@@ -63,7 +64,16 @@ class DFTManager(BaseOracle):
 
         for atoms in structures:
             iterator_empty = False
-            yield self._compute_single(atoms)
+
+            # Apply Periodic Embedding if configured
+            # This handles cluster carving -> box conversion as per Spec 3.2
+            if self.config.embedding_buffer:
+                # embed_cluster returns a new Atoms object (copy=True default)
+                structure_to_compute = embed_cluster(atoms, buffer=self.config.embedding_buffer)
+            else:
+                structure_to_compute = atoms
+
+            yield self._compute_single(structure_to_compute)
 
         if iterator_empty:
              # Audit requirement: "Add explicit handling for empty iterators with appropriate error messages."

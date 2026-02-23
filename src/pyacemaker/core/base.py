@@ -13,6 +13,16 @@ class BaseGenerator(ABC):
     """
 
     @abstractmethod
+    def update_config(self, config: Any) -> None:
+        """
+        Updates the generator configuration.
+        This allows adaptive policies to modify generation parameters at runtime.
+
+        Args:
+            config: New configuration object (e.g. StructureConfig).
+        """
+
+    @abstractmethod
     def generate(self, n_candidates: int) -> Iterator[Atoms]:
         """
         Generates candidate structures.

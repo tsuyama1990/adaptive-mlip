@@ -1,3 +1,4 @@
+from pathlib import Path
 from unittest.mock import patch
 
 import numpy as np
@@ -10,7 +11,7 @@ from pyacemaker.interfaces.qe_driver import QEDriver
 
 
 @pytest.fixture
-def mock_dft_config(tmp_path, monkeypatch) -> DFTConfig:
+def mock_dft_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> DFTConfig:
     monkeypatch.chdir(tmp_path)
     (tmp_path / "H.UPF").touch()
 

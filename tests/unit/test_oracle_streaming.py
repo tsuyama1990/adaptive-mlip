@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
 
@@ -10,7 +11,7 @@ from pyacemaker.domain_models import DFTConfig
 
 
 @pytest.fixture
-def mock_dft_config(tmp_path, monkeypatch) -> DFTConfig:
+def mock_dft_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> DFTConfig:
     monkeypatch.chdir(tmp_path)
     (tmp_path / "H.UPF").touch()
 

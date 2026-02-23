@@ -1,11 +1,11 @@
-
 import pytest
 from pydantic import ValidationError
+from pathlib import Path
 
 from pyacemaker.domain_models import DFTConfig
 
 
-def test_dft_config_full_valid(tmp_path, monkeypatch) -> None:
+def test_dft_config_full_valid(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Test full initialization of DFTConfig with all optional fields."""
     monkeypatch.chdir(tmp_path)
     (tmp_path / "Fe_pseudo.UPF").touch()
@@ -28,7 +28,7 @@ def test_dft_config_full_valid(tmp_path, monkeypatch) -> None:
     assert config.pseudopotentials == {"Fe": "Fe_pseudo.UPF"}
 
 
-def test_dft_config_defaults(tmp_path, monkeypatch) -> None:
+def test_dft_config_defaults(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Test default values for optional fields."""
     monkeypatch.chdir(tmp_path)
     (tmp_path / "Fe.UPF").touch()
@@ -46,7 +46,7 @@ def test_dft_config_defaults(tmp_path, monkeypatch) -> None:
     assert config.diagonalization == "david"
 
 
-def test_dft_config_invalid_mixing_beta(tmp_path, monkeypatch) -> None:
+def test_dft_config_invalid_mixing_beta(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Test invalid mixing_beta (must be 0 < beta <= 1)."""
     monkeypatch.chdir(tmp_path)
     (tmp_path / "Fe.UPF").touch()
@@ -72,7 +72,7 @@ def test_dft_config_invalid_mixing_beta(tmp_path, monkeypatch) -> None:
         )
 
 
-def test_dft_config_invalid_smearing_width(tmp_path, monkeypatch) -> None:
+def test_dft_config_invalid_smearing_width(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Test invalid smearing_width (must be > 0)."""
     monkeypatch.chdir(tmp_path)
     (tmp_path / "Fe.UPF").touch()
@@ -88,7 +88,7 @@ def test_dft_config_invalid_smearing_width(tmp_path, monkeypatch) -> None:
         )
 
 
-def test_dft_config_extra_forbid(tmp_path, monkeypatch) -> None:
+def test_dft_config_extra_forbid(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Test that extra fields are forbidden."""
     monkeypatch.chdir(tmp_path)
     (tmp_path / "Fe.UPF").touch()
@@ -125,7 +125,7 @@ def test_dft_config_empty_pseudopotential() -> None:
         )
 
 
-def test_dft_config_path_traversal(tmp_path, monkeypatch) -> None:
+def test_dft_config_path_traversal(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Test that path traversal is blocked."""
     monkeypatch.chdir(tmp_path)
 
@@ -169,7 +169,7 @@ def test_dft_config_path_traversal(tmp_path, monkeypatch) -> None:
         if outside_dir.exists():
             outside_dir.rmdir()
 
-def test_dft_config_file_not_found(tmp_path, monkeypatch) -> None:
+def test_dft_config_file_not_found(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Test that non-existent file raises error."""
     monkeypatch.chdir(tmp_path)
 
@@ -180,4 +180,41 @@ def test_dft_config_file_not_found(tmp_path, monkeypatch) -> None:
             kpoints_density=0.04,
             encut=500.0,
             pseudopotentials={"Fe": "missing.UPF"},
+        )
+
+def test_dft_config_embedding_buffer(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test validation of embedding_buffer."""
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "Fe.UPF").touch()
+
+    # Valid buffer
+    config = DFTConfig(
+        code="qe",
+        functional="PBE",
+        kpoints_density=0.04,
+        encut=500.0,
+        pseudopotentials={"Fe": "Fe.UPF"},
+        embedding_buffer=10.0,
+    )
+    assert config.embedding_buffer == 10.0
+
+    # Invalid buffer (<= 0)
+    with pytest.raises(ValidationError):
+        DFTConfig(
+            code="qe",
+            functional="PBE",
+            kpoints_density=0.04,
+            encut=500.0,
+            pseudopotentials={"Fe": "Fe.UPF"},
+            embedding_buffer=0.0,
+        )
+
+    with pytest.raises(ValidationError):
+        DFTConfig(
+            code="qe",
+            functional="PBE",
+            kpoints_density=0.04,
+            encut=500.0,
+            pseudopotentials={"Fe": "Fe.UPF"},
+            embedding_buffer=-5.0,
         )

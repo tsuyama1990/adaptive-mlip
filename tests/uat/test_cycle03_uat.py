@@ -41,8 +41,8 @@ def test_uat_03_01_generate_candidates() -> None:
     assert "Pt" in symbols
 
     # Verify perturbation
-    pos0 = first_two[0].positions  # type: ignore[no-untyped-call]
-    pos1 = first_two[1].positions  # type: ignore[no-untyped-call]
+    pos0 = first_two[0].positions
+    pos1 = first_two[1].positions
     assert not np.allclose(pos0, pos1)
 
     # Verify we can consume the rest without keeping them

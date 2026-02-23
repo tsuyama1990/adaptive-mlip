@@ -11,6 +11,11 @@ class DFTConfig(BaseModel):
     kpoints_density: PositiveFloat = Field(..., description="K-points density in 1/Angstrom")
     encut: PositiveFloat = Field(..., description="Energy cutoff in eV")
 
+    # Periodic Embedding
+    embedding_buffer: float | None = Field(
+        None, gt=0.0, description="Vacuum buffer for periodic embedding (Angstrom)"
+    )
+
     # Self-healing and convergence parameters
     mixing_beta: float = Field(0.7, gt=0.0, le=1.0, description="Initial mixing parameter for SCF")
     smearing_type: str = Field("mv", description="Type of smearing (e.g., 'mv', 'gaussian')")

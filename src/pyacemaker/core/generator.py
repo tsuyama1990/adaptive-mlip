@@ -1,4 +1,5 @@
 from collections.abc import Iterator
+from typing import Any
 
 from ase import Atoms
 
@@ -23,6 +24,15 @@ class StructureGenerator(BaseGenerator):
     def __init__(self, config: StructureConfig) -> None:
         self.config = config
         self.m3gnet = M3GNetWrapper()
+
+    def update_config(self, config: Any) -> None:
+        """
+        Updates the generator configuration.
+        """
+        if not isinstance(config, StructureConfig):
+            msg = f"Expected StructureConfig, got {type(config)}"
+            raise TypeError(msg)
+        self.config = config
 
     def _get_policy(self) -> BasePolicy:
         """Selects the appropriate policy based on configuration."""

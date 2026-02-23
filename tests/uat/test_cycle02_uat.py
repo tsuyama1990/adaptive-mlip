@@ -1,3 +1,4 @@
+from pathlib import Path
 from unittest.mock import patch
 
 import numpy as np
@@ -48,7 +49,7 @@ class UATMockCalculator(Calculator):
 
 
 @pytest.fixture
-def uat_dft_config(tmp_path, monkeypatch) -> DFTConfig:
+def uat_dft_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> DFTConfig:
     monkeypatch.chdir(tmp_path)
     (tmp_path / "H.UPF").touch()
     (tmp_path / "O.UPF").touch()
@@ -66,7 +67,7 @@ def uat_dft_config(tmp_path, monkeypatch) -> DFTConfig:
     )
 
 
-def test_uat_02_01_single_point_calculation(uat_dft_config: DFTConfig, monkeypatch) -> None:
+def test_uat_02_01_single_point_calculation(uat_dft_config: DFTConfig, monkeypatch: pytest.MonkeyPatch) -> None:
     """
     Scenario 02-01: Single Point Calculation.
     Verify that the system can run a simple DFT calculation (mocked).

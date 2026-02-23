@@ -1,3 +1,5 @@
+from collections.abc import Iterator
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
@@ -11,7 +13,7 @@ from tests.constants import TEST_ENERGY_GENERIC
 
 
 @pytest.fixture
-def mock_dft_config(tmp_path, monkeypatch) -> DFTConfig:
+def mock_dft_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> DFTConfig:
     monkeypatch.chdir(tmp_path)
     (tmp_path / "H.UPF").touch()
 
@@ -183,10 +185,47 @@ def test_dft_manager_invalid_input(mock_dft_config: DFTConfig) -> None:
 def test_dft_manager_empty_iterator(mock_dft_config: DFTConfig) -> None:
     """Test compute handles empty iterator correctly with warning."""
     manager = DFTManager(mock_dft_config)
-    empty_iter: iter = iter([])  # type: ignore
+    empty_iter: Iterator[Atoms] = iter([])
 
     with pytest.warns(UserWarning, match="Oracle received empty iterator"):
         # Explicit loop without list() materialization for safety
         results = list(manager.compute(empty_iter))
 
     assert len(results) == 0
+
+def test_dft_manager_embedding(mock_dft_config: DFTConfig, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test that embedding is applied when configured."""
+    from pyacemaker.core.oracle import DFTManager
+
+    # Configure embedding buffer
+    mock_dft_config.embedding_buffer = 5.0
+
+    # Mock embed_cluster
+    mock_embed = MagicMock()
+    # Return a dummy atoms object
+    embedded_atoms = Atoms("H", cell=[20, 20, 20], pbc=True)
+    mock_embed.return_value = embedded_atoms
+
+    monkeypatch.setattr("pyacemaker.core.oracle.embed_cluster", mock_embed)
+
+    # Mock Driver
+    mock_driver = MagicMock()
+    mock_driver.get_calculator.return_value = MockCalculator(fail_count=0)
+
+    manager = DFTManager(mock_dft_config, driver=mock_driver)
+
+    atoms = Atoms("H", positions=[[0, 0, 0]])
+    # Must be iterator
+    results = list(manager.compute(iter([atoms])))
+
+    assert len(results) == 1
+    # Check if embed_cluster was called
+    mock_embed.assert_called_once()
+    args, kwargs = mock_embed.call_args
+    assert args[0] == atoms
+    assert kwargs['buffer'] == 5.0
+
+    # Check if result is the embedded one
+    # DFTManager.compute yields the result of _compute_single(embedded_atoms)
+    # _compute_single returns the atom object passed to it (which is embedded_atoms)
+    assert results[0] == embedded_atoms

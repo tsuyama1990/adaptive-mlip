@@ -1,3 +1,4 @@
+from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
@@ -47,7 +48,7 @@ def test_structure_config_policy() -> None:
     assert config.rattle_stdev == 0.2
 
 
-def test_dft_config_valid(tmp_path, monkeypatch) -> None:
+def test_dft_config_valid(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
     (tmp_path / "Fe.UPF").touch()
 
@@ -98,7 +99,7 @@ def test_logging_config_valid() -> None:
     assert config.log_file == "pyacemaker.log"
 
 
-def test_pyace_config_valid(tmp_path, monkeypatch) -> None:
+def test_pyace_config_valid(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
     (tmp_path / "Al.UPF").touch()
 

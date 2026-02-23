@@ -42,11 +42,11 @@ def test_rattle_policy() -> None:
     assert structures[0] is not structures[1]
 
     # Verify positions are different between generated structures
-    pos0 = structures[0].positions.copy() # type: ignore[no-untyped-call]
-    pos1 = structures[1].positions.copy() # type: ignore[no-untyped-call]
+    pos0 = structures[0].positions.copy()
+    pos1 = structures[1].positions.copy()
 
     # Verify they are different from base
-    assert not np.allclose(pos0, base.positions) # type: ignore[no-untyped-call]
+    assert not np.allclose(pos0, base.positions)
 
     # Verify they are different from each other
     assert not np.allclose(pos0, pos1)
