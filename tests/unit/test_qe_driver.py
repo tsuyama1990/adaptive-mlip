@@ -1,10 +1,11 @@
 from unittest.mock import patch
 
+import numpy as np
 import pytest
 from ase import Atoms
 
 from pyacemaker.domain_models import DFTConfig
-from pyacemaker.interfaces.qe_driver import QEDriver
+from pyacemaker.interfaces.qe_driver import RECIPROCAL_FACTOR, QEDriver
 
 
 @pytest.fixture
@@ -35,13 +36,14 @@ def test_qe_driver_get_calculator_kpoints(mock_dft_config: DFTConfig) -> None:
         kpts = call_args.get("kpts")
         assert kpts is not None
 
-        # Spacing is more likely.
-
-        # I'll let the implementation decide, but I'll assert it's a tuple of 3 integers.
         assert isinstance(kpts, tuple | list)
         assert len(kpts) == 3
-        assert all(isinstance(k, int) for k in kpts)
-        assert all(k > 0 for k in kpts)
+
+        # Verify calculation:
+        # spacing = 0.04, factor = 2*pi / 0.04 ~ 157.08, L = 10
+        # N = ceil(157.08 / 10) = ceil(15.7) = 16
+        expected_k = int(np.ceil((RECIPROCAL_FACTOR / 0.04) / 10.0))
+        assert kpts == (expected_k, expected_k, expected_k)
 
 
 def test_qe_driver_kpoints_non_pbc(mock_dft_config: DFTConfig) -> None:
@@ -60,9 +62,11 @@ def test_qe_driver_kpoints_non_pbc(mock_dft_config: DFTConfig) -> None:
     with patch("pyacemaker.interfaces.qe_driver.Espresso") as MockEspresso:
         driver.get_calculator(atoms, mock_dft_config)
         kpts = MockEspresso.call_args[1].get("kpts")
-        # kx, ky should be > 1 (calculated), kz should be 1
-        assert kpts[0] > 1
-        assert kpts[1] > 1
+
+        # kx, ky should be calculated
+        expected_k = int(np.ceil((RECIPROCAL_FACTOR / 0.04) / 10.0))
+        assert kpts[0] == expected_k
+        assert kpts[1] == expected_k
         assert kpts[2] == 1
 
 

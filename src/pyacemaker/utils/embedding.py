@@ -44,16 +44,56 @@ def embed_cluster(cluster: Atoms, buffer: float) -> Atoms:
     dims = max_xyz - min_xyz
     cell_lengths = dims + buffer
 
-    # Create new atoms object
-    new_cluster = cluster.copy()  # type: ignore[no-untyped-call]
-    new_cluster.set_cell(cell_lengths)
-    new_cluster.set_pbc(True)
-
-    # Center atoms in the new cell
+    # Calculate shift
     center_of_box = cell_lengths / 2.0
     center_of_atoms = (min_xyz + max_xyz) / 2.0
     shift = center_of_box - center_of_atoms
 
-    new_cluster.translate(shift)
+    # Efficient creation: Avoid deep copy of everything if possible,
+    # but we need new cell and new positions.
+    # We can create new Atoms object using arrays directly.
+    new_positions = positions + shift
+
+    # Using Atoms constructor is generally fast enough if we pass arrays directly.
+    # Copying symbols/numbers is necessary.
+    new_cluster = Atoms(
+        numbers=cluster.get_atomic_numbers(),
+        positions=new_positions,
+        cell=cell_lengths,
+        pbc=True
+    )
+
+    # Transfer info/tags if needed? Usually for MLIP we might need info.
+    # Explicit copy of info dict is safer than deep copy of object.
+    new_cluster.info = cluster.info.copy()
+    # Arrays like tags, masses, moments might be needed.
+    # For now, simplistic recreation is faster but might lose data.
+    # Given the constraint "modify to work in-place OR use memory-efficient views",
+    # constructing a new object from arrays is efficient.
+    # However, to preserve ALL properties (constraints, etc.), copy() is safer.
+    # "Inefficient for large clusters" -> copy() is O(N). Everything is O(N).
+    # The overhead is Python object creation.
+    # Let's revert to copy() but document that it is O(N).
+    # OR, modify the input if a flag is passed?
+    # But the function signature implies returning new object.
+    # I will stick to optimized creation if preserving everything isn't strict,
+    # but standard practice is to preserve everything.
+
+    # Optimizing:
+    # new_cluster = cluster.copy() -> clones everything.
+    # Then translate.
+    # This involves allocating new positions array twice (once for copy, once for translate).
+
+    # Optimized approach:
+    # 1. Copy
+    # 2. Set cell/pbc
+    # 3. positions += shift (in-place update of the NEW array)
+
+    new_cluster = cluster.copy() # type: ignore[no-untyped-call]
+    new_cluster.set_cell(cell_lengths)
+    new_cluster.set_pbc(True)
+
+    # In-place translation of the new object's positions
+    new_cluster.positions += shift
 
     return new_cluster
