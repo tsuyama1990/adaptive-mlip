@@ -11,5 +11,12 @@ def get_species_order(atoms: Atoms) -> list[str]:
 
     Returns:
         List of unique chemical symbols (e.g., ["Al", "Ni"]).
+
+    Raises:
+        TypeError: If atoms is not an ASE Atoms object.
     """
+    if not isinstance(atoms, Atoms):
+        msg = f"Expected ASE Atoms object, got {type(atoms)}."
+        raise TypeError(msg)
+
     return sorted({atom.symbol for atom in atoms})

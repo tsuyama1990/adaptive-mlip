@@ -5,6 +5,8 @@ from ase import Atoms
 from pyacemaker.core.base import BaseEngine
 from pyacemaker.core.io_manager import LammpsFileManager
 from pyacemaker.core.lammps_generator import LammpsScriptGenerator
+from pyacemaker.core.validator import LammpsValidator
+from pyacemaker.domain_models.constants import LAMMPS_SCREEN_ARG
 from pyacemaker.domain_models.md import MDConfig, MDSimulationResult
 from pyacemaker.interfaces.lammps_driver import LammpsDriver
 
@@ -27,34 +29,23 @@ class LammpsEngine(BaseEngine):
         """
         Runs the MD simulation.
         """
-        if structure is None:
-             msg = "Structure must be provided."
-             raise ValueError(msg)
-
-        if len(structure) == 0:
-             msg = "Structure contains no atoms."
-             raise ValueError(msg)
+        # Input Validation (SRP via Validator)
+        LammpsValidator.validate_structure(structure)
+        potential_path = LammpsValidator.validate_potential(potential)
 
         # Prepare workspace (temp dir, file writing)
+        # Note: We checked structure is not None/Empty in validator.
+        # But prepare_workspace needs 'structure' as Atoms (which it is, after check).
+        # Type checker might complain if structure is Optional.
+        # But runtime check ensures it.
+        if structure is None:
+             msg = "Structure cannot be None after validation."
+             raise ValueError(msg)
+
         ctx, data_file, dump_file, log_file, elements = self.file_manager.prepare_workspace(structure)
 
         with ctx:
             # Generate script using delegate
-            # Note: potential is passed as is. Validation of potential existence
-            # should ideally happen, but LammpsFileManager handles data file.
-            # LammpsEngine should check potential if it's a path.
-            # (Adding check similar to previous implementation)
-            # Actually, io_manager doesn't handle potential file logic.
-
-            # Check potential path
-            # We assume potential is a path string or Path object.
-            # LammpsDriver needs string.
-            from pathlib import Path
-            potential_path = Path(potential)
-            if not potential_path.exists():
-                 msg = f"Potential file not found: {potential_path}"
-                 raise FileNotFoundError(msg)
-
             script = self.generator.generate(
                 potential_path.resolve(),
                 data_file,
@@ -63,7 +54,8 @@ class LammpsEngine(BaseEngine):
             )
 
             # Initialize Driver with unique log file
-            driver = LammpsDriver(["-screen", "none", "-log", str(log_file)])
+            # Use constant for screen arg
+            driver = LammpsDriver(["-screen", LAMMPS_SCREEN_ARG, "-log", str(log_file)])
 
             # Run
             try:

@@ -130,7 +130,9 @@ def test_run_missing_potential_error(mock_md_config: MDConfig) -> None:
 
 
 def test_run_large_structure_warning(mock_md_config: MDConfig, mock_driver: Any, caplog: Any, tmp_path: Path) -> None:
-    """Tests warning for large structures."""
+    """Tests info log for large structures (streaming)."""
+    import logging
+    caplog.set_level(logging.INFO)
     engine = LammpsEngine(mock_md_config)
     # Create large structure > 10k
     atoms = Atoms(symbols=["H"] * 10001, positions=[[0,0,0]]*10001, cell=[100,100,100], pbc=True)
@@ -139,6 +141,8 @@ def test_run_large_structure_warning(mock_md_config: MDConfig, mock_driver: Any,
     pot_path.touch()
 
     # We rely on mock driver to avoid actual execution overhead
+    # Note: prepare_workspace calls write_lammps_streaming which iterates.
+    # For 10k atoms it's fast enough for test.
     engine.run(atoms, pot_path)
 
-    assert "Writing large structure (10001 atoms)" in caplog.text
+    assert "Streaming large structure (10001 atoms)" in caplog.text

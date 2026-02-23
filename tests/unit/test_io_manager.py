@@ -1,8 +1,7 @@
 from pathlib import Path
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
-import pytest
 from ase import Atoms
 
 from pyacemaker.core.io_manager import LammpsFileManager
@@ -30,16 +29,16 @@ def test_prepare_workspace(tmp_path: Path, mock_md_config: MDConfig) -> None:
 
 
 def test_prepare_workspace_large_structure_warning(mock_md_config: MDConfig, caplog: Any) -> None:
+    import logging
+    caplog.set_level(logging.INFO)
     manager = LammpsFileManager(mock_md_config)
     atoms = Atoms(symbols=["H"] * 10001, positions=[[0,0,0]]*10001, cell=[100,100,100], pbc=True)
 
-    # We don't care about the file content, just the log
-    try:
+    # We patch write_lammps_streaming to avoid actual I/O for large structure test
+    with patch("pyacemaker.core.io_manager.write_lammps_streaming") as mock_stream:
         ctx, _, _, _, _ = manager.prepare_workspace(atoms)
         with ctx:
             pass
-    except Exception:
-        # Ignore write errors if disk is full etc in test env
-        pass
+        mock_stream.assert_called_once()
 
-    assert "Writing large structure" in caplog.text
+    assert "Streaming large structure" in caplog.text

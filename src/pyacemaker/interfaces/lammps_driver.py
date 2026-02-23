@@ -1,4 +1,6 @@
 
+import re
+
 import numpy as np
 from ase import Atoms
 from lammps import lammps
@@ -9,6 +11,13 @@ class LammpsDriver:
     Wrapper for the LAMMPS Python interface.
     Handles initialization and data extraction.
     """
+
+    # Whitelist of allowed characters in LAMMPS commands
+    # Alphanumeric, whitespace, and specific safe symbols used in LAMMPS syntax.
+    # Allowed: _ - . / = ' " # * $ { } ( ) [ ] , : + > <
+    # Note: ; | & are strictly forbidden (shell metachars).
+    # Backticks ` are forbidden.
+    SAFE_CMD_PATTERN = re.compile(r"^[a-zA-Z0-9_\-\.\/\=\s\'\"\#\*\$\{\}\(\)\[\],:\+\>\<]+$")
 
     def __init__(self, cmdargs: list[str] | None = None) -> None:
         """
@@ -28,6 +37,19 @@ class LammpsDriver:
             msg = f"Failed to initialize LAMMPS: {e}"
             raise RuntimeError(msg) from e
 
+    def _validate_command(self, cmd: str) -> None:
+        """Validates a single command against security rules."""
+        if not self.SAFE_CMD_PATTERN.match(cmd):
+            msg = f"Command contains forbidden characters: {cmd}"
+            raise ValueError(msg)
+
+        if "shell" in cmd.split(): # Tokenize to avoid matching 'shell' inside words? "myshell" is ok.
+            # LAMMPS command is usually first token.
+            # But 'shell' can be anywhere? No, usually 'shell cmd'.
+            # We blacklist 'shell' token.
+            msg = "Script contains forbidden command 'shell'."
+            raise ValueError(msg)
+
     def run(self, script: str) -> None:
         """
         Execute a LAMMPS script.
@@ -36,27 +58,16 @@ class LammpsDriver:
             script: String containing LAMMPS commands (can be multi-line).
 
         Raises:
-            ValueError: If script contains non-ASCII characters or unsafe shell constructs.
+            ValueError: If script contains non-ASCII characters or unsafe commands.
         """
         if not script.isascii():
              msg = "Script contains non-ASCII characters, which may be unsafe."
              raise ValueError(msg)
 
-        # Basic sanitization against injection via filenames/arguments
-        # If a line contains 'shell', we might want to flag it unless strictly allowed?
-        # But legitimate scripts might use shell.
-        # However, for our engine, we don't expect 'shell' command.
-        # We can blacklist 'shell' keyword for extra safety if generated internally.
-        if "shell" in script:
-             # This is a heuristic.
-             # If "shell" appears, it might be an injection attempt if we didn't generate it.
-             # Since we control the generator, we know we don't use 'shell'.
-             msg = "Script contains forbidden command 'shell'."
-             raise ValueError(msg)
-
         for line in script.split("\n"):
             cmd = line.strip()
             if cmd:
+                self._validate_command(cmd)
                 self.lmp.command(cmd)
 
     def extract_variable(self, name: str) -> float:

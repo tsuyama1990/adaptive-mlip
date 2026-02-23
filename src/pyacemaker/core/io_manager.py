@@ -8,6 +8,7 @@ from ase import Atoms
 from ase.io import write
 
 from pyacemaker.domain_models.md import MDConfig
+from pyacemaker.utils.io import write_lammps_streaming
 from pyacemaker.utils.structure import get_species_order
 
 logger = logging.getLogger(__name__)
@@ -48,27 +49,23 @@ class LammpsFileManager:
         dump_file = cwd / f"dump_{run_id}.lammpstrj"
         log_file = cwd / f"log_{run_id}.lammps"
 
-        # Validation for large structures (OOM/IO risk)
-        if len(structure) > 10000:
-            logger.warning(
-                "Writing large structure (%d atoms) to disk. "
-                "Consider streaming or using RAM disk if not already enabled.",
-                len(structure)
-            )
-
         elements = get_species_order(structure)
 
         try:
-            # ase.io.write handles buffering usually, but for very large structures
-            # we rely on system memory.
-            write(str(data_file), structure, format="lammps-data", specorder=elements, atom_style=self.config.atom_style)
+            # Optimization: Use streaming writer for large structures to avoid OOM
+            # Only supports 'atomic' style and orthogonal boxes for now.
+            if len(structure) > 10000 and self.config.atom_style == "atomic":
+                logger.info("Streaming large structure (%d atoms) to disk.", len(structure))
+                try:
+                    with data_file.open("w") as f:
+                        write_lammps_streaming(f, structure, elements)
+                except ValueError:
+                    # Fallback if non-orthogonal or other issue
+                    logger.warning("Streaming failed (e.g. non-orthogonal). Falling back to ASE write.")
+                    write(str(data_file), structure, format="lammps-data", specorder=elements, atom_style=self.config.atom_style)
+            else:
+                write(str(data_file), structure, format="lammps-data", specorder=elements, atom_style=self.config.atom_style)
         except Exception as e:
-            # Ensure cleanup if write fails? context manager handles it if we raise.
-            # But we must close context if we don't return it?
-            # We return context, caller must enter it or we enter it here?
-            # Better design: This method yields paths?
-            # Or simpler: run() uses context manager, passes temp_dir path to manager?
-            # Let's refactor: Manager provides a context manager method.
             temp_dir_ctx.cleanup()
             msg = f"Failed to write LAMMPS data file: {e}"
             raise RuntimeError(msg) from e
