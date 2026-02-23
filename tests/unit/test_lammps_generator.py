@@ -72,3 +72,14 @@ def test_generator_damping(tmp_path: Path) -> None:
     # pdamp = 500 * 0.002 = 1.0
     assert "temp 300.0 300.0 0.1" in script
     assert "iso 1.0 1.0 1.0" in script
+
+
+def test_generator_atom_style() -> None:
+    """Tests atom_style configuration."""
+    config = MDConfig(
+        temperature=300.0, pressure=1.0, timestep=0.001, n_steps=100,
+        atom_style="charge"
+    )
+    generator = LammpsScriptGenerator(config)
+    script = generator.generate(Path("pot"), Path("dat"), Path("dump"), ["H"])
+    assert "atom_style charge" in script

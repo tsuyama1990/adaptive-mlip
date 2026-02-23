@@ -7,6 +7,7 @@ RECIPROCAL_FACTOR = 2 * math.pi
 QE_KPOINT_TOLERANCE = 1e-3
 DEFAULT_STRAIN_RANGE = 0.05
 KB_EV = 8.617333262e-5  # Boltzmann constant in eV/K
+DEFAULT_RAM_DISK_PATH = "/dev/shm"
 
 # Embedding Constants
 EMBEDDING_TOLERANCE_CELL = 1e-6

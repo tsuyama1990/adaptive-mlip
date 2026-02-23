@@ -109,7 +109,7 @@ class LammpsScriptGenerator:
         lines = [
             "clear",
             "units metal",
-            "atom_style atomic",
+            f"atom_style {self.config.atom_style}",
             "boundary p p p",
             f"read_data {data_file}",
         ]

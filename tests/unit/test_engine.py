@@ -123,7 +123,7 @@ def test_run_empty_structure_error(mock_md_config: MDConfig, tmp_path: Path) -> 
 def test_run_missing_potential_error(mock_md_config: MDConfig) -> None:
     """Tests error handling for missing potential file."""
     engine = LammpsEngine(mock_md_config)
-    atoms = Atoms("H")
+    atoms = Atoms("H", cell=[10, 10, 10], pbc=True)
 
     with pytest.raises(FileNotFoundError, match="Potential file not found"):
         engine.run(atoms, "nonexistent.yace")
@@ -133,7 +133,7 @@ def test_run_large_structure_warning(mock_md_config: MDConfig, mock_driver: Any,
     """Tests warning for large structures."""
     engine = LammpsEngine(mock_md_config)
     # Create large structure > 10k
-    atoms = Atoms(symbols=["H"] * 10001, positions=[[0,0,0]]*10001, cell=[100,100,100])
+    atoms = Atoms(symbols=["H"] * 10001, positions=[[0,0,0]]*10001, cell=[100,100,100], pbc=True)
 
     pot_path = tmp_path / "pot.yace"
     pot_path.touch()
@@ -141,4 +141,4 @@ def test_run_large_structure_warning(mock_md_config: MDConfig, mock_driver: Any,
     # We rely on mock driver to avoid actual execution overhead
     engine.run(atoms, pot_path)
 
-    assert "Simulating large structure (10001 atoms)" in caplog.text
+    assert "Writing large structure (10001 atoms)" in caplog.text

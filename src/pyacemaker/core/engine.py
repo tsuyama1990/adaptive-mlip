@@ -1,19 +1,12 @@
-import logging
-import tempfile
-import uuid
-from pathlib import Path
 from typing import Any
 
 from ase import Atoms
-from ase.io import write
 
 from pyacemaker.core.base import BaseEngine
+from pyacemaker.core.io_manager import LammpsFileManager
 from pyacemaker.core.lammps_generator import LammpsScriptGenerator
 from pyacemaker.domain_models.md import MDConfig, MDSimulationResult
 from pyacemaker.interfaces.lammps_driver import LammpsDriver
-from pyacemaker.utils.structure import get_species_order
-
-logger = logging.getLogger(__name__)
 
 
 class LammpsEngine(BaseEngine):
@@ -28,6 +21,7 @@ class LammpsEngine(BaseEngine):
         """
         self.config = config
         self.generator = LammpsScriptGenerator(config)
+        self.file_manager = LammpsFileManager(config)
 
     def run(self, structure: Atoms | None, potential: Any) -> MDSimulationResult:
         """
@@ -41,39 +35,26 @@ class LammpsEngine(BaseEngine):
              msg = "Structure contains no atoms."
              raise ValueError(msg)
 
-        if len(structure) > 10000:
-             logger.warning("Simulating large structure (%d atoms). Memory usage may be high.", len(structure))
+        # Prepare workspace (temp dir, file writing)
+        ctx, data_file, dump_file, log_file, elements = self.file_manager.prepare_workspace(structure)
 
-        # Validate potential path
-        potential_path = Path(potential)
-        if not potential_path.exists():
-             msg = f"Potential file not found: {potential_path}"
-             raise FileNotFoundError(msg)
-
-        # Use temporary directory (RAM disk if possible via config)
-        with tempfile.TemporaryDirectory(dir=self.config.temp_dir) as tmp_dir_str:
-            tmp_dir = Path(tmp_dir_str)
-            run_id = uuid.uuid4().hex[:8]
-
-            # Intermediate files (in temp)
-            data_file = tmp_dir / f"data_{run_id}.lmp"
-
-            # Output files (in CWD for persistence)
-            cwd = Path.cwd()
-            dump_file = cwd / f"dump_{run_id}.lammpstrj"
-            log_file = cwd / f"log_{run_id}.lammps"
-
-            # Get elements for specorder
-            elements = get_species_order(structure)
-
-            # Write structure to LAMMPS data file in temp dir
-            try:
-                write(str(data_file), structure, format="lammps-data", specorder=elements, atom_style="atomic")
-            except Exception as e:
-                msg = f"Failed to write LAMMPS data file: {e}"
-                raise RuntimeError(msg) from e
-
+        with ctx:
             # Generate script using delegate
+            # Note: potential is passed as is. Validation of potential existence
+            # should ideally happen, but LammpsFileManager handles data file.
+            # LammpsEngine should check potential if it's a path.
+            # (Adding check similar to previous implementation)
+            # Actually, io_manager doesn't handle potential file logic.
+
+            # Check potential path
+            # We assume potential is a path string or Path object.
+            # LammpsDriver needs string.
+            from pathlib import Path
+            potential_path = Path(potential)
+            if not potential_path.exists():
+                 msg = f"Potential file not found: {potential_path}"
+                 raise FileNotFoundError(msg)
+
             script = self.generator.generate(
                 potential_path.resolve(),
                 data_file,

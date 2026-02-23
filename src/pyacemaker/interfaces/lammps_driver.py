@@ -36,10 +36,22 @@ class LammpsDriver:
             script: String containing LAMMPS commands (can be multi-line).
 
         Raises:
-            ValueError: If script contains non-ASCII characters (basic safety check).
+            ValueError: If script contains non-ASCII characters or unsafe shell constructs.
         """
         if not script.isascii():
              msg = "Script contains non-ASCII characters, which may be unsafe."
+             raise ValueError(msg)
+
+        # Basic sanitization against injection via filenames/arguments
+        # If a line contains 'shell', we might want to flag it unless strictly allowed?
+        # But legitimate scripts might use shell.
+        # However, for our engine, we don't expect 'shell' command.
+        # We can blacklist 'shell' keyword for extra safety if generated internally.
+        if "shell" in script:
+             # This is a heuristic.
+             # If "shell" appears, it might be an injection attempt if we didn't generate it.
+             # Since we control the generator, we know we don't use 'shell'.
+             msg = "Script contains forbidden command 'shell'."
              raise ValueError(msg)
 
         for line in script.split("\n"):

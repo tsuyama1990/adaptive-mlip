@@ -3,10 +3,12 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field, PositiveFloat, PositiveInt
 
+from pyacemaker.domain_models.constants import DEFAULT_RAM_DISK_PATH
+
 
 def _get_default_temp_dir() -> str | None:
-    """Returns /dev/shm if available and writable, else None."""
-    shm_path = Path("/dev/shm")  # noqa: S108
+    """Returns RAM disk path if available and writable, else None."""
+    shm_path = Path(DEFAULT_RAM_DISK_PATH)
     if shm_path.exists() and shm_path.is_dir() and os.access(shm_path, os.W_OK):
         return str(shm_path)
     return None
@@ -57,6 +59,9 @@ class MDConfig(BaseModel):
     minimize: bool = Field(False, description="Perform energy minimization before MD")
     neighbor_skin: PositiveFloat = Field(
         2.0, description="Neighbor list skin distance (Angstrom)"
+    )
+    atom_style: str = Field(
+        "atomic", description="LAMMPS atom style (e.g. atomic, charge)"
     )
 
     # Advanced Settings
