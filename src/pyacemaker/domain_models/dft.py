@@ -32,6 +32,7 @@ class DFTConfig(BaseModel):
         """
         Validates that pseudopotential files exist and are safe.
         Enforces that relative paths are within the current working directory.
+        Uses resolve(strict=True) to ensure existence and handle symlinks safely.
         """
         cwd = Path.cwd().resolve()
         for elem, path_str in v.items():
@@ -39,30 +40,28 @@ class DFTConfig(BaseModel):
                 msg = f"Pseudopotential path for {elem} cannot be empty"
                 raise ValueError(msg)
 
-            p = Path(path_str)
-
             try:
-                if p.is_absolute():
-                    if not p.exists():
-                        msg = f"Pseudopotential file not found: {p}"
-                        raise FileNotFoundError(msg)
-                else:
-                    # Resolve relative path
-                    # Note: resolve(strict=False) resolves symlinks and '..' components.
-                    # We check if the result is still inside CWD.
-                    resolved_path = p.resolve()
+                p = Path(path_str)
+                # resolve(strict=True) will raise FileNotFoundError if file doesn't exist.
+                # It also resolves symlinks.
+                resolved_path = p.resolve(strict=True)
 
-                    if not resolved_path.is_relative_to(cwd):
-                        msg = f"Path traversal detected: {path_str} resolves to {resolved_path}, which is outside {cwd}"
-                        raise ValueError(msg)  # noqa: TRY301
+                # Check path traversal
+                if not resolved_path.is_relative_to(cwd):
+                    msg = f"Path traversal detected: {path_str} resolves to {resolved_path}, which is outside {cwd}"
+                    raise ValueError(msg)  # noqa: TRY301
 
-                    if not resolved_path.exists():
-                         msg = f"Pseudopotential file not found: {resolved_path}"
-                         raise FileNotFoundError(msg)
+                # Check if it's a file
+                if not resolved_path.is_file():
+                    msg = f"Pseudopotential path is not a file: {resolved_path}"
+                    raise ValueError(msg)  # noqa: TRY301
 
+            except FileNotFoundError as e:
+                # Re-raise with informative message for Pydantic
+                msg = f"Pseudopotential file not found: {path_str}"
+                raise ValueError(msg) from e
             except (ValueError, OSError) as e:
                 # Catch ValueError from is_relative_to (if not related) or OSError
-                # Re-raise explicit ValueError for Pydantic
                 msg = f"Invalid pseudopotential path {path_str}: {e}"
                 raise ValueError(msg) from e
 

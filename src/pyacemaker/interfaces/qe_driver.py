@@ -112,7 +112,7 @@ class QEDriver:
         if vol < 1e-9:
             return (1, 1, 1)
 
-        # Reciprocal lattice vectors b_i
+        # Reciprocal lattice vectors b_i (without 2pi factor yet for simplicity in cross products)
 
         a1, a2, a3 = cell[0], cell[1], cell[2]
 

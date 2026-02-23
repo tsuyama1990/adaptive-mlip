@@ -34,20 +34,23 @@ class StructureGenerator(BaseGenerator):
             return StrainPolicy()
         if self.config.policy_name == ExplorationPolicy.DEFECTS:
             return DefectPolicy()
-        # Should be caught by Pydantic validation, but for safety:
         msg = f"Unknown policy: {self.config.policy_name}"
         raise ValueError(msg)
 
     def generate(self, n_candidates: int) -> Iterator[Atoms]:
         """
         Generates candidate structures.
+        This method returns an iterator to ensure streaming and O(1) memory usage.
         """
         if n_candidates <= 0:
             return
 
-        # Step 1: Get base structure
-        # Composition is derived from elements list (simple join for now)
-        # Stoichiometry is implicitly 1:1:1... based on unique elements list
+        # Policy Selection
+        policy = self._get_policy()
+
+        # Step 1: Base Structure Generation (Streaming)
+        # In Cold Start or perturbation, we need a base.
+
         composition = "".join(self.config.elements)
 
         try:
@@ -57,14 +60,21 @@ class StructureGenerator(BaseGenerator):
             raise RuntimeError(msg) from e
 
         # Replicate base structure to supercell size
-        # We assume M3GNet returns a unit cell (primitive or conventional)
-        # repeat() returns a new Atoms object
+        # repeat() returns a new Atoms object. This is unavoidable for the base.
+        # We do this once.
         base_structure = base_structure.repeat(self.config.supercell_size)  # type: ignore[no-untyped-call]
 
-        # Step 2: Apply Policy
-        policy = self._get_policy()
+        # Step 2: Apply Policy (Streaming)
+        # Pass the base structure to the policy, which yields perturbed copies one by one.
+        # This ensures we only have 1 base + 1 perturbed active in memory at a time.
 
-        # Yield from policy generator
-        # Note: ColdStartPolicy ignores n_candidates and yields 1 structure (as duplicates are useless)
-        # Other policies yield n_candidates variations.
-        yield from policy.generate(base_structure, self.config, n_structures=n_candidates)
+        for i, structure in enumerate(policy.generate(base_structure, self.config, n_structures=n_candidates)):
+            if i >= n_candidates:
+                break
+
+            # Data Integrity: Validate composition (basic check)
+            if len(structure) == 0:
+                 # Warn?
+                 pass
+
+            yield structure

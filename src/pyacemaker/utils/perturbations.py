@@ -1,11 +1,18 @@
+from typing import Any
+
 import numpy as np
 from ase import Atoms
 
 
-def rattle(atoms: Atoms, stdev: float) -> Atoms:
+def rattle(atoms: Atoms, stdev: float, rng: np.random.Generator | None = None) -> Atoms:
     """
     Apply random Gaussian noise to atomic positions.
     Returns a new Atoms object.
+
+    Args:
+        atoms: Input Atoms object.
+        stdev: Standard deviation of Gaussian noise in Angstroms.
+        rng: Optional NumPy random number generator for reproducibility/efficiency.
     """
     if stdev < 0:
         msg = "Standard deviation must be non-negative"
@@ -13,19 +20,25 @@ def rattle(atoms: Atoms, stdev: float) -> Atoms:
 
     new_atoms: Atoms = atoms.copy()  # type: ignore[no-untyped-call]
     if stdev > 0:
-        # Use numpy directly to ensure randomness and avoid ASE version ambiguities
-        rng = np.random.default_rng()
+        if rng is None:
+            rng = np.random.default_rng()
+
         displacement = rng.normal(scale=stdev, size=new_atoms.positions.shape)
         new_atoms.positions += displacement
     return new_atoms
 
 
-def apply_strain(atoms: Atoms, strain_tensor: np.ndarray) -> Atoms:
+def apply_strain(atoms: Atoms, strain_tensor: np.ndarray, rng: Any = None) -> Atoms:
     """
     Apply strain tensor to the unit cell.
     strain_tensor: 3x3 numpy array representing the strain epsilon.
     New cell = Old cell @ (I + epsilon)
     Atoms are scaled accordingly.
+
+    Args:
+        atoms: Input structure.
+        strain_tensor: 3x3 strain matrix.
+        rng: Unused (kept for API consistency if needed later).
     """
     if strain_tensor.shape != (3, 3):
         msg = "Strain tensor must be a 3x3 matrix"
@@ -42,11 +55,16 @@ def apply_strain(atoms: Atoms, strain_tensor: np.ndarray) -> Atoms:
     return new_atoms
 
 
-def create_vacancy(atoms: Atoms, rate: float) -> Atoms:
+def create_vacancy(atoms: Atoms, rate: float, rng: np.random.Generator | None = None) -> Atoms:
     """
     Randomly remove atoms to create vacancies.
     rate: Fraction of atoms to remove (0.0 to 1.0).
     Returns a new Atoms object.
+
+    Args:
+        atoms: Input structure.
+        rate: Vacancy concentration.
+        rng: Optional NumPy random number generator.
     """
     if not (0.0 <= rate <= 1.0):
         msg = "Vacancy rate must be between 0.0 and 1.0"
@@ -69,7 +87,10 @@ def create_vacancy(atoms: Atoms, rate: float) -> Atoms:
         return new_atoms
 
     # Select indices to remove
-    indices = np.random.choice(n_atoms, size=n_vacancies, replace=False)
+    if rng is None:
+        rng = np.random.default_rng()
+
+    indices = rng.choice(n_atoms, size=n_vacancies, replace=False)
     # Delete atoms. Note: deleting from ASE atoms object modifies it in place.
     del new_atoms[indices]  # type: ignore[no-untyped-call]
 

@@ -11,6 +11,12 @@ class ExplorationPolicy(StrEnum):
     DEFECTS = "defects"
 
 
+class StrainMode(StrEnum):
+    VOLUME = "volume"
+    SHEAR = "shear"
+    MIXED = "mixed"
+
+
 class StructureConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -29,8 +35,11 @@ class StructureConfig(BaseModel):
     rattle_stdev: float = Field(
         default=0.1, ge=0.0, description="Standard deviation for random rattle (Angstrom)"
     )
-    strain_mode: str = Field(
-        default="volume", description="Mode for strain application (volume, shear, mixed)"
+    strain_mode: StrainMode = Field(
+        default=StrainMode.VOLUME, description="Mode for strain application"
+    )
+    strain_magnitude: float = Field(
+        default=0.05, ge=0.0, description="Magnitude of strain to apply (e.g., 0.05 for 5%)"
     )
     vacancy_rate: float = Field(
         default=0.0, ge=0.0, le=1.0, description="Rate of vacancies to introduce"

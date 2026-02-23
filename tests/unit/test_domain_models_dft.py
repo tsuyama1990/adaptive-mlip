@@ -130,12 +130,13 @@ def test_dft_config_path_traversal(tmp_path, monkeypatch) -> None:
     monkeypatch.chdir(tmp_path)
 
     # Create a file in parent directory (risky but simulates outside access)
-    # Actually, we don't need to create it if validation fails before checking existence,
-    # but the logic checks relative resolution first.
-    # If the path is "../something", it resolves to parent.
-    # `is_relative_to(cwd)` will fail.
+    # With strict=True in resolve(), the file MUST exist to be resolved.
+    # If we pass "../secret.UPF" and it doesn't exist, resolve() raises FileNotFoundError.
+    # If it DOES exist, resolve() returns absolute path.
+    # Then is_relative_to(cwd) checks if it's inside.
 
-    with pytest.raises(ValidationError, match="Path traversal detected"):
+    # Case 1: File doesn't exist -> FileNotFoundError
+    with pytest.raises(ValidationError, match="Pseudopotential file not found"):
         DFTConfig(
             code="qe",
             functional="PBE",
@@ -143,6 +144,30 @@ def test_dft_config_path_traversal(tmp_path, monkeypatch) -> None:
             encut=500.0,
             pseudopotentials={"Fe": "../secret.UPF"},
         )
+
+    # Case 2: File exists but outside -> Path traversal detected
+    # We need to simulate a file outside CWD.
+    outside_dir = tmp_path.parent / "outside_dir"
+    outside_dir.mkdir(exist_ok=True)
+    outside_file = outside_dir / "secret.UPF"
+    outside_file.touch()
+
+    try:
+        # Pass absolute path to outside file
+        with pytest.raises(ValidationError, match="Path traversal detected"):
+            DFTConfig(
+                code="qe",
+                functional="PBE",
+                kpoints_density=0.04,
+                encut=500.0,
+                pseudopotentials={"Fe": str(outside_file)},
+            )
+    finally:
+        # Cleanup
+        if outside_file.exists():
+            outside_file.unlink()
+        if outside_dir.exists():
+            outside_dir.rmdir()
 
 def test_dft_config_file_not_found(tmp_path, monkeypatch) -> None:
     """Test that non-existent file raises error."""
