@@ -17,4 +17,6 @@ class PyAceConfig(BaseModel):
     training: TrainingConfig
     md: MDConfig
     workflow: WorkflowConfig
-    logging: LoggingConfig = Field(default_factory=LoggingConfig, description="Logging configuration")
+    logging: LoggingConfig = Field(
+        default_factory=LoggingConfig, description="Logging configuration"
+    )

@@ -53,11 +53,12 @@ def load_yaml(file_path: str | Path) -> dict[str, Any]:
             raise ValueError(msg) from e
         else:
             if not isinstance(data, dict):
-                 # Handle empty file or just scalar
-                 if data is None:
-                     return {}
-                 raise ValueError(ERR_YAML_NOT_DICT)
+                # Handle empty file or just scalar
+                if data is None:
+                    return {}
+                raise ValueError(ERR_YAML_NOT_DICT)
             return data
+
 
 def load_config(file_path: str | Path) -> PyAceConfig:
     """

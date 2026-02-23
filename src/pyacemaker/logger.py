@@ -27,9 +27,7 @@ def setup_logger(config: LoggingConfig, project_name: str) -> logging.Logger:
 
     logger.setLevel(config.level)
 
-    formatter = logging.Formatter(
-        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    )
+    formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 
     # Console Handler
     console_handler = logging.StreamHandler(sys.stdout)
@@ -44,9 +42,7 @@ def setup_logger(config: LoggingConfig, project_name: str) -> logging.Logger:
             log_path.parent.mkdir(parents=True, exist_ok=True)
 
         file_handler = RotatingFileHandler(
-            config.log_file,
-            maxBytes=config.max_bytes,
-            backupCount=config.backup_count
+            config.log_file, maxBytes=config.max_bytes, backupCount=config.backup_count
         )
         file_handler.setFormatter(formatter)
         logger.addHandler(file_handler)

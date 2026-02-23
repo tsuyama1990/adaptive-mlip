@@ -42,7 +42,7 @@ class Orchestrator:
         self.config = config
         self.logger = setup_logger(config=config.logging, project_name=config.project_name)
         self.iteration = 0
-        self.state_file = Path(f"{config.project_name}_state.json")
+        self.state_file = Path(config.workflow.state_file_path)
 
         # Core modules (placeholders for Cycle 01)
         self.generator: BaseGenerator | None = None
@@ -108,7 +108,11 @@ class Orchestrator:
 
             for i in range(start_iter, max_iterations):
                 self.iteration = i + 1
-                self.logger.info(LOG_START_ITERATION.format(iteration=self.iteration, max_iterations=max_iterations))
+                self.logger.info(
+                    LOG_START_ITERATION.format(
+                        iteration=self.iteration, max_iterations=max_iterations
+                    )
+                )
 
                 # Active Learning Loop Logic
 
@@ -129,10 +133,10 @@ class Orchestrator:
                     self.logger.info(LOG_COMPUTED_PROPERTIES.format(count=total_candidates))
 
                 elif self.generator:
-                     # Just consume generator if no oracle (mock mode)
-                     for _ in self.generator.generate(n_candidates=10):
-                         total_candidates += 1
-                     self.logger.info(LOG_GENERATED_CANDIDATES.format(count=total_candidates))
+                    # Just consume generator if no oracle (mock mode)
+                    for _ in self.generator.generate(n_candidates=10):
+                        total_candidates += 1
+                    self.logger.info(LOG_GENERATED_CANDIDATES.format(count=total_candidates))
 
                 # 3. Train potential
                 if self.trainer:
@@ -141,7 +145,7 @@ class Orchestrator:
 
                 # 4. Run MD
                 if self.engine:
-                    self.engine.run(structure=None, potential=None) # type: ignore[arg-type]
+                    self.engine.run(structure=None, potential=None)  # type: ignore[arg-type]
                     self.logger.info(LOG_MD_COMPLETED)
 
                 # Checkpoint

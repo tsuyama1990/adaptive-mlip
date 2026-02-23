@@ -1,11 +1,11 @@
-import sys
-import logging
-from unittest.mock import patch, MagicMock
 from pathlib import Path
-import pytest
 from typing import Any
+from unittest.mock import MagicMock, patch
+
+import pytest
+
 from pyacemaker.main import main
-from pyacemaker.domain_models import PyAceConfig
+
 
 def test_main_dry_run(caplog: Any, tmp_path: Path) -> None:
     config_data = """
@@ -33,14 +33,16 @@ workflow:
     p = tmp_path / "config.yaml"
     p.write_text(config_data)
 
-    with patch("argparse.ArgumentParser.parse_args", return_value=MagicMock(config=str(p), dry_run=True)):
-        with patch("pathlib.Path.cwd", return_value=tmp_path):
-            with pytest.raises(SystemExit) as e:
-                main()
-            assert e.value.code == 0
+    with patch(
+        "argparse.ArgumentParser.parse_args", return_value=MagicMock(config=str(p), dry_run=True)
+    ), patch("pathlib.Path.cwd", return_value=tmp_path):
+        with pytest.raises(SystemExit) as e:
+            main()
+        assert e.value.code == 0
 
     assert "Configuration loaded successfully" in caplog.text
     assert "Project: TestProject initialized" in caplog.text
+
 
 def test_main_run(caplog: Any, tmp_path: Path) -> None:
     config_data = """
@@ -69,14 +71,18 @@ workflow:
     p.write_text(config_data)
 
     with (
-        patch("argparse.ArgumentParser.parse_args", return_value=MagicMock(config=str(p), dry_run=False)),
+        patch(
+            "argparse.ArgumentParser.parse_args",
+            return_value=MagicMock(config=str(p), dry_run=False),
+        ),
         patch("pyacemaker.orchestrator.Orchestrator.run") as mock_run,
-        patch("pathlib.Path.cwd", return_value=tmp_path)
+        patch("pathlib.Path.cwd", return_value=tmp_path),
     ):
         main()
         mock_run.assert_called_once()
 
     assert "Configuration loaded successfully" in caplog.text
+
 
 def test_main_invalid_config(caplog: Any, tmp_path: Path) -> None:
     config_data = """
@@ -86,10 +92,11 @@ project_name: BadConfig
     p = tmp_path / "bad.yaml"
     p.write_text(config_data)
 
-    with patch("argparse.ArgumentParser.parse_args", return_value=MagicMock(config=str(p), dry_run=False)):
-        with patch("pathlib.Path.cwd", return_value=tmp_path):
-            with pytest.raises(SystemExit) as e:
-                main()
-            assert e.value.code == 1
+    with patch(
+        "argparse.ArgumentParser.parse_args", return_value=MagicMock(config=str(p), dry_run=False)
+    ), patch("pathlib.Path.cwd", return_value=tmp_path):
+        with pytest.raises(SystemExit) as e:
+            main()
+        assert e.value.code == 1
 
     assert "Fatal error during execution" in caplog.text

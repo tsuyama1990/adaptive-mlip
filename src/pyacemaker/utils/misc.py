@@ -4,6 +4,7 @@ from typing import TypeVar
 
 T = TypeVar("T")
 
+
 def batched(iterable: Iterable[T], n: int) -> Iterator[tuple[T, ...]]:
     """
     Batch data into tuples of length n. The last batch may be shorter.

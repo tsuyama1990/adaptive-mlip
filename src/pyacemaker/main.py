@@ -12,7 +12,9 @@ from pyacemaker.utils.io import load_config
 def main() -> None:
     parser = argparse.ArgumentParser(description="Adaptive MLIP construction orchestrator")
     parser.add_argument("--config", type=str, required=True, help="Path to configuration file")
-    parser.add_argument("--dry-run", action="store_true", help="Validate config and exit without running")
+    parser.add_argument(
+        "--dry-run", action="store_true", help="Validate config and exit without running"
+    )
 
     args = parser.parse_args()
     config_path = Path(args.config)
@@ -39,6 +41,7 @@ def main() -> None:
         logging.basicConfig(level=logging.ERROR)
         logging.exception("Fatal error during execution")
         sys.exit(1)
+
 
 if __name__ == "__main__":
     main()
