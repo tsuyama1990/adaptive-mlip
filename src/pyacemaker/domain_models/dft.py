@@ -3,8 +3,6 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field, PositiveFloat, field_validator
 
-from pyacemaker.constants import DEFAULT_MIXING_BETA_FACTOR, DEFAULT_SMEARING_WIDTH_FACTOR
-
 
 class DFTConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -21,8 +19,8 @@ class DFTConfig(BaseModel):
     diagonalization: str = Field("david", description="Diagonalization algorithm")
 
     # Strategy Multipliers
-    mixing_beta_factor: float = Field(DEFAULT_MIXING_BETA_FACTOR, gt=0.0, le=1.0, description="Multiplier for mixing_beta reduction strategy")
-    smearing_width_factor: float = Field(DEFAULT_SMEARING_WIDTH_FACTOR, gt=1.0, description="Multiplier for smearing_width increase strategy")
+    mixing_beta_factor: float = Field(0.5, gt=0.0, le=1.0, description="Multiplier for mixing_beta reduction strategy")
+    smearing_width_factor: float = Field(2.0, gt=1.0, description="Multiplier for smearing_width increase strategy")
 
     # Pseudopotentials
     pseudopotentials: dict[str, str] = Field(
