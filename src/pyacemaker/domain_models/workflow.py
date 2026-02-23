@@ -23,3 +23,6 @@ class WorkflowConfig(BaseModel):
         default=10, description="Number of candidate structures to generate per iteration"
     )
     checkpoint_interval: PositiveInt = Field(default=1, description="Save state every N iterations")
+    data_dir: str = Field(
+        default="data", description="Directory to store training data and artifacts"
+    )

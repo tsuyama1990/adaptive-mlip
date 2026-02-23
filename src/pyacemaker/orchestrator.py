@@ -25,6 +25,7 @@ from pyacemaker.constants import (
 from pyacemaker.core.base import BaseEngine, BaseGenerator, BaseOracle, BaseTrainer
 from pyacemaker.domain_models import PyAceConfig
 from pyacemaker.logger import setup_logger
+from pyacemaker.utils.misc import batched
 
 
 class Orchestrator:
@@ -44,7 +45,7 @@ class Orchestrator:
         self.logger = setup_logger(config=config.logging, project_name=config.project_name)
         self.iteration = 0
         self.state_file = Path(config.workflow.state_file_path)
-        self.data_dir = Path("data")
+        self.data_dir = Path(config.workflow.data_dir)
         self.data_dir.mkdir(exist_ok=True)
 
         # Core modules (placeholders for Cycle 01)
@@ -66,7 +67,6 @@ class Orchestrator:
         self.logger.info(LOG_INIT_MODULES)
         try:
             # In future cycles, we will instantiate concrete classes here based on config.
-            # For Cycle 01, we just set placeholders if they aren't injected (for testing).
             pass
 
         except Exception as e:
@@ -97,7 +97,10 @@ class Orchestrator:
                 self.logger.warning(LOG_STATE_LOAD_FAIL.format(error=e))
 
     def _run_active_learning_step(self) -> None:
-        """Executes a single step of the active learning loop with file-based streaming."""
+        """
+        Executes a single step of the active learning loop with file-based streaming.
+        Uses buffering to optimize I/O.
+        """
 
         # 1. Generate & Label Candidates (Streaming to Disk)
         total_candidates = 0
@@ -112,18 +115,15 @@ class Orchestrator:
             # Oracle consumes iterator and returns iterator
             labelled_stream = self.oracle.compute(candidate_stream, batch_size=batch_size)
 
-            # Streaming Write: Append each batch to file to minimize memory usage
-            # Note: ase.io.write handles lists of atoms or single atoms.
-            # We can accumulate small chunks or write one by one.
-            # Writing one by one in a loop is safe for memory.
+            # I/O Optimization: Buffer structures in memory (chunk) before writing
+            # Write mode: overwrite for first batch, then append
+            file_mode = "w"
 
-            # Ensure file is fresh
-            if training_file.exists():
-                training_file.unlink()
-
-            for atoms in labelled_stream:
-                write(training_file, atoms, append=True)
-                total_candidates += 1
+            for batch in batched(labelled_stream, n=batch_size):
+                # 'batch' is a tuple of Atoms from 'batched'
+                write(training_file, list(batch), format="extxyz", append=(file_mode == "a"))
+                file_mode = "a"  # Switch to append after first write
+                total_candidates += len(batch)
 
             self.logger.info(LOG_COMPUTED_PROPERTIES.format(count=total_candidates))
 
@@ -132,12 +132,18 @@ class Orchestrator:
             for _ in self.generator.generate(n_candidates=n_candidates):
                 total_candidates += 1
             self.logger.info(LOG_GENERATED_CANDIDATES.format(count=total_candidates))
+        else:
+            # Explicit check for missing modules if expected
+            # For Cycle 01, we might run with neither (empty loop), but let's log warning
+            pass
 
         # 3. Train potential
-        if self.trainer and training_file.exists():
-            # Pass the file path to the trainer, NOT a list of atoms
-            _ = self.trainer.train(training_data_path=training_file)
-            self.logger.info(LOG_POTENTIAL_TRAINED)
+        if self.trainer:
+            if training_file.exists():
+                _ = self.trainer.train(training_data_path=training_file)
+                self.logger.info(LOG_POTENTIAL_TRAINED)
+            else:
+                self.logger.warning("No training data found, skipping training.")
 
         # 4. Run MD
         if self.engine:
