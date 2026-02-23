@@ -72,7 +72,7 @@ def embed_cluster(cluster: Atoms, buffer: float, copy: bool = True) -> Atoms:
         target = cluster.copy()  # type: ignore[no-untyped-call]
         target.positions = target.positions.copy()
     else:
-        # In-place modification of the original object
+        # In-place modification of the original object: absolutely no new copies
         target = cluster
 
     # Modify the target (whether it's the copy or original)

@@ -23,6 +23,9 @@ class StructureConfig(BaseModel):
     @field_validator("elements")
     @classmethod
     def validate_elements(cls, v: list[str]) -> list[str]:
+        if not v:
+            msg = "Elements list cannot be empty"
+            raise ValueError(msg)
         valid_symbols = set(chemical_symbols)
         for el in v:
             if el not in valid_symbols:

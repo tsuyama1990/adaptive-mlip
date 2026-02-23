@@ -6,7 +6,7 @@ from ase import Atoms
 from ase.calculators.espresso import Espresso
 from ase.data import chemical_symbols
 
-from pyacemaker.constants import RECIPROCAL_FACTOR
+from pyacemaker.constants import QE_KPOINT_TOLERANCE, RECIPROCAL_FACTOR
 from pyacemaker.domain_models import DFTConfig
 
 
@@ -107,8 +107,8 @@ class QEDriver:
 
         # Use NumPy for vectorized computation
         # 1. Mask non-PBC or small dimensions (force to 1 k-point)
-        # lengths < 1e-3 is effectively zero dimension
-        valid_mask = pbc_arr & (lengths_arr >= 1e-3)
+        # lengths < QE_KPOINT_TOLERANCE is effectively zero dimension
+        valid_mask = pbc_arr & (lengths_arr >= QE_KPOINT_TOLERANCE)
 
         # 2. Compute k-points for valid dimensions.
         # N is calculated as ceil( (2*pi/spacing) / L )

@@ -75,26 +75,27 @@ class DFTManager(BaseOracle):
         """
         Returns a list of self-healing strategies.
         """
-        # Use multipliers from config
-        beta_factor = self.config.mixing_beta_factor
-        smearing_factor = self.config.smearing_width_factor
+        # We can extract these to methods or classes if they get complex.
+        # For now, we keep them simple but avoid unnecessary re-creation if possible.
+        # But they depend on instance config.
+        # To avoid re-creation, we could use functools.partial or make them instance methods.
 
-        # Define strategies as named functions for clarity/maintainability
-        def reduce_beta(c: DFTConfig) -> None:
-            c.mixing_beta *= beta_factor
-
-        def increase_smearing(c: DFTConfig) -> None:
-            c.smearing_width *= smearing_factor
-
-        def use_cg(c: DFTConfig) -> None:
-            c.diagonalization = "cg"
-
+        # Method-based strategies to avoid closure recreation overhead
         return [
-            None,  # First attempt: no change
-            reduce_beta,
-            increase_smearing,
-            use_cg,
+            None,
+            self._strategy_reduce_beta,
+            self._strategy_increase_smearing,
+            self._strategy_use_cg
         ]
+
+    def _strategy_reduce_beta(self, c: DFTConfig) -> None:
+        c.mixing_beta *= self.config.mixing_beta_factor
+
+    def _strategy_increase_smearing(self, c: DFTConfig) -> None:
+        c.smearing_width *= self.config.smearing_width_factor
+
+    def _strategy_use_cg(self, c: DFTConfig) -> None:
+        c.diagonalization = "cg"
 
     def _compute_single(self, atoms: Atoms) -> Atoms:
         """

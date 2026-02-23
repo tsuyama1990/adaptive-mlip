@@ -46,10 +46,12 @@ def test_qe_driver_kpoints_parametrized(
 
         # Calculate expected k
         # If factor is 1.0 (PBC), use formula. If 0.0 (No PBC), expect 1.
+        # Formula N = ceil( (2*pi / spacing) / L )
+        # Here spacing=0.04, L=10.0.
         k_val = int(np.ceil((RECIPROCAL_FACTOR / 0.04) / 10.0))
 
         expected_kpts = []
-        for _i, is_pbc in enumerate(pbc):
+        for is_pbc in pbc:
             if is_pbc:
                 expected_kpts.append(k_val)
             else:
