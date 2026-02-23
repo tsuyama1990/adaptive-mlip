@@ -16,6 +16,9 @@ class MDConfig(BaseModel):
     base_energy: float = Field(
         -100.0, description="Baseline energy for mock simulation"
     )
+    default_forces: list[list[float]] = Field(
+        default=[[0.0, 0.0, 0.0]], description="Default forces for mock simulation"
+    )
 
     # Spec Section 3.4 (Hybrid Potential & OTF)
     hybrid_potential: bool = Field(

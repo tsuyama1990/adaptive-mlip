@@ -48,7 +48,8 @@ def test_dft_config_defaults(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
     assert config.diagonalization == "david"
 
 
-def test_dft_config_invalid_mixing_beta(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize("beta", [1.5, -0.1, 0.0])
+def test_dft_config_invalid_mixing_beta(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, beta: float) -> None:
     """Test invalid mixing_beta (must be 0 < beta <= 1)."""
     monkeypatch.chdir(tmp_path)
     create_dummy_pseudopotentials(tmp_path, ["Fe"])
@@ -60,21 +61,12 @@ def test_dft_config_invalid_mixing_beta(tmp_path: Path, monkeypatch: pytest.Monk
             kpoints_density=0.04,
             encut=500.0,
             pseudopotentials={"Fe": "Fe.UPF"},
-            mixing_beta=1.5,
-        )
-
-    with pytest.raises(ValidationError):
-        DFTConfig(
-            code="qe",
-            functional="PBE",
-            kpoints_density=0.04,
-            encut=500.0,
-            pseudopotentials={"Fe": "Fe.UPF"},
-            mixing_beta=-0.1,
+            mixing_beta=beta,
         )
 
 
-def test_dft_config_invalid_smearing_width(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize("width", [-0.1, 0.0])
+def test_dft_config_invalid_smearing_width(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, width: float) -> None:
     """Test invalid smearing_width (must be > 0)."""
     monkeypatch.chdir(tmp_path)
     create_dummy_pseudopotentials(tmp_path, ["Fe"])
@@ -86,7 +78,7 @@ def test_dft_config_invalid_smearing_width(tmp_path: Path, monkeypatch: pytest.M
             kpoints_density=0.04,
             encut=500.0,
             pseudopotentials={"Fe": "Fe.UPF"},
-            smearing_width=-0.1,
+            smearing_width=width,
         )
 
 

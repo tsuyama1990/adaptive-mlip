@@ -73,20 +73,17 @@ class DFTManager(BaseOracle):
         # We do NOT use batched() here to avoid even small batch materialization in memory
         # as per strict audit requirements.
 
-        # Attempt to get the first item to verify iterator is not empty
-        try:
-            first_structure = next(structures)
-        except StopIteration:
-            import warnings
-            warnings.warn("Oracle received empty iterator. No calculations performed.", UserWarning, stacklevel=2)
-            return
+        # We process items as they come. We track if we processed any to warn if empty.
+        # This avoids preemptively consuming the iterator with next(), which can be risky for some streams.
 
-        # Process first item
-        yield self._process_structure(first_structure)
-
-        # Process rest
+        count = 0
         for atoms in structures:
+            count += 1
             yield self._process_structure(atoms)
+
+        if count == 0:
+             import warnings
+             warnings.warn("Oracle received empty iterator. No calculations performed.", UserWarning, stacklevel=2)
 
     def _process_structure(self, atoms: Atoms) -> Atoms:
         """

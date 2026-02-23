@@ -44,16 +44,19 @@ class StructureGenerator(BaseGenerator):
 
     def _get_policy(self) -> BasePolicy:
         """Selects the appropriate policy based on configuration."""
-        if self.config.policy_name == ExplorationPolicy.COLD_START:
-            return ColdStartPolicy()
-        if self.config.policy_name == ExplorationPolicy.RANDOM_RATTLE:
-            return RattlePolicy()
-        if self.config.policy_name == ExplorationPolicy.STRAIN:
-            return StrainPolicy()
-        if self.config.policy_name == ExplorationPolicy.DEFECTS:
-            return DefectPolicy()
-        msg = f"Unknown policy: {self.config.policy_name}"
-        raise ValueError(msg)
+        policies: dict[str, type[BasePolicy]] = {
+            ExplorationPolicy.COLD_START: ColdStartPolicy,
+            ExplorationPolicy.RANDOM_RATTLE: RattlePolicy,
+            ExplorationPolicy.STRAIN: StrainPolicy,
+            ExplorationPolicy.DEFECTS: DefectPolicy,
+        }
+
+        policy_cls = policies.get(self.config.policy_name)
+        if not policy_cls:
+            msg = f"Unknown policy: {self.config.policy_name}"
+            raise ValueError(msg)
+
+        return policy_cls()
 
     def generate(self, n_candidates: int) -> Iterator[Atoms]:
         """
@@ -70,17 +73,19 @@ class StructureGenerator(BaseGenerator):
 
         Raises:
             RuntimeError: If base structure generation fails.
-            ValueError: If the configured policy is invalid.
+            ValueError: If n_candidates is negative or policy is invalid.
         """
-        if n_candidates <= 0:
+        if n_candidates < 0:
+            msg = f"n_candidates must be non-negative, got {n_candidates}"
+            raise ValueError(msg)
+
+        if n_candidates == 0:
             return
 
         # Policy Selection
         policy = self._get_policy()
 
         # Step 1: Base Structure Generation (Streaming)
-        # In Cold Start or perturbation, we need a base.
-
         composition = "".join(self.config.elements)
 
         try:
@@ -95,13 +100,12 @@ class StructureGenerator(BaseGenerator):
              raise TypeError(msg)
 
         # Step 2: Apply Policy (Streaming)
-        # We generate the supercell once to use as a template.
-        # This is created lazily when the generator is consumed (i.e. on first next() call).
+        # Create the supercell template lazily.
+        # We perform the repeat operation here, but it is only executed when the generator
+        # is consumed (via next()).
         base_supercell = base_structure.repeat(self.config.supercell_size)  # type: ignore[no-untyped-call]
 
         # Stream directly from policy
-        # The policy uses the base_supercell to generate candidates.
-        # We ensure we yield immediately to prevent memory accumulation.
         # Using 'yield from' or explicit loop ensures we strictly follow the iterator protocol.
 
         count = 0
@@ -109,7 +113,6 @@ class StructureGenerator(BaseGenerator):
 
         # Verify it's an iterator to enforce streaming contract at runtime
         if not isinstance(policy_iter, Iterator):
-             # Just in case a policy implementation returns a list
              policy_iter = iter(policy_iter)
 
         for structure in policy_iter:

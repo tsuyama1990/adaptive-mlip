@@ -53,7 +53,7 @@ class LammpsEngine(BaseEngine):
 
         return {
             "energy": simulated_energy,
-            "forces": [[0.0, 0.0, 0.0]], # Mock forces
+            "forces": self.config.default_forces,
             "halted": False,
             "max_gamma": 0.0,
             "n_steps": self.config.n_steps,

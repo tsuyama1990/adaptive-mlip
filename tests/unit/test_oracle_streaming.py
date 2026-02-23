@@ -65,3 +65,8 @@ def test_dft_manager_streaming_behavior(mock_dft_config: DFTConfig) -> None:
     # Optional: consume one more to be sure
     next(stream)
     assert mock_driver.get_calculator.call_count == 3
+
+    # Verify no buffering or lookahead
+    # If the manager was buffering, it might have called the driver more times
+    # than we consumed. Since we consumed 3 items, call_count should be exactly 3.
+    # The current assertion already covers this, but adding a comment clarifies the intent.
