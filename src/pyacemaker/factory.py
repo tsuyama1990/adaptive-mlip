@@ -17,11 +17,24 @@ class ModuleFactory:
         config: PyAceConfig,
     ) -> tuple[BaseGenerator, BaseOracle, BaseTrainer, BaseEngine]:
         """
-        Creates instances of core modules.
+        Creates instances of core modules based on the provided configuration.
+
+        This method acts as a dependency injection root, instantiating concrete implementations
+        of the core abstract base classes (Generator, Oracle, Trainer, Engine).
+
+        Args:
+            config: A validated PyAceConfig object containing all necessary settings.
+
+        Returns:
+            A tuple containing initialized instances of:
+                - BaseGenerator (e.g., StructureGenerator)
+                - BaseOracle (e.g., DFTManager)
+                - BaseTrainer (e.g., PacemakerTrainer)
+                - BaseEngine (e.g., LammpsEngine)
 
         Raises:
-            ConfigError: If configuration is invalid.
-            RuntimeError: If module creation fails.
+            ConfigError: If configuration is invalid or missing required fields.
+            RuntimeError: If any module fails to initialize (e.g., missing dependencies).
         """
         # Validate configuration before module creation
         if not config.project_name:

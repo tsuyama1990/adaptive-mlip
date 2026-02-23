@@ -1,10 +1,19 @@
-from typing import Any
+from typing import Any, TypedDict
 
 from ase import Atoms
 
 from pyacemaker.core.base import BaseEngine
 from pyacemaker.domain_models.constants import KB_EV
 from pyacemaker.domain_models.md import MDConfig
+
+
+class SimulationResult(TypedDict):
+    energy: float
+    forces: list[list[float]]
+    halted: bool
+    max_gamma: float
+    n_steps: int
+    temperature: float
 
 
 class LammpsEngine(BaseEngine):
@@ -21,7 +30,7 @@ class LammpsEngine(BaseEngine):
     def __init__(self, config: MDConfig) -> None:
         self.config = config
 
-    def run(self, structure: Atoms | None, potential: Any) -> Any:
+    def run(self, structure: Atoms | None, potential: Any) -> SimulationResult:
         """
         Runs a simulation using the given structure and potential.
 
@@ -33,13 +42,7 @@ class LammpsEngine(BaseEngine):
             potential: Path to the interatomic potential file (optional if defined in config).
 
         Returns:
-            dict: Simulation results containing:
-                  - energy (float): Final potential energy.
-                  - forces (list): Atomic forces.
-                  - halted (bool): Whether the simulation was halted early (e.g. by OTF).
-                  - max_gamma (float): Maximum extrapolation grade observed.
-                  - n_steps (int): Number of steps executed.
-                  - temperature (float): Simulation temperature.
+            SimulationResult: Simulation results containing energy, forces, halted status, etc.
         """
         # In a real implementation, we would write input files and run LAMMPS.
 
