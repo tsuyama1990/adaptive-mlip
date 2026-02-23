@@ -1,3 +1,5 @@
+import os
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -24,7 +26,7 @@ def test_loop_state_save_load(tmp_path: Path) -> None:
     loaded_state = LoopState.load(state_file)
     assert loaded_state.iteration == 5
     assert loaded_state.status == LoopStatus.HALTED
-    assert loaded_state.current_potential == pot_path
+    assert loaded_state.current_potential == pot_path.resolve()
 
 
 def test_loop_state_load_non_existent(tmp_path: Path) -> None:
@@ -48,6 +50,31 @@ def test_loop_state_validation_path_is_dir(tmp_path: Path) -> None:
     pot_dir.mkdir()
     with pytest.raises(ValueError, match="Potential path is not a file"):
         LoopState(current_potential=pot_dir)
+
+
+def test_loop_state_validation_path_traversal(tmp_path: Path) -> None:
+    """Test validation fails if potential path is outside project root."""
+    # Create project structure
+    project_dir = tmp_path / "project"
+    project_dir.mkdir()
+
+    outside_dir = tmp_path / "outside"
+    outside_dir.mkdir()
+    unsafe_file = outside_dir / "unsafe.yace"
+    unsafe_file.touch()
+
+    # We need to change CWD to project_dir for the test to work
+    cwd = Path.cwd()
+    os.chdir(project_dir)
+    try:
+        # Mock tempfile.gettempdir to force the check to fail even if in /tmp
+        with pytest.MonkeyPatch.context() as mp:
+            mp.setattr(tempfile, "gettempdir", lambda: "/nonexistent_temp")
+
+            with pytest.raises(ValueError, match="outside the project directory"):
+                LoopState(current_potential=unsafe_file)
+    finally:
+        os.chdir(cwd)
 
 
 def test_loop_state_corrupted_load(tmp_path: Path) -> None:

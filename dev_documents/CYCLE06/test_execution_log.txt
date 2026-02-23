@@ -4,7 +4,7 @@ rootdir: /app
 configfile: pyproject.toml
 testpaths: tests
 plugins: cov-7.0.0
-collected 165 items
+collected 166 items
 
 tests/e2e/test_engine_integration.py ..                                  [  1%]
 tests/e2e/test_orchestrator.py .......                                   [  5%]
@@ -19,17 +19,17 @@ tests/unit/test_active_set.py .....                                      [ 18%]
 tests/unit/test_delta.py ....                                            [ 21%]
 tests/unit/test_domain_models.py ............                            [ 28%]
 tests/unit/test_domain_models_dft.py .............                       [ 36%]
-tests/unit/test_domain_models_md.py ........                             [ 41%]
+tests/unit/test_domain_models_md.py ........                             [ 40%]
 tests/unit/test_domain_models_training.py .......                        [ 45%]
 tests/unit/test_embedding.py .......                                     [ 49%]
 tests/unit/test_engine.py .......                                        [ 53%]
-tests/unit/test_factory.py ..                                            [ 55%]
+tests/unit/test_factory.py ..                                            [ 54%]
 tests/unit/test_generator.py ......                                      [ 58%]
 tests/unit/test_io.py ..........                                         [ 64%]
-tests/unit/test_io_manager.py ..                                         [ 66%]
+tests/unit/test_io_manager.py ..                                         [ 65%]
 tests/unit/test_lammps_driver.py .........                               [ 71%]
 tests/unit/test_lammps_generator.py ....                                 [ 73%]
-tests/unit/test_loop.py ......                                           [ 77%]
+tests/unit/test_loop.py .......                                          [ 77%]
 tests/unit/test_main.py ...                                              [ 79%]
 tests/unit/test_oracle.py ........                                       [ 84%]
 tests/unit/test_oracle_streaming.py .                                    [ 84%]
@@ -39,4 +39,4 @@ tests/unit/test_streaming_io.py ...                                      [ 92%]
 tests/unit/test_trainer_pacemaker.py ......                              [ 95%]
 tests/unit/test_validator.py .......                                     [100%]
 
-============================= 165 passed in 0.93s ==============================
+============================= 166 passed in 0.94s ==============================
