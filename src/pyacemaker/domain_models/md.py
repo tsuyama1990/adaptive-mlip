@@ -4,6 +4,19 @@ from pathlib import Path
 from pydantic import BaseModel, ConfigDict, Field, PositiveFloat, PositiveInt
 
 from pyacemaker.domain_models.constants import DEFAULT_RAM_DISK_PATH
+from pyacemaker.domain_models.defaults import (
+    DEFAULT_MD_ATOM_STYLE,
+    DEFAULT_MD_BASE_ENERGY,
+    DEFAULT_MD_CHECK_INTERVAL,
+    DEFAULT_MD_DUMP_FREQ,
+    DEFAULT_MD_HYBRID_ZBL_INNER,
+    DEFAULT_MD_HYBRID_ZBL_OUTER,
+    DEFAULT_MD_NEIGHBOR_SKIN,
+    DEFAULT_MD_PDAMP_FACTOR,
+    DEFAULT_MD_TDAMP_FACTOR,
+    DEFAULT_MD_THERMO_FREQ,
+    DEFAULT_OTF_UNCERTAINTY_THRESHOLD,
+)
 
 
 def _get_default_temp_dir() -> str | None:
@@ -18,10 +31,10 @@ class HybridParams(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     zbl_cut_inner: PositiveFloat = Field(
-        2.0, description="Inner cutoff radius for ZBL potential (Angstrom)"
+        DEFAULT_MD_HYBRID_ZBL_INNER, description="Inner cutoff radius for ZBL potential (Angstrom)"
     )
     zbl_cut_outer: PositiveFloat = Field(
-        2.5, description="Outer cutoff radius for ZBL potential (Angstrom)"
+        DEFAULT_MD_HYBRID_ZBL_OUTER, description="Outer cutoff radius for ZBL potential (Angstrom)"
     )
 
 
@@ -51,17 +64,17 @@ class MDConfig(BaseModel):
 
     # Output Control
     thermo_freq: PositiveInt = Field(
-        10, description="Frequency of thermodynamic output (steps)"
+        DEFAULT_MD_THERMO_FREQ, description="Frequency of thermodynamic output (steps)"
     )
     dump_freq: PositiveInt = Field(
-        100, description="Frequency of trajectory dump (steps)"
+        DEFAULT_MD_DUMP_FREQ, description="Frequency of trajectory dump (steps)"
     )
     minimize: bool = Field(False, description="Perform energy minimization before MD")
     neighbor_skin: PositiveFloat = Field(
-        2.0, description="Neighbor list skin distance (Angstrom)"
+        DEFAULT_MD_NEIGHBOR_SKIN, description="Neighbor list skin distance (Angstrom)"
     )
     atom_style: str = Field(
-        "atomic", description="LAMMPS atom style (e.g. atomic, charge)"
+        DEFAULT_MD_ATOM_STYLE, description="LAMMPS atom style (e.g. atomic, charge)"
     )
 
     # Advanced Settings
@@ -70,15 +83,15 @@ class MDConfig(BaseModel):
         description="Directory for temporary files (e.g., /dev/shm for RAM disk)"
     )
     tdamp_factor: PositiveFloat = Field(
-        100.0, description="Temperature damping factor (multiplies timestep)"
+        DEFAULT_MD_TDAMP_FACTOR, description="Temperature damping factor (multiplies timestep)"
     )
     pdamp_factor: PositiveFloat = Field(
-        1000.0, description="Pressure damping factor (multiplies timestep)"
+        DEFAULT_MD_PDAMP_FACTOR, description="Pressure damping factor (multiplies timestep)"
     )
 
     # Mocking Parameters (Audit Requirement)
     base_energy: float = Field(
-        -100.0, description="Baseline energy for mock simulation"
+        DEFAULT_MD_BASE_ENERGY, description="Baseline energy for mock simulation"
     )
     default_forces: list[list[float]] = Field(
         default=[[0.0, 0.0, 0.0]], description="Default forces for mock simulation"
@@ -93,9 +106,12 @@ class MDConfig(BaseModel):
     )
 
     # Spec Section 3.4 (OTF)
+    fix_halt: bool = Field(
+        False, description="Enable OTF halting based on uncertainty"
+    )
     uncertainty_threshold: float = Field(
-        5.0, gt=0.0, description="Gamma threshold for halting simulation"
+        DEFAULT_OTF_UNCERTAINTY_THRESHOLD, gt=0.0, description="Gamma threshold for halting simulation"
     )
     check_interval: int = Field(
-        10, gt=0, description="Step interval for uncertainty check"
+        DEFAULT_MD_CHECK_INTERVAL, gt=0, description="Step interval for uncertainty check"
     )

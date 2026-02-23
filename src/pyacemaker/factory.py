@@ -1,3 +1,4 @@
+from pyacemaker.core.active_set import ActiveSetSelector
 from pyacemaker.core.base import BaseEngine, BaseGenerator, BaseOracle, BaseTrainer
 from pyacemaker.core.engine import LammpsEngine
 from pyacemaker.core.exceptions import ConfigError
@@ -15,12 +16,12 @@ class ModuleFactory:
     @staticmethod
     def create_modules(
         config: PyAceConfig,
-    ) -> tuple[BaseGenerator, BaseOracle, BaseTrainer, BaseEngine]:
+    ) -> tuple[BaseGenerator, BaseOracle, BaseTrainer, BaseEngine, ActiveSetSelector]:
         """
         Creates instances of core modules based on the provided configuration.
 
         This method acts as a dependency injection root, instantiating concrete implementations
-        of the core abstract base classes (Generator, Oracle, Trainer, Engine).
+        of the core abstract base classes (Generator, Oracle, Trainer, Engine, ActiveSetSelector).
 
         Args:
             config: A validated PyAceConfig object containing all necessary settings.
@@ -31,6 +32,7 @@ class ModuleFactory:
                 - BaseOracle (e.g., DFTManager)
                 - BaseTrainer (e.g., PacemakerTrainer)
                 - BaseEngine (e.g., LammpsEngine)
+                - ActiveSetSelector
 
         Raises:
             ConfigError: If configuration is invalid or missing required fields.
@@ -54,6 +56,9 @@ class ModuleFactory:
             # Engine
             engine = LammpsEngine(config.md)
 
+            # Active Set Selector
+            active_set_selector = ActiveSetSelector()
+
         except Exception as e:
             msg = f"Failed to create modules: {e}"
             raise RuntimeError(msg) from e
@@ -63,4 +68,5 @@ class ModuleFactory:
             oracle,
             trainer,
             engine,
+            active_set_selector,
         )

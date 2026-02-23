@@ -31,7 +31,9 @@ def test_lammps_engine_run(mock_md_config: MDConfig, mock_driver: Any, tmp_path:
     # Mock get_atoms
     driver_instance.get_atoms.return_value = Atoms("H", cell=[10, 10, 10], pbc=True)
 
-    engine = LammpsEngine(mock_md_config)
+    # Enable fix_halt to test gamma extraction
+    config = mock_md_config.model_copy(update={"fix_halt": True})
+    engine = LammpsEngine(config)
     atoms = Atoms("H", cell=[10, 10, 10], pbc=True)
 
     # Create dummy potential file
@@ -74,7 +76,9 @@ def test_lammps_engine_halted(mock_md_config: MDConfig, mock_driver: Any, tmp_pa
 
     driver_instance.get_atoms.return_value = Atoms("H", cell=[10, 10, 10], pbc=True)
 
-    engine = LammpsEngine(mock_md_config)
+    # Enable fix_halt to test halted logic
+    config = mock_md_config.model_copy(update={"fix_halt": True})
+    engine = LammpsEngine(config)
     atoms = Atoms("H", cell=[10, 10, 10], pbc=True)
     pot_path = tmp_path / "potential.yace"
     pot_path.touch()
@@ -146,3 +150,16 @@ def test_run_large_structure_warning(mock_md_config: MDConfig, mock_driver: Any,
     engine.run(atoms, pot_path)
 
     assert "Streaming large structure (10001 atoms)" in caplog.text
+
+def test_run_driver_failure(mock_md_config: MDConfig, mock_driver: Any, tmp_path: Path) -> None:
+    """Tests error handling when LAMMPS execution fails."""
+    driver_instance = mock_driver.return_value
+    driver_instance.run.side_effect = RuntimeError("LAMMPS crashed")
+
+    engine = LammpsEngine(mock_md_config)
+    atoms = Atoms("H", cell=[10, 10, 10], pbc=True)
+    pot_path = tmp_path / "pot.yace"
+    pot_path.touch()
+
+    with pytest.raises(RuntimeError, match="LAMMPS execution failed: LAMMPS crashed"):
+        engine.run(atoms, pot_path)

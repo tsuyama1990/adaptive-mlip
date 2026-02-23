@@ -16,9 +16,14 @@ class LammpsScriptGenerator:
     def __init__(self, config: MDConfig) -> None:
         self.config = config
 
+    def _quote(self, path: Path | str) -> str:
+        """Quotes a path for LAMMPS script safety."""
+        return f'"{path}"'
+
     def _gen_potential(self, buffer: StringIO, potential_path: Path, elements: list[str]) -> None:
         """Generates potential definition commands."""
         species_str = " ".join(elements)
+        quoted_pot = self._quote(potential_path)
 
         if self.config.hybrid_potential:
             # Hybrid overlay: PACE + ZBL
@@ -26,7 +31,7 @@ class LammpsScriptGenerator:
             buffer.write(f"pair_style hybrid/overlay pace zbl {params.zbl_cut_inner} {params.zbl_cut_outer}\n")
 
             # PACE
-            buffer.write(f"pair_coeff * * pace {potential_path} {species_str}\n")
+            buffer.write(f"pair_coeff * * pace {quoted_pot} {species_str}\n")
 
             # ZBL
             n_types = len(elements)
@@ -40,7 +45,7 @@ class LammpsScriptGenerator:
         else:
             # Pure PACE
             buffer.write("pair_style pace\n")
-            buffer.write(f"pair_coeff * * pace {potential_path} {species_str}\n")
+            buffer.write(f"pair_coeff * * pace {quoted_pot} {species_str}\n")
 
     def _gen_settings(self, buffer: StringIO) -> None:
         """Generates general MD settings."""
@@ -50,7 +55,11 @@ class LammpsScriptGenerator:
 
     def _gen_watchdog(self, buffer: StringIO, potential_path: Path) -> None:
         """Generates Uncertainty Watchdog commands."""
-        buffer.write(f"compute gamma all pace {potential_path}\n")
+        if not self.config.fix_halt:
+            return
+
+        quoted_pot = self._quote(potential_path)
+        buffer.write(f"compute gamma all pace {quoted_pot}\n")
         buffer.write("compute max_gamma all reduce max c_gamma\n")
         buffer.write("variable max_g equal c_max_gamma\n")
 
@@ -79,12 +88,22 @@ class LammpsScriptGenerator:
     def _gen_output(self, buffer: StringIO, dump_file: Path) -> None:
         """Generates output settings."""
         buffer.write(f"thermo {self.config.thermo_freq}\n")
-        buffer.write("thermo_style custom step temp pe press v_max_g\n")
-        buffer.write(f"dump traj all custom {self.config.dump_freq} {dump_file} id type x y z c_gamma\n")
+
+        style = "step temp pe press"
+        dump_cols = "id type x y z"
+
+        if self.config.fix_halt:
+            style += " v_max_g"
+            dump_cols += " c_gamma"
+
+        quoted_dump = self._quote(dump_file)
+        buffer.write(f"thermo_style custom {style}\n")
+        buffer.write(f"dump traj all custom {self.config.dump_freq} {quoted_dump} {dump_cols}\n")
 
         # Check if halted
-        buffer.write("variable halted equal f_halt_check\n")
-        buffer.write("print 'Halted: ${halted}'\n")
+        if self.config.fix_halt:
+            buffer.write("variable halted equal f_halt_check\n")
+            buffer.write("print 'Halted: ${halted}'\n")
 
     def generate(
         self,
@@ -98,11 +117,13 @@ class LammpsScriptGenerator:
         """
         buffer = StringIO()
 
+        quoted_data = self._quote(data_file)
+
         buffer.write("clear\n")
         buffer.write("units metal\n")
         buffer.write(f"atom_style {self.config.atom_style}\n")
         buffer.write("boundary p p p\n")
-        buffer.write(f"read_data {data_file}\n")
+        buffer.write(f"read_data {quoted_data}\n")
 
         self._gen_potential(buffer, potential_path, elements)
         self._gen_settings(buffer)

@@ -33,6 +33,9 @@ class LammpsEngine(BaseEngine):
         LammpsValidator.validate_structure(structure)
         potential_path = LammpsValidator.validate_potential(potential)
 
+        # Ensure potential path is resolved and exists (double check for race conditions/symlinks)
+        potential_path = potential_path.resolve(strict=True)
+
         # Prepare workspace (temp dir, file writing)
         # Note: We checked structure is not None/Empty in validator.
         # But prepare_workspace needs 'structure' as Atoms (which it is, after check).
@@ -69,14 +72,24 @@ class LammpsEngine(BaseEngine):
                 energy = driver.extract_variable("pe")
                 temperature = driver.extract_variable("temp")
                 step = int(driver.extract_variable("step"))
-                max_gamma = driver.extract_variable("max_g")
             except Exception:
                 energy = 0.0
                 temperature = 0.0
                 step = 0
-                max_gamma = 0.0
 
-            halted = step < self.config.n_steps
+            max_gamma = 0.0
+            if self.config.fix_halt:
+                try:
+                    max_gamma = driver.extract_variable("max_g")
+                except Exception:
+                    max_gamma = 0.0
+
+            halted = False
+            if self.config.fix_halt:
+                # If using fix halt, checking step count is a proxy for early termination
+                # Assuming run starts at 0. If restart, logic might need adjustment.
+                # For now, Cycle 01/02 implies fresh runs.
+                halted = step < self.config.n_steps
 
             # Result
             return MDSimulationResult(

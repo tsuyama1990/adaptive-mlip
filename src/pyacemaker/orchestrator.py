@@ -6,7 +6,9 @@ from pathlib import Path
 
 from ase.io import iread, write
 
+from pyacemaker.core.active_set import ActiveSetSelector
 from pyacemaker.core.base import BaseEngine, BaseGenerator, BaseOracle, BaseTrainer
+from pyacemaker.core.otf_manager import OTFManager
 from pyacemaker.domain_models import PyAceConfig
 from pyacemaker.domain_models.defaults import (
     FILENAME_CANDIDATES,
@@ -15,7 +17,6 @@ from pyacemaker.domain_models.defaults import (
     LOG_GENERATED_CANDIDATES,
     LOG_INIT_MODULES,
     LOG_ITERATION_COMPLETED,
-    LOG_MD_COMPLETED,
     LOG_MODULE_INIT_FAIL,
     LOG_MODULES_INIT_SUCCESS,
     LOG_POTENTIAL_TRAINED,
@@ -29,7 +30,6 @@ from pyacemaker.domain_models.defaults import (
     LOG_WORKFLOW_COMPLETED,
     LOG_WORKFLOW_CRASHED,
     TEMPLATE_ITER_DIR,
-    TEMPLATE_POTENTIAL_FILE,
 )
 from pyacemaker.factory import ModuleFactory
 from pyacemaker.logger import setup_logger
@@ -65,6 +65,8 @@ class Orchestrator:
         self.oracle: BaseOracle | None = None
         self.trainer: BaseTrainer | None = None
         self.engine: BaseEngine | None = None
+        self.active_set_selector: ActiveSetSelector | None = None
+        self.otf_manager: OTFManager | None = None
 
         self.load_state()
         self.logger.info(LOG_PROJECT_INIT.format(project_name=config.project_name))
@@ -79,8 +81,22 @@ class Orchestrator:
         self.logger.info(LOG_INIT_MODULES)
         try:
             # Create modules using factory
-            self.generator, self.oracle, self.trainer, self.engine = ModuleFactory.create_modules(
-                self.config
+            (
+                self.generator,
+                self.oracle,
+                self.trainer,
+                self.engine,
+                self.active_set_selector,
+            ) = ModuleFactory.create_modules(self.config)
+
+            # Initialize OTF Manager
+            self.otf_manager = OTFManager(
+                self.config,
+                self.generator,
+                self.oracle,
+                self.trainer,
+                self.engine,
+                self.active_set_selector,
             )
 
         except Exception as e:
@@ -236,23 +252,6 @@ class Orchestrator:
         # Assume result is a path to the potential file
         return Path(result) if isinstance(result, (str, Path)) else None
 
-    def _deploy(self, paths: dict[str, Path], potential_path: Path | None) -> None:
-        """
-        Step 4: Deployment & Run
-        Deploys the potential and runs MD/Engine.
-        """
-        if potential_path and potential_path.exists():
-            filename = TEMPLATE_POTENTIAL_FILE.format(iteration=self.iteration)
-            target_path = self.potentials_dir / filename
-            with contextlib.suppress(shutil.SameFileError):
-                shutil.copy(potential_path, target_path)
-            self.logger.info(f"Deployed potential to {target_path}")
-
-        if self.engine:
-            # We assume Engine handles None structure/potential or finds them from config
-            self.engine.run(structure=None, potential=None)
-            self.logger.info(LOG_MD_COMPLETED)
-
     def _run_active_learning_step(self) -> None:
         """
         Executes a single step of the active learning loop using modular methods.
@@ -262,7 +261,14 @@ class Orchestrator:
         self._explore(paths)
         self._label(paths)
         potential_path = self._train(paths)
-        self._deploy(paths, potential_path)
+
+        if self.otf_manager:
+            self.otf_manager.run_loop(
+                paths=paths,
+                potential_path=potential_path,
+                iteration=self.iteration,
+                potentials_dir=self.potentials_dir
+            )
 
     def run(self) -> None:
         """

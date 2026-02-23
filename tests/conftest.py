@@ -1,4 +1,9 @@
+import sys
 from typing import Any
+from unittest.mock import MagicMock
+
+# Mock lammps module globally before any imports that depend on it
+sys.modules["lammps"] = MagicMock()
 
 import numpy as np
 import pytest
