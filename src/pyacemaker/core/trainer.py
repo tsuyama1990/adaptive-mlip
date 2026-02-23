@@ -1,14 +1,14 @@
-import subprocess
 from pathlib import Path
 from typing import Any
 
-from ase.io import read
+from ase.io import iread
 
 from pyacemaker.core.base import BaseTrainer
 from pyacemaker.core.exceptions import TrainerError
 from pyacemaker.domain_models.training import TrainingConfig
 from pyacemaker.utils.delta import get_lj_params
 from pyacemaker.utils.io import dump_yaml
+from pyacemaker.utils.process import run_command
 
 
 class PacemakerTrainer(BaseTrainer):
@@ -38,14 +38,7 @@ class PacemakerTrainer(BaseTrainer):
             TrainerError: If the training data file does not exist or format is invalid.
         """
         data_path = Path(training_data_path)
-        if not data_path.exists():
-            msg = f"Training data not found: {data_path}"
-            raise TrainerError(msg)
-
-        # Validate extension
-        if data_path.suffix not in {".pckl", ".xyz", ".extxyz", ".gzip"}:
-            msg = f"Invalid training data format: {data_path.suffix}"
-            raise TrainerError(msg)
+        self._validate_training_data(data_path)
 
         # Determine output directory (same as data file)
         output_dir = data_path.parent
@@ -59,54 +52,62 @@ class PacemakerTrainer(BaseTrainer):
         # Run pace_train
         cmd = ["pace_train", str(input_yaml_path)]
         try:
-            subprocess.run(
-                cmd,
-                check=True,
-                capture_output=True,
-                text=True,
-                shell=False,  # Security: explicit False
-            )
-        except subprocess.CalledProcessError as e:
-            msg = f"Training failed (exit code {e.returncode}): {e.stderr}"
-            raise TrainerError(msg) from e
-        except FileNotFoundError as e:
-            # Handle case where pace_train is not installed
-            msg = "pace_train command not found. Ensure Pacemaker is installed."
+            run_command(cmd)
+        except Exception as e:
+            msg = f"Training failed: {e}"
             raise TrainerError(msg) from e
 
         if not potential_path.exists():
-            # Sometimes pace_train might output to a different name if configured incorrectly
-            # or if it crashed without non-zero exit code (rare).
-            # We check if output_potential.yace exists as per config
             msg = f"Potential file was not created at {potential_path}"
             raise TrainerError(msg)
 
         return potential_path
 
+    def _validate_training_data(self, data_path: Path) -> None:
+        """Validates existence and basic format of training data."""
+        if not data_path.exists():
+            msg = f"Training data not found: {data_path}"
+            raise TrainerError(msg)
+
+        if data_path.suffix not in {".pckl", ".xyz", ".extxyz", ".gzip"}:
+            msg = f"Invalid training data format: {data_path.suffix}"
+            raise TrainerError(msg)
+
+        # Check for empty file
+        if data_path.stat().st_size == 0:
+            msg = f"Training data file is empty: {data_path}"
+            raise TrainerError(msg)
+
     def _generate_pacemaker_config(
         self, data_path: Path, output_path: Path
     ) -> dict[str, Any]:
         """Generates the dictionary for Pacemaker input.yaml."""
-        # Detect elements from the dataset
-        # Strategy: Use elements from config if provided, otherwise detect from first frame.
         elements: list[str] = []
         if self.config.elements:
             elements = sorted(self.config.elements)
         else:
             try:
-                # Use format='extxyz' if file extension allows, and index=0 to read only first frame
+                # Scan first few frames to detect elements
+                # Reading just one frame might be insufficient for mixed datasets.
+                # Scanning 10 frames is a reasonable compromise.
+                elements_set = set()
                 fmt = "extxyz" if data_path.suffix == ".xyz" else None
-                # Read single frame to detect elements.
-                # Assuming homogeneous dataset where first frame contains all species or at least types
-                # are consistent. If dataset is heterogeneous (e.g. pure A + pure B), this might miss elements.
-                # But for MLIP training, usually structures contain all active species or we define them.
-                # For safety, users SHOULD provide 'elements' in config for complex cases.
-                atoms = read(data_path, index=0, format=fmt)
-                if isinstance(atoms, list):
-                    atoms = atoms[0]
-                # get_chemical_symbols returns all symbols in structure.
-                # set() gets unique ones.
-                elements = sorted(set(atoms.get_chemical_symbols()))  # type: ignore[no-untyped-call]
+                # Use iread for streaming
+                # iread format requires str, not None. But ASE handles None = autodetect.
+                # To satisfy mypy, we cast or default. 'extxyz' is safest if extension matches.
+                # If fmt is None, iread uses filename.
+                read_fmt = fmt if fmt else ""
+                for i, atoms in enumerate(iread(data_path, index=":", format=read_fmt)):
+                    # atoms from iread is Atoms object
+                    elements_set.update(atoms.get_chemical_symbols())  # type: ignore[no-untyped-call]
+                    if i >= 10:  # Stop after 10 frames
+                        break
+                elements = sorted(elements_set)
+
+                if not elements:
+                     msg = "No elements detected in training data (file might be effectively empty)."
+                     raise TrainerError(msg)
+
             except Exception as e:
                 msg = f"Could not detect elements from {data_path}. Please provide 'elements' in config or ensure data is valid: {e}"
                 raise TrainerError(msg) from e
@@ -155,7 +156,6 @@ class PacemakerTrainer(BaseTrainer):
             },
         }
 
-        # Handle Delta Learning (LJ Baseline)
         if self.config.delta_learning:
             lj_params = {}
             for el in elements:

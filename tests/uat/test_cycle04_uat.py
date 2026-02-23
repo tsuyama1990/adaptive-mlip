@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 from ase import Atoms
@@ -9,57 +10,52 @@ from pyacemaker.core.trainer import PacemakerTrainer
 from pyacemaker.domain_models.training import TrainingConfig
 
 
-# Scenario 04-01: Fit Potential
 def test_uat_fit_potential(tmp_path: Path) -> None:
     # GIVEN a labelled dataset
     dataset_path = tmp_path / "train.xyz"
     write(dataset_path, Atoms("H2", positions=[[0, 0, 0], [0, 0, 1]]))
 
-    # AND a configuration
     config = TrainingConfig(
         potential_type="ace",
         cutoff_radius=5.0,
         max_basis_size=2,
         delta_learning=True,
-        output_filename="output_potential.yace"
+        output_filename="output_potential.yace",
+        elements=["H"]
     )
-
     trainer = PacemakerTrainer(config)
 
-    # Mock the external tools
-    with patch("subprocess.run") as mock_run, \
-         patch("pyacemaker.core.trainer.dump_yaml"), \
-         patch.object(Path, "exists", return_value=True):
+    # Use run_command patch to simulate success without real Pacemaker
+    with patch("pyacemaker.core.trainer.run_command") as mock_run, \
+         patch("pyacemaker.core.trainer.dump_yaml"):
 
-        mock_run.return_value = MagicMock(returncode=0)
+        # Simulate output file creation
+        (tmp_path / "output_potential.yace").touch()
 
-        # WHEN the Trainer executes
         result = trainer.train(dataset_path)
 
-        # THEN a potential file is returned
         assert result.name == "output_potential.yace"
+        mock_run.assert_called_once()
 
-        # AND LJ params are calculated (implied by delta_learning=True logic inside train)
-        # We can verify that get_lj_params was called if we mock it,
-        # or check if the generated yaml contains "base_potential"
-
-# Scenario 04-02: Active Set Selection
-def test_uat_active_set_selection() -> None:
-    # GIVEN a large pool of candidates
-    pool = [Atoms('H') for _ in range(100)]
+def test_uat_active_set_selection(tmp_path: Path) -> None:
+    pool = [Atoms('H') for _ in range(20)]
+    pot_path = tmp_path / "current.yace"
+    pot_path.touch()
 
     selector = ActiveSetSelector()
 
-    # WHEN the selector runs
-    with patch("subprocess.run") as mock_run, \
-         patch("pyacemaker.core.active_set.read") as mock_read, \
-         patch("pyacemaker.core.active_set.write"), \
-         patch.object(Path, "exists", return_value=True):
+    # Mocking run_command to simulate writing output
+    def side_effect(cmd: list[str], **kwargs: Any) -> MagicMock:
+        # cmd is list
+        out_idx = cmd.index("--output")
+        out_path = Path(cmd[out_idx + 1])
+        write(out_path, pool[:10], format="extxyz")
+        return MagicMock()
 
-        mock_run.return_value = MagicMock(returncode=0)
-        mock_read.return_value = pool[:10] # Mock returning 10 items
+    with patch("pyacemaker.core.active_set.run_command") as mock_run:
+        mock_run.side_effect = side_effect
 
-        selected = selector.select(pool, potential_path="current.yace", n_select=10)
+        selected_iter = selector.select(pool, pot_path, n_select=10)
+        selected = list(selected_iter)
 
-        # THEN 10 structures are returned
         assert len(selected) == 10

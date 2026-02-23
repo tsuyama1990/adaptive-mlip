@@ -1,12 +1,12 @@
-import subprocess
 import tempfile
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
 from pathlib import Path
 
 from ase import Atoms
-from ase.io import read, write
+from ase.io import iread, write
 
 from pyacemaker.core.exceptions import ActiveSetError
+from pyacemaker.utils.process import run_command
 
 
 class ActiveSetSelector:
@@ -20,7 +20,7 @@ class ActiveSetSelector:
         candidates: Iterable[Atoms],
         potential_path: str | Path,
         n_select: int,
-    ) -> list[Atoms]:
+    ) -> Iterator[Atoms]:
         """
         Selects a subset of structures that maximize the information gain.
 
@@ -30,7 +30,7 @@ class ActiveSetSelector:
             n_select: Number of structures to select. Must be > 0.
 
         Returns:
-            List of selected Atoms objects.
+            Iterator of selected Atoms objects.
 
         Raises:
             ActiveSetError: If the external command fails or inputs are invalid.
@@ -51,21 +51,22 @@ class ActiveSetSelector:
             output_file = tmp_path / "selected.xyz"
 
             # Stream write candidates to disk to avoid loading all into memory
+            count = 0
             try:
                 # Open file once and write frame by frame
                 with candidates_file.open("w") as f:
-                    count = 0
                     for atoms in candidates:
-                        write(f, atoms, format="extxyz")  # type: ignore[no-untyped-call]
+                        write(f, atoms, format="extxyz")
                         count += 1
             except Exception as e:
                 msg = f"Failed to write candidates to temporary file: {e}"
                 raise ActiveSetError(msg) from e
 
-            # Verify candidates were written (handle empty iterator case)
+            # Verify candidates were written
             if count == 0:
-                # If no candidates, return empty list
-                return []
+                # If no candidates, return empty iterator
+                yield from []
+                return
 
             # Construct command safely
             self._validate_path_safe(candidates_file)
@@ -91,50 +92,41 @@ class ActiveSetSelector:
                 msg = "Active set selection failed: Output file not created."
                 raise ActiveSetError(msg)
 
-            # Read back selected structures
+            # Check file integrity (simple empty check, format check implicitly done by read)
+            if output_file.stat().st_size == 0:
+                 msg = "Active set selection failed: Output file is empty."
+                 raise ActiveSetError(msg)
+
+            # Stream read selected structures to avoid memory spikes
             try:
-                selected_structures = read(output_file, index=":")
+                # iread returns an iterator. We yield from it to keep the generator active.
+                yield from iread(output_file, index=":")
             except Exception as e:
                 msg = f"Failed to read selected structures: {e}"
                 raise ActiveSetError(msg) from e
 
-            if isinstance(selected_structures, Atoms):
-                return [selected_structures]
-            return list(selected_structures)
-
     def _run_pace_activeset(self, cmd: list[str]) -> None:
         """Executes the pace_activeset command safely."""
         try:
-            subprocess.run(  # noqa: S603
-                cmd,
-                check=True,
-                capture_output=True,
-                text=True,
-                shell=False,  # Security: explicit False
-            )
-        except subprocess.CalledProcessError as e:
-            msg = f"Active set selection failed (exit code {e.returncode}): {e.stderr}"
-            raise ActiveSetError(msg) from e
-        except FileNotFoundError as e:
-            msg = "pace_activeset command not found. Ensure Pacemaker is installed."
+            run_command(cmd)
+        except Exception as e:
+            # Re-wrap exceptions to ActiveSetError context
+            msg = f"Active set execution failed: {e}"
             raise ActiveSetError(msg) from e
 
     def _validate_path_safe(self, path: Path) -> None:
-        """Ensures path does not contain suspicious characters for command execution context."""
+        """
+        Ensures path does not contain suspicious shell metacharacters.
+        Allows spaces and common filename characters.
+        """
         s = str(path)
-        # Check for dangerous characters in path string
-        # Although list args prevent shell injection, preventing weird chars is good practice
-        # Whitelist: alphanumeric, dot, underscore, dash, slash
-        import re
-        if not re.match(r'^[\w\-\.\/]+$', s):
-            # This might be too strict for some environments (e.g. spaces in paths), but safer.
-            # If tempdir has spaces, this fails.
-            # Let's relax to allow spaces but forbid shell metachars.
-            # Blacklist approach for shell metachars is safer for general paths
-            dangerous_chars = [";", "&", "|", "`", "$", "(", ")", "<", ">", "\n", "\r"]
-            if any(c in s for c in dangerous_chars):
-                 msg = f"Path contains invalid characters: {path}"
-                 raise ActiveSetError(msg)
+        # Blacklist of shell metacharacters that are dangerous even in list args (if tool has bugs)
+        # or just generally indicative of injection attempts in filenames.
+        # Note: subprocess(shell=False) handles spaces correctly.
+        dangerous_chars = [";", "&", "|", "`", "$", "(", ")", "<", ">", "\n", "\r"]
+        if any(c in s for c in dangerous_chars):
+             msg = f"Path contains invalid characters: {path}"
+             raise ActiveSetError(msg)
 
         if s.startswith("-"):
              msg = f"Path cannot start with '-': {path}"

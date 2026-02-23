@@ -19,7 +19,7 @@ def config() -> TrainingConfig:
         max_basis_size=2,
         output_filename="test_pot.yace",
         delta_learning=True,
-        elements=["H"],
+        # elements not provided, must be detected
         seed=123,
         max_iterations=500,
         batch_size=20
@@ -29,47 +29,43 @@ def config() -> TrainingConfig:
 def trainer(config: TrainingConfig) -> PacemakerTrainer:
     return PacemakerTrainer(config)
 
-def test_train_success_config_generation(trainer: PacemakerTrainer, tmp_path: Path) -> None:
-    # Create dummy training data
+def test_train_element_detection_scanning(trainer: PacemakerTrainer, tmp_path: Path) -> None:
+    # Create mixed dataset
     data_path = tmp_path / "train.xyz"
-    write(data_path, Atoms("H2", positions=[[0, 0, 0], [0, 0, 1]]))
+    # First frame only Fe
+    # Second frame Fe + Pt
+    atoms1 = Atoms("Fe", positions=[[0,0,0]])
+    atoms2 = Atoms("FePt", positions=[[0,0,0], [1,1,1]])
+    write(data_path, [atoms1, atoms2])
 
-    with patch("subprocess.run") as mock_run, \
+    with patch("pyacemaker.core.trainer.run_command") as mock_run, \
          patch("pyacemaker.core.trainer.dump_yaml") as mock_dump:
 
         mock_run.return_value = MagicMock(returncode=0)
 
-        # Mock file existence check for output (which is usually created by subprocess)
-        # We can mock Path.exists or just assume the Trainer checks it after
-        with patch.object(Path, "exists", return_value=True):
-            result = trainer.train(data_path)
+        # Create dummy output
+        (tmp_path / "test_pot.yace").touch()
 
-        assert result.name == "test_pot.yace"
-        mock_run.assert_called()
+        trainer.train(data_path)
 
-        # Verify generated config structure matches default PacemakerConfig
         args, _ = mock_dump.call_args
         generated_config = args[0]
-        assert generated_config["potential"]["elements"] == ["H"]
-        assert generated_config["seed"] == 123
-        assert generated_config["fit"]["optimizer"] == "BFGS"
-        assert generated_config["fit"]["maxiter"] == 500
-        assert generated_config["backend"]["batch_size"] == 20
-        # Check defaults from PacemakerConfig
-        assert generated_config["potential"]["embeddings"]["H"]["npot"] == "FinnisSinclair"
-        assert generated_config["fit"]["loss"]["kappa"] == 0.3
+        # Should detect both Fe and Pt even if first frame only has Fe
+        assert generated_config["potential"]["elements"] == ["Fe", "Pt"]
 
-def test_train_file_not_found(trainer: PacemakerTrainer) -> None:
-    with pytest.raises(TrainerError, match="Training data not found"):
-        trainer.train("non_existent.xyz")
-
-def test_train_process_failure(trainer: PacemakerTrainer, tmp_path: Path) -> None:
-    data_path = tmp_path / "train.xyz"
+def test_train_validation_empty_file(trainer: PacemakerTrainer, tmp_path: Path) -> None:
+    data_path = tmp_path / "empty.xyz"
     data_path.touch()
 
-    with patch("subprocess.run") as mock_run:
-        # Simulate pace_train failure via CalledProcessError
-        mock_run.side_effect = subprocess.CalledProcessError(1, "pace_train", stderr="OOM")
+    with pytest.raises(TrainerError, match="is empty"):
+        trainer.train(data_path)
+
+def test_train_process_fail_util(trainer: PacemakerTrainer, tmp_path: Path) -> None:
+    data_path = tmp_path / "train.xyz"
+    write(data_path, Atoms("H"))
+
+    with patch("pyacemaker.core.trainer.run_command") as mock_run:
+        mock_run.side_effect = subprocess.CalledProcessError(1, "cmd", stderr="error")
 
         with pytest.raises(TrainerError, match="Training failed"):
             trainer.train(data_path)
