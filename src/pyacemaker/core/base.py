@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
+from pathlib import Path
 from typing import Any
 
 from ase import Atoms
@@ -68,21 +69,23 @@ class BaseTrainer(ABC):
     """
 
     @abstractmethod
-    def train(self, training_data: list[Atoms]) -> Any:
+    def train(self, training_data_path: str | Path) -> Any:
         """
-        Trains a potential using the provided training data.
+        Trains a potential using the provided training data file.
+
+        To ensure scalability, training data should be passed as a file path
+        rather than an in-memory list.
 
         Args:
-            training_data: List of labelled ASE Atoms objects.
+            training_data_path: Path to the file containing labelled structures (e.g., .xyz, .pckl).
 
         Returns:
             Trained potential object or path to potential file.
 
         Example:
             class PacemakerTrainer(BaseTrainer):
-                def train(self, data):
-                    write_data(data)
-                    subprocess.run(["pace_train", ...])
+                def train(self, path):
+                    subprocess.run(["pace_train", "--dataset", str(path)])
                     return "potential.yace"
         """
 

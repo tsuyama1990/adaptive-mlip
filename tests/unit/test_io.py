@@ -20,9 +20,11 @@ def test_load_yaml_valid(tmp_path: Path) -> None:
         loaded = load_yaml(p)
     assert loaded == data
 
+
 def test_load_yaml_file_not_found(tmp_path: Path) -> None:
     with patch("pathlib.Path.cwd", return_value=tmp_path), pytest.raises(FileNotFoundError):
         load_yaml(tmp_path / "non_existent_file.yaml")
+
 
 def test_load_yaml_invalid_yaml(tmp_path: Path) -> None:
     p = tmp_path / "invalid.yaml"
@@ -31,9 +33,10 @@ def test_load_yaml_invalid_yaml(tmp_path: Path) -> None:
 
     with (
         patch("pathlib.Path.cwd", return_value=tmp_path),
-        pytest.raises(ValueError, match="Error parsing YAML")
+        pytest.raises(ValueError, match="Error parsing YAML"),
     ):
         load_yaml(p)
+
 
 def test_load_yaml_empty(tmp_path: Path) -> None:
     p = tmp_path / "empty.yaml"
@@ -45,9 +48,10 @@ def test_load_yaml_empty(tmp_path: Path) -> None:
 
     with (
         patch("pathlib.Path.cwd", return_value=tmp_path),
-        pytest.raises(ValueError, match="YAML file is empty")
+        pytest.raises(ValueError, match="YAML file is empty"),
     ):
         load_yaml(p)
+
 
 def test_load_yaml_not_dict(tmp_path: Path) -> None:
     p = tmp_path / "list.yaml"
@@ -57,18 +61,20 @@ def test_load_yaml_not_dict(tmp_path: Path) -> None:
     # Updated to TypeError for TRY004
     with (
         patch("pathlib.Path.cwd", return_value=tmp_path),
-        pytest.raises(TypeError, match="must contain a dictionary")
+        pytest.raises(TypeError, match="must contain a dictionary"),
     ):
         load_yaml(p)
+
 
 def test_load_yaml_directory(tmp_path: Path) -> None:
     p = tmp_path / "subdir"
     p.mkdir()
     with (
         patch("pathlib.Path.cwd", return_value=tmp_path),
-        pytest.raises(ValueError, match="Path is not a file")
+        pytest.raises(ValueError, match="Path is not a file"),
     ):
         load_yaml(p)
+
 
 def test_load_config_valid(tmp_path: Path) -> None:
     config_data = {
@@ -77,7 +83,7 @@ def test_load_config_valid(tmp_path: Path) -> None:
         "dft": {"code": "qe", "functional": "PBE", "kpoints_density": 0.04, "encut": 500.0},
         "training": {"potential_type": "ace", "cutoff_radius": 5.0, "max_basis_size": 500},
         "md": {"temperature": 300.0, "pressure": 0.0, "timestep": 0.001, "n_steps": 1000},
-        "workflow": {"max_iterations": 10}
+        "workflow": {"max_iterations": 10},
     }
     p = tmp_path / "config.yaml"
     with p.open("w") as f:
@@ -88,10 +94,11 @@ def test_load_config_valid(tmp_path: Path) -> None:
     assert isinstance(config, PyAceConfig)
     assert config.project_name == "Test"
 
+
 def test_load_config_invalid(tmp_path: Path) -> None:
     config_data = {
         "project_name": "Test",
-         # Missing structure
+        # Missing structure
     }
     p = tmp_path / "invalid_config.yaml"
     with p.open("w") as f:
@@ -99,6 +106,7 @@ def test_load_config_invalid(tmp_path: Path) -> None:
 
     with patch("pathlib.Path.cwd", return_value=tmp_path), pytest.raises(ValidationError):
         load_config(p)
+
 
 def test_path_traversal_check(tmp_path: Path) -> None:
     # Create a file outside the "current working directory"
@@ -113,6 +121,6 @@ def test_path_traversal_check(tmp_path: Path) -> None:
 
     with (
         patch("pathlib.Path.cwd", return_value=cwd),
-        pytest.raises(ValueError, match="Path traversal detected")
+        pytest.raises(ValueError, match="Path traversal detected"),
     ):
         load_yaml(p)

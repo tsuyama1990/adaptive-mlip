@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
 
+from ase.io import write
+
 from pyacemaker.constants import (
     LOG_COMPUTED_PROPERTIES,
     LOG_GENERATED_CANDIDATES,
@@ -42,6 +44,8 @@ class Orchestrator:
         self.logger = setup_logger(config=config.logging, project_name=config.project_name)
         self.iteration = 0
         self.state_file = Path(config.workflow.state_file_path)
+        self.data_dir = Path("data")
+        self.data_dir.mkdir(exist_ok=True)
 
         # Core modules (placeholders for Cycle 01)
         self.generator: BaseGenerator | None = None
@@ -63,7 +67,6 @@ class Orchestrator:
         try:
             # In future cycles, we will instantiate concrete classes here based on config.
             # For Cycle 01, we just set placeholders if they aren't injected (for testing).
-            # This method acts as a composition root.
             pass
 
         except Exception as e:
@@ -94,25 +97,33 @@ class Orchestrator:
                 self.logger.warning(LOG_STATE_LOAD_FAIL.format(error=e))
 
     def _run_active_learning_step(self) -> None:
-        """Executes a single step of the active learning loop."""
+        """Executes a single step of the active learning loop with file-based streaming."""
 
-        # 1. Generate & Label Candidates (Streaming)
+        # 1. Generate & Label Candidates (Streaming to Disk)
         total_candidates = 0
         n_candidates = self.config.workflow.n_candidates
         batch_size = self.config.workflow.batch_size
+        training_file = self.data_dir / f"training_iter_{self.iteration}.xyz"
 
         if self.generator and self.oracle:
             # Generator returns iterator
             candidate_stream = self.generator.generate(n_candidates=n_candidates)
 
             # Oracle consumes iterator and returns iterator
-            # Note: Depending on Oracle implementation, it might batch internally or we handle it here.
-            # To strictly follow ABC, pass iterator.
             labelled_stream = self.oracle.compute(candidate_stream, batch_size=batch_size)
 
-            for _ in labelled_stream:
+            # Streaming Write: Append each batch to file to minimize memory usage
+            # Note: ase.io.write handles lists of atoms or single atoms.
+            # We can accumulate small chunks or write one by one.
+            # Writing one by one in a loop is safe for memory.
+
+            # Ensure file is fresh
+            if training_file.exists():
+                training_file.unlink()
+
+            for atoms in labelled_stream:
+                write(training_file, atoms, append=True)
                 total_candidates += 1
-                # TODO: Accumulate training data or stream to trainer
 
             self.logger.info(LOG_COMPUTED_PROPERTIES.format(count=total_candidates))
 
@@ -123,10 +134,9 @@ class Orchestrator:
             self.logger.info(LOG_GENERATED_CANDIDATES.format(count=total_candidates))
 
         # 3. Train potential
-        if self.trainer:
-            # Note: Training usually requires full dataset, but we can't load all history into memory.
-            # Trainer implementation will handle file-based datasets.
-            _ = self.trainer.train(training_data=[])
+        if self.trainer and training_file.exists():
+            # Pass the file path to the trainer, NOT a list of atoms
+            _ = self.trainer.train(training_data_path=training_file)
             self.logger.info(LOG_POTENTIAL_TRAINED)
 
         # 4. Run MD
