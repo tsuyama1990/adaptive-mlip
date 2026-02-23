@@ -21,7 +21,11 @@ class PacemakerTrainer(BaseTrainer):
         self.config = config
         self.config_generator = PacemakerConfigGenerator(config)
 
-    def train(self, training_data_path: str | Path) -> Any:
+    def train(
+        self,
+        training_data_path: str | Path,
+        initial_potential: str | Path | None = None
+    ) -> Any:
         """
         Trains a potential using the provided training data file.
 
@@ -31,6 +35,7 @@ class PacemakerTrainer(BaseTrainer):
         Args:
             training_data_path: Path to the file containing labelled structures.
                                 Supported formats: .pckl, .xyz, .extxyz, .gzip.
+            initial_potential: Optional path to an existing potential to fine-tune from.
 
         Returns:
             Path: The path to the generated potential file (e.g., potential.yace).
@@ -57,6 +62,14 @@ class PacemakerTrainer(BaseTrainer):
 
         # Run pace_train
         cmd = ["pace_train", str(input_yaml_path)]
+
+        if initial_potential:
+            initial_path = Path(initial_potential)
+            if not initial_path.exists():
+                msg = f"Initial potential not found: {initial_path}"
+                raise TrainerError(msg)
+            cmd.extend(["--initial_potential", str(initial_path)])
+
         try:
             run_command(cmd)
         except subprocess.CalledProcessError as e:

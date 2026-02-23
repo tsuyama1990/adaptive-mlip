@@ -50,6 +50,9 @@ class LammpsScriptGenerator:
 
     def _gen_watchdog(self, buffer: StringIO, potential_path: Path) -> None:
         """Generates Uncertainty Watchdog commands."""
+        if not self.config.fix_halt:
+            return
+
         buffer.write(f"compute gamma all pace {potential_path}\n")
         buffer.write("compute max_gamma all reduce max c_gamma\n")
         buffer.write("variable max_g equal c_max_gamma\n")
@@ -79,12 +82,21 @@ class LammpsScriptGenerator:
     def _gen_output(self, buffer: StringIO, dump_file: Path) -> None:
         """Generates output settings."""
         buffer.write(f"thermo {self.config.thermo_freq}\n")
-        buffer.write("thermo_style custom step temp pe press v_max_g\n")
-        buffer.write(f"dump traj all custom {self.config.dump_freq} {dump_file} id type x y z c_gamma\n")
+
+        style = "step temp pe press"
+        dump_cols = "id type x y z"
+
+        if self.config.fix_halt:
+            style += " v_max_g"
+            dump_cols += " c_gamma"
+
+        buffer.write(f"thermo_style custom {style}\n")
+        buffer.write(f"dump traj all custom {self.config.dump_freq} {dump_file} {dump_cols}\n")
 
         # Check if halted
-        buffer.write("variable halted equal f_halt_check\n")
-        buffer.write("print 'Halted: ${halted}'\n")
+        if self.config.fix_halt:
+            buffer.write("variable halted equal f_halt_check\n")
+            buffer.write("print 'Halted: ${halted}'\n")
 
     def generate(
         self,

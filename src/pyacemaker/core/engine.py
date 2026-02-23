@@ -69,14 +69,24 @@ class LammpsEngine(BaseEngine):
                 energy = driver.extract_variable("pe")
                 temperature = driver.extract_variable("temp")
                 step = int(driver.extract_variable("step"))
-                max_gamma = driver.extract_variable("max_g")
             except Exception:
                 energy = 0.0
                 temperature = 0.0
                 step = 0
-                max_gamma = 0.0
 
-            halted = step < self.config.n_steps
+            max_gamma = 0.0
+            if self.config.fix_halt:
+                try:
+                    max_gamma = driver.extract_variable("max_g")
+                except Exception:
+                    max_gamma = 0.0
+
+            halted = False
+            if self.config.fix_halt:
+                # If using fix halt, checking step count is a proxy for early termination
+                # Assuming run starts at 0. If restart, logic might need adjustment.
+                # For now, Cycle 01/02 implies fresh runs.
+                halted = step < self.config.n_steps
 
             # Result
             return MDSimulationResult(

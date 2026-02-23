@@ -93,6 +93,9 @@ class MDConfig(BaseModel):
     )
 
     # Spec Section 3.4 (OTF)
+    fix_halt: bool = Field(
+        False, description="Enable OTF halting based on uncertainty"
+    )
     uncertainty_threshold: float = Field(
         5.0, gt=0.0, description="Gamma threshold for halting simulation"
     )

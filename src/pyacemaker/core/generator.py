@@ -8,6 +8,7 @@ from pyacemaker.core.exceptions import GeneratorError
 from pyacemaker.core.m3gnet_wrapper import M3GNetWrapper
 from pyacemaker.core.policy_factory import PolicyFactory
 from pyacemaker.domain_models.structure import ExplorationPolicy, StructureConfig
+from pyacemaker.utils.perturbations import rattle
 
 
 class StructureGenerator(BaseGenerator):
@@ -112,3 +113,33 @@ class StructureGenerator(BaseGenerator):
                 count += 1
 
         yield from lazy_policy_stream()
+
+    def generate_local(self, base_structure: Atoms, n_candidates: int) -> Iterator[Atoms]:
+        """
+        Generates candidate structures by perturbing a base structure.
+        Used in OTF loops to explore the local neighborhood of a high-uncertainty configuration.
+
+        Args:
+            base_structure: The reference structure to perturb.
+            n_candidates: Number of structures to generate.
+
+        Returns:
+            Iterator yielding ASE Atoms objects.
+        """
+        if n_candidates <= 0:
+            return
+
+        # Use configured rattle_stdev, or default if not set (though Config enforces it)
+        stdev = self.config.rattle_stdev
+
+        # Always include the base structure itself as an anchor (spec says so)
+        # But wait, BaseGenerator.generate_local contract?
+        # The spec says "Select ... This sets S0 is always included (Anchor)".
+        # ActiveSetSelector selects. Generator just generates candidates.
+        # But for robustness, let's generate n_candidates.
+        # If we want S0 in candidate pool, we can yield it first.
+        # Spec says: "Generate Local Candidates ... (A) Normal Mode ... (C) Random Displacement".
+
+        # We will yield perturbed structures.
+        for _ in range(n_candidates):
+            yield rattle(base_structure, stdev=stdev)

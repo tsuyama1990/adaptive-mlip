@@ -11,6 +11,7 @@ from pyacemaker.domain_models import (
     DFTConfig,
     LoggingConfig,
     MDConfig,
+    MDSimulationResult,
     PyAceConfig,
     StructureConfig,
     TrainingConfig,
@@ -42,6 +43,12 @@ class FakeGenerator(BaseGenerator):
             symbol = self.elements[0]
             yield Atoms(f"{symbol}2", positions=[[0, 0, 0], [0, 0, 0.74]])
 
+    def generate_local(self, base_structure: Atoms, n_candidates: int) -> Iterator[Atoms]:
+        for _ in range(n_candidates):
+            # Return copies to simulate different objects
+            # In a real scenario, these would be perturbed
+            yield base_structure.copy()  # type: ignore[no-untyped-call]
+
 
 class FakeOracle(BaseOracle):
     def compute(self, structures: Iterator[Atoms], batch_size: int = 10) -> Iterator[Atoms]:
@@ -54,7 +61,11 @@ class FakeTrainer(BaseTrainer):
     def __init__(self, output_dir: Path) -> None:
         self.output_dir = output_dir
 
-    def train(self, training_data_path: str | Path) -> Any:
+    def train(
+        self,
+        training_data_path: str | Path,
+        initial_potential: str | Path | None = None
+    ) -> Any:
         path = Path(training_data_path)
         if not path.exists() or path.stat().st_size == 0:
             msg = "Training data file missing or empty"
@@ -66,8 +77,17 @@ class FakeTrainer(BaseTrainer):
 
 
 class FakeEngine(BaseEngine):
-    def run(self, structure: Atoms | None, potential: Any) -> Any:
-        return {"status": "success", "trajectory": "path/to/traj"}
+    def run(self, structure: Atoms | None, potential: Any) -> MDSimulationResult:
+        return MDSimulationResult(
+             energy=-10.0,
+             forces=[[0.0, 0.0, 0.0]],
+             halted=False,
+             max_gamma=0.0,
+             n_steps=100,
+             temperature=300.0,
+             trajectory_path="traj.xyz",
+             log_path="log.lammps"
+        )
 
 
 @pytest.fixture
