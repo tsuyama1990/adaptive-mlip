@@ -55,13 +55,12 @@ def load_yaml(file_path: str | Path) -> dict[str, Any]:
             if not isinstance(data, dict):
                 # Handle empty file or just scalar
                 if data is None:
+                    # Return empty dict for empty file, if that's desired behavior.
+                    # Or raise error if config MUST be present.
+                    # Given it's a config loader, empty file is usually invalid.
                     msg = "YAML file is empty"
                     raise ValueError(msg)
-                # TRY004 suggestion: raising TypeError might be better for "not dict",
-                # but ValueError is also common for "content invalid".
-                # To satisfy Ruff, we can suppress or change.
-                # Let's check strict requirement. "Prefer TypeError exception for invalid type".
-                # The function signature says returns Dict.
+                # Function signature says returns Dict.
                 raise TypeError(ERR_YAML_NOT_DICT)
             return data
 
@@ -79,3 +78,16 @@ def load_config(file_path: str | Path) -> PyAceConfig:
     data = load_yaml(file_path)
     # Pydantic will raise ValidationError if data is invalid
     return PyAceConfig(**data)
+
+
+def dump_yaml(data: dict[str, Any], file_path: str | Path) -> None:
+    """
+    Writes a dictionary to a YAML file.
+
+    Args:
+        data: Dictionary to write.
+        file_path: Path to the output file.
+    """
+    path = Path(file_path)
+    with path.open("w") as f:
+        yaml.safe_dump(data, f)

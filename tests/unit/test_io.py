@@ -5,7 +5,7 @@ import yaml
 from pydantic import ValidationError
 
 from pyacemaker.domain_models import PyAceConfig
-from pyacemaker.utils.io import load_config, load_yaml
+from pyacemaker.utils.io import dump_yaml, load_config, load_yaml
 from tests.conftest import create_dummy_pseudopotentials
 
 
@@ -124,3 +124,16 @@ def test_path_traversal_check(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -
 
     with pytest.raises(ValueError, match="Path traversal detected"):
         load_yaml(p)
+
+
+def test_dump_yaml(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    data = {"key": "value", "list": [1, 2, 3]}
+    p = tmp_path / "output.yaml"
+
+    dump_yaml(data, p)
+
+    assert p.exists()
+    with p.open("r") as f:
+        loaded = yaml.safe_load(f)
+    assert loaded == data
