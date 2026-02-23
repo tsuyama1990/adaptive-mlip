@@ -28,8 +28,15 @@ def run_command(
         FileNotFoundError: If executable is not found.
     """
     # Mask potentially sensitive arguments (basic heuristic)
-    # We don't expect secrets in CLI args for this app, but good practice.
-    safe_cmd_str = " ".join(cmd)
+    # We redact arguments that look like they might be sensitive keys or very long strings
+    safe_cmd = []
+    for arg in cmd:
+        if len(arg) > 100:  # Truncate very long args
+            safe_cmd.append(f"{arg[:20]}...[TRUNCATED]")
+        else:
+            safe_cmd.append(arg)
+
+    safe_cmd_str = " ".join(safe_cmd)
     logger.debug(f"Running command: {safe_cmd_str}")
 
     try:

@@ -74,6 +74,10 @@ def test_train_element_detection_scanning(
         generated_config = args[0]
         # Should detect both Fe and Pt even if first frame only has Fe
         assert generated_config["potential"]["elements"] == ["Fe", "Pt"]
+        # Verify structure
+        assert "fit" in generated_config
+        assert "backend" in generated_config
+        assert generated_config["backend"]["evaluator"] == "tensorpot"
 
         # Verify command execution
         mock_run.assert_called_once()

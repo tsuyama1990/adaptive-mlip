@@ -93,56 +93,15 @@ class PacemakerTrainer(BaseTrainer):
         self, data_path: Path, output_path: Path
     ) -> dict[str, Any]:
         """Generates the dictionary for Pacemaker input.yaml."""
-        elements: list[str] = []
-        if self.config.elements:
-            elements = sorted(self.config.elements)
-        else:
-            try:
-                elements = detect_elements(data_path, max_frames=10)
-            except ValueError as e:
-                msg = f"Could not detect elements from {data_path}. Please provide 'elements' in config or ensure data is valid: {e}"
-                raise TrainerError(msg) from e
-
-        # Use PacemakerConfig from TrainingConfig
+        elements = self._get_elements(data_path)
         pm_conf = self.config.pacemaker
-
-        # Optimize element detection: If elements provided in config, use them directly
-        # but _generate_pacemaker_config logic above already handles this.
 
         config_dict: dict[str, Any] = {
             "cutoff": self.config.cutoff_radius,
             "seed": self.config.seed,
             "data": {"filename": str(data_path)},
-            "potential": {
-                "delta_spline_bins": pm_conf.delta_spline_bins,
-                "elements": elements,
-                "embeddings": {
-                    el: {
-                        "ndensity": pm_conf.ndensity,
-                        "npot": pm_conf.embedding_type,
-                        "fs_parameters": pm_conf.fs_parameters,
-                        "maxwell": True,
-                    }
-                    for el in elements
-                },
-                "bonds": {
-                    "N": self.config.max_basis_size,
-                    "max_deg": pm_conf.max_deg,
-                    "r0": pm_conf.r0,
-                    "rad_base": pm_conf.rad_base,
-                    "rad_parameters": pm_conf.rad_parameters,
-                },
-            },
-            "fit": {
-                "loss": {
-                    "kappa": pm_conf.loss_kappa,
-                    "L1_coeffs": pm_conf.loss_l1_coeffs,
-                    "L2_coeffs": pm_conf.loss_l2_coeffs,
-                },
-                "optimizer": pm_conf.optimizer,
-                "maxiter": self.config.max_iterations,
-                "repulsion_sigma": pm_conf.repulsion_sigma,
-            },
+            "potential": self._get_potential_config(elements),
+            "fit": self._get_fit_config(),
             "backend": {
                 "evaluator": pm_conf.evaluator,
                 "batch_size": self.config.batch_size,
@@ -151,13 +110,67 @@ class PacemakerTrainer(BaseTrainer):
         }
 
         if self.config.delta_learning:
-            lj_params = {}
-            for el in elements:
-                lj_params[el] = get_lj_params(el)
-
-            config_dict["base_potential"] = {
-                "type": "LennardJones",
-                "parameters": lj_params
-            }
+            config_dict["base_potential"] = self._get_base_potential_config(elements)
 
         return config_dict
+
+    def _get_elements(self, data_path: Path) -> list[str]:
+        """Determine elements from config or data file."""
+        from pyacemaker.domain_models.defaults import DEFAULT_MAX_FRAMES_ELEMENT_DETECTION
+
+        if self.config.elements:
+            return sorted(self.config.elements)
+
+        try:
+            return detect_elements(
+                data_path, max_frames=DEFAULT_MAX_FRAMES_ELEMENT_DETECTION
+            )
+        except ValueError as e:
+            msg = f"Could not detect elements from {data_path}. Please provide 'elements' in config or ensure data is valid: {e}"
+            raise TrainerError(msg) from e
+
+    def _get_potential_config(self, elements: list[str]) -> dict[str, Any]:
+        """Generate potential section of config."""
+        pm_conf = self.config.pacemaker
+        return {
+            "delta_spline_bins": pm_conf.delta_spline_bins,
+            "elements": elements,
+            "embeddings": {
+                el: {
+                    "ndensity": pm_conf.ndensity,
+                    "npot": pm_conf.embedding_type,
+                    "fs_parameters": pm_conf.fs_parameters,
+                    "maxwell": True,
+                }
+                for el in elements
+            },
+            "bonds": {
+                "N": self.config.max_basis_size,
+                "max_deg": pm_conf.max_deg,
+                "r0": pm_conf.r0,
+                "rad_base": pm_conf.rad_base,
+                "rad_parameters": pm_conf.rad_parameters,
+            },
+        }
+
+    def _get_fit_config(self) -> dict[str, Any]:
+        """Generate fit section of config."""
+        pm_conf = self.config.pacemaker
+        return {
+            "loss": {
+                "kappa": pm_conf.loss_kappa,
+                "L1_coeffs": pm_conf.loss_l1_coeffs,
+                "L2_coeffs": pm_conf.loss_l2_coeffs,
+            },
+            "optimizer": pm_conf.optimizer,
+            "maxiter": self.config.max_iterations,
+            "repulsion_sigma": pm_conf.repulsion_sigma,
+        }
+
+    def _get_base_potential_config(self, elements: list[str]) -> dict[str, Any]:
+        """Generate base potential section for delta learning."""
+        lj_params = {el: get_lj_params(el) for el in elements}
+        return {
+            "type": "LennardJones",
+            "parameters": lj_params,
+        }

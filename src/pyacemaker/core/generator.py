@@ -4,6 +4,7 @@ from typing import Any
 from ase import Atoms
 
 from pyacemaker.core.base import BaseGenerator
+from pyacemaker.core.exceptions import GeneratorError
 from pyacemaker.core.m3gnet_wrapper import M3GNetWrapper
 from pyacemaker.core.policy import (
     BasePolicy,
@@ -86,14 +87,8 @@ class StructureGenerator(BaseGenerator):
         policy = self._get_policy()
 
         # Step 1: Base Structure Generation (Lazy)
+        # We define composition here but don't call prediction yet
         composition = "".join(self.config.elements)
-
-        # Lazy loading of base structure only when generator is started
-        try:
-            base_structure = self.m3gnet.predict_structure(composition)
-        except Exception as e:
-            msg = f"Failed to generate base structure for {composition}: {e}"
-            raise RuntimeError(msg) from e
 
         # Validate policy configuration first
         if not isinstance(self.config.policy_name, ExplorationPolicy):
@@ -108,10 +103,16 @@ class StructureGenerator(BaseGenerator):
 
         # Ensure we strictly follow the iterator protocol.
         def lazy_policy_stream() -> Iterator[Atoms]:
+            # Lazy loading of base structure only when generator is started and first item requested
+            try:
+                base_structure = self.m3gnet.predict_structure(composition)
+            except Exception as e:
+                msg = f"Failed to generate base structure for {composition}: {e}"
+                raise GeneratorError(msg) from e
+
             # Generate the base supercell template once (it's small enough typically)
             # If supercell is huge (millions of atoms), even one copy is heavy.
             # But we must have a base to perturb.
-            # If memory is critical, we could defer this until the first yield.
             base_supercell = base_structure.repeat(self.config.supercell_size)  # type: ignore[no-untyped-call]
 
             count = 0

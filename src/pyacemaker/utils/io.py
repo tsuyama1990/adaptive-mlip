@@ -32,6 +32,8 @@ def load_yaml(file_path: str | Path) -> dict[str, Any]:
     base_dir = Path.cwd().resolve()
 
     # Path Sanitization: Ensure path doesn't traverse outside allowed scope (CWD)
+    # We strictly enforce that config files must be within the project root.
+    # Absolute paths are allowed IF they resolve to be inside CWD.
     if not path.is_relative_to(base_dir):
         msg = ERR_PATH_TRAVERSAL.format(path=path, base=base_dir)
         raise ValueError(msg)
@@ -93,14 +95,14 @@ def dump_yaml(data: dict[str, Any], file_path: str | Path) -> None:
         yaml.safe_dump(data, f)
 
 
-def detect_elements(file_path: Path, max_frames: int = 10) -> list[str]:
+def detect_elements(file_path: Path, max_frames: int | None = None) -> list[str]:
     """
     Detects chemical elements from a structure file by scanning the first few frames.
     Optimized to avoid loading the entire file.
 
     Args:
         file_path: Path to the structure file (xyz, extxyz, etc.)
-        max_frames: Maximum number of frames to scan.
+        max_frames: Maximum number of frames to scan. If None, uses default.
 
     Returns:
         Sorted list of unique chemical symbols found.
@@ -110,6 +112,10 @@ def detect_elements(file_path: Path, max_frames: int = 10) -> list[str]:
     """
     from ase.io import iread
 
+    from pyacemaker.domain_models.defaults import DEFAULT_MAX_FRAMES_ELEMENT_DETECTION
+
+    limit = max_frames if max_frames is not None else DEFAULT_MAX_FRAMES_ELEMENT_DETECTION
+
     elements_set = set()
     fmt = "extxyz" if file_path.suffix == ".xyz" else None
     read_fmt = fmt if fmt else ""
@@ -118,7 +124,7 @@ def detect_elements(file_path: Path, max_frames: int = 10) -> list[str]:
         # Use iread for streaming access
         for i, atoms in enumerate(iread(str(file_path), index=":", format=read_fmt)):
             elements_set.update(atoms.get_chemical_symbols())  # type: ignore[no-untyped-call]
-            if i >= max_frames:
+            if i >= limit:
                 break
     except Exception as e:
         msg = f"Failed to read structure file {file_path}: {e}"

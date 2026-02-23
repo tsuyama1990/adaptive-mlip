@@ -2,6 +2,15 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field, PositiveFloat, field_validator
 
+from pyacemaker.domain_models.defaults import (
+    DEFAULT_DFT_DIAGONALIZATION,
+    DEFAULT_DFT_MIXING_BETA,
+    DEFAULT_DFT_MIXING_BETA_FACTOR,
+    DEFAULT_DFT_SMEARING_TYPE,
+    DEFAULT_DFT_SMEARING_WIDTH,
+    DEFAULT_DFT_SMEARING_WIDTH_FACTOR,
+)
+
 
 class DFTConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -17,16 +26,33 @@ class DFTConfig(BaseModel):
     )
 
     # Self-healing and convergence parameters
-    mixing_beta: float = Field(0.7, gt=0.0, le=1.0, description="Initial mixing parameter for SCF")
-    smearing_type: str = Field("mv", description="Type of smearing (e.g., 'mv', 'gaussian')")
-    smearing_width: PositiveFloat = Field(0.1, description="Width of smearing in eV")
-    diagonalization: str = Field("david", description="Diagonalization algorithm")
+    mixing_beta: float = Field(
+        DEFAULT_DFT_MIXING_BETA, gt=0.0, le=1.0, description="Initial mixing parameter for SCF"
+    )
+    smearing_type: str = Field(
+        DEFAULT_DFT_SMEARING_TYPE, description="Type of smearing (e.g., 'mv', 'gaussian')"
+    )
+    smearing_width: PositiveFloat = Field(
+        DEFAULT_DFT_SMEARING_WIDTH, description="Width of smearing in eV"
+    )
+    diagonalization: str = Field(
+        DEFAULT_DFT_DIAGONALIZATION, description="Diagonalization algorithm"
+    )
 
     # Strategy Multipliers
     # Note: mixing_beta_factor is used to REDUCE mixing_beta (new_beta = beta * factor)
     #       smearing_width_factor is used to INCREASE smearing_width (new_width = width * factor)
-    mixing_beta_factor: float = Field(0.5, gt=0.0, le=1.0, description="Multiplier for mixing_beta reduction strategy")
-    smearing_width_factor: float = Field(2.0, gt=1.0, description="Multiplier for smearing_width increase strategy")
+    mixing_beta_factor: float = Field(
+        DEFAULT_DFT_MIXING_BETA_FACTOR,
+        gt=0.0,
+        le=1.0,
+        description="Multiplier for mixing_beta reduction strategy",
+    )
+    smearing_width_factor: float = Field(
+        DEFAULT_DFT_SMEARING_WIDTH_FACTOR,
+        gt=1.0,
+        description="Multiplier for smearing_width increase strategy",
+    )
 
     # Pseudopotentials
     pseudopotentials: dict[str, str] = Field(

@@ -2,6 +2,7 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
 
+import pytest
 from ase import Atoms
 from ase.io import write
 
@@ -48,6 +49,34 @@ def test_uat_fit_potential(tmp_path: Path) -> None:
         assert config_dict["potential"]["delta_spline_bins"] == 100
         assert config_dict["backend"]["evaluator"] == "tensorpot"
         assert config_dict["backend"]["display_step"] == 50
+
+def test_uat_fit_potential_failure(tmp_path: Path) -> None:
+    # GIVEN a labelled dataset
+    dataset_path = tmp_path / "train.xyz"
+    write(dataset_path, Atoms("H"))
+
+    config = TrainingConfig(
+        potential_type="ace",
+        cutoff_radius=5.0,
+        max_basis_size=2,
+        delta_learning=True,
+        output_filename="output_potential.yace",
+        elements=["H"]
+    )
+    trainer = PacemakerTrainer(config)
+
+    # Simulate process failure
+    import subprocess
+
+    from pyacemaker.core.exceptions import TrainerError
+
+    with patch("pyacemaker.core.trainer.run_command") as mock_run, \
+         patch("shutil.which", return_value="/usr/bin/pace_train"):
+
+        mock_run.side_effect = subprocess.CalledProcessError(1, "cmd", stderr="Simulated Crash")
+
+        with pytest.raises(TrainerError, match="Training failed with exit code 1"):
+            trainer.train(dataset_path)
 
 def test_uat_active_set_selection(tmp_path: Path) -> None:
     pool = [Atoms('H') for _ in range(20)]
