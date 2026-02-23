@@ -5,6 +5,8 @@ from typing import Any
 from ase import Atoms
 
 from pyacemaker.core.base import BaseEngine, BaseGenerator, BaseOracle, BaseTrainer
+from pyacemaker.core.exceptions import ConfigError
+from pyacemaker.core.oracle import DFTManager
 from pyacemaker.domain_models import PyAceConfig
 
 
@@ -12,15 +14,8 @@ from pyacemaker.domain_models import PyAceConfig
 class Cycle01Generator(BaseGenerator):
     def generate(self, n_candidates: int) -> Iterator[Atoms]:
         """Placeholder generator for Cycle 01."""
-        # Yield nothing or simple dummy atoms if needed, but for now empty
-        # Real implementation will use config.structure
+        # Must return an iterator
         return iter([])
-
-
-class Cycle01Oracle(BaseOracle):
-    def compute(self, structures: Iterator[Atoms], batch_size: int = 10) -> Iterator[Atoms]:
-        """Placeholder oracle for Cycle 01."""
-        yield from structures
 
 
 class Cycle01Trainer(BaseTrainer):
@@ -44,16 +39,29 @@ class ModuleFactory:
     def create_modules(
         config: PyAceConfig,
     ) -> tuple[BaseGenerator, BaseOracle, BaseTrainer, BaseEngine]:
+        """
+        Creates instances of core modules.
+
+        Raises:
+            ConfigError: If configuration is invalid.
+            RuntimeError: If module creation fails.
+        """
         # Validate configuration before module creation
         if not config.project_name:
             msg = "Project name is required for module initialization"
-            raise ValueError(msg)
+            raise ConfigError(msg)
 
-        # Future: Instantiate concrete classes based on config.dft.code, config.training.type, etc.
+        try:
+            # For Cycle 02, we use DFTManager for Oracle if configured
+            # config.dft is always present due to Pydantic model
+            oracle = DFTManager(config.dft)
 
-        return (
-            Cycle01Generator(),
-            Cycle01Oracle(),
-            Cycle01Trainer(),
-            Cycle01Engine(),
-        )
+            return (
+                Cycle01Generator(),
+                oracle,
+                Cycle01Trainer(),
+                Cycle01Engine(),
+            )
+        except Exception as e:
+            msg = f"Failed to create modules: {e}"
+            raise RuntimeError(msg) from e

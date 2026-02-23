@@ -72,7 +72,13 @@ def mock_config(tmp_path: Path) -> PyAceConfig:
     return PyAceConfig(
         project_name="TestProject",
         structure=StructureConfig(elements=["H"], supercell_size=[1, 1, 1]),
-        dft=DFTConfig(code="qe", functional="PBE", kpoints_density=0.04, encut=400.0),
+        dft=DFTConfig(
+            code="qe",
+            functional="PBE",
+            kpoints_density=0.04,
+            encut=400.0,
+            pseudopotentials={"H": "H.UPF"},
+        ),
         training=TrainingConfig(potential_type="ace", cutoff_radius=4.0, max_basis_size=100),
         md=MDConfig(temperature=300.0, pressure=0.0, timestep=0.001, n_steps=100),
         workflow=WorkflowConfig(

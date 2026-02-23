@@ -105,3 +105,4 @@ testpaths = ["tests"]
 strict = true
 ignore_missing_imports = true
 exclude = ["build/"]
+plugins = ["pydantic.mypy"]

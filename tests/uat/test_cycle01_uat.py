@@ -6,31 +6,15 @@ from typing import Any
 import pytest
 import yaml
 
+from tests.conftest import create_test_config_dict
 
-# Reusable fixture factory to reduce duplication
+
+# Reusable fixture factory using shared utility
 def create_config(tmp_path: Path, **overrides: Any) -> Path:
-    defaults: dict[str, Any] = {
-        "project_name": "FePt_Optimization",
-        "structure": {"elements": ["Fe", "Pt"], "supercell_size": [2, 2, 2]},
-        "dft": {"code": "qe", "functional": "PBE", "kpoints_density": 0.04, "encut": 500.0},
-        "training": {"potential_type": "ace", "cutoff_radius": 5.0, "max_basis_size": 500},
-        "md": {"temperature": 1000.0, "pressure": 0.0, "timestep": 0.001, "n_steps": 1000},
-        "workflow": {"max_iterations": 10},
-        "logging": {"log_file": "test.log"}
-    }
-
-    # Deep merge overrides would be better but for this simple case:
-    for section, values in overrides.items():
-        if section in defaults and isinstance(defaults[section], dict):
-            # Explicitly cast to dict to satisfy mypy
-            section_dict: dict[str, Any] = defaults[section]
-            section_dict.update(values)
-        else:
-            defaults[section] = values
-
+    config_dict = create_test_config_dict(**overrides)
     config_path = tmp_path / "config.yaml"
     with config_path.open("w") as f:
-        yaml.dump(defaults, f)
+        yaml.dump(config_dict, f)
     return config_path
 
 @pytest.fixture
