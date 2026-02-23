@@ -7,7 +7,6 @@ from ase import Atoms
 from ase.io import read, write
 
 from pyacemaker.core.exceptions import ActiveSetError
-from pyacemaker.utils.misc import batched
 
 
 class ActiveSetSelector:
@@ -52,35 +51,23 @@ class ActiveSetSelector:
             output_file = tmp_path / "selected.xyz"
 
             # Stream write candidates to disk to avoid loading all into memory
-            # ase.io.write supports appending, but efficient writing of multiple frames
-            # is usually handled by passing the iterable directly.
-            # To be absolutely sure we don't materialize, we can batch write.
             try:
-                # Using batch writing to ensure memory efficiency
-                # Although ase.io.write(..., iterable) usually works, explicit batching is safer
-                # for very large generators to avoid potential memory spikes inside ASE
-                first_batch = True
-                candidates_exist = False
-                for batch in batched(candidates, 100):
-                    candidates_exist = True
-                    if first_batch:
-                        write(candidates_file, list(batch))
-                        first_batch = False
-                    else:
-                        write(candidates_file, list(batch), append=True)
+                # Open file once and write frame by frame
+                with candidates_file.open("w") as f:
+                    count = 0
+                    for atoms in candidates:
+                        write(f, atoms, format="extxyz")  # type: ignore[no-untyped-call]
+                        count += 1
             except Exception as e:
                 msg = f"Failed to write candidates to temporary file: {e}"
                 raise ActiveSetError(msg) from e
 
             # Verify candidates were written (handle empty iterator case)
-            if not candidates_exist:
+            if count == 0:
                 # If no candidates, return empty list
                 return []
 
             # Construct command safely
-            # Validate paths don't contain dangerous characters (though subprocess list args are safer)
-            # However, pace_activeset expects paths.
-            # We already use Path objects which are sanitized by Python somewhat, but let's be strict.
             self._validate_path_safe(candidates_file)
             self._validate_path_safe(potential_path)
             self._validate_path_safe(output_file)
@@ -105,7 +92,6 @@ class ActiveSetSelector:
                 raise ActiveSetError(msg)
 
             # Read back selected structures
-            # Depending on size of active set (usually small, e.g. < 1000), reading into list is fine.
             try:
                 selected_structures = read(output_file, index=":")
             except Exception as e:
@@ -135,19 +121,21 @@ class ActiveSetSelector:
 
     def _validate_path_safe(self, path: Path) -> None:
         """Ensures path does not contain suspicious characters for command execution context."""
-        # Although we use shell=False, checking for null bytes or weird control chars is good practice.
         s = str(path)
-        if any(c in s for c in [";", "&", "|", "`", "$", "(", ")", "<", ">"]):
-            # This is overly strict for filenames but safe for our controlled environment
-            # where temp filenames are simple. User provided potential path might be complex though.
-            # Since we use list args in subprocess, shell injection is mitigated.
-            # This check is just an extra layer for "Command Injection" via argument parsing bugs in the tool.
-            # We'll stick to a basic check or skip if it blocks valid paths.
-            # Given the feedback "Validate all command arguments", let's be reasonably strict.
-            pass  # For now, subprocess list args handle most.
-                  # If we were building a shell string, this would be critical.
-                  # With list args, the main risk is argument injection (e.g. starting with -).
-                  # But here we control the flags.
-        if str(path).startswith("-"):
+        # Check for dangerous characters in path string
+        # Although list args prevent shell injection, preventing weird chars is good practice
+        # Whitelist: alphanumeric, dot, underscore, dash, slash
+        import re
+        if not re.match(r'^[\w\-\.\/]+$', s):
+            # This might be too strict for some environments (e.g. spaces in paths), but safer.
+            # If tempdir has spaces, this fails.
+            # Let's relax to allow spaces but forbid shell metachars.
+            # Blacklist approach for shell metachars is safer for general paths
+            dangerous_chars = [";", "&", "|", "`", "$", "(", ")", "<", ">", "\n", "\r"]
+            if any(c in s for c in dangerous_chars):
+                 msg = f"Path contains invalid characters: {path}"
+                 raise ActiveSetError(msg)
+
+        if s.startswith("-"):
              msg = f"Path cannot start with '-': {path}"
              raise ActiveSetError(msg)

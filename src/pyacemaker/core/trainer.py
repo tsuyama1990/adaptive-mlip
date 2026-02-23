@@ -59,7 +59,7 @@ class PacemakerTrainer(BaseTrainer):
         # Run pace_train
         cmd = ["pace_train", str(input_yaml_path)]
         try:
-            subprocess.run(  # noqa: S603
+            subprocess.run(
                 cmd,
                 check=True,
                 capture_output=True,
@@ -111,6 +111,9 @@ class PacemakerTrainer(BaseTrainer):
                 msg = f"Could not detect elements from {data_path}. Please provide 'elements' in config or ensure data is valid: {e}"
                 raise TrainerError(msg) from e
 
+        # Use PacemakerConfig from TrainingConfig
+        pm_conf = self.config.pacemaker
+
         config_dict: dict[str, Any] = {
             "cutoff": self.config.cutoff_radius,
             "seed": self.config.seed,
@@ -120,30 +123,30 @@ class PacemakerTrainer(BaseTrainer):
                 "elements": elements,
                 "embeddings": {
                     el: {
-                        "ndensity": 2,
-                        "npot": "FinnisSinclair",
-                        "fs_parameters": [1, 1, 1, 1.5],
+                        "ndensity": pm_conf.ndensity,
+                        "npot": pm_conf.embedding_type,
+                        "fs_parameters": pm_conf.fs_parameters,
                         "maxwell": True,
                     }
                     for el in elements
                 },
                 "bonds": {
                     "N": self.config.max_basis_size,
-                    "max_deg": 6,
-                    "r0": 1.5,
-                    "rad_base": "Chebyshev",
-                    "rad_parameters": [1.0],
+                    "max_deg": pm_conf.max_deg,
+                    "r0": pm_conf.r0,
+                    "rad_base": pm_conf.rad_base,
+                    "rad_parameters": pm_conf.rad_parameters,
                 },
             },
             "fit": {
                 "loss": {
-                    "kappa": 0.3,
-                    "L1_coeffs": 1e-8,
-                    "L2_coeffs": 1e-8,
+                    "kappa": pm_conf.loss_kappa,
+                    "L1_coeffs": pm_conf.loss_l1_coeffs,
+                    "L2_coeffs": pm_conf.loss_l2_coeffs,
                 },
-                "optimizer": "BFGS",
+                "optimizer": pm_conf.optimizer,
                 "maxiter": self.config.max_iterations,
-                "repulsion_sigma": 0.05,
+                "repulsion_sigma": pm_conf.repulsion_sigma,
             },
             "backend": {
                 "evaluator": "tensorpot",
