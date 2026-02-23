@@ -29,22 +29,33 @@ def test_structure_config_invalid_supercell() -> None:
 
 
 def test_dft_config_valid() -> None:
-    config = DFTConfig(code="quantum_espresso", functional="PBE", kpoints_density=0.04, encut=500.0)
+    config = DFTConfig(
+        code="quantum_espresso",
+        functional="PBE",
+        kpoints_density=0.04,
+        encut=500.0,
+        pseudopotentials={"Fe": "Fe.pbe-n-kjpaw_psl.1.0.0.UPF"},
+    )
     assert config.encut == 500.0
+    assert config.pseudopotentials["Fe"] == "Fe.pbe-n-kjpaw_psl.1.0.0.UPF"
 
 
 def test_dft_config_invalid_encut() -> None:
     with pytest.raises(ValidationError):
         DFTConfig(
-            code="qe", functional="PBE", kpoints_density=0.04, encut=-100.0
+            code="qe",
+            functional="PBE",
+            kpoints_density=0.04,
+            encut=-100.0,
+            pseudopotentials={"Fe": "Fe.UPF"},
         )  # Must be positive
 
 
 def test_dft_config_missing_field() -> None:
     with pytest.raises(ValidationError):
         DFTConfig.model_validate(
-            {"code": "qe", "functional": "PBE", "kpoints_density": 0.04}
-        )  # Missing encut
+            {"code": "qe", "functional": "PBE", "kpoints_density": 0.04, "encut": 500.0}
+        )  # Missing pseudopotentials (encut is present now to test specifically missing pseudo)
 
 
 def test_training_config_valid() -> None:
@@ -110,7 +121,13 @@ def test_logging_config_invalid_level() -> None:
 
 def test_pyace_config_valid() -> None:
     structure = StructureConfig(elements=["Al"], supercell_size=[1, 1, 1])
-    dft = DFTConfig(code="qe", functional="PBE", kpoints_density=0.04, encut=400.0)
+    dft = DFTConfig(
+        code="qe",
+        functional="PBE",
+        kpoints_density=0.04,
+        encut=400.0,
+        pseudopotentials={"Al": "Al.UPF"},
+    )
     training = TrainingConfig(potential_type="ace", cutoff_radius=4.5, max_basis_size=500)
     md = MDConfig(temperature=300.0, pressure=0.0, timestep=0.001, n_steps=1000)
     workflow = WorkflowConfig(max_iterations=10)
@@ -132,7 +149,13 @@ def test_pyace_config_valid() -> None:
 
 def test_pyace_config_missing_field() -> None:
     structure = StructureConfig(elements=["Al"], supercell_size=[1, 1, 1])
-    dft = DFTConfig(code="qe", functional="PBE", kpoints_density=0.04, encut=400.0)
+    dft = DFTConfig(
+        code="qe",
+        functional="PBE",
+        kpoints_density=0.04,
+        encut=400.0,
+        pseudopotentials={"Al": "Al.UPF"},
+    )
     training = TrainingConfig(potential_type="ace", cutoff_radius=4.5, max_basis_size=500)
     md = MDConfig(temperature=300.0, pressure=0.0, timestep=0.001, n_steps=1000)
     # Missing workflow, so we use model_validate with missing key to avoid mypy error on constructor

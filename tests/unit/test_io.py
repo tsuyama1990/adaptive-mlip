@@ -80,7 +80,13 @@ def test_load_config_valid(tmp_path: Path) -> None:
     config_data = {
         "project_name": "Test",
         "structure": {"elements": ["Fe"], "supercell_size": [1, 1, 1]},
-        "dft": {"code": "qe", "functional": "PBE", "kpoints_density": 0.04, "encut": 500.0},
+        "dft": {
+            "code": "qe",
+            "functional": "PBE",
+            "kpoints_density": 0.04,
+            "encut": 500.0,
+            "pseudopotentials": {"Fe": "Fe.UPF"},
+        },
         "training": {"potential_type": "ace", "cutoff_radius": 5.0, "max_basis_size": 500},
         "md": {"temperature": 300.0, "pressure": 0.0, "timestep": 0.001, "n_steps": 1000},
         "workflow": {"max_iterations": 10},

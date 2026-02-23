@@ -27,11 +27,17 @@ pyacemaker/
 The `DFTManager` class orchestrates the calculation workflow. It accepts a list of `ase.Atoms` objects and returns their energies, forces, and stresses.
 *   **Input**: `List[Atoms]`, `DFTConfig`.
 *   **Output**: `List[Atoms]` (with `calc.results` attached).
+*   **Configuration (`DFTConfig`)**:
+    *   `mixing_beta` (float, default 0.7): Initial mixing parameter for SCF.
+    *   `smearing_type` (str, default "mv"): Type of smearing (e.g., "mv", "gaussian").
+    *   `smearing_width` (float, default 0.1): Width of smearing in eV.
+    *   `diagonalization` (str, default "david"): Diagonalization algorithm.
+    *   `pseudopotentials` (Dict[str, str]): Mapping of element symbols to filenames.
 *   **Self-Healing Strategy**:
     1.  Attempt standard calculation.
     2.  `JobFailedException` caught.
     3.  Reduce `mixing_beta`. Retry.
-    4.  Increase `smearing`. Retry.
+    4.  Increase `smearing_width`. Retry.
     5.  Change `diagonalization`. Retry.
     6.  Fail gracefully if all attempts exhausted.
 
@@ -48,7 +54,7 @@ This utility is crucial for the "Active Learning" loop.
 Wraps `ase.calculators.espresso.Espresso`.
 *   **Features**:
     *   Automatic k-point generation based on cell size (k-spacing).
-    *   Pseudopotential dictionary management (SSSP).
+    *   Pseudopotential dictionary management (SSSP) via `interfaces/pseudos.py`.
     *   Parallel execution management (`mpirun`).
 
 ## 4. Implementation Approach

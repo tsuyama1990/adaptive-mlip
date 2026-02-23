@@ -12,7 +12,13 @@ def create_config(tmp_path: Path, **overrides: Any) -> Path:
     defaults: dict[str, Any] = {
         "project_name": "FePt_Optimization",
         "structure": {"elements": ["Fe", "Pt"], "supercell_size": [2, 2, 2]},
-        "dft": {"code": "qe", "functional": "PBE", "kpoints_density": 0.04, "encut": 500.0},
+        "dft": {
+            "code": "qe",
+            "functional": "PBE",
+            "kpoints_density": 0.04,
+            "encut": 500.0,
+            "pseudopotentials": {"Fe": "Fe.UPF", "Pt": "Pt.UPF"},
+        },
         "training": {"potential_type": "ace", "cutoff_radius": 5.0, "max_basis_size": 500},
         "md": {"temperature": 1000.0, "pressure": 0.0, "timestep": 0.001, "n_steps": 1000},
         "workflow": {"max_iterations": 10},

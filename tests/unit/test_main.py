@@ -18,6 +18,8 @@ dft:
     functional: PBE
     kpoints_density: 0.04
     encut: 500
+    pseudopotentials:
+        Fe: Fe.UPF
 training:
     potential_type: ace
     cutoff_radius: 5.0
@@ -59,6 +61,8 @@ dft:
     functional: PBE
     kpoints_density: 0.04
     encut: 400
+    pseudopotentials:
+        Al: Al.UPF
 training:
     potential_type: ace
     cutoff_radius: 4.0

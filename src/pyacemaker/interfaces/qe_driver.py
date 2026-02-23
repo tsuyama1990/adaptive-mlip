@@ -1,0 +1,103 @@
+import math
+from typing import Any
+
+from ase import Atoms
+from ase.calculators.espresso import Espresso
+
+from pyacemaker.domain_models import DFTConfig
+
+
+class QEDriver:
+    """
+    Interface for Quantum Espresso calculations using ASE.
+    """
+
+    def get_calculator(self, atoms: Atoms, config: DFTConfig) -> Espresso:
+        """
+        Creates an ASE Espresso calculator configured based on DFTConfig.
+
+        Args:
+            atoms: The atoms object to calculate (used for k-point generation).
+            config: The DFT configuration.
+
+        Returns:
+            Configured Espresso calculator.
+        """
+        # Calculate k-points
+        kpts = self._calculate_kpoints(atoms, config.kpoints_density)
+
+        # Construct input data
+        input_data: dict[str, Any] = {
+            "control": {
+                "calculation": "scf",
+                "restart_mode": "from_scratch",
+                "disk_io": "low",  # Optimize I/O
+                # pseudo_dir and outdir are typically handled by ASE or env vars
+            },
+            "system": {
+                "ecutwfc": config.encut,
+                "occupations": "smearing",
+                "smearing": config.smearing_type,
+                "degauss": config.smearing_width,
+            },
+            "electrons": {
+                "mixing_beta": config.mixing_beta,
+                "diagonalization": config.diagonalization,
+                "conv_thr": 1.0e-8,
+            },
+        }
+
+        # Create calculator
+        # Note: command is typically set via ASE_ESPRESSO_COMMAND env var or profile
+        # We assume the user has set it up or passed it via config.code if we wanted to support custom commands.
+        # But ASE uses 'espresso' profile usually.
+        # Here we pass 'command' if needed, but usually ASE handles it.
+        # Spec says "code: str = Field(..., description='DFT code to use')".
+        # If config.code is just "pw.x", ASE might need explicit command if not in PATH.
+        # For now, we rely on ASE's default behavior or environment variables.
+
+        return Espresso(
+            input_data=input_data,
+            pseudopotentials=config.pseudopotentials,
+            kpts=kpts,
+        )
+
+    def _calculate_kpoints(self, atoms: Atoms, spacing: float) -> tuple[int, int, int]:
+        """
+        Calculates k-point mesh based on k-spacing.
+        N_i = ceil(2 * pi / (|a_i| * spacing))
+
+        Args:
+            atoms: Atoms object.
+            spacing: K-point spacing in 1/Angstrom.
+
+        Returns:
+            Tuple of (k_x, k_y, k_z).
+        """
+        cell = atoms.get_cell()
+        lengths = cell.lengths()
+
+        # Avoid division by zero if cell is 0 (should not happen for valid periodic systems)
+        if any(L < 1e-3 for L in lengths):
+            # Fallback for non-periodic or vacuum dimensions?
+            # If pbc is False for a direction, k-point should be 1.
+            pbc = atoms.get_pbc()
+            kpts = []
+            for i in range(3):
+                if not pbc[i] or lengths[i] < 1e-3:
+                    kpts.append(1)
+                else:
+                    k = math.ceil(2 * math.pi / (lengths[i] * spacing))
+                    kpts.append(max(1, k))
+            return tuple(kpts) # type: ignore
+
+        # Standard calculation
+        kpts_list = []
+        for i in range(3):
+            if not atoms.pbc[i]:
+                kpts_list.append(1)
+            else:
+                k = math.ceil(2 * math.pi / (lengths[i] * spacing))
+                kpts_list.append(max(1, k))
+
+        return tuple(kpts_list) # type: ignore
