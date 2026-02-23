@@ -1,12 +1,16 @@
 [project]
-name = "amlip"
+name = "pyacemaker"
 version = "0.1.0"
 description = "Adaptive machine learning interatomic potentials"
 readme = "README.md"
-requires-python = "==3.12.4"
+requires-python = ">=3.11"
 dependencies = [
     "mypy>=1.19.1",
     "ruff>=0.15.2",
+    "pydantic>=2.0",
+    "pyyaml>=6.0",
+    "ase>=3.27.0",
+    "numpy>=2.4.2",
 ]
 authors = [
     { name = "Tomoyuki Tsuyama", email = "tomoyuki.tsuyaman@gmail.com" }
@@ -18,6 +22,7 @@ dev = [
     "mypy",
     "pytest",
     "pytest-cov",
+    "types-pyyaml>=6.0.12.20250915",
 ]
 
 [tool.ruff]

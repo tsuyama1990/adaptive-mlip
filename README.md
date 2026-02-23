@@ -6,48 +6,28 @@
 ![Python](https://img.shields.io/badge/python-3.11+-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
-PYACEMAKER is an autonomous system designed to democratise the creation of Machine Learning Interatomic Potentials (MLIPs). By orchestrating the **Pacemaker** engine within a self-driving Active Learning loop, it allows researchers to generate State-of-the-Art potentials for complex alloys and interfaces with a "Zero-Config" workflow—no coding required.
+PYACEMAKER is an autonomous system designed to democratise the creation of Machine Learning Interatomic Potentials (MLIPs). By orchestrating the **Pacemaker** engine within a self-driving Active Learning loop, it allows researchers to generate State-of-the-Art potentials for complex alloys and interfaces with a "Zero-Config" workflow.
+
+**Current Status**: Configuration & Orchestration System Verified
 
 ---
 
 ## 🚀 Key Features
 
-*   **Zero-Config Automation**: Launch a full active learning campaign with a single YAML file. The system automatically infers hyperparameters based on physical properties.
-*   **Physics-Informed Robustness**: Guarantees physical safety (no atomic fusion) by enforcing a Delta Learning strategy with LJ/ZBL baselines, ensuring simulations never crash due to non-physical forces.
-*   **Data Efficiency**: Utilizes D-Optimality (Active Set selection) and Periodic Embedding to achieve DFT accuracy with 90% fewer calculations than random sampling.
-*   **Self-Healing Oracle**: Automatically recovers from Quantum Espresso convergence failures by adjusting mixing betas and smearing parameters on the fly.
-*   **Multi-Scale Capability**: Seamlessly bridges the gap between Molecular Dynamics (LAMMPS) and Adaptive Kinetic Monte Carlo (EON) for long-timescale simulations.
+*   **Robust Configuration**: Utilizes **Pydantic V2** for strict schema validation, ensuring all inputs (temperatures, cutoffs, paths) are physically valid before execution.
+*   **Orchestration Core**: Centralized state machine designed to manage the "Explore-Label-Train-Run" lifecycle.
+*   **Structured Logging**: Automatic setup of console and file logging with rotation policies.
+*   **Modular Architecture**: Clean separation of concerns with Abstract Base Classes for Generator, Oracle, Trainer, and Engine.
+*   **Zero-Config Automation**: (Planned) Launch a full active learning campaign with a single YAML file.
 
 ---
-
-## 🏗 Architecture Overview
-
-The system follows a cyclic "Explore-Label-Train-Run" architecture managed by a central Orchestrator.
-
-```mermaid
-graph TD
-    User[User] -->|config.yaml| ORC[Orchestrator]
-    ORC -->|1. Explore| SG[Structure Generator]
-    SG -->|Candidates| ORC
-    ORC -->|2. Compute| DFT[Oracle (QE)]
-    DFT -->|Data| ORC
-    ORC -->|3. Train| PM[Trainer (Pacemaker)]
-    PM -->|potential.yace| ORC
-    ORC -->|4. Run| MD[Engine (LAMMPS)]
-    MD -- High Uncertainty --> ORC
-```
 
 ## 🛠 Prerequisites
 
 *   **Python**: 3.11 or higher
-*   **Quantum Espresso**: `pw.x` must be in your PATH (for Oracle)
-*   **LAMMPS**: Must be installed with `USER-PACE` package
-*   **Pacemaker**: `pace_train`, `pace_activeset` tools
-*   **EON**: (Optional) For kMC simulations
+*   **Package Manager**: `uv` (recommended) or `pip`
 
-## 📦 Installation & Setup
-
-We recommend using `uv` or `poetry` for dependency management, but `pip` works as well.
+## 📦 Installation
 
 1.  **Clone the repository**
     ```bash
@@ -56,77 +36,89 @@ We recommend using `uv` or `poetry` for dependency management, but `pip` works a
     ```
 
 2.  **Install Dependencies**
+    Using `uv`:
     ```bash
-    pip install .
-    # OR if using uv
     uv sync
     ```
-
-3.  **Environment Setup**
-    Copy the example configuration and adjust for your HPC environment.
+    Using `pip`:
     ```bash
-    cp config.example.yaml config.yaml
+    pip install .
     ```
 
 ## ⚡ Usage
 
-### Quick Start (FePt Alloy)
+### 1. Create a Configuration File
+Create a `config.yaml` file with the required sections:
 
-1.  **Prepare Configuration**
-    Create a `config.yaml` file:
-    ```yaml
-    project_name: "FePt_Test"
-    elements: ["Fe", "Pt"]
-    temperature: 1000
-    ```
+```yaml
+project_name: "FePt_Optimization"
 
-2.  **Run the Orchestrator**
-    ```bash
-    python -m pyacemaker.main --config config.yaml
-    ```
+structure:
+  elements: ["Fe", "Pt"]
+  supercell_size: [2, 2, 2]
 
-3.  **Monitor Progress**
-    Tail the logs to see the cycle in action:
-    ```bash
-    tail -f pyacemaker.log
-    ```
+dft:
+  code: "quantum_espresso"
+  encut: 500.0
+  kpoints_density: 0.04
 
-### Running Tutorials
-We provide interactive Marimo tutorials for validation.
-```bash
-marimo edit tutorials/UAT_AND_TUTORIAL.py
+training:
+  potential_type: "ace"
+  cutoff_radius: 5.0
+  max_basis_size: 500
+
+md:
+  temperature: 1000.0
+  n_steps: 1000
+
+workflow:
+  max_iterations: 10
+  convergence_energy: 0.001
 ```
 
-## 💻 Development Workflow
+### 2. Validate Configuration (Dry Run)
+Check if your configuration is valid without running any simulations:
 
-This project uses a cycle-based development approach (Cycles 01-08).
+```bash
+uv run python -m pyacemaker.main --config config.yaml --dry-run
+```
+*Output: "Configuration loaded successfully."*
 
-*   **Testing**: Run the full test suite.
-    ```bash
-    pytest
-    ```
-*   **Linting**: Ensure code quality with Ruff and Mypy.
-    ```bash
-    ruff check .
-    mypy src
-    ```
+### 3. Run the Orchestrator
+Start the active learning loop (currently a skeleton loop for Cycle 01):
 
-## 📂 Project Structure
+```bash
+uv run python -m pyacemaker.main --config config.yaml
+```
+
+## 🏗 Architecture & File Structure
 
 ```ascii
 pyacemaker/
-├── dev_documents/          # Specs & Architecture
-│   ├── system_prompts/     # Cycle Definitions (01-08)
-│   └── SYSTEM_ARCHITECTURE.md
+├── pyproject.toml              # Dependencies & Settings
 ├── src/
 │   └── pyacemaker/
-│       ├── core/           # Core Logic (Generator, Oracle, Trainer)
-│       ├── interfaces/     # Drivers (QE, LAMMPS, EON)
-│       └── orchestrator.py # Main Loop
-├── tests/                  # Pytest Suite
-└── tutorials/              # Marimo Notebooks
+│       ├── domain_models/      # Pydantic Schemas (Config, Structure, DFT, etc.)
+│       ├── core/               # Abstract Base Classes (Generator, Oracle, etc.)
+│       ├── utils/              # Utilities (IO, YAML parsing)
+│       ├── logger.py           # Logging setup
+│       ├── orchestrator.py     # Main Logic
+│       └── main.py             # CLI Entry Point
+└── tests/                      # Unit, E2E, and UAT tests
 ```
+
+## 💻 Development
+
+*   **Testing**:
+    ```bash
+    uv run pytest
+    ```
+*   **Linting**:
+    ```bash
+    uv run ruff check .
+    uv run mypy .
+    ```
 
 ## 📄 License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+This project is licensed under the MIT License.
