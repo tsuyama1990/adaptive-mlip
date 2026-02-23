@@ -17,17 +17,21 @@ def create_config(tmp_path: Path, **overrides: Any) -> Path:
         yaml.dump(config_dict, f)
     return config_path
 
+
 @pytest.fixture
 def valid_config_file(tmp_path: Path) -> Path:
     return create_config(tmp_path)
+
 
 @pytest.fixture
 def invalid_config_file_temp(tmp_path: Path) -> Path:
     return create_config(tmp_path, project_name="Bad_Temp", md={"temperature": -100.0})
 
+
 @pytest.fixture
 def invalid_config_file_cutoff(tmp_path: Path) -> Path:
     return create_config(tmp_path, project_name="Bad_Cutoff", training={"cutoff_radius": -2.0})
+
 
 def test_scenario_01_01_hello_config(valid_config_file: Path) -> None:
     env = {"PYTHONPATH": str(Path("src").resolve())}
@@ -35,9 +39,13 @@ def test_scenario_01_01_hello_config(valid_config_file: Path) -> None:
     cmd = [sys.executable, "-m", "pyacemaker.main", "--config", valid_config_file.name, "--dry-run"]
 
     # Use check=True for expected success
-    result = subprocess.run(cmd, capture_output=True, text=True, env=env, cwd=str(cwd), check=True) # noqa: S603
+    result = subprocess.run(cmd, capture_output=True, text=True, env=env, cwd=str(cwd), check=True)  # noqa: S603
 
-    assert "Configuration loaded successfully" in result.stdout or "Configuration loaded successfully" in result.stderr
+    assert (
+        "Configuration loaded successfully" in result.stdout
+        or "Configuration loaded successfully" in result.stderr
+    )
+
 
 def test_scenario_01_02_guardrails_check_temp(invalid_config_file_temp: Path) -> None:
     env = {"PYTHONPATH": str(Path("src").resolve())}
@@ -49,6 +57,7 @@ def test_scenario_01_02_guardrails_check_temp(invalid_config_file_temp: Path) ->
     assert result.returncode != 0
     assert "validation error" in result.stderr
     assert "temperature" in result.stderr
+
 
 def test_scenario_01_02_guardrails_check_cutoff(invalid_config_file_cutoff: Path) -> None:
     env = {"PYTHONPATH": str(Path("src").resolve())}

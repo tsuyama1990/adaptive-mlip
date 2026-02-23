@@ -3,27 +3,31 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from pyacemaker.core.exceptions import ConfigError
+from pyacemaker.core.generator import StructureGenerator
 from pyacemaker.domain_models import PyAceConfig
-from pyacemaker.factory import Cycle01Engine, Cycle01Generator, Cycle01Trainer, ModuleFactory
+from pyacemaker.factory import Cycle01Engine, Cycle01Trainer, ModuleFactory
 
 
 @pytest.fixture
-def mock_config() -> PyAceConfig:
+def mock_config(tmp_path) -> PyAceConfig:
     # Minimal config to satisfy Pydantic
-    return PyAceConfig.model_validate({
-        "project_name": "TestFactory",
-        "structure": {"elements": ["Fe"], "supercell_size": [1, 1, 1]},
-        "dft": {
-            "code": "qe",
-            "functional": "PBE",
-            "kpoints_density": 0.04,
-            "encut": 500.0,
-            "pseudopotentials": {"Fe": "Fe.UPF"},
-        },
-        "training": {"potential_type": "ace", "cutoff_radius": 5.0, "max_basis_size": 500},
-        "md": {"temperature": 300, "pressure": 0.0, "timestep": 1.0, "n_steps": 10},
-        "workflow": {"max_iterations": 1},
-    })
+    (tmp_path / "Fe.UPF").touch()
+    return PyAceConfig.model_validate(
+        {
+            "project_name": "TestFactory",
+            "structure": {"elements": ["Fe"], "supercell_size": [1, 1, 1]},
+            "dft": {
+                "code": "qe",
+                "functional": "PBE",
+                "kpoints_density": 0.04,
+                "encut": 500.0,
+                "pseudopotentials": {"Fe": str(tmp_path / "Fe.UPF")},
+            },
+            "training": {"potential_type": "ace", "cutoff_radius": 5.0, "max_basis_size": 500},
+            "md": {"temperature": 300, "pressure": 0.0, "timestep": 1.0, "n_steps": 10},
+            "workflow": {"max_iterations": 1},
+        }
+    )
 
 
 def test_module_factory_create_modules(mock_config: PyAceConfig) -> None:
@@ -34,7 +38,8 @@ def test_module_factory_create_modules(mock_config: PyAceConfig) -> None:
     with patch("pyacemaker.factory.DFTManager") as MockDFTManager:
         gen, oracle, trainer, engine = ModuleFactory.create_modules(mock_config)
 
-        assert isinstance(gen, Cycle01Generator)
+        # Updated for Cycle 03: Generator is now StructureGenerator
+        assert isinstance(gen, StructureGenerator)
         assert isinstance(trainer, Cycle01Trainer)
         assert isinstance(engine, Cycle01Engine)
 

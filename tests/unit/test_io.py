@@ -41,10 +41,6 @@ def test_load_yaml_invalid_yaml(tmp_path: Path) -> None:
 def test_load_yaml_empty(tmp_path: Path) -> None:
     p = tmp_path / "empty.yaml"
     p.touch()
-    # Combine patch and pytest.raises into single with statement
-    # However, Python < 3.9 doesn't support parenthesized context managers cleanly
-    # if we strictly follow older styles, but we target >=3.11.
-    # The SIM117 suggests combining nested.
 
     with (
         patch("pathlib.Path.cwd", return_value=tmp_path),
@@ -77,6 +73,9 @@ def test_load_yaml_directory(tmp_path: Path) -> None:
 
 
 def test_load_config_valid(tmp_path: Path) -> None:
+    # Strict validation requires pseudopotential files to exist
+    (tmp_path / "Fe.UPF").touch()
+
     config_data = {
         "project_name": "Test",
         "structure": {"elements": ["Fe"], "supercell_size": [1, 1, 1]},

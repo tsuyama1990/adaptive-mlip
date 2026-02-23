@@ -1,55 +1,60 @@
-from typing import Any
+from collections.abc import Iterator
 from unittest.mock import MagicMock
 
-import numpy as np
 import pytest
 from ase import Atoms
 
 from pyacemaker.core.oracle import DFTManager
 from pyacemaker.domain_models import DFTConfig
+from tests.conftest import MockCalculator
 
 
 @pytest.fixture
-def mock_dft_config() -> DFTConfig:
+def mock_dft_config(tmp_path) -> DFTConfig:
+    (tmp_path / "H.UPF").touch()
     return DFTConfig(
         code="pw.x",
         functional="PBE",
         kpoints_density=0.04,
         encut=500.0,
-        pseudopotentials={"H": "H.UPF"},
+        pseudopotentials={"H": str(tmp_path / "H.UPF")},
     )
+
 
 def test_dft_manager_streaming_behavior(mock_dft_config: DFTConfig) -> None:
     """
-    Verify that DFTManager computes properties one by one (streaming)
-    and does NOT consume the whole generator upfront.
+    Verify that DFTManager processes structures lazily (streaming).
+    It should not consume the entire iterator upfront.
     """
-    # 1. Create an infinite or large generator
-    def infinite_structures() -> Any:
-        i = 0
-        while True:
-            # Yield single atom each time
-            yield Atoms("H", positions=[[0, 0, 0]])
-            i += 1
+    # Create a generator that yields atoms and tracks yield count
+    yield_count = 0
 
-    # 2. Mock driver
+    def structure_generator() -> Iterator[Atoms]:
+        nonlocal yield_count
+        for _ in range(5):
+            yield_count += 1
+            yield Atoms("H", cell=[10, 10, 10], pbc=True)
+
+    # Mock Driver
     mock_driver = MagicMock()
-    # Mock calculator methods to return valid data (get_stress expects array)
-    calc = MagicMock()
-    calc.get_stress.return_value = np.zeros(6)
-    mock_driver.get_calculator.return_value = calc
+    mock_driver.get_calculator.return_value = MockCalculator(fail_count=0)
 
     manager = DFTManager(mock_dft_config, driver=mock_driver)
 
-    # 3. Call compute
-    # If it tries to list() the input, it will hang (infinite loop) or OOM.
-    stream = manager.compute(infinite_structures())
+    # Start computation
+    result_stream = manager.compute(structure_generator())
 
-    # 4. Consume just a few items
-    first = next(stream)
-    second = next(stream)
+    # Initially, nothing should be yielded from source
+    # Note: DFTManager.compute might pre-fetch if it batches.
+    # The default batch size is 10. So if we iterate once, it might try to fill a batch.
+    # However, DFTManager implementation processes one by one in the current cycle.
 
-    assert len(first) == 1
-    assert len(second) == 1
-    # If we reached here, it means compute didn't consume the whole iterator.
-    assert mock_driver.get_calculator.call_count == 2
+    assert yield_count == 0
+
+    # Consume 1 item
+    next(result_stream)
+    assert yield_count == 1
+
+    # Consume 2nd item
+    next(result_stream)
+    assert yield_count == 2

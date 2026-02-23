@@ -8,19 +8,22 @@
 
 PYACEMAKER is an autonomous system designed to democratise the creation of Machine Learning Interatomic Potentials (MLIPs). By orchestrating the **Pacemaker** engine within a self-driving Active Learning loop, it allows researchers to generate State-of-the-Art potentials for complex alloys and interfaces with a "Zero-Config" workflow.
 
-**Current Status**: **System Verified (Cycle 02 - Oracle)**
+**Current Status**: **System Verified (Cycle 03 - Structure Generation)**
 
 ---
 
 ## 🚀 Key Features
 
-*   **Robust Configuration**: Utilizes **Pydantic V2** for strict schema validation, ensuring all inputs (temperatures, cutoffs, paths) are physically valid before execution.
-*   **Orchestration Core**: Centralized state machine designed to manage the "Explore-Label-Train-Run" lifecycle.
-*   **DFT Automation**: Fully automated interface for **Quantum Espresso**, handling input generation and execution.
-*   **Self-Healing Calculation**: Intelligent retry mechanism that automatically adjusts convergence parameters (e.g., `mixing_beta`, `smearing`) when DFT calculations fail.
-*   **Periodic Embedding**: Utility for embedding arbitrary atomic clusters into periodic simulation cells with automatic vacuum padding.
-*   **Structured Logging**: Automatic setup of console and file logging with rotation policies.
-*   **Modular Architecture**: Clean separation of concerns with Abstract Base Classes for Generator, Oracle, Trainer, and Engine.
+*   **Advanced Structure Exploration**: Generate diverse atomic configurations using configurable policies:
+    *   **Cold Start**: Automated initial structure prediction (mocked M3GNet integration).
+    *   **Random Rattle**: Gaussian noise perturbation for thermal sampling.
+    *   **Strain**: Elastic deformation sampling (volume, shear, full).
+    *   **Defects**: Automated vacancy generation for robustness testing.
+*   **Robust Configuration**: Utilizes **Pydantic V2** for strict schema validation, ensuring all inputs are physically valid.
+*   **Orchestration Core**: Centralized state machine managing the "Explore-Label-Train-Run" lifecycle.
+*   **DFT Automation**: Automated **Quantum Espresso** interface with self-healing capabilities for convergence errors.
+*   **Structured Logging**: Comprehensive console and file logging.
+*   **Modular Architecture**: Extensible design with Abstract Base Classes for Generator, Oracle, Trainer, and Engine.
 
 ---
 
@@ -58,14 +61,16 @@ project_name: "FePt_Optimization"
 structure:
   elements: ["Fe", "Pt"]
   supercell_size: [2, 2, 2]
+  # Exploration Policy
+  policy_name: "random_rattle"  # Options: cold_start, random_rattle, strain, defects
+  rattle_stdev: 0.1
+  vacancy_rate: 0.05
 
 dft:
   code: "quantum_espresso"
+  functional: "pbe"
   encut: 500.0
   kpoints_density: 0.04
-  # Self-Healing parameters (optional, defaults shown)
-  mixing_beta: 0.7
-  smearing_width: 0.1
   pseudopotentials:
     Fe: "Fe.pbe-n-kjpaw_psl.1.0.0.UPF"
     Pt: "Pt.pbe-n-kjpaw_psl.1.0.0.UPF"
@@ -77,6 +82,8 @@ training:
 
 md:
   temperature: 1000.0
+  pressure: 1.0
+  timestep: 0.001
   n_steps: 1000
 
 workflow:
@@ -93,7 +100,7 @@ uv run python -m pyacemaker.main --config config.yaml --dry-run
 *Output: "Configuration loaded successfully."*
 
 ### 3. Run the Orchestrator
-Start the active learning loop (currently a skeleton loop for Cycle 01):
+Start the active learning loop:
 
 ```bash
 uv run python -m pyacemaker.main --config config.yaml
@@ -107,9 +114,9 @@ pyacemaker/
 ├── src/
 │   └── pyacemaker/
 │       ├── domain_models/      # Pydantic Schemas (Config, Structure, DFT, etc.)
-│       ├── core/               # Core Logic (DFTManager, etc.)
+│       ├── core/               # Core Logic (Generator, Policy, Oracle, etc.)
 │       ├── interfaces/         # External Interfaces (QEDriver)
-│       ├── utils/              # Utilities (IO, Embedding)
+│       ├── utils/              # Utilities (Perturbations, IO, Embedding)
 │       ├── logger.py           # Logging setup
 │       ├── orchestrator.py     # Main Logic
 │       └── main.py             # CLI Entry Point

@@ -52,7 +52,7 @@ class Orchestrator:
         self.config = config
         self.logger = setup_logger(config=config.logging, project_name=config.project_name)
         self.iteration = 0
-        self.state_file = Path(config.workflow.state_file_path)
+        self.state_file = Path(config.workflow.get_state_path())
         self.data_dir = Path(config.workflow.data_dir)
         self.data_dir.mkdir(exist_ok=True)
         self.active_learning_dir = Path(config.workflow.active_learning_dir)

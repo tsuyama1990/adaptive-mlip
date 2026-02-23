@@ -10,7 +10,10 @@ from pyacemaker.interfaces.qe_driver import QEDriver
 
 
 @pytest.fixture
-def mock_dft_config() -> DFTConfig:
+def mock_dft_config(tmp_path) -> DFTConfig:
+    # Create dummy pseudopotential
+    (tmp_path / "H.UPF").touch()
+
     return DFTConfig(
         code="pw.x",
         functional="PBE",
@@ -20,7 +23,7 @@ def mock_dft_config() -> DFTConfig:
         smearing_type="mv",
         smearing_width=0.02,
         diagonalization="david",
-        pseudopotentials={"H": "H.UPF"},
+        pseudopotentials={"H": str(tmp_path / "H.UPF")},
     )
 
 
@@ -28,7 +31,7 @@ def mock_dft_config() -> DFTConfig:
     ("pbc", "expected_factor"),
     [
         ([True, True, True], 1.0),
-        ([False, False, False], 0.0), # Factor 0.0 implies result is 1 (max(1, 0))
+        ([False, False, False], 0.0),  # Factor 0.0 implies result is 1 (max(1, 0))
         ([True, True, False], 1.0),
     ],
 )
@@ -59,6 +62,7 @@ def test_qe_driver_kpoints_parametrized(
 
         assert kpts == tuple(expected_kpts)
 
+
 def test_qe_driver_kpoints_zero_length(mock_dft_config: DFTConfig) -> None:
     """Test k-point generation with zero-length cells (should default to 1)."""
     # Cell with zero volume or very small dimensions
@@ -73,6 +77,7 @@ def test_qe_driver_kpoints_zero_length(mock_dft_config: DFTConfig) -> None:
         # Implementation uses mask (lengths >= 1e-3). So should be 1.
         assert kpts == (1, 1, 1)
 
+
 def test_qe_driver_invalid_input(mock_dft_config: DFTConfig) -> None:
     """Test validation of invalid inputs."""
     driver = QEDriver()
@@ -82,7 +87,7 @@ def test_qe_driver_invalid_input(mock_dft_config: DFTConfig) -> None:
     mock_dft_config.encut = -10.0
     with pytest.raises(ValueError, match="Energy cutoff must be positive"):
         driver.get_calculator(atoms, mock_dft_config)
-    mock_dft_config.encut = 500.0 # Reset
+    mock_dft_config.encut = 500.0  # Reset
 
     # Negative K-point density
     mock_dft_config.kpoints_density = -0.04
@@ -131,4 +136,5 @@ def test_qe_driver_parameters(mock_dft_config: DFTConfig) -> None:
 
         # Check pseudopotentials
         pseudos = kwargs.get("pseudopotentials")
-        assert pseudos == {"H": "H.UPF"}
+        # Ensure path is string and correct
+        assert pseudos["H"].endswith("H.UPF")

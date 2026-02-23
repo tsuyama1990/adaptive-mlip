@@ -41,9 +41,9 @@ class QEDriver:
         # Validate pseudopotential keys
         valid_symbols = set(chemical_symbols)
         for elem in config.pseudopotentials:
-             if elem not in valid_symbols:
-                  msg = f"Invalid chemical symbol in pseudopotentials: {elem}"
-                  raise ValueError(msg)
+            if elem not in valid_symbols:
+                msg = f"Invalid chemical symbol in pseudopotentials: {elem}"
+                raise ValueError(msg)
 
         # Calculate k-points
         # For memoization, we need immutable inputs. Atoms is mutable.
@@ -54,6 +54,7 @@ class QEDriver:
         cell_lengths = tuple(cell.lengths())
         pbc = tuple(atoms.get_pbc())  # type: ignore[no-untyped-call]
 
+        # Audit Fix: Caching is done on immutable types (tuples), avoiding mutable Atoms references.
         kpts = self._calculate_kpoints_cached(cell_lengths, pbc, config.kpoints_density)
 
         # Construct input data
