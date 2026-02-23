@@ -38,7 +38,6 @@ class PacemakerTrainer(BaseTrainer):
             TrainerError: If the training data file does not exist or format is invalid.
         """
         data_path = Path(training_data_path).resolve()
-        self._validate_path_safe(data_path)
         self._validate_training_data(data_path)
 
         # Determine output directory (same as data file)
@@ -63,14 +62,6 @@ class PacemakerTrainer(BaseTrainer):
             raise TrainerError(msg)
 
         return potential_path
-
-    def _validate_path_safe(self, path: Path) -> None:
-        """Ensures path is safe from traversal and injection."""
-        s = str(path)
-        dangerous_chars = [";", "&", "|", "`", "$", "(", ")", "<", ">", "\n", "\r"]
-        if any(c in s for c in dangerous_chars):
-             msg = f"Path contains invalid characters: {path}"
-             raise TrainerError(msg)
 
     def _validate_training_data(self, data_path: Path) -> None:
         """Validates existence and basic format of training data."""

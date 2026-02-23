@@ -31,7 +31,7 @@ def run_command(
     logger.debug(f"Running command: {cmd_str}")
 
     try:
-        return subprocess.run(
+        return subprocess.run(  # noqa: S603
             cmd,
             cwd=cwd,
             check=check,

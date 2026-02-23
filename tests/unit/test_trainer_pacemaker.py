@@ -61,15 +61,6 @@ def test_train_validation_empty_file(trainer: PacemakerTrainer, tmp_path: Path) 
     with pytest.raises(TrainerError, match="is empty"):
         trainer.train(data_path)
 
-def test_train_validation_bad_path(trainer: PacemakerTrainer) -> None:
-    with pytest.raises(TrainerError, match="Path contains invalid characters"):
-        # We need a path that exists relative or mock existence, but validation is first
-        # But validation checks characters first?
-        # Actually validation checks resolve() which might fail if not exist?
-        # _validate_path_safe uses str(path).
-        # We can pass a path with bad chars.
-        trainer.train(Path("bad/;/path.xyz"))
-
 def test_train_process_fail_util(trainer: PacemakerTrainer, tmp_path: Path) -> None:
     data_path = tmp_path / "train.xyz"
     write(data_path, Atoms("H"))

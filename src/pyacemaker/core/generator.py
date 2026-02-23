@@ -44,7 +44,7 @@ class StructureGenerator(BaseGenerator):
 
     def _get_policy(self) -> BasePolicy:
         """Selects the appropriate policy based on configuration."""
-        policies: dict[str, type[BasePolicy]] = {
+        policies: dict[ExplorationPolicy, type[BasePolicy]] = {
             ExplorationPolicy.COLD_START: ColdStartPolicy,
             ExplorationPolicy.RANDOM_RATTLE: RattlePolicy,
             ExplorationPolicy.STRAIN: StrainPolicy,
