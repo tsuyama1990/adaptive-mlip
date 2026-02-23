@@ -64,9 +64,10 @@ class PacemakerTrainer(BaseTrainer):
                 check=True,
                 capture_output=True,
                 text=True,
+                shell=False,  # Security: explicit False
             )
         except subprocess.CalledProcessError as e:
-            msg = f"Training failed: {e.stderr}"
+            msg = f"Training failed (exit code {e.returncode}): {e.stderr}"
             raise TrainerError(msg) from e
         except FileNotFoundError as e:
             # Handle case where pace_train is not installed
@@ -87,23 +88,24 @@ class PacemakerTrainer(BaseTrainer):
     ) -> dict[str, Any]:
         """Generates the dictionary for Pacemaker input.yaml."""
         # Detect elements from the dataset
-        # This can be expensive for large datasets.
-        # Alternatively, we could require elements in config.
-        # For now, we read the first frame or assume elements are known if provided.
-        # Using ase.io.read to get all species
-        # Use index=0 to save time, assume homogeneous dataset
-        try:
-            atoms = read(data_path, index=0)
-            if isinstance(atoms, list):
-                atoms = atoms[0]
-            elements = sorted(set(atoms.get_chemical_symbols()))  # type: ignore[no-untyped-call]
-        except Exception as e:
-            msg = f"Could not read elements from {data_path}: {e}"
-            raise TrainerError(msg) from e
+        # Strategy: Use elements from config if provided, otherwise detect from first frame.
+        elements: list[str] = []
+        if self.config.elements:
+            elements = sorted(self.config.elements)
+        else:
+            try:
+                # Use index=0 to save time and memory, assume homogeneous dataset
+                atoms = read(data_path, index=0)
+                if isinstance(atoms, list):
+                    atoms = atoms[0]
+                elements = sorted(set(atoms.get_chemical_symbols()))  # type: ignore[no-untyped-call]
+            except Exception as e:
+                msg = f"Could not detect elements from {data_path}. Please provide 'elements' in config or ensure data is valid: {e}"
+                raise TrainerError(msg) from e
 
         config_dict: dict[str, Any] = {
             "cutoff": self.config.cutoff_radius,
-            "seed": 42,  # Reproducibility
+            "seed": self.config.seed,
             "data": {"filename": str(data_path)},
             "potential": {
                 "delta_spline_bins": 100,
@@ -132,12 +134,12 @@ class PacemakerTrainer(BaseTrainer):
                     "L2_coeffs": 1e-8,
                 },
                 "optimizer": "BFGS",
-                "maxiter": 1000,
+                "maxiter": self.config.max_iterations,
                 "repulsion_sigma": 0.05,
             },
             "backend": {
                 "evaluator": "tensorpot",
-                "batch_size": 10,
+                "batch_size": self.config.batch_size,
                 "display_step": 50,
             },
         }

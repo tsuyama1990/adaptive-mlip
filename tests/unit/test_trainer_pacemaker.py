@@ -17,7 +17,11 @@ def config() -> TrainingConfig:
         cutoff_radius=5.0,
         max_basis_size=2,
         output_filename="test_pot.yace",
-        delta_learning=True
+        delta_learning=True,
+        elements=["H"],
+        seed=123,
+        max_iterations=500,
+        batch_size=20
     )
 
 @pytest.fixture
@@ -42,8 +46,15 @@ def test_train_success(trainer: PacemakerTrainer, tmp_path: Path) -> None:
 
         assert result.name == "test_pot.yace"
         mock_run.assert_called()
-        # Check if config.yaml was generated
-        mock_dump.assert_called()
+
+        # Verify generated config structure
+        args, _ = mock_dump.call_args
+        generated_config = args[0]
+        assert generated_config["potential"]["elements"] == ["H"]
+        assert generated_config["seed"] == 123
+        assert generated_config["fit"]["loss"]["optimizer"] == "BFGS"
+        assert generated_config["fit"]["maxiter"] == 500
+        assert generated_config["backend"]["batch_size"] == 20
 
 def test_train_file_not_found(trainer: PacemakerTrainer) -> None:
     with pytest.raises(TrainerError, match="Training data not found"):

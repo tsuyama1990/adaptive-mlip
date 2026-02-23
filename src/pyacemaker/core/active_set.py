@@ -25,42 +25,45 @@ class ActiveSetSelector:
         Selects a subset of structures that maximize the information gain.
 
         Args:
-            candidates: List or Iterable of candidate structures.
+            candidates: Iterable of candidate structures. Can be a generator.
             potential_path: Path to the current potential (used for descriptors).
-            n_select: Number of structures to select.
+            n_select: Number of structures to select. Must be > 0.
 
         Returns:
             List of selected Atoms objects.
 
         Raises:
-            ActiveSetError: If the external command fails.
+            ActiveSetError: If the external command fails or inputs are invalid.
         """
+        if n_select <= 0:
+            msg = f"n_select must be positive, got {n_select}"
+            raise ValueError(msg)
+
         potential_path = Path(potential_path)
         if not potential_path.exists():
-            # If potential doesn't exist, we can't compute descriptors.
-            # In a cold start scenario, we might return random selection,
-            # but here we assume a potential exists (even if it's just initialized).
             msg = f"Potential file not found: {potential_path}"
             raise ActiveSetError(msg)
 
-        # Ensure candidates is a list for length check, though we might stream write
-        candidates_list = list(candidates)
-        if not candidates_list:
-            return []
-
-        if n_select >= len(candidates_list):
-            return candidates_list
-
+        # Use a temporary directory to stream write candidates and run the command
         with tempfile.TemporaryDirectory() as tmp_dir:
             tmp_path = Path(tmp_dir)
             candidates_file = tmp_path / "candidates.xyz"
             output_file = tmp_path / "selected.xyz"
 
-            # Write candidates to disk
-            write(candidates_file, candidates_list)
+            # Stream write candidates to disk to avoid loading all into memory
+            # ase.io.write supports writing multiple images from an iterable
+            try:
+                write(candidates_file, candidates)  # type: ignore[arg-type]
+            except Exception as e:
+                msg = f"Failed to write candidates to temporary file: {e}"
+                raise ActiveSetError(msg) from e
 
-            # Construct command
-            # pace_activeset -d candidates.xyz -p potential.yace -n n_select -o selected.xyz
+            # Verify candidates were written (handle empty iterator case)
+            if not candidates_file.exists() or candidates_file.stat().st_size == 0:
+                # If no candidates, return empty list
+                return []
+
+            # Construct command safely
             cmd = [
                 "pace_activeset",
                 "--dataset",
@@ -73,29 +76,38 @@ class ActiveSetSelector:
                 str(output_file),
             ]
 
-            try:
-                subprocess.run(  # noqa: S603
-                    cmd,
-                    check=True,
-                    capture_output=True,
-                    text=True,
-                )
-            except subprocess.CalledProcessError as e:
-                msg = f"Active set selection failed: {e.stderr}"
-                raise ActiveSetError(msg) from e
-            except FileNotFoundError as e:
-                # Handle case where pace_activeset is not installed
-                msg = "pace_activeset command not found. Ensure Pacemaker is installed."
-                raise ActiveSetError(msg) from e
+            self._run_pace_activeset(cmd)
 
             # Read selected structures
             if not output_file.exists():
                 msg = "Active set selection failed: Output file not created."
                 raise ActiveSetError(msg)
 
-            selected_structures = read(output_file, index=":")
+            # Read back selected structures
+            # Depending on size of active set (usually small, e.g. < 1000), reading into list is fine.
+            try:
+                selected_structures = read(output_file, index=":")
+            except Exception as e:
+                msg = f"Failed to read selected structures: {e}"
+                raise ActiveSetError(msg) from e
 
-            # Ensure return type is list[Atoms]
             if isinstance(selected_structures, Atoms):
                 return [selected_structures]
             return list(selected_structures)
+
+    def _run_pace_activeset(self, cmd: list[str]) -> None:
+        """Executes the pace_activeset command safely."""
+        try:
+                subprocess.run(  # noqa: S603
+                cmd,
+                check=True,
+                capture_output=True,
+                text=True,
+                shell=False,  # Security: explicit False
+            )
+        except subprocess.CalledProcessError as e:
+            msg = f"Active set selection failed (exit code {e.returncode}): {e.stderr}"
+            raise ActiveSetError(msg) from e
+        except FileNotFoundError as e:
+            msg = "pace_activeset command not found. Ensure Pacemaker is installed."
+            raise ActiveSetError(msg) from e

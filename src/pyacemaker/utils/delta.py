@@ -79,12 +79,14 @@ def compute_zbl_energy(el1: str, el2: str, r: float) -> float:
     e_squared = 14.3996  # eV * Angstrom (Coulomb constant)
     a0 = 0.529177  # Bohr radius in Angstrom
 
-    # Screening length
+    # Screening length (ZBL Universal Screening)
+    # 0.8854 is the screening length constant for the Thomas-Fermi model approximation
     a = (0.8854 * a0) / (z1**0.23 + z2**0.23)
 
     x = r / a
 
-    # Universal screening function
+    # Universal screening function (Ziegler-Biersack-Littmark)
+    # The coefficients are empirically fitted to interatomic potentials
     phi = (
         0.1818 * np.exp(-3.2 * x)
         + 0.5099 * np.exp(-0.9423 * x)
