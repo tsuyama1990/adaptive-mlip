@@ -10,20 +10,22 @@ from pyacemaker.factory import Cycle01Engine, Cycle01Generator, Cycle01Trainer, 
 @pytest.fixture
 def mock_config() -> PyAceConfig:
     # Minimal config to satisfy Pydantic
-    return PyAceConfig.model_validate({
-        "project_name": "TestFactory",
-        "structure": {"elements": ["Fe"], "supercell_size": [1, 1, 1]},
-        "dft": {
-            "code": "qe",
-            "functional": "PBE",
-            "kpoints_density": 0.04,
-            "encut": 500.0,
-            "pseudopotentials": {"Fe": "Fe.UPF"},
-        },
-        "training": {"potential_type": "ace", "cutoff_radius": 5.0, "max_basis_size": 500},
-        "md": {"temperature": 300, "pressure": 0.0, "timestep": 1.0, "n_steps": 10},
-        "workflow": {"max_iterations": 1},
-    })
+    return PyAceConfig.model_validate(
+        {
+            "project_name": "TestFactory",
+            "structure": {"elements": ["Fe"], "supercell_size": [1, 1, 1]},
+            "dft": {
+                "code": "qe",
+                "functional": "PBE",
+                "kpoints_density": 0.04,
+                "encut": 500.0,
+                "pseudopotentials": {"Fe": "Fe.UPF"},
+            },
+            "training": {"potential_type": "ace", "cutoff_radius": 5.0, "max_basis_size": 500},
+            "md": {"temperature": 300, "pressure": 0.0, "timestep": 1.0, "n_steps": 10},
+            "workflow": {"max_iterations": 1},
+        }
+    )
 
 
 def test_module_factory_create_modules(mock_config: PyAceConfig) -> None:

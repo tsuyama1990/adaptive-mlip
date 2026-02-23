@@ -1,4 +1,3 @@
-from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
@@ -6,18 +5,12 @@ from ase import Atoms
 
 from pyacemaker.core.base import BaseEngine, BaseGenerator, BaseOracle, BaseTrainer
 from pyacemaker.core.exceptions import ConfigError
+from pyacemaker.core.generator import StructureGenerator
 from pyacemaker.core.oracle import DFTManager
 from pyacemaker.domain_models import PyAceConfig
 
 
-# Default implementations for Cycle 01
-class Cycle01Generator(BaseGenerator):
-    def generate(self, n_candidates: int) -> Iterator[Atoms]:
-        """Placeholder generator for Cycle 01."""
-        # Must return an iterator
-        return iter([])
-
-
+# Default implementations for Cycle 01/02 placeholders
 class Cycle01Trainer(BaseTrainer):
     def train(self, training_data_path: str | Path) -> Any:
         """Placeholder trainer for Cycle 01."""
@@ -52,12 +45,14 @@ class ModuleFactory:
             raise ConfigError(msg)
 
         try:
-            # For Cycle 02, we use DFTManager for Oracle if configured
-            # config.dft is always present due to Pydantic model
+            # Cycle 02: Oracle -> DFTManager
             oracle = DFTManager(config.dft)
 
+            # Cycle 03: Generator -> StructureGenerator
+            generator = StructureGenerator(config.structure)
+
             return (
-                Cycle01Generator(),
+                generator,
                 oracle,
                 Cycle01Trainer(),
                 Cycle01Engine(),

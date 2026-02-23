@@ -161,10 +161,12 @@ def test_pyace_config_missing_field() -> None:
     # Missing workflow, so we use model_validate with missing key to avoid mypy error on constructor
 
     with pytest.raises(ValidationError):
-        PyAceConfig.model_validate({
-            "project_name": "TestProject",
-            "structure": structure.model_dump(),
-            "dft": dft.model_dump(),
-            "training": training.model_dump(),
-            "md": md.model_dump()
-        })
+        PyAceConfig.model_validate(
+            {
+                "project_name": "TestProject",
+                "structure": structure.model_dump(),
+                "dft": dft.model_dump(),
+                "training": training.model_dump(),
+                "md": md.model_dump(),
+            }
+        )

@@ -19,8 +19,12 @@ class DFTConfig(BaseModel):
     diagonalization: str = Field("david", description="Diagonalization algorithm")
 
     # Strategy Multipliers
-    mixing_beta_factor: float = Field(0.5, gt=0.0, le=1.0, description="Multiplier for mixing_beta reduction strategy")
-    smearing_width_factor: float = Field(2.0, gt=1.0, description="Multiplier for smearing_width increase strategy")
+    mixing_beta_factor: float = Field(
+        0.5, gt=0.0, le=1.0, description="Multiplier for mixing_beta reduction strategy"
+    )
+    smearing_width_factor: float = Field(
+        2.0, gt=1.0, description="Multiplier for smearing_width increase strategy"
+    )
 
     # Pseudopotentials
     pseudopotentials: dict[str, str] = Field(
@@ -44,8 +48,8 @@ class DFTConfig(BaseModel):
 
             norm_path = os.path.normpath(path_str)
             if norm_path.startswith("..") or "/../" in norm_path.replace("\\", "/"):
-                 msg = f"Path traversal detected in pseudopotential path: {path_str}"
-                 raise ValueError(msg)
+                msg = f"Path traversal detected in pseudopotential path: {path_str}"
+                raise ValueError(msg)
 
             p = Path(path_str)
             # If path is absolute, check existence

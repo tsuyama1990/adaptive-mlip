@@ -66,10 +66,15 @@ class DFTManager(BaseOracle):
             yield self._compute_single(atoms)
 
         if iterator_empty:
-             # Audit requirement: "Add explicit handling for empty iterators with appropriate error messages."
-             # Returning empty iterator is valid, but logging helps debug.
-             import warnings
-             warnings.warn("Oracle received empty iterator. No calculations performed.", UserWarning, stacklevel=2)
+            # Audit requirement: "Add explicit handling for empty iterators with appropriate error messages."
+            # Returning empty iterator is valid, but logging helps debug.
+            import warnings
+
+            warnings.warn(
+                "Oracle received empty iterator. No calculations performed.",
+                UserWarning,
+                stacklevel=2,
+            )
 
     def _get_strategies(self) -> list[Callable[[DFTConfig], None] | None]:
         """
@@ -85,7 +90,7 @@ class DFTManager(BaseOracle):
             None,
             self._strategy_reduce_beta,
             self._strategy_increase_smearing,
-            self._strategy_use_cg
+            self._strategy_use_cg,
         ]
 
     def _strategy_reduce_beta(self, c: DFTConfig) -> None:

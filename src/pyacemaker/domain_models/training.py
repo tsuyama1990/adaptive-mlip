@@ -10,6 +10,4 @@ class TrainingConfig(BaseModel):
 
     # Spec Section 3.3
     delta_learning: bool = Field(False, description="Use LJ baseline for delta learning")
-    active_set_optimization: bool = Field(
-        False, description="Use MaxVol selection for active set"
-    )
+    active_set_optimization: bool = Field(False, description="Use MaxVol selection for active set")

@@ -41,9 +41,9 @@ class QEDriver:
         # Validate pseudopotential keys
         valid_symbols = set(chemical_symbols)
         for elem in config.pseudopotentials:
-             if elem not in valid_symbols:
-                  msg = f"Invalid chemical symbol in pseudopotentials: {elem}"
-                  raise ValueError(msg)
+            if elem not in valid_symbols:
+                msg = f"Invalid chemical symbol in pseudopotentials: {elem}"
+                raise ValueError(msg)
 
         # Calculate k-points
         # For memoization, we need immutable inputs. Atoms is mutable.

@@ -80,7 +80,7 @@ def create_test_config_dict(**overrides: Any) -> dict[str, Any]:
         supercell_size=[1, 1, 1],
         adaptive_ratio=0.5,
         defect_density=0.01,
-        strain_range=0.05
+        strain_range=0.05,
     )
     dft = DFTConfig(
         code="qe",
@@ -91,14 +91,14 @@ def create_test_config_dict(**overrides: Any) -> dict[str, Any]:
         mixing_beta=0.7,
         smearing_type="mv",
         smearing_width=0.1,
-        diagonalization="david"
+        diagonalization="david",
     )
     training = TrainingConfig(
         potential_type="ace",
         cutoff_radius=5.0,
         max_basis_size=500,
         delta_learning=True,
-        active_set_optimization=True
+        active_set_optimization=True,
     )
     md = MDConfig(
         temperature=300.0,
@@ -106,13 +106,13 @@ def create_test_config_dict(**overrides: Any) -> dict[str, Any]:
         timestep=0.001,
         n_steps=1000,
         uncertainty_threshold=5.0,
-        check_interval=10
+        check_interval=10,
     )
     workflow = WorkflowConfig(
         max_iterations=10,
         state_file_path="state.json",
         active_learning_dir="active_learning",
-        potentials_dir="potentials"
+        potentials_dir="potentials",
     )
     logging = LoggingConfig()
 
@@ -124,7 +124,7 @@ def create_test_config_dict(**overrides: Any) -> dict[str, Any]:
         training=training,
         md=md,
         workflow=workflow,
-        logging=logging
+        logging=logging,
     )
 
     # 3. Export to dict
@@ -133,8 +133,8 @@ def create_test_config_dict(**overrides: Any) -> dict[str, Any]:
     # 4. Apply overrides (Simple deep merge)
     for key, value in overrides.items():
         if key in config_dict and isinstance(config_dict[key], dict) and isinstance(value, dict):
-             config_dict[key].update(value)
+            config_dict[key].update(value)
         else:
-             config_dict[key] = value
+            config_dict[key] = value
 
     return config_dict

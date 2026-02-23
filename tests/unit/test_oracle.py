@@ -54,8 +54,8 @@ def test_dft_manager_self_healing(mock_dft_config: DFTConfig) -> None:
     mock_driver = MagicMock()
 
     # The calculator needs to fail first, then succeed.
-    calc_fail = MockCalculator(fail_count=1) # Fails once (attempt 1)
-    calc_success = MockCalculator(fail_count=0) # Succeeds (attempt 2)
+    calc_fail = MockCalculator(fail_count=1)  # Fails once (attempt 1)
+    calc_success = MockCalculator(fail_count=0)  # Succeeds (attempt 2)
 
     mock_driver.get_calculator.side_effect = [calc_fail, calc_success]
 
@@ -73,7 +73,7 @@ def test_dft_manager_self_healing(mock_dft_config: DFTConfig) -> None:
 
     # First call: original config
     call1_args = mock_driver.get_calculator.call_args_list[0]
-    config1 = call1_args[0][1] # second arg is config
+    config1 = call1_args[0][1]  # second arg is config
     assert config1.mixing_beta == 0.7
     assert config1.smearing_width == 0.1
     assert config1.diagonalization == "david"
@@ -131,7 +131,7 @@ def test_dft_manager_strategies(mock_dft_config: DFTConfig) -> None:
     strategies = manager._get_strategies()
 
     assert len(strategies) > 0
-    assert strategies[0] is None # First attempt is vanilla
+    assert strategies[0] is None  # First attempt is vanilla
 
     # Strategy 1: Reduce Beta
     strat_beta = strategies[1]
@@ -156,6 +156,7 @@ def test_dft_manager_strategies(mock_dft_config: DFTConfig) -> None:
     strat_cg(config_copy)
     assert config_copy.diagonalization == "cg"
 
+
 def test_dft_manager_invalid_input(mock_dft_config: DFTConfig) -> None:
     """Test compute raises TypeError for non-iterator input."""
     manager = DFTManager(mock_dft_config)
@@ -171,6 +172,7 @@ def test_dft_manager_invalid_input(mock_dft_config: DFTConfig) -> None:
         # But wait, type checking `isinstance(structures, Iterator)` is at the top of the function.
         # Yes, generator function body execution is deferred.
         next(manager.compute(atoms_list))  # type: ignore[arg-type]
+
 
 def test_dft_manager_empty_iterator(mock_dft_config: DFTConfig) -> None:
     """Test compute handles empty iterator correctly with warning."""

@@ -175,7 +175,9 @@ def test_orchestrator_checkpointing(mock_config: PyAceConfig) -> None:
     assert orch2.iteration == 5
 
 
-def test_orchestrator_corrupted_state_file(mock_config: PyAceConfig, tmp_path: Path, caplog: Any) -> None:
+def test_orchestrator_corrupted_state_file(
+    mock_config: PyAceConfig, tmp_path: Path, caplog: Any
+) -> None:
     """Test resilience against corrupted state file."""
     state_file = Path(mock_config.workflow.state_file_path)
     state_file.write_text("{invalid_json")
@@ -209,14 +211,12 @@ def test_orchestrator_error_handling_oracle_stream(
     try:
         # Oracle that fails during iteration
         class FailingOracle(BaseOracle):
-            def compute(
-                self, structures: Iterator[Atoms], batch_size: int = 10
-            ) -> Iterator[Atoms]:
+            def compute(self, structures: Iterator[Atoms], batch_size: int = 10) -> Iterator[Atoms]:
                 msg = "Oracle computation failed"
                 raise RuntimeError(msg)
 
         def mock_create_modules(cfg: PyAceConfig) -> tuple[Any, Any, Any, Any]:
-             return FakeGenerator(elements=cfg.structure.elements), FailingOracle(), None, None
+            return FakeGenerator(elements=cfg.structure.elements), FailingOracle(), None, None
 
         monkeypatch.setattr(ModuleFactory, "create_modules", mock_create_modules)
 
