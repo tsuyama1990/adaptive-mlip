@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field, PositiveFloat, field_validator
@@ -39,15 +40,19 @@ class DFTConfig(BaseModel):
                 msg = f"Pseudopotential path for {elem} cannot be empty"
                 raise ValueError(msg)
 
+            # Robust path traversal check using resolve() logic without strict existence for relative
+            # We treat the path as if it were relative to a theoretical root.
+            # If it tries to go above that root using '..', it's risky.
+
+            norm_path = os.path.normpath(path_str)
+            if norm_path.startswith("..") or "/../" in norm_path.replace("\\", "/"):
+                 msg = f"Path traversal detected in pseudopotential path: {path_str}"
+                 raise ValueError(msg)
+
             p = Path(path_str)
             # If path is absolute, check existence
             if p.is_absolute() and not p.exists():
                 msg = f"Pseudopotential file not found: {p}"
                 raise FileNotFoundError(msg)
-
-            # Simple traversal check for relative paths
-            if ".." in str(p):
-                 msg = f"Relative path traversal (..) not allowed in pseudopotentials: {p}"
-                 raise ValueError(msg)
 
         return v

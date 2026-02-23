@@ -4,7 +4,7 @@ from unittest.mock import MagicMock
 import numpy as np
 import pytest
 from ase import Atoms
-from ase.calculators.calculator import Calculator
+from ase.calculators.calculator import Calculator, CalculatorSetupError
 
 from pyacemaker.core.exceptions import OracleError
 from pyacemaker.core.oracle import DFTManager
@@ -30,9 +30,10 @@ class MockCalculator(Calculator):
     """Mock ASE calculator that can simulate failure."""
     implemented_properties: ClassVar[list[str]] = ["energy", "forces", "stress"]
 
-    def __init__(self, fail_count: int = 0) -> None:
+    def __init__(self, fail_count: int = 0, setup_error: bool = False) -> None:
         super().__init__()
         self.fail_count = fail_count
+        self.setup_error = setup_error
         self.attempts = 0
 
     def calculate(
@@ -42,6 +43,11 @@ class MockCalculator(Calculator):
         system_changes: list[str] | None = None,
     ) -> None:
         self.attempts += 1
+
+        if self.setup_error:
+            msg = "Setup failed"
+            raise CalculatorSetupError(msg)
+
         if self.attempts <= self.fail_count:
             # Simulate SCF failure (which usually raises RuntimeError in ASE)
             msg = "Convergence not achieved"
@@ -91,6 +97,7 @@ def test_dft_manager_self_healing(mock_dft_config: DFTConfig) -> None:
     # Inject mock driver
     manager = DFTManager(mock_dft_config, driver=mock_driver)
 
+    # Note: consume generator to trigger execution
     results = list(manager.compute(iter([atoms])))
 
     assert len(results) == 1
@@ -131,6 +138,25 @@ def test_dft_manager_fatal_error(mock_dft_config: DFTConfig) -> None:
     assert mock_driver.get_calculator.call_count > 1
 
 
+def test_dft_manager_setup_error(mock_dft_config: DFTConfig) -> None:
+    """Test handling of CalculatorSetupError."""
+    atoms = Atoms("H", cell=[10, 10, 10], pbc=True)
+
+    mock_driver = MagicMock()
+    # Fails with setup error (e.g. missing pseudo file)
+    mock_driver.get_calculator.return_value = MockCalculator(setup_error=True)
+
+    manager = DFTManager(mock_dft_config, driver=mock_driver)
+
+    with pytest.raises(OracleError, match="DFT calculation failed"):
+        list(manager.compute(iter([atoms])))
+
+    # Should retry even on setup error if it's considered transient or parameter based?
+    # Spec says "JobFailedException" (RuntimeError). Implementation catches (RuntimeError, CalculatorSetupError).
+    # So it should retry.
+    assert mock_driver.get_calculator.call_count > 1
+
+
 def test_dft_manager_strategies(mock_dft_config: DFTConfig) -> None:
     """Test that strategies are correctly defined."""
     manager = DFTManager(mock_dft_config)
@@ -146,4 +172,5 @@ def test_dft_manager_strategies(mock_dft_config: DFTConfig) -> None:
     config_copy = mock_dft_config.model_copy()
     original_beta = config_copy.mixing_beta
     strat_beta(config_copy)
+    # Using default factor 0.5
     assert config_copy.mixing_beta == original_beta * 0.5

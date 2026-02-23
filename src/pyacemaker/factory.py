@@ -14,8 +14,7 @@ from pyacemaker.domain_models import PyAceConfig
 class Cycle01Generator(BaseGenerator):
     def generate(self, n_candidates: int) -> Iterator[Atoms]:
         """Placeholder generator for Cycle 01."""
-        # Yield nothing or simple dummy atoms if needed, but for now empty
-        # Real implementation will use config.structure
+        # Must return an iterator
         return iter([])
 
 
