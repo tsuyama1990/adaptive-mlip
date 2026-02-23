@@ -4,14 +4,9 @@ from typing import Any
 from ase import Atoms
 
 from pyacemaker.core.base import BaseGenerator
+from pyacemaker.core.exceptions import GeneratorError
 from pyacemaker.core.m3gnet_wrapper import M3GNetWrapper
-from pyacemaker.core.policy import (
-    BasePolicy,
-    ColdStartPolicy,
-    DefectPolicy,
-    RattlePolicy,
-    StrainPolicy,
-)
+from pyacemaker.core.policy_factory import PolicyFactory
 from pyacemaker.domain_models.structure import ExplorationPolicy, StructureConfig
 
 
@@ -42,22 +37,6 @@ class StructureGenerator(BaseGenerator):
             raise TypeError(msg)
         self.config = config
 
-    def _get_policy(self) -> BasePolicy:
-        """Selects the appropriate policy based on configuration."""
-        policies: dict[str, type[BasePolicy]] = {
-            ExplorationPolicy.COLD_START: ColdStartPolicy,
-            ExplorationPolicy.RANDOM_RATTLE: RattlePolicy,
-            ExplorationPolicy.STRAIN: StrainPolicy,
-            ExplorationPolicy.DEFECTS: DefectPolicy,
-        }
-
-        policy_cls = policies.get(self.config.policy_name)
-        if not policy_cls:
-            msg = f"Unknown policy: {self.config.policy_name}"
-            raise ValueError(msg)
-
-        return policy_cls()
-
     def generate(self, n_candidates: int) -> Iterator[Atoms]:
         """
         Generates candidate structures.
@@ -83,16 +62,11 @@ class StructureGenerator(BaseGenerator):
             return
 
         # Policy Selection
-        policy = self._get_policy()
+        policy = PolicyFactory.get_policy(self.config)
 
-        # Step 1: Base Structure Generation (Streaming)
+        # Step 1: Base Structure Generation (Lazy)
+        # We define composition here but don't call prediction yet
         composition = "".join(self.config.elements)
-
-        try:
-            base_structure = self.m3gnet.predict_structure(composition)
-        except Exception as e:
-            msg = f"Failed to generate base structure for {composition}: {e}"
-            raise RuntimeError(msg) from e
 
         # Validate policy configuration first
         if not isinstance(self.config.policy_name, ExplorationPolicy):
@@ -100,27 +74,41 @@ class StructureGenerator(BaseGenerator):
              raise TypeError(msg)
 
         # Step 2: Apply Policy (Streaming)
-        # Create the supercell template lazily.
-        # We perform the repeat operation here, but it is only executed when the generator
-        # is consumed (via next()).
-        base_supercell = base_structure.repeat(self.config.supercell_size)  # type: ignore[no-untyped-call]
+        # Create the supercell template lazily inside the generator.
+        # This prevents materializing a potentially huge supercell if n_candidates is 0,
+        # but more importantly, the base_supercell itself is just one object.
+        # The true laziness comes from the policy yielding one by one.
 
-        # Stream directly from policy
-        # Using 'yield from' or explicit loop ensures we strictly follow the iterator protocol.
+        # Ensure we strictly follow the iterator protocol.
+        def lazy_policy_stream() -> Iterator[Atoms]:
+            # Lazy loading of base structure only when generator is started and first item requested
+            try:
+                base_structure = self.m3gnet.predict_structure(composition)
+            except Exception as e:
+                msg = f"Failed to generate base structure for {composition}: {e}"
+                raise GeneratorError(msg) from e
 
-        count = 0
-        policy_iter = policy.generate(base_supercell, self.config, n_structures=n_candidates)
+            # Generate the base supercell template once (it's small enough typically)
+            # If supercell is huge (millions of atoms), even one copy is heavy.
+            # But we must have a base to perturb.
+            base_supercell = base_structure.repeat(self.config.supercell_size)  # type: ignore[no-untyped-call]
 
-        # Verify it's an iterator to enforce streaming contract at runtime
-        if not isinstance(policy_iter, Iterator):
-             policy_iter = iter(policy_iter)
+            count = 0
+            policy_iter = policy.generate(base_supercell, self.config, n_structures=n_candidates)
 
-        for structure in policy_iter:
-            if count >= n_candidates:
-                break
+            # Verify it's an iterator to enforce streaming contract at runtime
+            if not isinstance(policy_iter, Iterator):
+                 # Convert iterable to iterator if needed
+                 iter_policy = iter(policy_iter)
+            else:
+                 iter_policy = policy_iter
 
-            if len(structure) == 0:
-                continue
+            for structure in iter_policy:
+                if count >= n_candidates:
+                    break
+                if len(structure) == 0:
+                    continue
+                yield structure
+                count += 1
 
-            yield structure
-            count += 1
+        yield from lazy_policy_stream()

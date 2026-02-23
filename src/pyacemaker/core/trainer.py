@@ -1,12 +1,12 @@
+import shutil
+import subprocess
 from pathlib import Path
 from typing import Any
 
-from ase.io import iread
-
 from pyacemaker.core.base import BaseTrainer
+from pyacemaker.core.config_generator import PacemakerConfigGenerator
 from pyacemaker.core.exceptions import TrainerError
 from pyacemaker.domain_models.training import TrainingConfig
-from pyacemaker.utils.delta import get_lj_params
 from pyacemaker.utils.io import dump_yaml
 from pyacemaker.utils.process import run_command
 
@@ -19,6 +19,7 @@ class PacemakerTrainer(BaseTrainer):
 
     def __init__(self, config: TrainingConfig) -> None:
         self.config = config
+        self.config_generator = PacemakerConfigGenerator(config)
 
     def train(self, training_data_path: str | Path) -> Any:
         """
@@ -37,8 +38,12 @@ class PacemakerTrainer(BaseTrainer):
         Raises:
             TrainerError: If the training data file does not exist or format is invalid.
         """
+        # Ensure pace_train is installed
+        if not shutil.which("pace_train"):
+            msg = "Executable 'pace_train' not found in PATH."
+            raise TrainerError(msg)
+
         data_path = Path(training_data_path).resolve()
-        self._validate_path_safe(data_path)
         self._validate_training_data(data_path)
 
         # Determine output directory (same as data file)
@@ -47,15 +52,20 @@ class PacemakerTrainer(BaseTrainer):
         potential_path = output_dir / self.config.output_filename
 
         # Generate configuration
-        pacemaker_config = self._generate_pacemaker_config(data_path, potential_path)
+        pacemaker_config = self.config_generator.generate(str(data_path), str(potential_path))
         dump_yaml(pacemaker_config, input_yaml_path)
 
         # Run pace_train
         cmd = ["pace_train", str(input_yaml_path)]
         try:
             run_command(cmd)
+        except subprocess.CalledProcessError as e:
+            # Capture specific subprocess error
+            msg = f"Training failed with exit code {e.returncode}: {e}"
+            raise TrainerError(msg) from e
         except Exception as e:
-            msg = f"Training failed: {e}"
+            # Catch other unexpected errors
+            msg = f"Training failed unexpectedly: {e}"
             raise TrainerError(msg) from e
 
         if not potential_path.exists():
@@ -63,14 +73,6 @@ class PacemakerTrainer(BaseTrainer):
             raise TrainerError(msg)
 
         return potential_path
-
-    def _validate_path_safe(self, path: Path) -> None:
-        """Ensures path is safe from traversal and injection."""
-        s = str(path)
-        dangerous_chars = [";", "&", "|", "`", "$", "(", ")", "<", ">", "\n", "\r"]
-        if any(c in s for c in dangerous_chars):
-             msg = f"Path contains invalid characters: {path}"
-             raise TrainerError(msg)
 
     def _validate_training_data(self, data_path: Path) -> None:
         """Validates existence and basic format of training data."""
@@ -87,90 +89,4 @@ class PacemakerTrainer(BaseTrainer):
             msg = f"Training data file is empty: {data_path}"
             raise TrainerError(msg)
 
-    def _raise_no_elements_error(self) -> None:
-        msg = "No elements detected in training data (file might be effectively empty)."
-        raise TrainerError(msg)
 
-    def _generate_pacemaker_config(
-        self, data_path: Path, output_path: Path
-    ) -> dict[str, Any]:
-        """Generates the dictionary for Pacemaker input.yaml."""
-        elements: list[str] = []
-        if self.config.elements:
-            elements = sorted(self.config.elements)
-        else:
-            try:
-                # Scan first few frames to detect elements
-                elements_set = set()
-                fmt = "extxyz" if data_path.suffix == ".xyz" else None
-                # iread format requires str, not None. But ASE handles None = autodetect.
-                read_fmt = fmt if fmt else ""
-                for i, atoms in enumerate(iread(data_path, index=":", format=read_fmt)):
-                    # atoms from iread is Atoms object
-                    elements_set.update(atoms.get_chemical_symbols())  # type: ignore[no-untyped-call]
-                    if i >= 10:  # Stop after 10 frames
-                        break
-                elements = sorted(elements_set)
-
-                if not elements:
-                     self._raise_no_elements_error()
-
-            except Exception as e:
-                msg = f"Could not detect elements from {data_path}. Please provide 'elements' in config or ensure data is valid: {e}"
-                raise TrainerError(msg) from e
-
-        # Use PacemakerConfig from TrainingConfig
-        pm_conf = self.config.pacemaker
-
-        config_dict: dict[str, Any] = {
-            "cutoff": self.config.cutoff_radius,
-            "seed": self.config.seed,
-            "data": {"filename": str(data_path)},
-            "potential": {
-                "delta_spline_bins": 100,
-                "elements": elements,
-                "embeddings": {
-                    el: {
-                        "ndensity": pm_conf.ndensity,
-                        "npot": pm_conf.embedding_type,
-                        "fs_parameters": pm_conf.fs_parameters,
-                        "maxwell": True,
-                    }
-                    for el in elements
-                },
-                "bonds": {
-                    "N": self.config.max_basis_size,
-                    "max_deg": pm_conf.max_deg,
-                    "r0": pm_conf.r0,
-                    "rad_base": pm_conf.rad_base,
-                    "rad_parameters": pm_conf.rad_parameters,
-                },
-            },
-            "fit": {
-                "loss": {
-                    "kappa": pm_conf.loss_kappa,
-                    "L1_coeffs": pm_conf.loss_l1_coeffs,
-                    "L2_coeffs": pm_conf.loss_l2_coeffs,
-                },
-                "optimizer": pm_conf.optimizer,
-                "maxiter": self.config.max_iterations,
-                "repulsion_sigma": pm_conf.repulsion_sigma,
-            },
-            "backend": {
-                "evaluator": "tensorpot",
-                "batch_size": self.config.batch_size,
-                "display_step": 50,
-            },
-        }
-
-        if self.config.delta_learning:
-            lj_params = {}
-            for el in elements:
-                lj_params[el] = get_lj_params(el)
-
-            config_dict["base_potential"] = {
-                "type": "LennardJones",
-                "parameters": lj_params
-            }
-
-        return config_dict

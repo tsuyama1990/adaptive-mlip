@@ -2,6 +2,7 @@ import numpy as np
 import pytest
 from ase import Atoms
 
+from pyacemaker.core.exceptions import GeneratorError
 from pyacemaker.core.generator import StructureGenerator
 from pyacemaker.domain_models.structure import ExplorationPolicy, StructureConfig
 
@@ -106,5 +107,5 @@ def test_generator_invalid_composition() -> None:
 
     generator.m3gnet.predict_structure = mock_raise # type: ignore
 
-    with pytest.raises(RuntimeError, match="Failed to generate base structure"):
+    with pytest.raises(GeneratorError, match="Failed to generate base structure"):
         next(generator.generate(1))

@@ -56,7 +56,7 @@ def mock_training_config() -> TrainingConfig:
         cutoff_radius=5.0,
         max_basis_size=500,
         delta_learning=True,
-        active_set_optimization=True
+        active_set_optimization=False
     )
 
 @pytest.fixture
@@ -137,7 +137,7 @@ def create_test_config_dict(**overrides: Any) -> dict[str, Any]:
         cutoff_radius=5.0,
         max_basis_size=500,
         delta_learning=True,
-        active_set_optimization=True
+        active_set_optimization=False
     )
     md = MDConfig(
         temperature=300.0,
