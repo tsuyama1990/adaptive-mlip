@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field
 
 from .dft import DFTConfig
 from .logging import LoggingConfig
@@ -18,8 +18,3 @@ class PyAceConfig(BaseModel):
     md: MDConfig
     workflow: WorkflowConfig
     logging: LoggingConfig = Field(default_factory=LoggingConfig, description="Logging configuration")
-
-    @model_validator(mode='after')
-    def check_cutoff_supercell(self) -> 'PyAceConfig':
-        # Future enhancement: Add lattice_constants to StructureConfig or infer from a seed structure.
-        return self

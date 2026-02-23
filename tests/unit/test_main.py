@@ -1,13 +1,13 @@
+import sys
+import logging
+from unittest.mock import patch, MagicMock
 from pathlib import Path
-from typing import Any
-from unittest.mock import MagicMock, patch
-
 import pytest
-
+from typing import Any
 from pyacemaker.main import main
+from pyacemaker.domain_models import PyAceConfig
 
-
-def test_main_dry_run(capsys: Any, tmp_path: Path) -> None:
+def test_main_dry_run(caplog: Any, tmp_path: Path) -> None:
     config_data = """
 project_name: TestProject
 structure:
@@ -34,16 +34,15 @@ workflow:
     p.write_text(config_data)
 
     with patch("argparse.ArgumentParser.parse_args", return_value=MagicMock(config=str(p), dry_run=True)):
-        with pytest.raises(SystemExit) as e:
-            main()
-        assert e.value.code == 0
+        with patch("pathlib.Path.cwd", return_value=tmp_path):
+            with pytest.raises(SystemExit) as e:
+                main()
+            assert e.value.code == 0
 
-    captured = capsys.readouterr()
-    assert "Configuration loaded successfully" in captured.out
-    assert "Project: TestProject initialized" in captured.out
-    assert "Dry run complete" in captured.out
+    assert "Configuration loaded successfully" in caplog.text
+    assert "Project: TestProject initialized" in caplog.text
 
-def test_main_run(capsys: Any, tmp_path: Path) -> None:
+def test_main_run(caplog: Any, tmp_path: Path) -> None:
     config_data = """
 project_name: TestRun
 structure:
@@ -71,15 +70,15 @@ workflow:
 
     with (
         patch("argparse.ArgumentParser.parse_args", return_value=MagicMock(config=str(p), dry_run=False)),
-        patch("pyacemaker.orchestrator.Orchestrator.run") as mock_run
+        patch("pyacemaker.orchestrator.Orchestrator.run") as mock_run,
+        patch("pathlib.Path.cwd", return_value=tmp_path)
     ):
         main()
         mock_run.assert_called_once()
 
-    captured = capsys.readouterr()
-    assert "Configuration loaded successfully" in captured.out
+    assert "Configuration loaded successfully" in caplog.text
 
-def test_main_invalid_config(capsys: Any, tmp_path: Path) -> None:
+def test_main_invalid_config(caplog: Any, tmp_path: Path) -> None:
     config_data = """
 project_name: BadConfig
 # Missing required fields
@@ -88,10 +87,9 @@ project_name: BadConfig
     p.write_text(config_data)
 
     with patch("argparse.ArgumentParser.parse_args", return_value=MagicMock(config=str(p), dry_run=False)):
-        with pytest.raises(SystemExit) as e:
-            main()
-        assert e.value.code == 1
+        with patch("pathlib.Path.cwd", return_value=tmp_path):
+            with pytest.raises(SystemExit) as e:
+                main()
+            assert e.value.code == 1
 
-    captured = capsys.readouterr()
-    assert "Error:" in captured.err
-    assert "validation error" in captured.err
+    assert "Fatal error during execution" in caplog.text

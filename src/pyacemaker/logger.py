@@ -9,6 +9,7 @@ from pyacemaker.domain_models.logging import LoggingConfig
 def setup_logger(config: LoggingConfig, project_name: str) -> logging.Logger:
     """
     Sets up the logger based on the configuration.
+    Ensures idempotency to avoid duplicate handlers.
 
     Args:
         config: LoggingConfig object.
@@ -18,13 +19,17 @@ def setup_logger(config: LoggingConfig, project_name: str) -> logging.Logger:
         Configured Logger instance.
     """
     logger = logging.getLogger(project_name)
+
+    # If handlers already exist, assume it's already configured and return.
+    # This prevents duplicate logs if setup_logger is called multiple times.
+    if logger.handlers:
+        return logger
+
     logger.setLevel(config.level)
 
-    # Remove existing handlers to avoid duplicates if re-initialized
-    if logger.handlers:
-        logger.handlers.clear()
-
-    formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+    formatter = logging.Formatter(
+        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    )
 
     # Console Handler
     console_handler = logging.StreamHandler(sys.stdout)
@@ -39,7 +44,9 @@ def setup_logger(config: LoggingConfig, project_name: str) -> logging.Logger:
             log_path.parent.mkdir(parents=True, exist_ok=True)
 
         file_handler = RotatingFileHandler(
-            config.log_file, maxBytes=config.max_bytes, backupCount=config.backup_count
+            config.log_file,
+            maxBytes=config.max_bytes,
+            backupCount=config.backup_count
         )
         file_handler.setFormatter(formatter)
         logger.addHandler(file_handler)
