@@ -39,3 +39,7 @@ TEMPLATE_POTENTIAL_FILE = "generation_{iteration:03d}.yace"
 
 # Physics Constants
 RECIPROCAL_FACTOR = 6.283185307179586  # 2 * pi
+
+# Embedding Constants
+EMBEDDING_TOLERANCE_CELL = 1e-6
+EMBEDDING_TOLERANCE_LENGTH = 1e-9

@@ -2,6 +2,8 @@ import numpy as np
 from ase import Atoms
 from numpy.typing import NDArray
 
+from pyacemaker.constants import EMBEDDING_TOLERANCE_CELL
+
 
 def embed_cluster(cluster: Atoms, buffer: float, copy: bool = True) -> Atoms:
     """
@@ -47,8 +49,8 @@ def embed_cluster(cluster: Atoms, buffer: float, copy: bool = True) -> Atoms:
     cell_lengths = dims + buffer
 
     # Validate cell dimensions
-    if np.any(cell_lengths <= 1e-6):
-        msg = f"Resulting cell dimensions must be positive: {cell_lengths}. Increase buffer."
+    if np.any(cell_lengths <= EMBEDDING_TOLERANCE_CELL):
+        msg = f"Resulting cell dimensions must be positive (> {EMBEDDING_TOLERANCE_CELL}): {cell_lengths}. Increase buffer."
         raise ValueError(msg)
 
     # Calculate shift

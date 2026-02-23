@@ -5,10 +5,13 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 class StructureConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    elements: list[str] = Field(..., description="List of elements in the system")
+    elements: list[str] = Field(
+        ..., min_length=1, description="List of elements in the system"
+    )
     supercell_size: list[int] = Field(
         ..., min_length=3, max_length=3, description="Supercell size [nx, ny, nz]"
     )
+
 
     # Adaptive Exploration Policy Parameters (Spec Section 3.1)
     adaptive_ratio: float = Field(
