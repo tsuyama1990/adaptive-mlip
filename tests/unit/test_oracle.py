@@ -1,14 +1,13 @@
-from typing import ClassVar
 from unittest.mock import MagicMock
 
-import numpy as np
 import pytest
 from ase import Atoms
-from ase.calculators.calculator import Calculator, CalculatorSetupError
 
+from pyacemaker.constants import TEST_ENERGY_GENERIC
 from pyacemaker.core.exceptions import OracleError
 from pyacemaker.core.oracle import DFTManager
 from pyacemaker.domain_models import DFTConfig
+from tests.conftest import MockCalculator
 
 
 @pytest.fixture
@@ -26,40 +25,6 @@ def mock_dft_config() -> DFTConfig:
     )
 
 
-class MockCalculator(Calculator):
-    """Mock ASE calculator that can simulate failure."""
-    implemented_properties: ClassVar[list[str]] = ["energy", "forces", "stress"]
-
-    def __init__(self, fail_count: int = 0, setup_error: bool = False) -> None:
-        super().__init__()
-        self.fail_count = fail_count
-        self.setup_error = setup_error
-        self.attempts = 0
-
-    def calculate(
-        self,
-        atoms: Atoms | None = None,
-        properties: list[str] | None = None,
-        system_changes: list[str] | None = None,
-    ) -> None:
-        self.attempts += 1
-
-        if self.setup_error:
-            msg = "Setup failed"
-            raise CalculatorSetupError(msg)
-
-        if self.attempts <= self.fail_count:
-            # Simulate SCF failure (which usually raises RuntimeError in ASE)
-            msg = "Convergence not achieved"
-            raise RuntimeError(msg)
-
-        self.results = {
-            "energy": -13.6,
-            "forces": np.array([[0.0, 0.0, 0.0]]),
-            "stress": np.array([0.0] * 6),
-        }
-
-
 def test_dft_manager_compute_success(mock_dft_config: DFTConfig) -> None:
     """Test successful computation using dependency injection."""
     atoms = Atoms("H", cell=[10, 10, 10], pbc=True)
@@ -75,7 +40,7 @@ def test_dft_manager_compute_success(mock_dft_config: DFTConfig) -> None:
     generator = manager.compute(iter([atoms]))
     result = next(generator)
 
-    assert result.get_potential_energy() == -13.6
+    assert result.get_potential_energy() == TEST_ENERGY_GENERIC  # type: ignore[no-untyped-call]
 
     # Verify get_calculator was called with correct config
     mock_driver.get_calculator.assert_called_with(atoms, mock_dft_config)
@@ -97,11 +62,11 @@ def test_dft_manager_self_healing(mock_dft_config: DFTConfig) -> None:
     # Inject mock driver
     manager = DFTManager(mock_dft_config, driver=mock_driver)
 
-    # Note: consume generator to trigger execution
-    results = list(manager.compute(iter([atoms])))
+    # Use next() to consume generator one-by-one without materializing list
+    gen = manager.compute(iter([atoms]))
+    result = next(gen)
 
-    assert len(results) == 1
-    assert results[0].get_potential_energy() == -13.6
+    assert result.get_potential_energy() == TEST_ENERGY_GENERIC  # type: ignore[no-untyped-call]
 
     # Verify calls to get_calculator
     assert mock_driver.get_calculator.call_count == 2
@@ -131,8 +96,10 @@ def test_dft_manager_fatal_error(mock_dft_config: DFTConfig) -> None:
     manager = DFTManager(mock_dft_config, driver=mock_driver)
 
     # Now raises OracleError
+    # Use next() to trigger execution
+    gen = manager.compute(iter([atoms]))
     with pytest.raises(OracleError, match="DFT calculation failed"):
-        list(manager.compute(iter([atoms])))
+        next(gen)
 
     # Verify retries happened (at least > 1)
     assert mock_driver.get_calculator.call_count > 1
@@ -148,8 +115,9 @@ def test_dft_manager_setup_error(mock_dft_config: DFTConfig) -> None:
 
     manager = DFTManager(mock_dft_config, driver=mock_driver)
 
+    gen = manager.compute(iter([atoms]))
     with pytest.raises(OracleError, match="DFT calculation failed"):
-        list(manager.compute(iter([atoms])))
+        next(gen)
 
     # Should retry even on setup error if it's considered transient or parameter based?
     # Spec says "JobFailedException" (RuntimeError). Implementation catches (RuntimeError, CalculatorSetupError).
@@ -165,12 +133,52 @@ def test_dft_manager_strategies(mock_dft_config: DFTConfig) -> None:
     assert len(strategies) > 0
     assert strategies[0] is None # First attempt is vanilla
 
-    # Test strategy logic (e.g. reduced beta)
+    # Strategy 1: Reduce Beta
     strat_beta = strategies[1]
     assert strat_beta is not None
-
     config_copy = mock_dft_config.model_copy()
     original_beta = config_copy.mixing_beta
     strat_beta(config_copy)
-    # Using default factor 0.5
     assert config_copy.mixing_beta == original_beta * 0.5
+
+    # Strategy 2: Increase Smearing
+    strat_smearing = strategies[2]
+    assert strat_smearing is not None
+    config_copy = mock_dft_config.model_copy()
+    original_smearing = config_copy.smearing_width
+    strat_smearing(config_copy)
+    assert config_copy.smearing_width == original_smearing * 2.0
+
+    # Strategy 3: CG Diagonalization
+    strat_cg = strategies[3]
+    assert strat_cg is not None
+    config_copy = mock_dft_config.model_copy()
+    strat_cg(config_copy)
+    assert config_copy.diagonalization == "cg"
+
+def test_dft_manager_invalid_input(mock_dft_config: DFTConfig) -> None:
+    """Test compute raises TypeError for non-iterator input."""
+    manager = DFTManager(mock_dft_config)
+    atoms_list = [Atoms("H")]
+
+    with pytest.raises(TypeError, match="must be an Iterator"):
+        # Validation happens immediately when generator is created
+        # We need to call next() to trigger the code execution up to the first yield?
+        # No, compute is a generator function. The code *before* the first yield runs only when
+        # next() is called? Or does it?
+        # Actually, in Python generator functions, execution starts only when next() is called.
+        # So we MUST call next() or iterate to trigger validation.
+        # But wait, type checking `isinstance(structures, Iterator)` is at the top of the function.
+        # Yes, generator function body execution is deferred.
+        next(manager.compute(atoms_list))  # type: ignore[arg-type]
+
+def test_dft_manager_empty_iterator(mock_dft_config: DFTConfig) -> None:
+    """Test compute handles empty iterator correctly with warning."""
+    manager = DFTManager(mock_dft_config)
+    empty_iter: iter = iter([])  # type: ignore
+
+    with pytest.warns(UserWarning, match="Oracle received empty iterator"):
+        # Explicit loop without list() materialization for safety
+        results = list(manager.compute(empty_iter))
+
+    assert len(results) == 0

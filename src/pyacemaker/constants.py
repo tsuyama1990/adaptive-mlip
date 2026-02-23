@@ -1,3 +1,5 @@
+import math
+
 # Constants for PyAceMaker
 
 # File names
@@ -38,4 +40,13 @@ TEMPLATE_ITER_DIR = "iter_{iteration:03d}"
 TEMPLATE_POTENTIAL_FILE = "generation_{iteration:03d}.yace"
 
 # Physics Constants
-RECIPROCAL_FACTOR = 6.283185307179586  # 2 * pi
+RECIPROCAL_FACTOR = 2 * math.pi
+
+# Embedding Constants
+EMBEDDING_TOLERANCE_CELL = 1e-6
+EMBEDDING_TOLERANCE_LENGTH = 1e-9
+QE_KPOINT_TOLERANCE = 1e-3
+
+# Test Constants
+TEST_ENERGY_H2O = -14.5
+TEST_ENERGY_GENERIC = -13.6

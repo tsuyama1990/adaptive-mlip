@@ -1,40 +1,33 @@
-from typing import ClassVar
 from unittest.mock import patch
 
 import numpy as np
 import pytest
 from ase import Atoms
-from ase.calculators.calculator import Calculator
 
+from pyacemaker.constants import TEST_ENERGY_H2O
 from pyacemaker.core.oracle import DFTManager
 from pyacemaker.domain_models import DFTConfig
+from tests.conftest import MockCalculator
 
+# Monkeypatch calculate to return specific UAT values if needed,
+# or better, rely on conftest MockCalculator if generic values suffice.
+# UAT checks for -14.5. Conftest gives -13.6.
+# Let's subclass to keep UAT values.
 
-class MockCalculator(Calculator):
-    """Mock Calculator for UAT."""
-    implemented_properties: ClassVar[list[str]] = ["energy", "forces", "stress"]
-
-    def __init__(self, fail_count: int = 0) -> None:
-        super().__init__()
-        self.fail_count = fail_count
-        self.attempts = 0
-
+class UATMockCalculator(MockCalculator):
+    """Subclass to provide UAT-specific energy values."""
     def calculate(
         self,
         atoms: Atoms | None = None,
         properties: list[str] | None = None,
         system_changes: list[str] | None = None,
     ) -> None:
-        self.attempts += 1
-        if self.attempts <= self.fail_count:
-            msg = "Convergence not achieved"
-            raise RuntimeError(msg)
-
-        self.results = {
-            "energy": -14.5,  # Matches UAT expectation
-            "forces": np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]]),
-            "stress": np.array([0.0] * 6),
-        }
+        super().calculate(atoms, properties, system_changes)
+        # Override with UAT specific values
+        self.results["energy"] = TEST_ENERGY_H2O
+        # Ensure forces shape matches atoms
+        n_atoms = len(atoms) if atoms else 3
+        self.results["forces"] = np.zeros((n_atoms, 3))
 
 
 @pytest.fixture
@@ -64,14 +57,16 @@ def test_uat_02_01_single_point_calculation(uat_dft_config: DFTConfig) -> None:
     with patch("pyacemaker.core.oracle.QEDriver") as MockDriver:
         manager = DFTManager(uat_dft_config)
         mock_driver_instance = MockDriver.return_value
-        mock_driver_instance.get_calculator.return_value = MockCalculator(fail_count=0)
+        mock_driver_instance.get_calculator.return_value = UATMockCalculator(fail_count=0)
 
-        results = list(manager.compute(iter([h2o])))
+        # Use explicit iteration to avoid list() materialization risk in principle,
+        # though [h2o] is small.
+        gen = manager.compute(iter([h2o]))
+        result = next(gen)
 
         # 3. Expectation
-        assert len(results) == 1
-        assert results[0].get_potential_energy() == -14.5
-        assert results[0].get_forces().shape == (3, 3)
+        assert result.get_potential_energy() == TEST_ENERGY_H2O  # type: ignore[no-untyped-call]
+        assert result.get_forces().shape == (3, 3)  # type: ignore[no-untyped-call]
 
 
 def test_uat_02_02_self_healing(uat_dft_config: DFTConfig, caplog: pytest.LogCaptureFixture) -> None:
@@ -88,15 +83,15 @@ def test_uat_02_02_self_healing(uat_dft_config: DFTConfig, caplog: pytest.LogCap
         mock_driver_instance = MockDriver.return_value
 
         # Mock failure on first attempt, success on second
-        calc_fail = MockCalculator(fail_count=1)
-        calc_success = MockCalculator(fail_count=0)
+        calc_fail = UATMockCalculator(fail_count=1)
+        calc_success = UATMockCalculator(fail_count=0)
         mock_driver_instance.get_calculator.side_effect = [calc_fail, calc_success]
 
-        results = list(manager.compute(iter([h2o])))
+        gen = manager.compute(iter([h2o]))
+        result = next(gen)
 
         # 3. Expectation
-        assert len(results) == 1
-        assert results[0].get_potential_energy() == -14.5
+        assert result.get_potential_energy() == TEST_ENERGY_H2O  # type: ignore[no-untyped-call]
 
         # Verify that get_calculator was called twice (original + retry)
         assert mock_driver_instance.get_calculator.call_count == 2

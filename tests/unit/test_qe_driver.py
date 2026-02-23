@@ -4,8 +4,9 @@ import numpy as np
 import pytest
 from ase import Atoms
 
+from pyacemaker.constants import RECIPROCAL_FACTOR
 from pyacemaker.domain_models import DFTConfig
-from pyacemaker.interfaces.qe_driver import RECIPROCAL_FACTOR, QEDriver
+from pyacemaker.interfaces.qe_driver import QEDriver
 
 
 @pytest.fixture
@@ -23,51 +24,80 @@ def mock_dft_config() -> DFTConfig:
     )
 
 
-def test_qe_driver_get_calculator_kpoints(mock_dft_config: DFTConfig) -> None:
-    """Test k-point generation based on density."""
-    atoms = Atoms("H", cell=[10, 10, 10], pbc=True)
+@pytest.mark.parametrize(
+    ("pbc", "expected_factor"),
+    [
+        ([True, True, True], 1.0),
+        ([False, False, False], 0.0), # Factor 0.0 implies result is 1 (max(1, 0))
+        ([True, True, False], 1.0),
+    ],
+)
+def test_qe_driver_kpoints_parametrized(
+    mock_dft_config: DFTConfig, pbc: list[bool], expected_factor: float
+) -> None:
+    """Test k-point generation with various PBC settings."""
+    atoms = Atoms("H", cell=[10, 10, 10], pbc=pbc)
     driver = QEDriver()
 
     with patch("pyacemaker.interfaces.qe_driver.Espresso") as MockEspresso:
         driver.get_calculator(atoms, mock_dft_config)
-
-        # Verify k-points passed to Espresso
-        call_args = MockEspresso.call_args[1]
-        kpts = call_args.get("kpts")
+        kpts = MockEspresso.call_args[1].get("kpts")
         assert kpts is not None
 
-        assert isinstance(kpts, tuple | list)
-        assert len(kpts) == 3
+        # Calculate expected k
+        # If factor is 1.0 (PBC), use formula. If 0.0 (No PBC), expect 1.
+        # Formula N = ceil( (2*pi / spacing) / L )
+        # Here spacing=0.04, L=10.0.
+        k_val = int(np.ceil((RECIPROCAL_FACTOR / 0.04) / 10.0))
 
-        # Verify calculation:
-        # spacing = 0.04, factor = 2*pi / 0.04 ~ 157.08, L = 10
-        # N = ceil(157.08 / 10) = ceil(15.7) = 16
-        expected_k = int(np.ceil((RECIPROCAL_FACTOR / 0.04) / 10.0))
-        assert kpts == (expected_k, expected_k, expected_k)
+        expected_kpts = []
+        for is_pbc in pbc:
+            if is_pbc:
+                expected_kpts.append(k_val)
+            else:
+                expected_kpts.append(1)
 
+        assert kpts == tuple(expected_kpts)
 
-def test_qe_driver_kpoints_non_pbc(mock_dft_config: DFTConfig) -> None:
-    """Test k-point generation for non-periodic systems."""
-    # Isolated atom, pbc=False
-    atoms = Atoms("H", cell=[10, 10, 10], pbc=[False, False, False])
+def test_qe_driver_kpoints_zero_length(mock_dft_config: DFTConfig) -> None:
+    """Test k-point generation with zero-length cells (should default to 1)."""
+    # Cell with zero volume or very small dimensions
+    atoms = Atoms("H", cell=[0.0, 0.0, 0.0], pbc=True)
     driver = QEDriver()
 
     with patch("pyacemaker.interfaces.qe_driver.Espresso") as MockEspresso:
         driver.get_calculator(atoms, mock_dft_config)
         kpts = MockEspresso.call_args[1].get("kpts")
+
+        # Zero length -> treated as non-periodic direction or just handled safely
+        # Implementation uses mask (lengths >= 1e-3). So should be 1.
         assert kpts == (1, 1, 1)
 
-    # Surface (slab), pbc=[True, True, False]
-    atoms = Atoms("H", cell=[10, 10, 10], pbc=[True, True, False])
-    with patch("pyacemaker.interfaces.qe_driver.Espresso") as MockEspresso:
-        driver.get_calculator(atoms, mock_dft_config)
-        kpts = MockEspresso.call_args[1].get("kpts")
+def test_qe_driver_invalid_input(mock_dft_config: DFTConfig) -> None:
+    """Test validation of invalid inputs."""
+    driver = QEDriver()
+    atoms = Atoms("H", cell=[10, 10, 10], pbc=True)
 
-        # kx, ky should be calculated
-        expected_k = int(np.ceil((RECIPROCAL_FACTOR / 0.04) / 10.0))
-        assert kpts[0] == expected_k
-        assert kpts[1] == expected_k
-        assert kpts[2] == 1
+    # Negative Energy Cutoff
+    mock_dft_config.encut = -10.0
+    with pytest.raises(ValueError, match="Energy cutoff must be positive"):
+        driver.get_calculator(atoms, mock_dft_config)
+    mock_dft_config.encut = 500.0 # Reset
+
+    # Negative K-point density
+    mock_dft_config.kpoints_density = -0.04
+    with pytest.raises(ValueError, match="K-points density must be positive"):
+        driver.get_calculator(atoms, mock_dft_config)
+    mock_dft_config.kpoints_density = 0.04
+
+    # Invalid Pseudopotential Key
+    # Assuming config validation passes initially (e.g. at Pydantic level)
+    # but runtime check catches it. Or modify config object directly as here.
+    # Note: Pydantic validation usually happens at init, but we modified attribute.
+    # The driver re-validates.
+    mock_dft_config.pseudopotentials = {"InvalidElement": "file.upf"}
+    with pytest.raises(ValueError, match="Invalid chemical symbol"):
+        driver.get_calculator(atoms, mock_dft_config)
 
 
 def test_qe_driver_parameters(mock_dft_config: DFTConfig) -> None:

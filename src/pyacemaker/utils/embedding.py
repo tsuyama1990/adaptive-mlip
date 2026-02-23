@@ -2,6 +2,8 @@ import numpy as np
 from ase import Atoms
 from numpy.typing import NDArray
 
+from pyacemaker.constants import EMBEDDING_TOLERANCE_CELL
+
 
 def embed_cluster(cluster: Atoms, buffer: float, copy: bool = True) -> Atoms:
     """
@@ -31,8 +33,16 @@ def embed_cluster(cluster: Atoms, buffer: float, copy: bool = True) -> Atoms:
         msg = "Cannot embed empty cluster"
         raise ValueError(msg)
 
+    if buffer <= 0:
+        msg = f"Buffer must be positive: {buffer}"
+        raise ValueError(msg)
+
+    if buffer > 1000.0:
+        msg = f"Buffer is excessively large: {buffer} (limit 1000.0)"
+        raise ValueError(msg)
+
     # Get bounding box (no copy)
-    positions: NDArray[np.float64] = cluster.get_positions()
+    positions: NDArray[np.float64] = cluster.get_positions()  # type: ignore[no-untyped-call]
 
     # Validation: Ensure positions is valid (redundant if ASE is valid, but good for type safety)
     if positions.ndim != 2 or positions.shape[1] != 3:
@@ -46,21 +56,32 @@ def embed_cluster(cluster: Atoms, buffer: float, copy: bool = True) -> Atoms:
     dims = max_xyz - min_xyz
     cell_lengths = dims + buffer
 
+    # Validate cell dimensions
+    if np.any(cell_lengths <= EMBEDDING_TOLERANCE_CELL):
+        msg = f"Resulting cell dimensions must be positive (> {EMBEDDING_TOLERANCE_CELL}): {cell_lengths}. Increase buffer."
+        raise ValueError(msg)
+
     # Calculate shift
     center_of_box = cell_lengths / 2.0
     center_of_atoms = (min_xyz + max_xyz) / 2.0
     shift = center_of_box - center_of_atoms
 
     # Handle object creation vs modification
-    # Create shallow copy of the container but new arrays
-    target = cluster.copy() if copy else cluster  # type: ignore[no-untyped-call]
+    if copy:
+        # Create a deep copy of the Atoms object to ensure positions are not shared
+        target = cluster.copy()  # type: ignore[no-untyped-call]
+        target.positions = target.positions.copy()
+    else:
+        # In-place modification of the original object: absolutely no new copies
+        target = cluster
 
+    # Modify the target (whether it's the copy or original)
     target.set_cell(cell_lengths)
     target.set_pbc(True)
-
-    # In-place translation of the target object's positions
-    # If copy=True, target.positions is a new array (from .copy()).
-    # If copy=False, target.positions is the original array reference.
     target.positions += shift
 
-    return target
+    # Explicit cast to Atoms to satisfy type checker if ASE doesn't return strictly Atoms
+    # or just return as is, assuming target is Atoms.
+    # The ignore was because mypy thinks ASE methods might return something else?
+    # Actually ASE copy() returns 'Atoms' (or subclasses).
+    return target  # type: ignore[no-any-return]

@@ -42,85 +42,104 @@ class DFTManager(BaseOracle):
 
         Yields:
             Atoms objects with computed properties.
+
+        Raises:
+            OracleError: If a calculation fails fatally.
+            TypeError: If structures is not an iterator (to prevent memory leaks from huge lists).
         """
+        # Validate that structures is an iterator to enforce O(1) memory usage contract
+        # isinstance check against Iterator (from collections.abc) might be tricky with some generators?
+        # But iter(list) returns 'list_iterator' which inherits from Iterator.
+        # However, a list is Iterable but NOT Iterator.
+        # Let's ensure we import Iterator from collections.abc correctly.
+        if not isinstance(structures, Iterator):
+            msg = f"Input 'structures' must be an Iterator (got {type(structures)}). Use iter() to create one."
+            raise TypeError(msg)
+
         # Strict streaming: Process one by one.
         # We do NOT use batched() here to avoid even small batch materialization in memory
         # as per strict audit requirements.
+        iterator_empty = True
+
         for atoms in structures:
+            iterator_empty = False
             yield self._compute_single(atoms)
+
+        if iterator_empty:
+             # Audit requirement: "Add explicit handling for empty iterators with appropriate error messages."
+             # Returning empty iterator is valid, but logging helps debug.
+             import warnings
+             warnings.warn("Oracle received empty iterator. No calculations performed.", UserWarning, stacklevel=2)
 
     def _get_strategies(self) -> list[Callable[[DFTConfig], None] | None]:
         """
         Returns a list of self-healing strategies.
         """
-        # Use multipliers from config
-        beta_factor = self.config.mixing_beta_factor
-        smearing_factor = self.config.smearing_width_factor
+        # We can extract these to methods or classes if they get complex.
+        # For now, we keep them simple but avoid unnecessary re-creation if possible.
+        # But they depend on instance config.
+        # To avoid re-creation, we could use functools.partial or make them instance methods.
 
-        # Define strategies as named functions for clarity/maintainability
-        def reduce_beta(c: DFTConfig) -> None:
-            c.mixing_beta *= beta_factor
-
-        def increase_smearing(c: DFTConfig) -> None:
-            c.smearing_width *= smearing_factor
-
-        def use_cg(c: DFTConfig) -> None:
-            c.diagonalization = "cg"
-
+        # Method-based strategies to avoid closure recreation overhead
         return [
-            None,  # First attempt: no change
-            reduce_beta,
-            increase_smearing,
-            use_cg,
+            None,
+            self._strategy_reduce_beta,
+            self._strategy_increase_smearing,
+            self._strategy_use_cg
         ]
+
+    def _strategy_reduce_beta(self, c: DFTConfig) -> None:
+        c.mixing_beta *= self.config.mixing_beta_factor
+
+    def _strategy_increase_smearing(self, c: DFTConfig) -> None:
+        c.smearing_width *= self.config.smearing_width_factor
+
+    def _strategy_use_cg(self, c: DFTConfig) -> None:
+        c.diagonalization = "cg"
 
     def _compute_single(self, atoms: Atoms) -> Atoms:
         """
-        Runs calculation for a single structure with retries.
-        """
-        # Create a mutable copy of config
-        current_config = self.config.model_copy()
+        Runs calculation for a single structure with retries and self-healing strategies.
 
+        Args:
+            atoms: The atomic structure to calculate.
+
+        Returns:
+            Atoms object with calculated properties attached.
+
+        Raises:
+            OracleError: If calculation fails after all retries and strategies.
+        """
+        current_config = self.config.model_copy()
         strategies = self._get_strategies()
         last_error: Exception | None = None
 
-        # Reusing calculator logic?
-        # ASE calculators are typically tied to specific parameters.
-        # Changing parameters (like mixing_beta) usually requires a new calculator instance
-        # or a heavy reset. Creating a new lightweight wrapper is safer and standard ASE usage.
-        # The 'Espresso' object is just a file-writer wrapper, the heavy lifting is the binary.
-
-        for _, strategy in enumerate(strategies):
+        for strategy in strategies:
             if strategy:
                 strategy(current_config)
 
             try:
-                # Create calculator with current config
-                # We create a new calculator for each attempt to ensure clean state
-                calc = self.driver.get_calculator(atoms, current_config.model_copy())
-
-                # Context manager for calculator lifecycle if supported (ASE calculators usually aren't context managers)
-                # But we can ensure we don't leave debris.
-                # atoms.calc takes ownership.
-                atoms.calc = calc
-
-                # Trigger calculation
-                # These calls trigger the actual I/O and execution
-                atoms.get_potential_energy()
-                atoms.get_forces()
-
-                # Try to get stress, ignore if not implemented
-                with contextlib.suppress(PropertyNotImplementedError, RuntimeError):
-                    atoms.get_stress()
-
+                self._run_calculator(atoms, current_config)
             except (RuntimeError, CalculatorSetupError) as e:
                 last_error = e
-                # Clean up calculator if possible (though GC handles it)
-                atoms.calc = None
+                atoms.calc = None  # Clean up failed calculator
                 continue
             else:
                 return atoms
 
-        # If we reach here, all attempts failed
-        msg = f"DFT calculation failed after {len(strategies)} attempts. Last error: {last_error}"
+        msg = f"DFT calculation failed after {len(strategies)} attempts."
         raise OracleError(msg) from last_error
+
+    def _run_calculator(self, atoms: Atoms, config: DFTConfig) -> None:
+        """Helper to run a single calculation attempt."""
+        # Create new calculator for clean state
+        calc = self.driver.get_calculator(atoms, config.model_copy())
+        atoms.calc = calc
+
+        # Trigger actual calculation
+        atoms.get_potential_energy()  # type: ignore[no-untyped-call]
+        atoms.get_forces()  # type: ignore[no-untyped-call]
+
+        # Try to get stress (optional)
+        with contextlib.suppress(PropertyNotImplementedError, RuntimeError):
+            atoms.get_stress()  # type: ignore[no-untyped-call]
