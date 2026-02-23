@@ -102,8 +102,17 @@ class StructureGenerator(BaseGenerator):
         # Stream directly from policy
         # The policy uses the base_supercell to generate candidates.
         # We ensure we yield immediately to prevent memory accumulation.
+        # Using 'yield from' or explicit loop ensures we strictly follow the iterator protocol.
+
         count = 0
-        for structure in policy.generate(base_supercell, self.config, n_structures=n_candidates):
+        policy_iter = policy.generate(base_supercell, self.config, n_structures=n_candidates)
+
+        # Verify it's an iterator to enforce streaming contract at runtime
+        if not isinstance(policy_iter, Iterator):
+             # Just in case a policy implementation returns a list
+             policy_iter = iter(policy_iter)
+
+        for structure in policy_iter:
             if count >= n_candidates:
                 break
 

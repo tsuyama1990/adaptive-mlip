@@ -2,7 +2,7 @@ import contextlib
 from collections.abc import Callable, Iterator
 
 from ase import Atoms
-from ase.calculators.calculator import CalculatorSetupError, PropertyNotImplementedError
+from ase.calculators.calculator import PropertyNotImplementedError
 
 from pyacemaker.core.base import BaseOracle
 from pyacemaker.core.exceptions import OracleError
@@ -61,6 +61,10 @@ class DFTManager(BaseOracle):
         # But iter(list) returns 'list_iterator' which inherits from Iterator.
         # However, a list is Iterable but NOT Iterator.
         # Let's ensure we import Iterator from collections.abc correctly.
+        if isinstance(structures, (list, tuple)):
+            msg = "Input 'structures' must be an Iterator, not a list/tuple. Use iter() to avoid memory issues."
+            raise TypeError(msg)
+
         if not isinstance(structures, Iterator):
             msg = f"Input 'structures' must be an Iterator (got {type(structures)}). Use iter() to create one."
             raise TypeError(msg)
@@ -147,7 +151,9 @@ class DFTManager(BaseOracle):
 
             try:
                 self._run_calculator(atoms, current_config)
-            except (RuntimeError, CalculatorSetupError) as e:
+            except Exception as e:
+                # Catch all exceptions (RuntimeError, CalculatorSetupError, JobFailedException etc)
+                # to ensure self-healing strategies are attempted.
                 last_error = e
                 atoms.calc = None  # Clean up failed calculator
                 continue

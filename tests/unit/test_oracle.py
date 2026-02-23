@@ -8,14 +8,14 @@ from ase import Atoms
 from pyacemaker.core.exceptions import OracleError
 from pyacemaker.core.oracle import DFTManager
 from pyacemaker.domain_models import DFTConfig
-from tests.conftest import MockCalculator
+from tests.conftest import MockCalculator, create_dummy_pseudopotentials
 from tests.constants import TEST_ENERGY_GENERIC
 
 
 @pytest.fixture
 def mock_dft_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> DFTConfig:
     monkeypatch.chdir(tmp_path)
-    (tmp_path / "H.UPF").touch()
+    create_dummy_pseudopotentials(tmp_path, ["H"])
 
     return DFTConfig(
         code="pw.x",

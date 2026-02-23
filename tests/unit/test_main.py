@@ -10,12 +10,12 @@ from pyacemaker.domain_models.defaults import (
     LOG_PROJECT_INIT,
 )
 from pyacemaker.main import main
+from tests.conftest import create_dummy_pseudopotentials
 
 
 def test_main_dry_run(caplog: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
-    # Create dummy pseudo
-    (tmp_path / "Al.UPF").touch()
+    create_dummy_pseudopotentials(tmp_path, ["Al"])
 
     config_data = """
 project_name: TestProject
@@ -70,7 +70,7 @@ def test_main_file_not_found(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) ->
 
 def test_main_run(caplog: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
-    (tmp_path / "Al.UPF").touch()
+    create_dummy_pseudopotentials(tmp_path, ["Al"])
 
     config_data = """
 project_name: TestRun

@@ -3,6 +3,7 @@ from typing import Any
 from ase import Atoms
 
 from pyacemaker.core.base import BaseEngine
+from pyacemaker.domain_models.constants import KB_EV
 from pyacemaker.domain_models.md import MDConfig
 
 
@@ -10,6 +11,11 @@ class LammpsEngine(BaseEngine):
     """
     LAMMPS implementation of BaseEngine.
     Wraps the 'lmp' command (simulated).
+
+    Extension Guidelines:
+        - To implement a real LAMMPS driver, override the 'run' method to write proper 'in.lammps' files.
+        - Ensure configuration fields in MDConfig align with LAMMPS commands.
+        - Use the 'subprocess' module to execute the LAMMPS binary securely.
     """
 
     def __init__(self, config: MDConfig) -> None:
@@ -40,7 +46,8 @@ class LammpsEngine(BaseEngine):
         # Simulate result based on config
         # Use temperature to simulate some variation
         base_energy = self.config.base_energy
-        thermal_noise = self.config.temperature * 0.001 # 1 meV per K
+        # Use Boltzmann constant for physical scaling (approximation for fluctuation scale)
+        thermal_noise = self.config.temperature * KB_EV
 
         simulated_energy = base_energy + thermal_noise
 

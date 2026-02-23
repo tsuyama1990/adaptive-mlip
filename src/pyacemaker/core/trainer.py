@@ -9,6 +9,11 @@ class PacemakerTrainer(BaseTrainer):
     """
     Pacemaker implementation of BaseTrainer.
     Wraps the 'pace_train' command (simulated).
+
+    Extension Guidelines:
+        - To implement real training, override the 'train' method to execute 'pace_train'.
+        - Map TrainingConfig fields (cutoff, basis size) to Pacemaker command-line arguments.
+        - Ensure output files are generated in the expected location.
     """
 
     def __init__(self, config: TrainingConfig) -> None:

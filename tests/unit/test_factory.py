@@ -10,6 +10,7 @@ from pyacemaker.core.generator import StructureGenerator
 from pyacemaker.core.trainer import PacemakerTrainer
 from pyacemaker.domain_models import PyAceConfig
 from pyacemaker.factory import ModuleFactory
+from tests.conftest import create_dummy_pseudopotentials
 
 
 @pytest.fixture
@@ -23,7 +24,7 @@ def mock_config(
 ) -> PyAceConfig:
     monkeypatch.chdir(tmp_path)
     # Create required pseudo file used in shared fixture
-    (tmp_path / "Fe.UPF").touch()
+    create_dummy_pseudopotentials(tmp_path, ["Fe"])
 
     # Update DFT config to use the created file and match element
     mock_dft_config.pseudopotentials = {"Fe": "Fe.UPF"}

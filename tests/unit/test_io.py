@@ -6,6 +6,7 @@ from pydantic import ValidationError
 
 from pyacemaker.domain_models import PyAceConfig
 from pyacemaker.utils.io import load_config, load_yaml
+from tests.conftest import create_dummy_pseudopotentials
 
 
 def test_load_yaml_valid(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -65,8 +66,7 @@ def test_load_yaml_directory(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
 def test_load_config_valid(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
 
-    # Create dummy pseudopotential file
-    (tmp_path / "Fe.UPF").touch()
+    create_dummy_pseudopotentials(tmp_path, ["Fe"])
 
     config_data = {
         "project_name": "Test",

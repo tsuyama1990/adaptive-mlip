@@ -8,12 +8,13 @@ from ase import Atoms
 from pyacemaker.domain_models import DFTConfig
 from pyacemaker.domain_models.constants import RECIPROCAL_FACTOR
 from pyacemaker.interfaces.qe_driver import QEDriver
+from tests.conftest import create_dummy_pseudopotentials
 
 
 @pytest.fixture
 def mock_dft_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> DFTConfig:
     monkeypatch.chdir(tmp_path)
-    (tmp_path / "H.UPF").touch()
+    create_dummy_pseudopotentials(tmp_path, ["H"])
 
     return DFTConfig(
         code="pw.x",

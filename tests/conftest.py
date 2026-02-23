@@ -18,12 +18,16 @@ from pyacemaker.domain_models.structure import ExplorationPolicy
 from tests.constants import TEST_ENERGY_GENERIC
 
 
+def create_dummy_pseudopotentials(path: Any, elements: list[str]) -> None:
+    """Helper to create dummy pseudopotential files."""
+    for el in elements:
+        (path / f"{el}.UPF").touch()
+
+
 @pytest.fixture
 def mock_dft_config(tmp_path: Any, monkeypatch: Any) -> DFTConfig:
     monkeypatch.chdir(tmp_path)
-    (tmp_path / "H.UPF").touch()
-    (tmp_path / "O.UPF").touch()
-    (tmp_path / "Fe.UPF").touch()
+    create_dummy_pseudopotentials(tmp_path, ["H", "O", "Fe"])
 
     return DFTConfig(
         code="pw.x",
