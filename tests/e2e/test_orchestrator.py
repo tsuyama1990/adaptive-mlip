@@ -28,9 +28,14 @@ from pyacemaker.orchestrator import Orchestrator
 
 # Concrete Fakes for testing
 class FakeGenerator(BaseGenerator):
+    def __init__(self, elements: list[str] | None = None) -> None:
+        self.elements = elements or ["H"]
+
     def generate(self, n_candidates: int) -> Iterator[Atoms]:
         for _ in range(n_candidates):
-            yield Atoms("H2", positions=[[0, 0, 0], [0, 0, 0.74]])
+            # Use dynamic elements
+            symbol = self.elements[0]
+            yield Atoms(f"{symbol}2", positions=[[0, 0, 0], [0, 0, 0.74]])
 
 
 class FakeOracle(BaseOracle):
@@ -107,7 +112,7 @@ def test_integration_workflow_complete(
         # Mock factory to return our fakes
         def mock_create_modules(cfg: PyAceConfig) -> tuple[Any, Any, Any, Any]:
             return (
-                FakeGenerator(),
+                FakeGenerator(elements=cfg.structure.elements),
                 FakeOracle(),
                 FakeTrainer(output_dir=tmp_path),
                 FakeEngine(),
@@ -205,7 +210,7 @@ def test_orchestrator_error_handling_oracle_stream(
                 raise RuntimeError(msg)
 
         def mock_create_modules(cfg: PyAceConfig) -> tuple[Any, Any, Any, Any]:
-             return FakeGenerator(), FailingOracle(), None, None
+             return FakeGenerator(elements=cfg.structure.elements), FailingOracle(), None, None
 
         monkeypatch.setattr(ModuleFactory, "create_modules", mock_create_modules)
 

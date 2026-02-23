@@ -25,6 +25,8 @@ class BaseGenerator(ABC):
 
         Returns:
             Iterator yielding ASE Atoms objects.
+            If generation cannot produce any structures, the iterator should be empty
+            (or raise an error if 0 is invalid for the context).
 
         Raises:
             RuntimeError: If generation fails due to internal errors or configuration issues.
@@ -55,6 +57,7 @@ class BaseOracle(ABC):
 
         Returns:
             Iterator of ASE Atoms objects with computed properties attached (e.g. in atoms.info).
+            If the input iterator is empty, the returned iterator should also be empty.
 
         Raises:
             RuntimeError: If calculation fails (e.g., DFT convergence error, connection error).

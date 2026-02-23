@@ -110,6 +110,30 @@ class Orchestrator:
             except Exception as e:
                 self.logger.warning(LOG_STATE_LOAD_FAIL.format(error=e))
 
+    def _ensure_directory(self, path: Path) -> None:
+        """
+        Creates a directory and verifies write permissions.
+
+        Args:
+            path: Path to the directory.
+
+        Raises:
+            RuntimeError: If path exists but is not a directory.
+            PermissionError: If directory is not writable.
+            OSError: If directory creation fails.
+        """
+        try:
+            path.mkdir(parents=True, exist_ok=True)
+            if not path.is_dir():
+                msg = f"Path {path} exists but is not a directory."
+                raise RuntimeError(msg)
+            if not os.access(path, os.W_OK):
+                msg = f"Directory {path} is not writable."
+                raise PermissionError(msg)
+        except OSError as e:
+            self.logger.critical(f"Failed to create directory {path}: {e}")
+            raise
+
     def _setup_iteration_directory(self, iteration: int) -> dict[str, Path]:
         """
         Creates the directory structure for the current iteration.
@@ -130,19 +154,8 @@ class Orchestrator:
             "md_run": iter_dir / "md_run",
         }
 
-        try:
-            for p in paths.values():
-                p.mkdir(parents=True, exist_ok=True)
-                # Verify write permissions (basic check)
-                if not p.is_dir():
-                    msg = f"Path {p} exists but is not a directory."
-                    raise RuntimeError(msg)
-                if not os.access(p, os.W_OK):
-                    msg = f"Directory {p} is not writable."
-                    raise PermissionError(msg)
-        except OSError as e:
-            self.logger.critical(f"Failed to create directory structure: {e}")
-            raise
+        for p in paths.values():
+            self._ensure_directory(p)
 
         return paths
 
@@ -165,7 +178,9 @@ class Orchestrator:
         # Open file once and append batches
         with candidates_file.open("a") as f:
             for batch in batched(candidate_stream, n=batch_size):
-                write(f, list(batch), format="extxyz")
+                # batched returns a tuple, ase.io.write accepts a sequence of Atoms.
+                # No need to convert tuple to list.
+                write(f, batch, format="extxyz")
                 total += len(batch)
 
         self.logger.info(LOG_GENERATED_CANDIDATES.format(count=total))
@@ -196,7 +211,7 @@ class Orchestrator:
         # Open file once and append batches
         with training_file.open("a") as f:
             for batch in batched(labelled_stream, n=batch_size):
-                write(f, list(batch), format="extxyz")
+                write(f, batch, format="extxyz")
                 total += len(batch)
 
         self.logger.info(LOG_COMPUTED_PROPERTIES.format(count=total))
