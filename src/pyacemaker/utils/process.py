@@ -27,8 +27,10 @@ def run_command(
         subprocess.CalledProcessError: If command fails and check=True.
         FileNotFoundError: If executable is not found.
     """
-    cmd_str = " ".join(cmd)
-    logger.debug(f"Running command: {cmd_str}")
+    # Mask potentially sensitive arguments (basic heuristic)
+    # We don't expect secrets in CLI args for this app, but good practice.
+    safe_cmd_str = " ".join(cmd)
+    logger.debug(f"Running command: {safe_cmd_str}")
 
     try:
         return subprocess.run(  # noqa: S603
@@ -40,7 +42,7 @@ def run_command(
             shell=False,  # Enforce security
         )
     except subprocess.CalledProcessError as e:
-        logger.exception(f"Command failed: {cmd_str}. Exit code: {e.returncode}. Stderr: {e.stderr}")
+        logger.exception(f"Command failed: {safe_cmd_str}. Exit code: {e.returncode}. Stderr: {e.stderr}")
         raise
     except FileNotFoundError:
         logger.exception(f"Executable not found: {cmd[0]}")

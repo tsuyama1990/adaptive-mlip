@@ -23,6 +23,8 @@ class DFTConfig(BaseModel):
     diagonalization: str = Field("david", description="Diagonalization algorithm")
 
     # Strategy Multipliers
+    # Note: mixing_beta_factor is used to REDUCE mixing_beta (new_beta = beta * factor)
+    #       smearing_width_factor is used to INCREASE smearing_width (new_width = width * factor)
     mixing_beta_factor: float = Field(0.5, gt=0.0, le=1.0, description="Multiplier for mixing_beta reduction strategy")
     smearing_width_factor: float = Field(2.0, gt=1.0, description="Multiplier for smearing_width increase strategy")
 

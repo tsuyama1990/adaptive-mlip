@@ -85,9 +85,10 @@ class StructureGenerator(BaseGenerator):
         # Policy Selection
         policy = self._get_policy()
 
-        # Step 1: Base Structure Generation (Streaming)
+        # Step 1: Base Structure Generation (Lazy)
         composition = "".join(self.config.elements)
 
+        # Lazy loading of base structure only when generator is started
         try:
             base_structure = self.m3gnet.predict_structure(composition)
         except Exception as e:
@@ -100,27 +101,35 @@ class StructureGenerator(BaseGenerator):
              raise TypeError(msg)
 
         # Step 2: Apply Policy (Streaming)
-        # Create the supercell template lazily.
-        # We perform the repeat operation here, but it is only executed when the generator
-        # is consumed (via next()).
-        base_supercell = base_structure.repeat(self.config.supercell_size)  # type: ignore[no-untyped-call]
+        # Create the supercell template lazily inside the generator.
+        # This prevents materializing a potentially huge supercell if n_candidates is 0,
+        # but more importantly, the base_supercell itself is just one object.
+        # The true laziness comes from the policy yielding one by one.
 
-        # Stream directly from policy
-        # Using 'yield from' or explicit loop ensures we strictly follow the iterator protocol.
+        # Ensure we strictly follow the iterator protocol.
+        def lazy_policy_stream() -> Iterator[Atoms]:
+            # Generate the base supercell template once (it's small enough typically)
+            # If supercell is huge (millions of atoms), even one copy is heavy.
+            # But we must have a base to perturb.
+            # If memory is critical, we could defer this until the first yield.
+            base_supercell = base_structure.repeat(self.config.supercell_size)  # type: ignore[no-untyped-call]
 
-        count = 0
-        policy_iter = policy.generate(base_supercell, self.config, n_structures=n_candidates)
+            count = 0
+            policy_iter = policy.generate(base_supercell, self.config, n_structures=n_candidates)
 
-        # Verify it's an iterator to enforce streaming contract at runtime
-        if not isinstance(policy_iter, Iterator):
-             policy_iter = iter(policy_iter)
+            # Verify it's an iterator to enforce streaming contract at runtime
+            if not isinstance(policy_iter, Iterator):
+                 # Convert iterable to iterator if needed
+                 iter_policy = iter(policy_iter)
+            else:
+                 iter_policy = policy_iter
 
-        for structure in policy_iter:
-            if count >= n_candidates:
-                break
+            for structure in iter_policy:
+                if count >= n_candidates:
+                    break
+                if len(structure) == 0:
+                    continue
+                yield structure
+                count += 1
 
-            if len(structure) == 0:
-                continue
-
-            yield structure
-            count += 1
+        yield from lazy_policy_stream()

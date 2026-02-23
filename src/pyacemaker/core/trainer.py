@@ -1,3 +1,4 @@
+import shutil
 from pathlib import Path
 from typing import Any
 
@@ -37,6 +38,11 @@ class PacemakerTrainer(BaseTrainer):
         Raises:
             TrainerError: If the training data file does not exist or format is invalid.
         """
+        # Ensure pace_train is installed
+        if not shutil.which("pace_train"):
+            msg = "Executable 'pace_train' not found in PATH."
+            raise TrainerError(msg)
+
         data_path = Path(training_data_path).resolve()
         self._validate_training_data(data_path)
 
@@ -113,12 +119,15 @@ class PacemakerTrainer(BaseTrainer):
         # Use PacemakerConfig from TrainingConfig
         pm_conf = self.config.pacemaker
 
+        # Optimize element detection: If elements provided in config, use them directly
+        # but _generate_pacemaker_config logic above already handles this.
+
         config_dict: dict[str, Any] = {
             "cutoff": self.config.cutoff_radius,
             "seed": self.config.seed,
             "data": {"filename": str(data_path)},
             "potential": {
-                "delta_spline_bins": 100,
+                "delta_spline_bins": pm_conf.delta_spline_bins,
                 "elements": elements,
                 "embeddings": {
                     el: {
@@ -148,9 +157,9 @@ class PacemakerTrainer(BaseTrainer):
                 "repulsion_sigma": pm_conf.repulsion_sigma,
             },
             "backend": {
-                "evaluator": "tensorpot",
+                "evaluator": pm_conf.evaluator,
                 "batch_size": self.config.batch_size,
-                "display_step": 50,
+                "display_step": pm_conf.display_step,
             },
         }
 

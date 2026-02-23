@@ -28,7 +28,8 @@ def test_uat_fit_potential(tmp_path: Path) -> None:
     # Use run_command patch to simulate success without real Pacemaker
     # And verify config file content
     with patch("pyacemaker.core.trainer.run_command") as mock_run, \
-         patch("pyacemaker.core.trainer.dump_yaml") as mock_dump:
+         patch("pyacemaker.core.trainer.dump_yaml") as mock_dump, \
+         patch("shutil.which", return_value="/usr/bin/pace_train"):  # Mock executable check
 
         # Simulate output file creation
         (tmp_path / "output_potential.yace").touch()

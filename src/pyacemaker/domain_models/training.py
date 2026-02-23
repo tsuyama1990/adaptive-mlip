@@ -34,6 +34,11 @@ class PacemakerConfig(BaseModel):
     # Optimizer settings
     optimizer: str = Field("BFGS", description="Optimization algorithm")
 
+    # Advanced Settings (Moved from hardcoded values)
+    delta_spline_bins: int = Field(100, description="Number of bins for delta spline", gt=0)
+    evaluator: str = Field("tensorpot", description="Backend evaluator for potential")
+    display_step: int = Field(50, description="Frequency of logging during training", gt=0)
+
 
 class TrainingConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
