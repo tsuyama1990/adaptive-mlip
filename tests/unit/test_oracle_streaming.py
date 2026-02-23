@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
 
@@ -7,12 +8,13 @@ from ase import Atoms
 
 from pyacemaker.core.oracle import DFTManager
 from pyacemaker.domain_models import DFTConfig
+from tests.conftest import create_dummy_pseudopotentials
 
 
 @pytest.fixture
-def mock_dft_config(tmp_path, monkeypatch) -> DFTConfig:
+def mock_dft_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> DFTConfig:
     monkeypatch.chdir(tmp_path)
-    (tmp_path / "H.UPF").touch()
+    create_dummy_pseudopotentials(tmp_path, ["H"])
 
     return DFTConfig(
         code="pw.x",
@@ -63,3 +65,8 @@ def test_dft_manager_streaming_behavior(mock_dft_config: DFTConfig) -> None:
     # Optional: consume one more to be sure
     next(stream)
     assert mock_driver.get_calculator.call_count == 3
+
+    # Verify no buffering or lookahead
+    # If the manager was buffering, it might have called the driver more times
+    # than we consumed. Since we consumed 3 items, call_count should be exactly 3.
+    # The current assertion already covers this, but adding a comment clarifies the intent.

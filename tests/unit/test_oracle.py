@@ -1,3 +1,5 @@
+from collections.abc import Iterator
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
@@ -6,14 +8,14 @@ from ase import Atoms
 from pyacemaker.core.exceptions import OracleError
 from pyacemaker.core.oracle import DFTManager
 from pyacemaker.domain_models import DFTConfig
-from tests.conftest import MockCalculator
+from tests.conftest import MockCalculator, create_dummy_pseudopotentials
 from tests.constants import TEST_ENERGY_GENERIC
 
 
 @pytest.fixture
-def mock_dft_config(tmp_path, monkeypatch) -> DFTConfig:
+def mock_dft_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> DFTConfig:
     monkeypatch.chdir(tmp_path)
-    (tmp_path / "H.UPF").touch()
+    create_dummy_pseudopotentials(tmp_path, ["H"])
 
     return DFTConfig(
         code="pw.x",
@@ -169,24 +171,58 @@ def test_dft_manager_invalid_input(mock_dft_config: DFTConfig) -> None:
     manager = DFTManager(mock_dft_config)
     atoms_list = [Atoms("H")]
 
+    # Check that it raises TypeError immediately upon calling next()
+    # because generator execution is deferred.
+    # We want to ensure it fails.
+    gen = manager.compute(atoms_list) # type: ignore[arg-type]
+
     with pytest.raises(TypeError, match="must be an Iterator"):
-        # Validation happens immediately when generator is created
-        # We need to call next() to trigger the code execution up to the first yield?
-        # No, compute is a generator function. The code *before* the first yield runs only when
-        # next() is called? Or does it?
-        # Actually, in Python generator functions, execution starts only when next() is called.
-        # So we MUST call next() or iterate to trigger validation.
-        # But wait, type checking `isinstance(structures, Iterator)` is at the top of the function.
-        # Yes, generator function body execution is deferred.
-        next(manager.compute(atoms_list))  # type: ignore[arg-type]
+        next(gen)
 
 def test_dft_manager_empty_iterator(mock_dft_config: DFTConfig) -> None:
     """Test compute handles empty iterator correctly with warning."""
     manager = DFTManager(mock_dft_config)
-    empty_iter: iter = iter([])  # type: ignore
+    empty_iter: Iterator[Atoms] = iter([])
 
+    # Explicit loop without list() materialization for safety
+    # Use deque(..., maxlen=0) to consume iterator efficiently
+    from collections import deque
     with pytest.warns(UserWarning, match="Oracle received empty iterator"):
-        # Explicit loop without list() materialization for safety
-        results = list(manager.compute(empty_iter))
+        deque(manager.compute(empty_iter), maxlen=0)
 
-    assert len(results) == 0
+def test_dft_manager_embedding(mock_dft_config: DFTConfig, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test that embedding is applied when configured."""
+    from pyacemaker.core.oracle import DFTManager
+
+    # Configure embedding buffer
+    mock_dft_config.embedding_buffer = 5.0
+
+    # Mock embed_cluster
+    mock_embed = MagicMock()
+    # Return a dummy atoms object
+    embedded_atoms = Atoms("H", cell=[20, 20, 20], pbc=True)
+    mock_embed.return_value = embedded_atoms
+
+    monkeypatch.setattr("pyacemaker.core.oracle.embed_cluster", mock_embed)
+
+    # Mock Driver
+    mock_driver = MagicMock()
+    mock_driver.get_calculator.return_value = MockCalculator(fail_count=0)
+
+    manager = DFTManager(mock_dft_config, driver=mock_driver)
+
+    atoms = Atoms("H", positions=[[0, 0, 0]])
+    # Must be iterator
+    gen = manager.compute(iter([atoms]))
+    result = next(gen)
+
+    # Check if embed_cluster was called
+    mock_embed.assert_called_once()
+    args, kwargs = mock_embed.call_args
+    assert args[0] == atoms
+    assert kwargs['buffer'] == 5.0
+
+    # Check if result is the embedded one
+    # DFTManager.compute yields the result of _compute_single(embedded_atoms)
+    # _compute_single returns the atom object passed to it (which is embedded_atoms)
+    assert result == embedded_atoms

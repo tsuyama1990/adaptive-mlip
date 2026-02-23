@@ -2,12 +2,13 @@ import contextlib
 from collections.abc import Callable, Iterator
 
 from ase import Atoms
-from ase.calculators.calculator import CalculatorSetupError, PropertyNotImplementedError
+from ase.calculators.calculator import PropertyNotImplementedError
 
 from pyacemaker.core.base import BaseOracle
 from pyacemaker.core.exceptions import OracleError
 from pyacemaker.domain_models import DFTConfig
 from pyacemaker.interfaces.qe_driver import QEDriver
+from pyacemaker.utils.embedding import embed_cluster
 
 
 class DFTManager(BaseOracle):
@@ -31,6 +32,14 @@ class DFTManager(BaseOracle):
         self.config = config
         self.driver = driver or QEDriver()
 
+        # Cache strategies to avoid recreation on every compute call
+        self.strategies: list[Callable[[DFTConfig], None] | None] = [
+            None,
+            self._strategy_reduce_beta,
+            self._strategy_increase_smearing,
+            self._strategy_use_cg
+        ]
+
     def compute(self, structures: Iterator[Atoms], batch_size: int = 10) -> Iterator[Atoms]:
         """
         Computes DFT properties for stream of structures.
@@ -52,6 +61,10 @@ class DFTManager(BaseOracle):
         # But iter(list) returns 'list_iterator' which inherits from Iterator.
         # However, a list is Iterable but NOT Iterator.
         # Let's ensure we import Iterator from collections.abc correctly.
+        if isinstance(structures, (list, tuple)):
+            msg = "Input 'structures' must be an Iterator, not a list/tuple. Use iter() to avoid memory issues."
+            raise TypeError(msg)
+
         if not isinstance(structures, Iterator):
             msg = f"Input 'structures' must be an Iterator (got {type(structures)}). Use iter() to create one."
             raise TypeError(msg)
@@ -59,34 +72,49 @@ class DFTManager(BaseOracle):
         # Strict streaming: Process one by one.
         # We do NOT use batched() here to avoid even small batch materialization in memory
         # as per strict audit requirements.
-        iterator_empty = True
 
+        # We process items as they come. We track if we processed any to warn if empty.
+        # This avoids preemptively consuming the iterator with next(), which can be risky for some streams.
+
+        count = 0
         for atoms in structures:
-            iterator_empty = False
-            yield self._compute_single(atoms)
+            count += 1
+            yield self._process_structure(atoms)
 
-        if iterator_empty:
-             # Audit requirement: "Add explicit handling for empty iterators with appropriate error messages."
-             # Returning empty iterator is valid, but logging helps debug.
+        if count == 0:
              import warnings
              warnings.warn("Oracle received empty iterator. No calculations performed.", UserWarning, stacklevel=2)
+
+    def _process_structure(self, atoms: Atoms) -> Atoms:
+        """
+        Applies embedding and computes properties for a single structure.
+
+        Args:
+            atoms: The input atomic structure.
+
+        Returns:
+            Atoms: The structure with computed properties (energy, forces, stress).
+                   If embedding is configured, properties are computed for the embedded cluster.
+        """
+        # Apply Periodic Embedding if configured
+        if self.config.embedding_buffer:
+            structure_to_compute = embed_cluster(atoms, buffer=self.config.embedding_buffer)
+        else:
+            structure_to_compute = atoms
+
+        return self._compute_single(structure_to_compute)
 
     def _get_strategies(self) -> list[Callable[[DFTConfig], None] | None]:
         """
         Returns a list of self-healing strategies.
-        """
-        # We can extract these to methods or classes if they get complex.
-        # For now, we keep them simple but avoid unnecessary re-creation if possible.
-        # But they depend on instance config.
-        # To avoid re-creation, we could use functools.partial or make them instance methods.
 
-        # Method-based strategies to avoid closure recreation overhead
-        return [
-            None,
-            self._strategy_reduce_beta,
-            self._strategy_increase_smearing,
-            self._strategy_use_cg
-        ]
+        These strategies are applied sequentially if the initial calculation fails.
+        Each strategy modifies the configuration in place to attempt recovery (e.g., reducing mixing beta).
+
+        Returns:
+            List of callable strategies (or None for the initial attempt).
+        """
+        return self.strategies
 
     def _strategy_reduce_beta(self, c: DFTConfig) -> None:
         c.mixing_beta *= self.config.mixing_beta_factor
@@ -120,7 +148,9 @@ class DFTManager(BaseOracle):
 
             try:
                 self._run_calculator(atoms, current_config)
-            except (RuntimeError, CalculatorSetupError) as e:
+            except Exception as e:
+                # Catch all exceptions (RuntimeError, CalculatorSetupError, JobFailedException etc)
+                # to ensure self-healing strategies are attempted.
                 last_error = e
                 atoms.calc = None  # Clean up failed calculator
                 continue

@@ -1,25 +1,10 @@
-from pathlib import Path
-from typing import Any
-
-from ase import Atoms
-
 from pyacemaker.core.base import BaseEngine, BaseGenerator, BaseOracle, BaseTrainer
+from pyacemaker.core.engine import LammpsEngine
 from pyacemaker.core.exceptions import ConfigError
 from pyacemaker.core.generator import StructureGenerator
 from pyacemaker.core.oracle import DFTManager
+from pyacemaker.core.trainer import PacemakerTrainer
 from pyacemaker.domain_models import PyAceConfig
-
-
-class Cycle01Trainer(BaseTrainer):
-    def train(self, training_data_path: str | Path) -> Any:
-        """Placeholder trainer for Cycle 01."""
-        return None
-
-
-class Cycle01Engine(BaseEngine):
-    def run(self, structure: Atoms | None, potential: Any) -> Any:
-        """Placeholder engine for Cycle 01."""
-        return None
 
 
 class ModuleFactory:
@@ -32,11 +17,24 @@ class ModuleFactory:
         config: PyAceConfig,
     ) -> tuple[BaseGenerator, BaseOracle, BaseTrainer, BaseEngine]:
         """
-        Creates instances of core modules.
+        Creates instances of core modules based on the provided configuration.
+
+        This method acts as a dependency injection root, instantiating concrete implementations
+        of the core abstract base classes (Generator, Oracle, Trainer, Engine).
+
+        Args:
+            config: A validated PyAceConfig object containing all necessary settings.
+
+        Returns:
+            A tuple containing initialized instances of:
+                - BaseGenerator (e.g., StructureGenerator)
+                - BaseOracle (e.g., DFTManager)
+                - BaseTrainer (e.g., PacemakerTrainer)
+                - BaseEngine (e.g., LammpsEngine)
 
         Raises:
-            ConfigError: If configuration is invalid.
-            RuntimeError: If module creation fails.
+            ConfigError: If configuration is invalid or missing required fields.
+            RuntimeError: If any module fails to initialize (e.g., missing dependencies).
         """
         # Validate configuration before module creation
         if not config.project_name:
@@ -44,18 +42,25 @@ class ModuleFactory:
             raise ConfigError(msg)
 
         try:
-            # For Cycle 02, we use DFTManager for Oracle if configured
+            # Oracle
             oracle = DFTManager(config.dft)
 
-            # For Cycle 03, we use StructureGenerator
+            # Generator
             generator = StructureGenerator(config.structure)
 
-            return (
-                generator,
-                oracle,
-                Cycle01Trainer(),
-                Cycle01Engine(),
-            )
+            # Trainer
+            trainer = PacemakerTrainer(config.training)
+
+            # Engine
+            engine = LammpsEngine(config.md)
+
         except Exception as e:
             msg = f"Failed to create modules: {e}"
             raise RuntimeError(msg) from e
+
+        return (
+            generator,
+            oracle,
+            trainer,
+            engine,
+        )

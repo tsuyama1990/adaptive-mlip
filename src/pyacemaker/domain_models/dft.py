@@ -11,6 +11,11 @@ class DFTConfig(BaseModel):
     kpoints_density: PositiveFloat = Field(..., description="K-points density in 1/Angstrom")
     encut: PositiveFloat = Field(..., description="Energy cutoff in eV")
 
+    # Periodic Embedding
+    embedding_buffer: float | None = Field(
+        None, gt=0.0, description="Vacuum buffer for periodic embedding (Angstrom)"
+    )
+
     # Self-healing and convergence parameters
     mixing_beta: float = Field(0.7, gt=0.0, le=1.0, description="Initial mixing parameter for SCF")
     smearing_type: str = Field("mv", description="Type of smearing (e.g., 'mv', 'gaussian')")
@@ -43,10 +48,20 @@ class DFTConfig(BaseModel):
             try:
                 p = Path(path_str)
                 # resolve(strict=True) will raise FileNotFoundError if file doesn't exist.
-                # It also resolves symlinks.
+                # It also resolves symlinks to their target.
                 resolved_path = p.resolve(strict=True)
 
+                # Explicitly disallow symlinks for security
+                if p.is_symlink():
+                     msg = f"Symlinks are not allowed for pseudopotentials: {path_str}"
+                     raise ValueError(msg)  # noqa: TRY301
+
                 # Check path traversal
+                # Ensure we are comparing absolute paths
+                if not resolved_path.is_absolute():
+                    # Should be absolute after resolve(), but defensive check
+                    resolved_path = resolved_path.absolute()
+
                 if not resolved_path.is_relative_to(cwd):
                     msg = f"Path traversal detected: {path_str} resolves to {resolved_path}, which is outside {cwd}"
                     raise ValueError(msg)  # noqa: TRY301

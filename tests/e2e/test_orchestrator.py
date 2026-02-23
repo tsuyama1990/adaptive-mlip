@@ -31,6 +31,9 @@ class FakeGenerator(BaseGenerator):
     def __init__(self, elements: list[str] | None = None) -> None:
         self.elements = elements or ["H"]
 
+    def update_config(self, config: Any) -> None:
+        pass
+
     def generate(self, n_candidates: int) -> Iterator[Atoms]:
         # Generate at least 1, but up to n_candidates
         # Generator contract says "Generates candidate structures"

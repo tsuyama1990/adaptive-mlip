@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 from pydantic import ValidationError
 
@@ -11,6 +13,7 @@ from pyacemaker.domain_models import (
     WorkflowConfig,
 )
 from pyacemaker.domain_models.structure import ExplorationPolicy
+from tests.conftest import create_dummy_pseudopotentials
 
 
 def test_structure_config_valid() -> None:
@@ -47,9 +50,9 @@ def test_structure_config_policy() -> None:
     assert config.rattle_stdev == 0.2
 
 
-def test_dft_config_valid(tmp_path, monkeypatch) -> None:
+def test_dft_config_valid(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
-    (tmp_path / "Fe.UPF").touch()
+    create_dummy_pseudopotentials(tmp_path, ["Fe"])
 
     config = DFTConfig(
         code="quantum_espresso",
@@ -98,9 +101,9 @@ def test_logging_config_valid() -> None:
     assert config.log_file == "pyacemaker.log"
 
 
-def test_pyace_config_valid(tmp_path, monkeypatch) -> None:
+def test_pyace_config_valid(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
-    (tmp_path / "Al.UPF").touch()
+    create_dummy_pseudopotentials(tmp_path, ["Al"])
 
     structure = StructureConfig(elements=["Al"], supercell_size=[1, 1, 1])
     dft = DFTConfig(

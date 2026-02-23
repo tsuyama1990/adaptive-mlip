@@ -6,9 +6,10 @@ from pydantic import ValidationError
 
 from pyacemaker.domain_models import PyAceConfig
 from pyacemaker.utils.io import load_config, load_yaml
+from tests.conftest import create_dummy_pseudopotentials
 
 
-def test_load_yaml_valid(tmp_path: Path, monkeypatch) -> None:
+def test_load_yaml_valid(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
     data = {"key": "value"}
     p = tmp_path / "test.yaml"
@@ -19,13 +20,13 @@ def test_load_yaml_valid(tmp_path: Path, monkeypatch) -> None:
     assert loaded == data
 
 
-def test_load_yaml_file_not_found(tmp_path: Path, monkeypatch) -> None:
+def test_load_yaml_file_not_found(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
     with pytest.raises(FileNotFoundError):
         load_yaml(tmp_path / "non_existent_file.yaml")
 
 
-def test_load_yaml_invalid_yaml(tmp_path: Path, monkeypatch) -> None:
+def test_load_yaml_invalid_yaml(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
     p = tmp_path / "invalid.yaml"
     with p.open("w") as f:
@@ -35,7 +36,7 @@ def test_load_yaml_invalid_yaml(tmp_path: Path, monkeypatch) -> None:
         load_yaml(p)
 
 
-def test_load_yaml_empty(tmp_path: Path, monkeypatch) -> None:
+def test_load_yaml_empty(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
     p = tmp_path / "empty.yaml"
     p.touch()
@@ -44,7 +45,7 @@ def test_load_yaml_empty(tmp_path: Path, monkeypatch) -> None:
         load_yaml(p)
 
 
-def test_load_yaml_not_dict(tmp_path: Path, monkeypatch) -> None:
+def test_load_yaml_not_dict(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
     p = tmp_path / "list.yaml"
     with p.open("w") as f:
@@ -54,7 +55,7 @@ def test_load_yaml_not_dict(tmp_path: Path, monkeypatch) -> None:
         load_yaml(p)
 
 
-def test_load_yaml_directory(tmp_path: Path, monkeypatch) -> None:
+def test_load_yaml_directory(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
     p = tmp_path / "subdir"
     p.mkdir()
@@ -62,11 +63,10 @@ def test_load_yaml_directory(tmp_path: Path, monkeypatch) -> None:
         load_yaml(p)
 
 
-def test_load_config_valid(tmp_path: Path, monkeypatch) -> None:
+def test_load_config_valid(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
 
-    # Create dummy pseudopotential file
-    (tmp_path / "Fe.UPF").touch()
+    create_dummy_pseudopotentials(tmp_path, ["Fe"])
 
     config_data = {
         "project_name": "Test",
@@ -91,7 +91,7 @@ def test_load_config_valid(tmp_path: Path, monkeypatch) -> None:
     assert config.project_name == "Test"
 
 
-def test_load_config_invalid(tmp_path: Path, monkeypatch) -> None:
+def test_load_config_invalid(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
     config_data = {
         "project_name": "Test",
@@ -105,7 +105,7 @@ def test_load_config_invalid(tmp_path: Path, monkeypatch) -> None:
         load_config(p)
 
 
-def test_path_traversal_check(tmp_path: Path, monkeypatch) -> None:
+def test_path_traversal_check(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     # Create a file outside the "current working directory"
     outside_dir = tmp_path / "outside"
     outside_dir.mkdir()

@@ -18,8 +18,17 @@ from pyacemaker.domain_models.structure import ExplorationPolicy
 from tests.constants import TEST_ENERGY_GENERIC
 
 
+def create_dummy_pseudopotentials(path: Any, elements: list[str]) -> None:
+    """Helper to create dummy pseudopotential files."""
+    for el in elements:
+        (path / f"{el}.UPF").touch()
+
+
 @pytest.fixture
-def mock_dft_config() -> DFTConfig:
+def mock_dft_config(tmp_path: Any, monkeypatch: Any) -> DFTConfig:
+    monkeypatch.chdir(tmp_path)
+    create_dummy_pseudopotentials(tmp_path, ["H", "O", "Fe"])
+
     return DFTConfig(
         code="pw.x",
         functional="PBE",
@@ -32,6 +41,35 @@ def mock_dft_config() -> DFTConfig:
         pseudopotentials={"H": "H.UPF", "O": "O.UPF", "Fe": "Fe.UPF"},
     )
 
+@pytest.fixture
+def mock_structure_config() -> StructureConfig:
+    return StructureConfig(
+        elements=["Fe"],
+        supercell_size=[2, 2, 2],
+        policy_name=ExplorationPolicy.COLD_START,
+    )
+
+@pytest.fixture
+def mock_training_config() -> TrainingConfig:
+    return TrainingConfig(
+        potential_type="ace",
+        cutoff_radius=5.0,
+        max_basis_size=500,
+        delta_learning=True,
+        active_set_optimization=True
+    )
+
+@pytest.fixture
+def mock_md_config() -> MDConfig:
+    return MDConfig(
+        temperature=300.0,
+        pressure=1.0,
+        timestep=0.001,
+        n_steps=1000,
+        hybrid_potential=True,
+        hybrid_params={"lj/cut": "..."}
+    )
+
 
 class MockCalculator(Calculator):
     """
@@ -39,12 +77,13 @@ class MockCalculator(Calculator):
     Can simulate failures and setup errors.
     """
 
-    def __init__(self, fail_count: int = 0, setup_error: bool = False) -> None:
+    def __init__(self, fail_count: int = 0, setup_error: bool = False, test_energy: float | None = None) -> None:
         super().__init__()  # type: ignore[no-untyped-call]
         self.implemented_properties = ["energy", "forces", "stress"]
         self.fail_count = fail_count
         self.setup_error = setup_error
         self.attempts = 0
+        self.test_energy = test_energy if test_energy is not None else TEST_ENERGY_GENERIC
 
     def calculate(
         self,
@@ -64,7 +103,7 @@ class MockCalculator(Calculator):
             raise RuntimeError(msg)
 
         self.results = {
-            "energy": TEST_ENERGY_GENERIC,
+            "energy": self.test_energy,
             "forces": np.array([[0.0, 0.0, 0.0]] * (len(atoms) if atoms else 1)),
             "stress": np.array([0.0] * 6),
         }
