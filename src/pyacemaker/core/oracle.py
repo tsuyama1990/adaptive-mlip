@@ -106,12 +106,12 @@ class DFTManager(BaseOracle):
 
                 # Trigger calculation
                 # These calls trigger the actual I/O and execution
-                atoms.get_potential_energy()
-                atoms.get_forces()
+                atoms.get_potential_energy()  # type: ignore[no-untyped-call]
+                atoms.get_forces()  # type: ignore[no-untyped-call]
 
                 # Try to get stress, ignore if not implemented
                 with contextlib.suppress(PropertyNotImplementedError, RuntimeError):
-                    atoms.get_stress()
+                    atoms.get_stress()  # type: ignore[no-untyped-call]
 
             except (RuntimeError, CalculatorSetupError) as e:
                 last_error = e

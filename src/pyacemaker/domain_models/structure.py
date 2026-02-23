@@ -10,6 +10,13 @@ class StructureConfig(BaseModel):
         ..., min_length=3, max_length=3, description="Supercell size [nx, ny, nz]"
     )
 
+    # Adaptive Exploration Policy Parameters (Spec Section 3.1)
+    adaptive_ratio: float = Field(
+        0.0, ge=0.0, le=1.0, description="MD/MC Ratio (0.0 = Pure MD, 1.0 = Pure MC)"
+    )
+    defect_density: float = Field(0.0, ge=0.0, description="Concentration of defects to introduce")
+    strain_range: float = Field(0.0, ge=0.0, description="Range of strain for elastic sampling")
+
     @field_validator("elements")
     @classmethod
     def validate_elements(cls, v: list[str]) -> list[str]:

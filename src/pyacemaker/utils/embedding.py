@@ -32,7 +32,7 @@ def embed_cluster(cluster: Atoms, buffer: float, copy: bool = True) -> Atoms:
         raise ValueError(msg)
 
     # Get bounding box (no copy)
-    positions: NDArray[np.float64] = cluster.get_positions()
+    positions: NDArray[np.float64] = cluster.get_positions()  # type: ignore[no-untyped-call]
 
     # Validation: Ensure positions is valid (redundant if ASE is valid, but good for type safety)
     if positions.ndim != 2 or positions.shape[1] != 3:

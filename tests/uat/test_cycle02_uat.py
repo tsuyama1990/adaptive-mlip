@@ -1,4 +1,3 @@
-from typing import ClassVar
 from unittest.mock import patch
 
 import numpy as np
@@ -12,10 +11,10 @@ from pyacemaker.domain_models import DFTConfig
 
 class MockCalculator(Calculator):
     """Mock Calculator for UAT."""
-    implemented_properties: ClassVar[list[str]] = ["energy", "forces", "stress"]
 
     def __init__(self, fail_count: int = 0) -> None:
-        super().__init__()
+        super().__init__()  # type: ignore[no-untyped-call]
+        self.implemented_properties = ["energy", "forces", "stress"]
         self.fail_count = fail_count
         self.attempts = 0
 
@@ -70,8 +69,8 @@ def test_uat_02_01_single_point_calculation(uat_dft_config: DFTConfig) -> None:
 
         # 3. Expectation
         assert len(results) == 1
-        assert results[0].get_potential_energy() == -14.5
-        assert results[0].get_forces().shape == (3, 3)
+        assert results[0].get_potential_energy() == -14.5  # type: ignore[no-untyped-call]
+        assert results[0].get_forces().shape == (3, 3)  # type: ignore[no-untyped-call]
 
 
 def test_uat_02_02_self_healing(uat_dft_config: DFTConfig, caplog: pytest.LogCaptureFixture) -> None:
@@ -96,7 +95,7 @@ def test_uat_02_02_self_healing(uat_dft_config: DFTConfig, caplog: pytest.LogCap
 
         # 3. Expectation
         assert len(results) == 1
-        assert results[0].get_potential_energy() == -14.5
+        assert results[0].get_potential_energy() == -14.5  # type: ignore[no-untyped-call]
 
         # Verify that get_calculator was called twice (original + retry)
         assert mock_driver_instance.get_calculator.call_count == 2

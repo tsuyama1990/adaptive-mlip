@@ -1,4 +1,3 @@
-from typing import ClassVar
 from unittest.mock import MagicMock
 
 import numpy as np
@@ -28,10 +27,10 @@ def mock_dft_config() -> DFTConfig:
 
 class MockCalculator(Calculator):
     """Mock ASE calculator that can simulate failure."""
-    implemented_properties: ClassVar[list[str]] = ["energy", "forces", "stress"]
 
     def __init__(self, fail_count: int = 0, setup_error: bool = False) -> None:
-        super().__init__()
+        super().__init__()  # type: ignore[no-untyped-call]
+        self.implemented_properties = ["energy", "forces", "stress"]
         self.fail_count = fail_count
         self.setup_error = setup_error
         self.attempts = 0
@@ -75,7 +74,7 @@ def test_dft_manager_compute_success(mock_dft_config: DFTConfig) -> None:
     generator = manager.compute(iter([atoms]))
     result = next(generator)
 
-    assert result.get_potential_energy() == -13.6
+    assert result.get_potential_energy() == -13.6  # type: ignore[no-untyped-call]
 
     # Verify get_calculator was called with correct config
     mock_driver.get_calculator.assert_called_with(atoms, mock_dft_config)
@@ -101,7 +100,7 @@ def test_dft_manager_self_healing(mock_dft_config: DFTConfig) -> None:
     results = list(manager.compute(iter([atoms])))
 
     assert len(results) == 1
-    assert results[0].get_potential_energy() == -13.6
+    assert results[0].get_potential_energy() == -13.6  # type: ignore[no-untyped-call]
 
     # Verify calls to get_calculator
     assert mock_driver.get_calculator.call_count == 2

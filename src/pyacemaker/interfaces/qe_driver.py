@@ -52,7 +52,7 @@ class QEDriver:
         }
 
         # Create calculator
-        return Espresso(
+        return Espresso(  # type: ignore[no-untyped-call]
             input_data=input_data,
             pseudopotentials=config.pseudopotentials,
             kpts=kpts,
@@ -70,10 +70,10 @@ class QEDriver:
         Returns:
             Tuple of (k_x, k_y, k_z).
         """
-        cell = atoms.get_cell()
+        cell = atoms.get_cell()  # type: ignore[no-untyped-call]
         # lengths() call is cheap (returns cached lengths if cell hasn't changed, or simple norm)
         lengths = cell.lengths()
-        pbc = atoms.get_pbc()
+        pbc = atoms.get_pbc()  # type: ignore[no-untyped-call]
 
         # Optimize loop: direct computation
         kpts_list: list[int] = []
