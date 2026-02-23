@@ -2,12 +2,41 @@
 platform linux -- Python 3.12.12, pytest-9.0.2, pluggy-1.6.0
 rootdir: /app
 configfile: pyproject.toml
+testpaths: tests
 plugins: cov-7.0.0
-collected 14 items
+collected 162 items
 
-tests/unit/test_loop.py ...                                              [ 21%]
-tests/e2e/test_orchestrator_loop.py ...                                  [ 42%]
-tests/uat/test_cycle06_uat.py ..                                         [ 57%]
-tests/e2e/test_orchestrator.py ......                                    [100%]
+tests/e2e/test_engine_integration.py ..                                  [  1%]
+tests/e2e/test_orchestrator.py .......                                   [  5%]
+tests/e2e/test_orchestrator_loop.py ...                                  [  7%]
+tests/integration/test_pacemaker_integration.py ..                       [  8%]
+tests/uat/test_cycle01_uat.py ...                                        [ 10%]
+tests/uat/test_cycle02_uat.py ..                                         [ 11%]
+tests/uat/test_cycle03_uat.py ..                                         [ 12%]
+tests/uat/test_cycle04_uat.py ...                                        [ 14%]
+tests/uat/test_cycle06_uat.py ..                                         [ 16%]
+tests/unit/test_active_set.py .....                                      [ 19%]
+tests/unit/test_delta.py ....                                            [ 21%]
+tests/unit/test_domain_models.py ............                            [ 29%]
+tests/unit/test_domain_models_dft.py .............                       [ 37%]
+tests/unit/test_domain_models_md.py ........                             [ 41%]
+tests/unit/test_domain_models_training.py .......                        [ 46%]
+tests/unit/test_embedding.py .......                                     [ 50%]
+tests/unit/test_engine.py .......                                        [ 54%]
+tests/unit/test_factory.py ..                                            [ 56%]
+tests/unit/test_generator.py ......                                      [ 59%]
+tests/unit/test_io.py ..........                                         [ 66%]
+tests/unit/test_io_manager.py ..                                         [ 67%]
+tests/unit/test_lammps_driver.py .........                               [ 72%]
+tests/unit/test_lammps_generator.py ....                                 [ 75%]
+tests/unit/test_loop.py ...                                              [ 77%]
+tests/unit/test_main.py ...                                              [ 79%]
+tests/unit/test_oracle.py ........                                       [ 83%]
+tests/unit/test_oracle_streaming.py .                                    [ 84%]
+tests/unit/test_perturbations.py ...                                     [ 86%]
+tests/unit/test_qe_driver.py ......                                      [ 90%]
+tests/unit/test_streaming_io.py ...                                      [ 91%]
+tests/unit/test_trainer_pacemaker.py ......                              [ 95%]
+tests/unit/test_validator.py .......                                     [100%]
 
-============================== 14 passed in 0.18s ==============================
+============================= 162 passed in 0.90s ==============================

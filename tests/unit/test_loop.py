@@ -13,6 +13,7 @@ def test_loop_state_initialization() -> None:
 def test_loop_state_save_load(tmp_path: Path) -> None:
     state_file = tmp_path / "state.json"
     pot_path = tmp_path / "pot.yace"
+    pot_path.touch()
     state = LoopState(iteration=5, status=LoopStatus.HALTED, current_potential=pot_path)
 
     state.save(state_file)

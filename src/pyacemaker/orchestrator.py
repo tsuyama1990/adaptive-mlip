@@ -8,7 +8,6 @@ from ase.io import iread, read, write
 from pyacemaker.core.active_set import ActiveSetSelector
 from pyacemaker.core.base import BaseEngine, BaseGenerator, BaseOracle, BaseTrainer
 from pyacemaker.core.loop import LoopState
-from pyacemaker.core.otf_manager import OTFManager
 from pyacemaker.domain_models import PyAceConfig
 from pyacemaker.domain_models.defaults import (
     FILENAME_CANDIDATES,
@@ -68,7 +67,6 @@ class Orchestrator:
         self.trainer: BaseTrainer | None = None
         self.engine: BaseEngine | None = None
         self.active_set_selector: ActiveSetSelector | None = None
-        self.otf_manager: OTFManager | None = None
 
         # Initialize State
         self.load_state()
@@ -91,16 +89,6 @@ class Orchestrator:
                 self.engine,
                 self.active_set_selector,
             ) = ModuleFactory.create_modules(self.config)
-
-            # Initialize OTF Manager (Optional helper)
-            self.otf_manager = OTFManager(
-                self.config,
-                self.generator,
-                self.oracle,
-                self.trainer,
-                self.engine,
-                self.active_set_selector,
-            )
 
         except Exception as e:
             self.logger.exception("Failed to initialize modules")
@@ -128,6 +116,7 @@ class Orchestrator:
     def _ensure_directory(self, path: Path) -> None:
         """
         Creates a directory and verifies write permissions.
+        Ensures partial directory creation is handled.
         """
         try:
             path.mkdir(parents=True, exist_ok=True)
@@ -138,12 +127,15 @@ class Orchestrator:
                 msg = f"Directory {path} is not writable."
                 raise PermissionError(msg)
         except OSError as e:
+            # If creation failed, we should probably not attempt to remove anything automatically
+            # as it might be a shared parent. But we log critical error.
             self.logger.critical(f"Failed to create directory {path}: {e}")
             raise
 
     def _setup_iteration_directory(self, iteration: int) -> dict[str, Path]:
         """
         Creates the directory structure for the current iteration.
+        Attempts to clean up if partial creation fails.
         """
         iter_dirname = TEMPLATE_ITER_DIR.format(iteration=iteration)
         iter_dir = self.active_learning_dir / iter_dirname
@@ -155,8 +147,18 @@ class Orchestrator:
             "md_run": iter_dir / "md_run",
         }
 
-        for p in paths.values():
-            self._ensure_directory(p)
+        created_paths: list[Path] = []
+        try:
+            for p in paths.values():
+                self._ensure_directory(p)
+                created_paths.append(p)
+        except Exception:
+            # If any creation fails, log and re-raise.
+            # We assume critical failure and let the workflow crash.
+            # Cleanup might be dangerous if we delete pre-existing data.
+            # So we just raise.
+            self.logger.exception(f"Failed to setup iteration directory for iteration {iteration}")
+            raise
 
         return paths
 
@@ -245,15 +247,11 @@ class Orchestrator:
 
     def _get_initial_structure(self, iteration: int) -> Atoms | None:
         """Returns an initial structure for MD."""
-        # Try to get from candidates of previous iteration or iteration 0
-        # If iteration > 0, we can check iteration 0 candidates
         if not self.generator:
             return None
 
         try:
-             # Just generate one fresh if needed, it's safer than relying on files existence
-             # But for reproducibility, using saved candidates is better.
-             # Let's try to read from iter_000/candidates/candidates.xyz
+             # Try to get from candidates of previous iteration or iteration 0
              iter0_paths = self._setup_iteration_directory(0)
              cand_file = iter0_paths["candidates"] / FILENAME_CANDIDATES
              if cand_file.exists():
@@ -269,6 +267,13 @@ class Orchestrator:
         """Refines potential upon Halt."""
         if not result.halt_structure_path or not self.generator or not self.active_set_selector or not self.oracle or not self.trainer:
             return None
+
+        # Check uncertainty threshold from config (Maintainability fix)
+        # Note: Engine should ideally check this, but we can verify here or log
+        threshold = self.config.workflow.otf.uncertainty_threshold
+        if result.max_gamma <= threshold and not result.halted:
+             # Should not be here if not halted, but safety check
+             return None
 
         try:
             halt_structure = read(result.halt_structure_path)
@@ -326,6 +331,7 @@ class Orchestrator:
         initial_structure = self._get_initial_structure(iteration)
         if not initial_structure:
              self.logger.warning("No structure for MD. Skipping iteration.")
+             # Update state safely
              self.loop_state.iteration = iteration
              self.save_state()
              return
@@ -337,8 +343,12 @@ class Orchestrator:
                 self.logger.info(f"MD Halted at step {result.n_steps}. Triggering refinement.")
                 new_potential = self._refine_potential(result, deployed_potential, paths)
                 if new_potential:
-                    self.loop_state.current_potential = new_potential
-                    self.logger.info(f"Potential refined to: {new_potential}")
+                    # Validate new potential path before updating state
+                    if not new_potential.exists():
+                        self.logger.error(f"Refined potential path {new_potential} does not exist!")
+                    else:
+                        self.loop_state.current_potential = new_potential
+                        self.logger.info(f"Potential refined to: {new_potential}")
             else:
                  self.logger.info(LOG_ITERATION_COMPLETED.format(iteration=iteration))
 

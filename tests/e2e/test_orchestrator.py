@@ -36,9 +36,6 @@ class FakeGenerator(BaseGenerator):
         pass
 
     def generate(self, n_candidates: int) -> Iterator[Atoms]:
-        # Generate at least 1, but up to n_candidates
-        # Generator contract says "Generates candidate structures"
-        # If n_candidates is requested, we yield n_candidates
         for _ in range(n_candidates):
             symbol = self.elements[0]
             yield Atoms(f"{symbol}2", positions=[[0, 0, 0], [0, 0, 0.74]])
@@ -65,8 +62,6 @@ class FakeTrainer(BaseTrainer):
         initial_potential: str | Path | None = None
     ) -> Any:
         path = Path(training_data_path)
-        # Check if file exists (it might be empty if generator yielded nothing, but here generator yields)
-        # But allow empty file check for robustness tests
         if not path.exists():
             msg = "Training data file missing"
             raise RuntimeError(msg)
@@ -93,7 +88,6 @@ class FakeEngine(BaseEngine):
 
 @pytest.fixture
 def mock_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> PyAceConfig:
-    # Ensure CWD is tmp_path and create dummy files required for validation
     monkeypatch.chdir(tmp_path)
     (tmp_path / "H.UPF").touch()
 
@@ -132,28 +126,20 @@ def test_integration_workflow_complete(
     mock_config: PyAceConfig, tmp_path: Path, caplog: Any, monkeypatch: Any
 ) -> None:
     """Comprehensive integration test for the full active learning loop."""
-    # Note: CWD is already tmp_path thanks to mock_config fixture using monkeypatch
-
-    # Recreate config copy if needed, but mock_config is already fine
     config = mock_config.model_copy()
 
-    # Mock factory to return our fakes
     def mock_create_modules(cfg: PyAceConfig) -> tuple[Any, Any, Any, Any, Any]:
         return (
             FakeGenerator(elements=cfg.structure.elements),
             FakeOracle(),
             FakeTrainer(output_dir=tmp_path),
             FakeEngine(),
-            MagicMock(),  # ActiveSetSelector
+            MagicMock(),
         )
 
     monkeypatch.setattr(ModuleFactory, "create_modules", mock_create_modules)
 
     orch = Orchestrator(config)
-
-    # We need to ensure FakeTrainer output dir is correct.
-    # The Orchestrator will call train(), which returns 'fake_potential.yace' in tmp_path.
-
     orch.run()
 
     assert orch.loop_state.iteration == 2
@@ -163,7 +149,6 @@ def test_integration_workflow_complete(
     active_learning_dir = Path(config.workflow.active_learning_dir)
     assert active_learning_dir.exists()
 
-    # Check Cold Start (Iter 0)
     iter0_dir = active_learning_dir / "iter_000"
     assert iter0_dir.exists()
     training_file = iter0_dir / "training" / FILENAME_TRAINING
@@ -171,29 +156,23 @@ def test_integration_workflow_complete(
     content = training_file.read_text()
     assert "Lattice" in content or "Properties" in content
 
-    # Check Iteration 1 (MD Run)
     iter1_dir = active_learning_dir / "iter_001"
     assert iter1_dir.exists()
-    # Since MD didn't halt (FakeEngine halted=False), no new training data in iter_001
 
     potentials_dir = Path(config.workflow.potentials_dir)
     assert potentials_dir.exists()
-    # generation_001.yace should exist (copied from fake_potential.yace)
     assert (potentials_dir / "generation_001.yace").exists()
 
-    # Check logs
     assert LOG_COMPUTED_PROPERTIES.format(count=10) in caplog.text
     assert LOG_POTENTIAL_TRAINED in caplog.text
     assert LOG_ITERATION_COMPLETED.format(iteration=1) in caplog.text
 
 
 def test_orchestrator_checkpointing(mock_config: PyAceConfig) -> None:
-    # 1. Save state
     orch1 = Orchestrator(mock_config)
     orch1.loop_state.iteration = 5
     orch1.save_state()
 
-    # 2. Load state
     orch2 = Orchestrator(mock_config)
     assert orch2.loop_state.iteration == 5
 
@@ -204,16 +183,30 @@ def test_orchestrator_corrupted_state_file(mock_config: PyAceConfig, tmp_path: P
 
     orch = Orchestrator(mock_config)
     assert orch.loop_state.iteration == 0
-    # Log message check might vary depending on logger config, but expecting warning
-    # The actual log message constant is LOG_STATE_LOAD_FAIL
 
-    # We check if warning was logged
-    # Since setup_logger might capture to file or stdout, caplog fixture captures it from root logger usually.
-    # But Orchestrator uses a specific logger.
-    # We'll assume caplog works.
 
-    # Check for keywords
-    # assert "Failed to load state" in caplog.text
+def test_orchestrator_directory_creation_error(mock_config: PyAceConfig, monkeypatch: Any) -> None:
+    """Test error handling when directory creation fails."""
+    # Patch pathlib.Path.mkdir to raise PermissionError
+    original_mkdir = Path.mkdir
+    def mock_mkdir(self: Path, mode: int = 0o777, parents: bool = False, exist_ok: bool = False) -> None:
+        if "iter_" in str(self):
+            msg = "Mock permission denied"
+            raise PermissionError(msg)
+        original_mkdir(self, mode, parents, exist_ok)
+
+    monkeypatch.setattr(Path, "mkdir", mock_mkdir)
+
+    # We also need to mock module creation to pass init
+    def mock_create_modules(cfg: PyAceConfig) -> tuple[Any, Any, Any, Any, Any]:
+        return (FakeGenerator(), FakeOracle(), FakeTrainer(Path()), FakeEngine(), MagicMock())
+    monkeypatch.setattr(ModuleFactory, "create_modules", mock_create_modules)
+
+    orch = Orchestrator(mock_config)
+
+    # run() -> _check_initial_potential() -> _setup_iteration_directory(0) -> _ensure_directory -> mkdir
+    with pytest.raises(PermissionError, match="Mock permission denied"):
+        orch.run()
 
 
 def test_orchestrator_error_handling_generator(mock_config: PyAceConfig, monkeypatch: Any) -> None:
@@ -221,7 +214,6 @@ def test_orchestrator_error_handling_generator(mock_config: PyAceConfig, monkeyp
     mock_gen.generate.side_effect = RuntimeError("Generator failed")
 
     def mock_create_modules(cfg: PyAceConfig) -> tuple[Any, Any, Any, Any, Any]:
-        # Return mocks for others to pass initialization
         return mock_gen, MagicMock(), MagicMock(), MagicMock(), MagicMock()
 
     monkeypatch.setattr(ModuleFactory, "create_modules", mock_create_modules)
@@ -234,7 +226,6 @@ def test_orchestrator_error_handling_generator(mock_config: PyAceConfig, monkeyp
 def test_orchestrator_error_handling_oracle_stream(
     mock_config: PyAceConfig, monkeypatch: Any
 ) -> None:
-    # Oracle that fails during iteration
     class FailingOracle(BaseOracle):
         def compute(
             self, structures: Iterator[Atoms], batch_size: int = 10
@@ -248,7 +239,5 @@ def test_orchestrator_error_handling_oracle_stream(
     monkeypatch.setattr(ModuleFactory, "create_modules", mock_create_modules)
 
     orch = Orchestrator(mock_config)
-    # The Orchestrator catches exceptions and re-raises/logs.
-    # run() wraps in try-except and raises.
     with pytest.raises(RuntimeError, match="Oracle computation failed"):
         orch.run()
