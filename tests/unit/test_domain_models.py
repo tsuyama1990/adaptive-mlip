@@ -87,6 +87,14 @@ def test_workflow_config_default() -> None:
     assert config.state_file_path == "state.json"
     assert config.active_learning_dir == "active_learning"
     assert config.potentials_dir == "potentials"
+    assert config.checkpoint_interval == 1
+
+
+def test_workflow_config_invalid_checkpoint() -> None:
+    with pytest.raises(ValidationError):
+        WorkflowConfig(max_iterations=10, checkpoint_interval=0)  # Must be > 0
+    with pytest.raises(ValidationError):
+        WorkflowConfig(max_iterations=10, checkpoint_interval=-1)
 
 
 def test_logging_config_valid() -> None:

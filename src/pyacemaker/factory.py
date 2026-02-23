@@ -44,8 +44,13 @@ class ModuleFactory:
     def create_modules(
         config: PyAceConfig,
     ) -> tuple[BaseGenerator, BaseOracle, BaseTrainer, BaseEngine]:
+        # Validate configuration before module creation
+        if not config.project_name:
+            msg = "Project name is required for module initialization"
+            raise ValueError(msg)
+
         # Future: Instantiate concrete classes based on config.dft.code, config.training.type, etc.
-        _ = config  # Prevent unused argument warning for now
+
         return (
             Cycle01Generator(),
             Cycle01Oracle(),

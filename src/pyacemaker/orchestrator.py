@@ -7,6 +7,8 @@ from pathlib import Path
 from ase.io import iread, write
 
 from pyacemaker.constants import (
+    FILENAME_CANDIDATES,
+    FILENAME_TRAINING,
     LOG_COMPUTED_PROPERTIES,
     LOG_GENERATED_CANDIDATES,
     LOG_INIT_MODULES,
@@ -24,6 +26,8 @@ from pyacemaker.constants import (
     LOG_STATE_SAVED,
     LOG_WORKFLOW_COMPLETED,
     LOG_WORKFLOW_CRASHED,
+    TEMPLATE_ITER_DIR,
+    TEMPLATE_POTENTIAL_FILE,
 )
 from pyacemaker.core.base import BaseEngine, BaseGenerator, BaseOracle, BaseTrainer
 from pyacemaker.domain_models import PyAceConfig
@@ -116,7 +120,8 @@ class Orchestrator:
         Returns:
             Dictionary of paths for the iteration.
         """
-        iter_dir = self.active_learning_dir / f"iter_{iteration:03d}"
+        iter_dirname = TEMPLATE_ITER_DIR.format(iteration=iteration)
+        iter_dir = self.active_learning_dir / iter_dirname
         paths = {
             "root": iter_dir,
             "candidates": iter_dir / "candidates",
@@ -145,22 +150,23 @@ class Orchestrator:
         """
         Step 1: Exploration
         Generates candidate structures and saves them to the candidates directory.
+        Uses streaming write to avoid opening/closing files repeatedly.
         """
         if not self.generator:
             return
 
         n_candidates = self.config.workflow.n_candidates
         batch_size = self.config.workflow.batch_size
-        candidates_file = paths["candidates"] / "candidates.xyz"
+        candidates_file = paths["candidates"] / FILENAME_CANDIDATES
 
         candidate_stream = self.generator.generate(n_candidates=n_candidates)
-        file_mode = "w"
         total = 0
 
-        for batch in batched(candidate_stream, n=batch_size):
-            write(candidates_file, list(batch), format="extxyz", append=(file_mode == "a"))
-            file_mode = "a"
-            total += len(batch)
+        # Open file once and append batches
+        with candidates_file.open("a") as f:
+            for batch in batched(candidate_stream, n=batch_size):
+                write(f, list(batch), format="extxyz")
+                total += len(batch)
 
         self.logger.info(LOG_GENERATED_CANDIDATES.format(count=total))
 
@@ -168,30 +174,30 @@ class Orchestrator:
         """
         Step 2: Labeling (Oracle)
         Reads candidate structures, computes properties, and saves labelled data.
+        Uses streaming read and write.
         """
         if not self.oracle:
             return
 
-        candidates_file = paths["candidates"] / "candidates.xyz"
+        candidates_file = paths["candidates"] / FILENAME_CANDIDATES
         if not candidates_file.exists():
             self.logger.warning("No candidates found to label.")
             return
 
         batch_size = self.config.workflow.batch_size
-        training_file = paths["training"] / "training_data.xyz"
+        training_file = paths["training"] / FILENAME_TRAINING
 
-        # Read from candidates file efficiently
-        candidate_stream = iread(str(candidates_file), index=":")
+        # Read from candidates file efficiently using streaming iterator
+        candidate_stream = iread(str(candidates_file), index=":", format="extxyz")
 
         labelled_stream = self.oracle.compute(candidate_stream, batch_size=batch_size)
-
-        file_mode = "w"
         total = 0
 
-        for batch in batched(labelled_stream, n=batch_size):
-            write(training_file, list(batch), format="extxyz", append=(file_mode == "a"))
-            file_mode = "a"
-            total += len(batch)
+        # Open file once and append batches
+        with training_file.open("a") as f:
+            for batch in batched(labelled_stream, n=batch_size):
+                write(f, list(batch), format="extxyz")
+                total += len(batch)
 
         self.logger.info(LOG_COMPUTED_PROPERTIES.format(count=total))
 
@@ -204,7 +210,7 @@ class Orchestrator:
         if not self.trainer:
             return None
 
-        training_file = paths["training"] / "training_data.xyz"
+        training_file = paths["training"] / FILENAME_TRAINING
         if not training_file.exists():
             self.logger.warning("No training data found, skipping training.")
             return None
@@ -221,7 +227,8 @@ class Orchestrator:
         Deploys the potential and runs MD/Engine.
         """
         if potential_path and potential_path.exists():
-            target_path = self.potentials_dir / f"generation_{self.iteration:03d}.yace"
+            filename = TEMPLATE_POTENTIAL_FILE.format(iteration=self.iteration)
+            target_path = self.potentials_dir / filename
             with contextlib.suppress(shutil.SameFileError):
                 shutil.copy(potential_path, target_path)
             self.logger.info(f"Deployed potential to {target_path}")

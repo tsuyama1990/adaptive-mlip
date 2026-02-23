@@ -26,3 +26,9 @@ ERR_YAML_PARSE = "Error parsing YAML file: {error}"
 ERR_YAML_NOT_DICT = "YAML file must contain a dictionary"
 ERR_PATH_TRAVERSAL = "Path traversal detected: {path} is outside allowed directory {base}"
 ERR_MODULE_INIT = "Module initialization failed: {error}"
+
+# Path Templates & Constants
+TEMPLATE_ITER_DIR = "iter_{iteration:03d}"
+TEMPLATE_POTENTIAL_FILE = "generation_{iteration:03d}.yace"
+FILENAME_CANDIDATES = "candidates.xyz"
+FILENAME_TRAINING = "training_data.xyz"
