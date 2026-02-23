@@ -61,7 +61,7 @@ def test_qe_driver_get_calculator_kpoints(mock_dft_config: DFTConfig) -> None:
         # Spacing is more likely.
 
         # I'll let the implementation decide, but I'll assert it's a tuple of 3 integers.
-        assert isinstance(kpts, tuple) or isinstance(kpts, list)
+        assert isinstance(kpts, tuple | list)
         assert len(kpts) == 3
         assert all(isinstance(k, int) for k in kpts)
         assert all(k > 0 for k in kpts)

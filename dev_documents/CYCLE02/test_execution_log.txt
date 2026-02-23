@@ -4,17 +4,18 @@ rootdir: /app
 configfile: pyproject.toml
 testpaths: tests
 plugins: cov-7.0.0
-collected 53 items
+collected 58 items
 
-tests/e2e/test_orchestrator.py ......                                    [ 11%]
-tests/uat/test_cycle01_uat.py ...                                        [ 16%]
-tests/uat/test_cycle02_uat.py ..                                         [ 20%]
-tests/unit/test_domain_models.py .................                       [ 52%]
-tests/unit/test_domain_models_dft.py .....                               [ 62%]
-tests/unit/test_embedding.py ..                                          [ 66%]
-tests/unit/test_io.py .........                                          [ 83%]
-tests/unit/test_main.py ...                                              [ 88%]
-tests/unit/test_oracle.py ...                                            [ 94%]
+tests/e2e/test_orchestrator.py ......                                    [ 10%]
+tests/uat/test_cycle01_uat.py ...                                        [ 15%]
+tests/uat/test_cycle02_uat.py ..                                         [ 18%]
+tests/unit/test_domain_models.py .................                       [ 48%]
+tests/unit/test_domain_models_dft.py ......                              [ 58%]
+tests/unit/test_embedding.py ...                                         [ 63%]
+tests/unit/test_factory.py ..                                            [ 67%]
+tests/unit/test_io.py .........                                          [ 82%]
+tests/unit/test_main.py ...                                              [ 87%]
+tests/unit/test_oracle.py ....                                           [ 94%]
 tests/unit/test_qe_driver.py ...                                         [100%]
 
 ================================ tests coverage ================================
@@ -25,24 +26,24 @@ Name                                        Stmts   Miss  Cover
 src/pyacemaker/__init__.py                      4      0   100%
 src/pyacemaker/constants.py                    29      0   100%
 src/pyacemaker/core/base.py                    17      0   100%
-src/pyacemaker/core/oracle.py                  34      0   100%
+src/pyacemaker/core/oracle.py                  36      0   100%
 src/pyacemaker/domain_models/__init__.py        8      0   100%
 src/pyacemaker/domain_models/config.py         16      0   100%
-src/pyacemaker/domain_models/dft.py            12      0   100%
+src/pyacemaker/domain_models/dft.py            20      0   100%
 src/pyacemaker/domain_models/logging.py        31     11    65%
 src/pyacemaker/domain_models/md.py              7      0   100%
 src/pyacemaker/domain_models/structure.py      22      2    91%
 src/pyacemaker/domain_models/training.py        6      0   100%
 src/pyacemaker/domain_models/workflow.py       13      0   100%
-src/pyacemaker/factory.py                      25      8    68%
+src/pyacemaker/factory.py                      24      3    88%
 src/pyacemaker/interfaces/__init__.py           0      0   100%
-src/pyacemaker/interfaces/qe_driver.py         29      8    72%
+src/pyacemaker/interfaces/qe_driver.py         21      0   100%
 src/pyacemaker/logger.py                       22      1    95%
 src/pyacemaker/main.py                         30      1    97%
 src/pyacemaker/orchestrator.py                148     19    87%
-src/pyacemaker/utils/embedding.py              19      2    89%
+src/pyacemaker/utils/embedding.py              19      0   100%
 src/pyacemaker/utils/io.py                     32      0   100%
 src/pyacemaker/utils/misc.py                   11      2    82%
 ---------------------------------------------------------------
-TOTAL                                         515     54    90%
-============================== 53 passed in 6.03s ==============================
+TOTAL                                         516     39    92%
+============================== 58 passed in 5.96s ==============================

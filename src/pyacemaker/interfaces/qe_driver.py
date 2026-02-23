@@ -76,28 +76,15 @@ class QEDriver:
         """
         cell = atoms.get_cell()
         lengths = cell.lengths()
+        pbc = atoms.get_pbc()
 
-        # Avoid division by zero if cell is 0 (should not happen for valid periodic systems)
-        if any(L < 1e-3 for L in lengths):
-            # Fallback for non-periodic or vacuum dimensions?
-            # If pbc is False for a direction, k-point should be 1.
-            pbc = atoms.get_pbc()
-            kpts = []
-            for i in range(3):
-                if not pbc[i] or lengths[i] < 1e-3:
-                    kpts.append(1)
-                else:
-                    k = math.ceil(2 * math.pi / (lengths[i] * spacing))
-                    kpts.append(max(1, k))
-            return tuple(kpts) # type: ignore
-
-        # Standard calculation
-        kpts_list = []
+        # Optimize loop
+        kpts_list: list[int] = []
         for i in range(3):
-            if not atoms.pbc[i]:
+            if not pbc[i] or lengths[i] < 1e-3:
                 kpts_list.append(1)
             else:
-                k = math.ceil(2 * math.pi / (lengths[i] * spacing))
-                kpts_list.append(max(1, k))
+                k_val = math.ceil(2 * math.pi / (lengths[i] * spacing))
+                kpts_list.append(max(1, int(k_val)))
 
         return tuple(kpts_list) # type: ignore

@@ -1,5 +1,5 @@
 from typing import ClassVar
-from unittest.mock import patch
+from unittest.mock import MagicMock
 
 import numpy as np
 import pytest
@@ -54,73 +54,93 @@ class MockCalculator(Calculator):
 
 
 def test_dft_manager_compute_success(mock_dft_config: DFTConfig) -> None:
-    """Test successful computation."""
+    """Test successful computation using dependency injection."""
     atoms = Atoms("H", cell=[10, 10, 10], pbc=True)
 
-    # Mock QEDriver to return a working calculator
-    with patch("pyacemaker.core.oracle.QEDriver") as MockDriver:
-        manager = DFTManager(mock_dft_config)
-        mock_driver_instance = MockDriver.return_value
-        mock_driver_instance.get_calculator.return_value = MockCalculator(fail_count=0)
+    # Create Mock Driver
+    mock_driver = MagicMock()
+    mock_driver.get_calculator.return_value = MockCalculator(fail_count=0)
 
-        results = list(manager.compute(iter([atoms])))
+    # Inject mock driver
+    manager = DFTManager(mock_dft_config, driver=mock_driver)
 
-        assert len(results) == 1
-        assert results[0].get_potential_energy() == -13.6
+    results = list(manager.compute(iter([atoms])))
 
-        # Verify get_calculator was called with correct config
-        mock_driver_instance.get_calculator.assert_called_with(atoms, mock_dft_config)
+    assert len(results) == 1
+    assert results[0].get_potential_energy() == -13.6
+
+    # Verify get_calculator was called with correct config
+    mock_driver.get_calculator.assert_called_with(atoms, mock_dft_config)
 
 
 def test_dft_manager_self_healing(mock_dft_config: DFTConfig) -> None:
     """Test self-healing mechanism."""
     atoms = Atoms("H", cell=[10, 10, 10], pbc=True)
 
-    # Mock QEDriver to verify parameter changes
-    with patch("pyacemaker.core.oracle.QEDriver") as MockDriver:
-        manager = DFTManager(mock_dft_config)
-        mock_driver_instance = MockDriver.return_value
+    # Mock Driver
+    mock_driver = MagicMock()
 
-        # The calculator needs to fail first, then succeed.
-        calc_fail = MockCalculator(fail_count=1) # Fails once (attempt 1)
-        calc_success = MockCalculator(fail_count=0) # Succeeds (attempt 2)
+    # The calculator needs to fail first, then succeed.
+    calc_fail = MockCalculator(fail_count=1) # Fails once (attempt 1)
+    calc_success = MockCalculator(fail_count=0) # Succeeds (attempt 2)
 
-        mock_driver_instance.get_calculator.side_effect = [calc_fail, calc_success]
+    mock_driver.get_calculator.side_effect = [calc_fail, calc_success]
 
-        results = list(manager.compute(iter([atoms])))
+    # Inject mock driver
+    manager = DFTManager(mock_dft_config, driver=mock_driver)
 
-        assert len(results) == 1
-        assert results[0].get_potential_energy() == -13.6
+    results = list(manager.compute(iter([atoms])))
 
-        # Verify calls to get_calculator
-        assert mock_driver_instance.get_calculator.call_count == 2
+    assert len(results) == 1
+    assert results[0].get_potential_energy() == -13.6
 
-        # First call: original config
-        call1_args = mock_driver_instance.get_calculator.call_args_list[0]
-        config1 = call1_args[0][1] # second arg is config
-        assert config1.mixing_beta == 0.7
-        assert config1.smearing_width == 0.1
-        assert config1.diagonalization == "david"
+    # Verify calls to get_calculator
+    assert mock_driver.get_calculator.call_count == 2
 
-        # Second call: updated config (reduced mixing_beta)
-        call2_args = mock_driver_instance.get_calculator.call_args_list[1]
-        config2 = call2_args[0][1]
+    # First call: original config
+    call1_args = mock_driver.get_calculator.call_args_list[0]
+    config1 = call1_args[0][1] # second arg is config
+    assert config1.mixing_beta == 0.7
+    assert config1.smearing_width == 0.1
+    assert config1.diagonalization == "david"
 
-        assert config2.mixing_beta < 0.7
+    # Second call: updated config (reduced mixing_beta)
+    call2_args = mock_driver.get_calculator.call_args_list[1]
+    config2 = call2_args[0][1]
+
+    assert config2.mixing_beta < 0.7
 
 
 def test_dft_manager_fatal_error(mock_dft_config: DFTConfig) -> None:
     """Test fatal error after exhausting retries."""
     atoms = Atoms("H", cell=[10, 10, 10], pbc=True)
 
-    with patch("pyacemaker.core.oracle.QEDriver") as MockDriver:
-        manager = DFTManager(mock_dft_config)
-        mock_driver_instance = MockDriver.return_value
-        # Always fail
-        mock_driver_instance.get_calculator.return_value = MockCalculator(fail_count=100)
+    mock_driver = MagicMock()
+    # Always fail
+    mock_driver.get_calculator.return_value = MockCalculator(fail_count=100)
 
-        with pytest.raises(RuntimeError, match="DFT calculation failed"):
-            list(manager.compute(iter([atoms])))
+    manager = DFTManager(mock_dft_config, driver=mock_driver)
 
-        # Verify retries happened (at least > 1)
-        assert mock_driver_instance.get_calculator.call_count > 1
+    with pytest.raises(RuntimeError, match="DFT calculation failed"):
+        list(manager.compute(iter([atoms])))
+
+    # Verify retries happened (at least > 1)
+    assert mock_driver.get_calculator.call_count > 1
+
+
+def test_dft_manager_strategies(mock_dft_config: DFTConfig) -> None:
+    """Test that strategies are correctly defined."""
+    manager = DFTManager(mock_dft_config)
+    strategies = manager._get_strategies()
+
+    assert len(strategies) > 0
+    assert strategies[0] is None # First attempt is vanilla
+
+    # Test strategy logic (e.g. reduced beta)
+    strat_beta = strategies[1]
+    assert strat_beta is not None
+
+    config_copy = mock_dft_config.model_copy()
+    original_beta = config_copy.mixing_beta
+    strat_beta(config_copy)
+    assert config_copy.mixing_beta == original_beta * 0.5

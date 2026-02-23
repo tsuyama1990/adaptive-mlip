@@ -6,16 +6,23 @@ def embed_cluster(cluster: Atoms, buffer: float) -> Atoms:
     """
     Embeds a cluster of atoms into a periodic box with vacuum padding.
 
+    The function calculates the bounding box of the input cluster, adds a specified
+    vacuum buffer to each dimension, and centers the cluster within the new cell.
+    Periodic boundary conditions (PBC) are enabled for all dimensions.
+
     Args:
-        cluster: The atomic cluster to embed.
+        cluster: The atomic cluster to embed. Must contain at least one atom.
         buffer: The amount of vacuum to add to the bounding box dimensions (in Angstroms).
-                This is the total vacuum added to each dimension (or gap between images).
+                This value is added to the extent of the cluster in each dimension.
+                For example, if the cluster spans 5.0 A along x and buffer is 10.0 A,
+                the new cell length along x will be 15.0 A.
 
     Returns:
-        Atoms object with periodic boundary conditions and centered in the new cell.
+        Atoms object with periodic boundary conditions set to True and
+        positions centered in the new cell.
 
     Raises:
-        ValueError: If the cluster is empty.
+        ValueError: If the input cluster is empty (contains no atoms).
     """
     if len(cluster) == 0:
         msg = "Cannot embed empty cluster"

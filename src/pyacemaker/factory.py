@@ -5,6 +5,7 @@ from typing import Any
 from ase import Atoms
 
 from pyacemaker.core.base import BaseEngine, BaseGenerator, BaseOracle, BaseTrainer
+from pyacemaker.core.oracle import DFTManager
 from pyacemaker.domain_models import PyAceConfig
 
 
@@ -15,12 +16,6 @@ class Cycle01Generator(BaseGenerator):
         # Yield nothing or simple dummy atoms if needed, but for now empty
         # Real implementation will use config.structure
         return iter([])
-
-
-class Cycle01Oracle(BaseOracle):
-    def compute(self, structures: Iterator[Atoms], batch_size: int = 10) -> Iterator[Atoms]:
-        """Placeholder oracle for Cycle 01."""
-        yield from structures
 
 
 class Cycle01Trainer(BaseTrainer):
@@ -49,11 +44,13 @@ class ModuleFactory:
             msg = "Project name is required for module initialization"
             raise ValueError(msg)
 
-        # Future: Instantiate concrete classes based on config.dft.code, config.training.type, etc.
+        # For Cycle 02, we use DFTManager for Oracle if configured
+        # config.dft is always present due to Pydantic model
+        oracle = DFTManager(config.dft)
 
         return (
             Cycle01Generator(),
-            Cycle01Oracle(),
+            oracle,
             Cycle01Trainer(),
             Cycle01Engine(),
         )

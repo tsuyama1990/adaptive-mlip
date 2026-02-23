@@ -1,3 +1,4 @@
+from typing import ClassVar
 from unittest.mock import patch
 
 import numpy as np
@@ -8,8 +9,6 @@ from ase.calculators.calculator import Calculator
 from pyacemaker.core.oracle import DFTManager
 from pyacemaker.domain_models import DFTConfig
 
-
-from typing import ClassVar
 
 class MockCalculator(Calculator):
     """Mock Calculator for UAT."""
@@ -106,7 +105,6 @@ def test_uat_02_02_self_healing(uat_dft_config: DFTConfig, caplog: pytest.LogCap
         # First call: original (0.7)
         # Second call: reduced (0.35)
         args, _ = mock_driver_instance.get_calculator.call_args  # Last call
-        # args[0] is atoms, args[1] is config
         final_config = args[1]
         assert final_config.mixing_beta < 0.7
         assert final_config.mixing_beta == 0.35

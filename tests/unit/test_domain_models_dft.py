@@ -1,3 +1,4 @@
+
 import pytest
 from pydantic import ValidationError
 
@@ -85,4 +86,25 @@ def test_dft_config_extra_forbid() -> None:
             encut=500.0,
             pseudopotentials={"Fe": "Fe.UPF"},
             extra_field="invalid",  # type: ignore
+        )
+
+
+def test_dft_config_empty_pseudopotential() -> None:
+    """Test that pseudopotential paths cannot be empty strings."""
+    with pytest.raises(ValidationError):
+        DFTConfig(
+            code="qe",
+            functional="PBE",
+            kpoints_density=0.04,
+            encut=500.0,
+            pseudopotentials={"Fe": ""},
+        )
+
+    with pytest.raises(ValidationError):
+        DFTConfig(
+            code="qe",
+            functional="PBE",
+            kpoints_density=0.04,
+            encut=500.0,
+            pseudopotentials={"Fe": "   "},
         )
