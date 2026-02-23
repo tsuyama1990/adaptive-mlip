@@ -26,18 +26,27 @@ class LoopState(BaseModel):
     def validate_potential_path(cls, v: Path | None) -> Path | None:
         """Ensures that if a potential path is set, it exists and is a file."""
         if v is not None:
-            path = Path(v)
-            if not path.exists():
-                msg = f"Potential path does not exist: {path}"
-                raise ValueError(msg)
+            # Resolve to absolute path to prevent traversal/ambiguity
+            try:
+                path = Path(v).resolve(strict=True)
+            except (FileNotFoundError, RuntimeError) as e:
+                # strict=True raises FileNotFoundError if it doesn't exist
+                msg = f"Potential path does not exist or is invalid: {v}"
+                raise ValueError(msg) from e
+
             if not path.is_file():
                 msg = f"Potential path is not a file: {path}"
                 raise ValueError(msg)
+
+            # Additional check: ensure it is not just a root directory or sensitive path?
+            # Without a chroot/sandbox config, we assume the user has permissions.
+            return path
         return v
 
     def save(self, path: Path) -> None:
         """Saves the state to a JSON file using atomic write."""
         data = self.model_dump(mode="json")
+        path = path.resolve()
 
         # Use a temporary file in the same directory to ensure atomic move
         # (os.replace is atomic on POSIX)

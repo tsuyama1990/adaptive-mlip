@@ -18,3 +18,6 @@ class EngineError(PyAceError):
 
 class ActiveSetError(PyAceError):
     """Active set selection errors."""
+
+class OrchestratorError(PyAceError):
+    """Orchestrator/Workflow related errors."""

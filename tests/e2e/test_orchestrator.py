@@ -7,6 +7,7 @@ import pytest
 from ase import Atoms
 
 from pyacemaker.core.base import BaseEngine, BaseGenerator, BaseOracle, BaseTrainer
+from pyacemaker.core.exceptions import OrchestratorError
 from pyacemaker.domain_models import (
     DFTConfig,
     LoggingConfig,
@@ -205,7 +206,9 @@ def test_orchestrator_directory_creation_error(mock_config: PyAceConfig, monkeyp
     orch = Orchestrator(mock_config)
 
     # run() -> _check_initial_potential() -> _setup_iteration_directory(0) -> _ensure_directory -> mkdir
-    with pytest.raises(PermissionError, match="Mock permission denied"):
+    # The transaction should catch the PermissionError, log, and re-raise as OrchestratorError (wrapping) or propagate?
+    # _setup_iteration_directory raises OrchestratorError from Exception
+    with pytest.raises(OrchestratorError, match="Failed to setup directory"):
         orch.run()
 
 
@@ -219,7 +222,7 @@ def test_orchestrator_error_handling_generator(mock_config: PyAceConfig, monkeyp
     monkeypatch.setattr(ModuleFactory, "create_modules", mock_create_modules)
 
     orch = Orchestrator(mock_config)
-    with pytest.raises(RuntimeError):
+    with pytest.raises(OrchestratorError, match="Exploration failed"):
         orch.run()
 
 
@@ -239,5 +242,5 @@ def test_orchestrator_error_handling_oracle_stream(
     monkeypatch.setattr(ModuleFactory, "create_modules", mock_create_modules)
 
     orch = Orchestrator(mock_config)
-    with pytest.raises(RuntimeError, match="Oracle computation failed"):
+    with pytest.raises(OrchestratorError, match="Labeling failed"):
         orch.run()

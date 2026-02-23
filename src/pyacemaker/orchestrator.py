@@ -7,6 +7,7 @@ from ase.io import iread, read, write
 
 from pyacemaker.core.active_set import ActiveSetSelector
 from pyacemaker.core.base import BaseEngine, BaseGenerator, BaseOracle, BaseTrainer
+from pyacemaker.core.exceptions import OrchestratorError
 from pyacemaker.core.loop import LoopState
 from pyacemaker.domain_models import PyAceConfig
 from pyacemaker.domain_models.defaults import (
@@ -79,7 +80,7 @@ class Orchestrator:
         Initializes the core modules (Generator, Oracle, Trainer, Engine).
 
         Raises:
-            RuntimeError: If module initialization fails.
+            OrchestratorError: If module initialization fails.
         """
         self.logger.info(LOG_INIT_MODULES)
         try:
@@ -94,7 +95,8 @@ class Orchestrator:
 
         except Exception as e:
             self.logger.exception("Failed to initialize modules")
-            raise RuntimeError(LOG_MODULE_INIT_FAIL.format(error=e)) from e
+            msg = LOG_MODULE_INIT_FAIL.format(error=e)
+            raise OrchestratorError(msg) from e
 
         self.logger.info(LOG_MODULES_INIT_SUCCESS)
 
@@ -146,7 +148,7 @@ class Orchestrator:
                 else:
                     # Just verify permission if it exists
                     self._ensure_directory(p)
-        except Exception:
+        except Exception as e:
             self.logger.exception("Failed to create iteration directories")
             # Attempt rollback for newly created directories
             for p in reversed(created_paths):
@@ -155,7 +157,11 @@ class Orchestrator:
                         p.rmdir()
                 except OSError:
                     self.logger.warning(f"Failed to rollback directory creation for {p}")
-            raise
+
+            # Wrap in OrchestratorError for consistency
+            msg = f"Failed to setup directory: {e}"
+            raise OrchestratorError(msg) from e
+
         return created_paths
 
     def _setup_iteration_directory(self, iteration: int) -> dict[str, Path]:
@@ -184,16 +190,20 @@ class Orchestrator:
         batch_size = self.config.workflow.batch_size
         candidates_file = paths["candidates"] / FILENAME_CANDIDATES
 
-        candidate_stream = self.generator.generate(n_candidates=n_candidates)
-        total = 0
+        try:
+            candidate_stream = self.generator.generate(n_candidates=n_candidates)
+            total = 0
 
-        # ase.io.write handles open file objects efficiently for many formats
-        with candidates_file.open("a") as f:
-            for batch in batched(candidate_stream, n=batch_size):
-                write(f, batch, format="extxyz")
-                total += len(batch)
+            # ase.io.write handles open file objects efficiently for many formats
+            with candidates_file.open("a") as f:
+                for batch in batched(candidate_stream, n=batch_size):
+                    write(f, batch, format="extxyz")
+                    total += len(batch)
 
-        self.logger.info(LOG_GENERATED_CANDIDATES.format(count=total))
+            self.logger.info(LOG_GENERATED_CANDIDATES.format(count=total))
+        except Exception as e:
+            msg = f"Exploration failed: {e}"
+            raise OrchestratorError(msg) from e
 
     def _label(self, paths: dict[str, Path]) -> None:
         """Step 2: Labeling (Oracle)"""
@@ -208,17 +218,21 @@ class Orchestrator:
         batch_size = self.config.workflow.batch_size
         training_file = paths["training"] / FILENAME_TRAINING
 
-        candidate_stream = iread(str(candidates_file), index=":", format="extxyz")
+        try:
+            candidate_stream = iread(str(candidates_file), index=":", format="extxyz")
 
-        labelled_stream = self.oracle.compute(candidate_stream, batch_size=batch_size)
-        total = 0
+            labelled_stream = self.oracle.compute(candidate_stream, batch_size=batch_size)
+            total = 0
 
-        with training_file.open("a") as f:
-            for batch in batched(labelled_stream, n=batch_size):
-                write(f, batch, format="extxyz")
-                total += len(batch)
+            with training_file.open("a") as f:
+                for batch in batched(labelled_stream, n=batch_size):
+                    write(f, batch, format="extxyz")
+                    total += len(batch)
 
-        self.logger.info(LOG_COMPUTED_PROPERTIES.format(count=total))
+            self.logger.info(LOG_COMPUTED_PROPERTIES.format(count=total))
+        except Exception as e:
+            msg = f"Labeling failed: {e}"
+            raise OrchestratorError(msg) from e
 
     def _train(self, paths: dict[str, Path], initial_potential: Path | None = None) -> Path | None:
         """Step 3: Training"""
@@ -257,7 +271,7 @@ class Orchestrator:
             self.logger.info(f"Cold start completed. Initial potential: {potential_path}")
         else:
             msg = "Cold start failed to produce a potential."
-            raise RuntimeError(msg)
+            raise OrchestratorError(msg)
 
     def _get_initial_structure(self, iteration: int) -> Atoms | None:
         """Returns an initial structure for MD."""
@@ -269,6 +283,7 @@ class Orchestrator:
              iter0_paths = self._setup_iteration_directory(0)
              cand_file = iter0_paths["candidates"] / FILENAME_CANDIDATES
              if cand_file.exists():
+                 # Use next() on iread to get just the first frame efficiently
                  return next(iread(str(cand_file), index=0))
 
              # Fallback to generator
@@ -287,6 +302,7 @@ class Orchestrator:
              return None
 
         try:
+            # We need to read the halt structure. ASE read supports many formats.
             halt_structure = read(result.halt_structure_path)
             if isinstance(halt_structure, list):
                 halt_structure = halt_structure[-1]
@@ -331,7 +347,7 @@ class Orchestrator:
                 shutil.copy(self.loop_state.current_potential, deployed_potential)
         else:
             msg = "No current potential to deploy."
-            raise RuntimeError(msg)
+            raise OrchestratorError(msg)
 
         return deployed_potential
 
@@ -373,15 +389,13 @@ class Orchestrator:
             if result:
                 self._handle_md_halt(result, deployed_potential, paths)
 
-            # Always increment iteration even if MD skipped or halted, as we either refined (new pot for next iter)
-            # or skipped (try next iter).
-            # Note: If halted and refined, we are ready for next iteration (which will use new potential).
             self.loop_state.iteration = iteration
             self.save_state()
 
-        except Exception:
+        except Exception as e:
             self.logger.exception(f"Iteration {iteration} failed")
-            raise
+            msg = f"Iteration {iteration} failed: {e}"
+            raise OrchestratorError(msg) from e
 
     def _finalize(self) -> None:
         """Finalizes the workflow by deploying the best potential."""
