@@ -3,29 +3,22 @@ import sys
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
+from pyacemaker.domain_models.logging import LoggingConfig
 
-def setup_logger(
-    name: str = "pyacemaker",
-    log_file: str | None = "pyacemaker.log",
-    level: str = "INFO",
-    max_bytes: int = 10 * 1024 * 1024,  # 10 MB
-    backup_count: int = 5,
-) -> logging.Logger:
+
+def setup_logger(config: LoggingConfig, project_name: str) -> logging.Logger:
     """
-    Sets up the logger with console and file handlers.
+    Sets up the logger based on the configuration.
 
     Args:
-        name: Name of the logger
-        log_file: Path to the log file. If None, only console logging is enabled.
-        level: Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
-        max_bytes: Max size of log file before rotation
-        backup_count: Number of backup log files to keep
+        config: LoggingConfig object.
+        project_name: Name of the project (logger name).
 
     Returns:
-        Configured Logger instance
+        Configured Logger instance.
     """
-    logger = logging.getLogger(name)
-    logger.setLevel(level)
+    logger = logging.getLogger(project_name)
+    logger.setLevel(config.level)
 
     # Remove existing handlers to avoid duplicates if re-initialized
     if logger.handlers:
@@ -39,13 +32,15 @@ def setup_logger(
     logger.addHandler(console_handler)
 
     # File Handler
-    if log_file:
-        log_path = Path(log_file)
+    if config.log_file:
+        log_path = Path(config.log_file)
         # Ensure directory exists
         if log_path.parent != Path():
             log_path.parent.mkdir(parents=True, exist_ok=True)
 
-        file_handler = RotatingFileHandler(log_file, maxBytes=max_bytes, backupCount=backup_count)
+        file_handler = RotatingFileHandler(
+            config.log_file, maxBytes=config.max_bytes, backupCount=config.backup_count
+        )
         file_handler.setFormatter(formatter)
         logger.addHandler(file_handler)
 

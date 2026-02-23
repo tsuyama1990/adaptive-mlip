@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from collections.abc import Iterator
 from typing import Any
 
 from ase import Atoms
@@ -8,7 +9,7 @@ class BaseGenerator(ABC):
     """Abstract base class for structure generation."""
 
     @abstractmethod
-    def generate(self, n_candidates: int) -> list[Atoms]:
+    def generate(self, n_candidates: int) -> Iterator[Atoms]:
         """
         Generates candidate structures.
 
@@ -16,7 +17,7 @@ class BaseGenerator(ABC):
             n_candidates: Number of structures to generate.
 
         Returns:
-            List of generated ASE Atoms objects.
+            Iterator yielding ASE Atoms objects.
         """
 
 
@@ -24,12 +25,13 @@ class BaseOracle(ABC):
     """Abstract base class for property calculation (Oracle)."""
 
     @abstractmethod
-    def compute(self, structures: list[Atoms]) -> list[Atoms]:
+    def compute(self, structures: list[Atoms], batch_size: int = 10) -> list[Atoms]:
         """
         Computes properties (energy, forces, stress) for the given structures.
 
         Args:
             structures: List of ASE Atoms objects.
+            batch_size: Number of structures to compute in a single batch.
 
         Returns:
             List of ASE Atoms objects with computed properties attached.

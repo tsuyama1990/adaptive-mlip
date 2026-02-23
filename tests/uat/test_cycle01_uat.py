@@ -12,9 +12,9 @@ def valid_config_file(tmp_path: Path) -> Path:
     config_data = {
         "project_name": "FePt_Optimization",
         "structure": {"elements": ["Fe", "Pt"], "supercell_size": [2, 2, 2]},
-        "dft": {"encut": 500.0, "kpoints_density": 0.04},
-        "training": {"cutoff_radius": 5.0, "max_basis_size": 500},
-        "md": {"temperature": 1000.0, "n_steps": 1000},
+        "dft": {"code": "qe", "functional": "PBE", "kpoints_density": 0.04, "encut": 500.0},
+        "training": {"potential_type": "ace", "cutoff_radius": 5.0, "max_basis_size": 500},
+        "md": {"temperature": 1000.0, "pressure": 0.0, "timestep": 0.001, "n_steps": 1000},
         "workflow": {"max_iterations": 10},
     }
     config_path = tmp_path / "valid_config.yaml"
@@ -22,15 +22,14 @@ def valid_config_file(tmp_path: Path) -> Path:
         yaml.dump(config_data, f)
     return config_path
 
-
 @pytest.fixture
 def invalid_config_file_temp(tmp_path: Path) -> Path:
     config_data = {
         "project_name": "Bad_Config",
         "structure": {"elements": ["Fe"], "supercell_size": [1, 1, 1]},
-        "dft": {"encut": 500.0},
-        "training": {"cutoff_radius": 5.0},
-        "md": {"temperature": -100.0},  # Invalid
+        "dft": {"code": "qe", "functional": "PBE", "kpoints_density": 0.04, "encut": 500.0},
+        "training": {"potential_type": "ace", "cutoff_radius": 5.0, "max_basis_size": 500},
+        "md": {"temperature": -100.0, "pressure": 0.0, "timestep": 0.001, "n_steps": 1000},  # Invalid
         "workflow": {"max_iterations": 10},
     }
     config_path = tmp_path / "bad_config_temp.yaml"
@@ -44,9 +43,9 @@ def invalid_config_file_cutoff(tmp_path: Path) -> Path:
     config_data = {
         "project_name": "Bad_Config",
         "structure": {"elements": ["Fe"], "supercell_size": [1, 1, 1]},
-        "dft": {"encut": 500.0},
-        "training": {"cutoff_radius": -2.0},  # Invalid
-        "md": {"temperature": 300.0},
+        "dft": {"code": "qe", "functional": "PBE", "kpoints_density": 0.04, "encut": 500.0},
+        "training": {"potential_type": "ace", "cutoff_radius": -2.0, "max_basis_size": 500},  # Invalid
+        "md": {"temperature": 300.0, "pressure": 0.0, "timestep": 0.001, "n_steps": 1000},
         "workflow": {"max_iterations": 10},
     }
     config_path = tmp_path / "bad_config_cutoff.yaml"
