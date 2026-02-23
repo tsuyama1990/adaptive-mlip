@@ -5,6 +5,7 @@ import pytest
 from ase import Atoms
 from ase.calculators.calculator import Calculator, CalculatorSetupError
 
+from pyacemaker.constants import TEST_ENERGY_GENERIC
 from pyacemaker.domain_models import (
     DFTConfig,
     LoggingConfig,
@@ -62,7 +63,7 @@ class MockCalculator(Calculator):
             raise RuntimeError(msg)
 
         self.results = {
-            "energy": -13.6,
+            "energy": TEST_ENERGY_GENERIC,
             "forces": np.array([[0.0, 0.0, 0.0]] * (len(atoms) if atoms else 1)),
             "stress": np.array([0.0] * 6),
         }

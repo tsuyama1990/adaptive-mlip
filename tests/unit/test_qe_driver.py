@@ -57,6 +57,32 @@ def test_qe_driver_kpoints_parametrized(
 
         assert kpts == tuple(expected_kpts)
 
+def test_qe_driver_invalid_input(mock_dft_config: DFTConfig) -> None:
+    """Test validation of invalid inputs."""
+    driver = QEDriver()
+    atoms = Atoms("H", cell=[10, 10, 10], pbc=True)
+
+    # Negative Energy Cutoff
+    mock_dft_config.encut = -10.0
+    with pytest.raises(ValueError, match="Energy cutoff must be positive"):
+        driver.get_calculator(atoms, mock_dft_config)
+    mock_dft_config.encut = 500.0 # Reset
+
+    # Negative K-point density
+    mock_dft_config.kpoints_density = -0.04
+    with pytest.raises(ValueError, match="K-points density must be positive"):
+        driver.get_calculator(atoms, mock_dft_config)
+    mock_dft_config.kpoints_density = 0.04
+
+    # Invalid Pseudopotential Key
+    # Assuming config validation passes initially (e.g. at Pydantic level)
+    # but runtime check catches it. Or modify config object directly as here.
+    # Note: Pydantic validation usually happens at init, but we modified attribute.
+    # The driver re-validates.
+    mock_dft_config.pseudopotentials = {"InvalidElement": "file.upf"}
+    with pytest.raises(ValueError, match="Invalid chemical symbol"):
+        driver.get_calculator(atoms, mock_dft_config)
+
 
 def test_qe_driver_parameters(mock_dft_config: DFTConfig) -> None:
     """Test that parameters from config are passed to Espresso."""

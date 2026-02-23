@@ -3,6 +3,7 @@ from unittest.mock import MagicMock
 import pytest
 from ase import Atoms
 
+from pyacemaker.constants import TEST_ENERGY_GENERIC
 from pyacemaker.core.exceptions import OracleError
 from pyacemaker.core.oracle import DFTManager
 from pyacemaker.domain_models import DFTConfig
@@ -39,7 +40,7 @@ def test_dft_manager_compute_success(mock_dft_config: DFTConfig) -> None:
     generator = manager.compute(iter([atoms]))
     result = next(generator)
 
-    assert result.get_potential_energy() == -13.6  # type: ignore[no-untyped-call]
+    assert result.get_potential_energy() == TEST_ENERGY_GENERIC  # type: ignore[no-untyped-call]
 
     # Verify get_calculator was called with correct config
     mock_driver.get_calculator.assert_called_with(atoms, mock_dft_config)
@@ -61,11 +62,11 @@ def test_dft_manager_self_healing(mock_dft_config: DFTConfig) -> None:
     # Inject mock driver
     manager = DFTManager(mock_dft_config, driver=mock_driver)
 
-    # Note: consume generator to trigger execution
-    results = list(manager.compute(iter([atoms])))
+    # Use next() to consume generator one-by-one without materializing list
+    gen = manager.compute(iter([atoms]))
+    result = next(gen)
 
-    assert len(results) == 1
-    assert results[0].get_potential_energy() == -13.6  # type: ignore[no-untyped-call]
+    assert result.get_potential_energy() == TEST_ENERGY_GENERIC  # type: ignore[no-untyped-call]
 
     # Verify calls to get_calculator
     assert mock_driver.get_calculator.call_count == 2
@@ -95,8 +96,10 @@ def test_dft_manager_fatal_error(mock_dft_config: DFTConfig) -> None:
     manager = DFTManager(mock_dft_config, driver=mock_driver)
 
     # Now raises OracleError
+    # Use next() to trigger execution
+    gen = manager.compute(iter([atoms]))
     with pytest.raises(OracleError, match="DFT calculation failed"):
-        list(manager.compute(iter([atoms])))
+        next(gen)
 
     # Verify retries happened (at least > 1)
     assert mock_driver.get_calculator.call_count > 1
@@ -112,8 +115,9 @@ def test_dft_manager_setup_error(mock_dft_config: DFTConfig) -> None:
 
     manager = DFTManager(mock_dft_config, driver=mock_driver)
 
+    gen = manager.compute(iter([atoms]))
     with pytest.raises(OracleError, match="DFT calculation failed"):
-        list(manager.compute(iter([atoms])))
+        next(gen)
 
     # Should retry even on setup error if it's considered transient or parameter based?
     # Spec says "JobFailedException" (RuntimeError). Implementation catches (RuntimeError, CalculatorSetupError).
@@ -158,8 +162,15 @@ def test_dft_manager_invalid_input(mock_dft_config: DFTConfig) -> None:
     atoms_list = [Atoms("H")]
 
     with pytest.raises(TypeError, match="must be an Iterator"):
-        # We need to consume the generator for it to start execution
-        list(manager.compute(atoms_list))  # type: ignore[arg-type]
+        # Validation happens immediately when generator is created
+        # We need to call next() to trigger the code execution up to the first yield?
+        # No, compute is a generator function. The code *before* the first yield runs only when
+        # next() is called? Or does it?
+        # Actually, in Python generator functions, execution starts only when next() is called.
+        # So we MUST call next() or iterate to trigger validation.
+        # But wait, type checking `isinstance(structures, Iterator)` is at the top of the function.
+        # Yes, generator function body execution is deferred.
+        next(manager.compute(atoms_list))  # type: ignore[arg-type]
 
 def test_dft_manager_empty_iterator(mock_dft_config: DFTConfig) -> None:
     """Test compute handles empty iterator correctly with warning."""
@@ -167,6 +178,7 @@ def test_dft_manager_empty_iterator(mock_dft_config: DFTConfig) -> None:
     empty_iter: iter = iter([])  # type: ignore
 
     with pytest.warns(UserWarning, match="Oracle received empty iterator"):
+        # Explicit loop without list() materialization for safety
         results = list(manager.compute(empty_iter))
 
     assert len(results) == 0

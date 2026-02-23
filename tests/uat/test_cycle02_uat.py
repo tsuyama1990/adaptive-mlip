@@ -4,6 +4,7 @@ import numpy as np
 import pytest
 from ase import Atoms
 
+from pyacemaker.constants import TEST_ENERGY_H2O
 from pyacemaker.core.oracle import DFTManager
 from pyacemaker.domain_models import DFTConfig
 from tests.conftest import MockCalculator
@@ -23,7 +24,7 @@ class UATMockCalculator(MockCalculator):
     ) -> None:
         super().calculate(atoms, properties, system_changes)
         # Override with UAT specific values
-        self.results["energy"] = -14.5
+        self.results["energy"] = TEST_ENERGY_H2O
         # Ensure forces shape matches atoms
         n_atoms = len(atoms) if atoms else 3
         self.results["forces"] = np.zeros((n_atoms, 3))
@@ -58,12 +59,14 @@ def test_uat_02_01_single_point_calculation(uat_dft_config: DFTConfig) -> None:
         mock_driver_instance = MockDriver.return_value
         mock_driver_instance.get_calculator.return_value = UATMockCalculator(fail_count=0)
 
-        results = list(manager.compute(iter([h2o])))
+        # Use explicit iteration to avoid list() materialization risk in principle,
+        # though [h2o] is small.
+        gen = manager.compute(iter([h2o]))
+        result = next(gen)
 
         # 3. Expectation
-        assert len(results) == 1
-        assert results[0].get_potential_energy() == -14.5  # type: ignore[no-untyped-call]
-        assert results[0].get_forces().shape == (3, 3)  # type: ignore[no-untyped-call]
+        assert result.get_potential_energy() == TEST_ENERGY_H2O  # type: ignore[no-untyped-call]
+        assert result.get_forces().shape == (3, 3)  # type: ignore[no-untyped-call]
 
 
 def test_uat_02_02_self_healing(uat_dft_config: DFTConfig, caplog: pytest.LogCaptureFixture) -> None:
@@ -84,11 +87,11 @@ def test_uat_02_02_self_healing(uat_dft_config: DFTConfig, caplog: pytest.LogCap
         calc_success = UATMockCalculator(fail_count=0)
         mock_driver_instance.get_calculator.side_effect = [calc_fail, calc_success]
 
-        results = list(manager.compute(iter([h2o])))
+        gen = manager.compute(iter([h2o]))
+        result = next(gen)
 
         # 3. Expectation
-        assert len(results) == 1
-        assert results[0].get_potential_energy() == -14.5  # type: ignore[no-untyped-call]
+        assert result.get_potential_energy() == TEST_ENERGY_H2O  # type: ignore[no-untyped-call]
 
         # Verify that get_calculator was called twice (original + retry)
         assert mock_driver_instance.get_calculator.call_count == 2

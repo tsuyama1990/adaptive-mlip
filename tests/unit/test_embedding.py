@@ -67,3 +67,25 @@ def test_embed_cluster_large() -> None:
 
     assert len(embedded) == 100
     assert np.all(embedded.get_pbc())  # type: ignore[no-untyped-call]
+
+def test_embed_cluster_boundary_conditions() -> None:
+    """Test cluster with atoms at extreme coordinates."""
+    # Atoms far from origin
+    cluster = Atoms("H2", positions=[[1000.0, 1000.0, 1000.0], [1001.0, 1000.0, 1000.0]])
+    buffer = 2.0
+    # Expected cell: 1.0 (extent) + 2.0 (buffer) = 3.0 in x. 2.0 in y, z.
+
+    embedded = embed_cluster(cluster, buffer=buffer)
+    cell = embedded.get_cell()  # type: ignore[no-untyped-call]
+
+    assert np.allclose(cell.lengths(), [3.0, 2.0, 2.0])
+
+    # Check centering: center of box is 1.5, 1.0, 1.0.
+    # Center of atoms was 1000.5, 1000.0, 1000.0.
+    # Shift = 1.5 - 1000.5 = -999.0 in x.
+    # New pos 1: 1000 - 999 = 1.0.
+    # New pos 2: 1001 - 999 = 2.0.
+
+    pos = embedded.get_positions()  # type: ignore[no-untyped-call]
+    assert np.allclose(pos[0], [1.0, 1.0, 1.0])
+    assert np.allclose(pos[1], [2.0, 1.0, 1.0])
