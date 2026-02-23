@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from pyacemaker.core.loop import LoopState, LoopStatus
 
 
@@ -31,3 +33,27 @@ def test_loop_state_load_non_existent(tmp_path: Path) -> None:
     assert state.iteration == 0
     assert state.status == LoopStatus.RUNNING
     assert state.current_potential is None
+
+
+def test_loop_state_validation_path_not_exists(tmp_path: Path) -> None:
+    """Test validation fails if potential path does not exist."""
+    pot_path = tmp_path / "missing.yace"
+    with pytest.raises(ValueError, match="Potential path does not exist"):
+        LoopState(current_potential=pot_path)
+
+
+def test_loop_state_validation_path_is_dir(tmp_path: Path) -> None:
+    """Test validation fails if potential path is a directory."""
+    pot_dir = tmp_path / "pot_dir"
+    pot_dir.mkdir()
+    with pytest.raises(ValueError, match="Potential path is not a file"):
+        LoopState(current_potential=pot_dir)
+
+
+def test_loop_state_corrupted_load(tmp_path: Path) -> None:
+    """Test that loading a corrupted JSON raises ValueError."""
+    state_file = tmp_path / "corrupted.json"
+    state_file.write_text("{invalid_json")
+
+    with pytest.raises(ValueError, match="Failed to load loop state"):
+        LoopState.load(state_file)

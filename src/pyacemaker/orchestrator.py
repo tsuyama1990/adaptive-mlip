@@ -10,7 +10,9 @@ from pyacemaker.core.base import BaseEngine, BaseGenerator, BaseOracle, BaseTrai
 from pyacemaker.core.loop import LoopState
 from pyacemaker.domain_models import PyAceConfig
 from pyacemaker.domain_models.defaults import (
+    DEFAULT_PRODUCTION_DIR,
     FILENAME_CANDIDATES,
+    FILENAME_POTENTIAL,
     FILENAME_TRAINING,
     LOG_COMPUTED_PROPERTIES,
     LOG_GENERATED_CANDIDATES,
@@ -127,15 +129,38 @@ class Orchestrator:
                 msg = f"Directory {path} is not writable."
                 raise PermissionError(msg)
         except OSError as e:
-            # If creation failed, we should probably not attempt to remove anything automatically
-            # as it might be a shared parent. But we log critical error.
             self.logger.critical(f"Failed to create directory {path}: {e}")
             raise
+
+    def _create_iteration_directories(self, paths: dict[str, Path]) -> list[Path]:
+        """
+        Attempts to create all directories for an iteration atomically.
+        If any creation fails, it attempts to rollback created directories.
+        """
+        created_paths: list[Path] = []
+        try:
+            for p in paths.values():
+                if not p.exists():
+                    self._ensure_directory(p)
+                    created_paths.append(p)
+                else:
+                    # Just verify permission if it exists
+                    self._ensure_directory(p)
+        except Exception:
+            self.logger.exception("Failed to create iteration directories")
+            # Attempt rollback for newly created directories
+            for p in reversed(created_paths):
+                try:
+                    if p.is_dir() and not any(p.iterdir()): # Only delete empty directories
+                        p.rmdir()
+                except OSError:
+                    self.logger.warning(f"Failed to rollback directory creation for {p}")
+            raise
+        return created_paths
 
     def _setup_iteration_directory(self, iteration: int) -> dict[str, Path]:
         """
         Creates the directory structure for the current iteration.
-        Attempts to clean up if partial creation fails.
         """
         iter_dirname = TEMPLATE_ITER_DIR.format(iteration=iteration)
         iter_dir = self.active_learning_dir / iter_dirname
@@ -147,19 +172,7 @@ class Orchestrator:
             "md_run": iter_dir / "md_run",
         }
 
-        created_paths: list[Path] = []
-        try:
-            for p in paths.values():
-                self._ensure_directory(p)
-                created_paths.append(p)
-        except Exception:
-            # If any creation fails, log and re-raise.
-            # We assume critical failure and let the workflow crash.
-            # Cleanup might be dangerous if we delete pre-existing data.
-            # So we just raise.
-            self.logger.exception(f"Failed to setup iteration directory for iteration {iteration}")
-            raise
-
+        self._create_iteration_directories(paths)
         return paths
 
     def _explore(self, paths: dict[str, Path]) -> None:
@@ -174,6 +187,7 @@ class Orchestrator:
         candidate_stream = self.generator.generate(n_candidates=n_candidates)
         total = 0
 
+        # ase.io.write handles open file objects efficiently for many formats
         with candidates_file.open("a") as f:
             for batch in batched(candidate_stream, n=batch_size):
                 write(f, batch, format="extxyz")
@@ -268,11 +282,8 @@ class Orchestrator:
         if not result.halt_structure_path or not self.generator or not self.active_set_selector or not self.oracle or not self.trainer:
             return None
 
-        # Check uncertainty threshold from config (Maintainability fix)
-        # Note: Engine should ideally check this, but we can verify here or log
         threshold = self.config.workflow.otf.uncertainty_threshold
         if result.max_gamma <= threshold and not result.halted:
-             # Should not be here if not halted, but safety check
              return None
 
         try:
@@ -310,13 +321,8 @@ class Orchestrator:
             self.logger.exception("Refinement failed")
             return None
 
-    def _run_loop_iteration(self) -> None:
-        """Executes one iteration of the active learning loop."""
-        iteration = self.loop_state.iteration + 1
-        paths = self._setup_iteration_directory(iteration)
-        self.logger.info(LOG_START_ITERATION.format(iteration=iteration, max_iterations=self.config.workflow.max_iterations))
-
-        # 1. Deploy Potential
+    def _deploy_potential(self, iteration: int) -> Path:
+        """Deploys the current potential to the potentials directory."""
         potential_filename = TEMPLATE_POTENTIAL_FILE.format(iteration=iteration)
         deployed_potential = self.potentials_dir / potential_filename
 
@@ -327,40 +333,62 @@ class Orchestrator:
             msg = "No current potential to deploy."
             raise RuntimeError(msg)
 
-        # 2. Run MD
+        return deployed_potential
+
+    def _run_md_simulation(self, iteration: int, deployed_potential: Path) -> MDSimulationResult | None:
+        """Runs the MD simulation."""
         initial_structure = self._get_initial_structure(iteration)
         if not initial_structure:
              self.logger.warning("No structure for MD. Skipping iteration.")
-             # Update state safely
-             self.loop_state.iteration = iteration
-             self.save_state()
-             return
+             return None
 
         if self.engine:
-            result = self.engine.run(structure=initial_structure, potential=deployed_potential)
+            return self.engine.run(structure=initial_structure, potential=deployed_potential)
+        return None
 
-            if result.halted:
-                self.logger.info(f"MD Halted at step {result.n_steps}. Triggering refinement.")
-                new_potential = self._refine_potential(result, deployed_potential, paths)
-                if new_potential:
-                    # Validate new potential path before updating state
-                    if not new_potential.exists():
-                        self.logger.error(f"Refined potential path {new_potential} does not exist!")
-                    else:
-                        self.loop_state.current_potential = new_potential
-                        self.logger.info(f"Potential refined to: {new_potential}")
-            else:
-                 self.logger.info(LOG_ITERATION_COMPLETED.format(iteration=iteration))
+    def _handle_md_halt(self, result: MDSimulationResult, deployed_potential: Path, paths: dict[str, Path]) -> None:
+        """Handles MD halt logic and triggers refinement."""
+        if result.halted:
+            self.logger.info(f"MD Halted at step {result.n_steps}. Triggering refinement.")
+            new_potential = self._refine_potential(result, deployed_potential, paths)
+            if new_potential:
+                if not new_potential.exists():
+                    self.logger.error(f"Refined potential path {new_potential} does not exist!")
+                else:
+                    self.loop_state.current_potential = new_potential
+                    self.logger.info(f"Potential refined to: {new_potential}")
+        else:
+             self.logger.info(LOG_ITERATION_COMPLETED.format(iteration=self.loop_state.iteration + 1))
 
-        self.loop_state.iteration = iteration
-        self.save_state()
+    def _run_loop_iteration(self) -> None:
+        """Executes one iteration of the active learning loop."""
+        iteration = self.loop_state.iteration + 1
+        paths = self._setup_iteration_directory(iteration)
+        self.logger.info(LOG_START_ITERATION.format(iteration=iteration, max_iterations=self.config.workflow.max_iterations))
+
+        try:
+            deployed_potential = self._deploy_potential(iteration)
+            result = self._run_md_simulation(iteration, deployed_potential)
+
+            if result:
+                self._handle_md_halt(result, deployed_potential, paths)
+
+            # Always increment iteration even if MD skipped or halted, as we either refined (new pot for next iter)
+            # or skipped (try next iter).
+            # Note: If halted and refined, we are ready for next iteration (which will use new potential).
+            self.loop_state.iteration = iteration
+            self.save_state()
+
+        except Exception:
+            self.logger.exception(f"Iteration {iteration} failed")
+            raise
 
     def _finalize(self) -> None:
         """Finalizes the workflow by deploying the best potential."""
-        production_dir = Path("production")
+        production_dir = Path(DEFAULT_PRODUCTION_DIR)
         production_dir.mkdir(exist_ok=True)
         if self.loop_state.current_potential:
-             target = production_dir / "potential.yace"
+             target = production_dir / FILENAME_POTENTIAL
              shutil.copy(self.loop_state.current_potential, target)
              self.logger.info(f"Deployed best potential to {target}")
 

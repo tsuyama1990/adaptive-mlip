@@ -1,4 +1,5 @@
 import json
+import os
 import tempfile
 from enum import StrEnum
 from pathlib import Path
@@ -45,6 +46,9 @@ class LoopState(BaseModel):
 
         with tempfile.NamedTemporaryFile("w", dir=directory, delete=False) as tmp_file:
             json.dump(data, tmp_file, indent=2)
+            # Ensure data is flushed to disk
+            tmp_file.flush()
+            os.fsync(tmp_file.fileno())
             tmp_path_str = tmp_file.name
 
         tmp_path = Path(tmp_path_str)
