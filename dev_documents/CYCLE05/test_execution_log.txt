@@ -1,0 +1,35 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.12, pytest-9.0.2, pluggy-1.6.0
+rootdir: /app
+configfile: pyproject.toml
+testpaths: tests
+plugins: cov-7.0.0
+collected 122 items
+
+tests/e2e/test_engine_integration.py .                                   [  0%]
+tests/e2e/test_orchestrator.py ......                                    [  5%]
+tests/integration/test_pacemaker_integration.py ..                       [  7%]
+tests/uat/test_cycle01_uat.py ...                                        [  9%]
+tests/uat/test_cycle02_uat.py ..                                         [ 11%]
+tests/uat/test_cycle03_uat.py ..                                         [ 13%]
+tests/uat/test_cycle04_uat.py ...                                        [ 15%]
+tests/unit/test_active_set.py .....                                      [ 19%]
+tests/unit/test_delta.py ....                                            [ 22%]
+tests/unit/test_domain_models.py ............                            [ 32%]
+tests/unit/test_domain_models_dft.py .............                       [ 43%]
+tests/unit/test_domain_models_md.py .....                                [ 47%]
+tests/unit/test_domain_models_training.py .......                        [ 53%]
+tests/unit/test_embedding.py .......                                     [ 59%]
+tests/unit/test_engine.py ...                                            [ 61%]
+tests/unit/test_factory.py ..                                            [ 63%]
+tests/unit/test_generator.py .....                                       [ 67%]
+tests/unit/test_io.py ..........                                         [ 75%]
+tests/unit/test_lammps_driver.py ....                                    [ 78%]
+tests/unit/test_main.py ...                                              [ 81%]
+tests/unit/test_oracle.py ........                                       [ 87%]
+tests/unit/test_oracle_streaming.py .                                    [ 88%]
+tests/unit/test_perturbations.py ...                                     [ 90%]
+tests/unit/test_qe_driver.py ......                                      [ 95%]
+tests/unit/test_trainer_pacemaker.py .....                               [100%]
+
+============================= 122 passed in 0.54s ==============================

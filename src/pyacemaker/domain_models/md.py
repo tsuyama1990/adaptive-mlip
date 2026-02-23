@@ -1,7 +1,21 @@
-
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, PositiveFloat
+from pydantic import BaseModel, ConfigDict, Field, PositiveFloat, PositiveInt
+
+
+class MDSimulationResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    energy: float = Field(..., description="Final potential energy of the system")
+    forces: list[list[float]] = Field(..., description="Forces on atoms in the final frame")
+    halted: bool = Field(..., description="Whether the simulation was halted early")
+    max_gamma: float = Field(..., description="Maximum extrapolation grade observed")
+    n_steps: int = Field(..., description="Number of steps actually performed")
+    temperature: float = Field(..., description="Average or final temperature")
+    trajectory_path: str | None = Field(None, description="Path to the trajectory file")
+    halt_structure_path: str | None = Field(
+        None, description="Path to the structure where halt occurred"
+    )
 
 
 class MDConfig(BaseModel):
@@ -11,6 +25,15 @@ class MDConfig(BaseModel):
     pressure: float = Field(..., ge=0.0, description="Simulation pressure in Bar")
     timestep: PositiveFloat = Field(..., description="Timestep in ps")
     n_steps: int = Field(..., gt=0, description="Number of MD steps")
+
+    # Output Control
+    thermo_freq: PositiveInt = Field(
+        10, description="Frequency of thermodynamic output (steps)"
+    )
+    dump_freq: PositiveInt = Field(
+        100, description="Frequency of trajectory dump (steps)"
+    )
+    minimize: bool = Field(False, description="Perform energy minimization before MD")
 
     # Mocking Parameters (Audit Requirement)
     base_energy: float = Field(
