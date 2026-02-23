@@ -7,6 +7,7 @@ from ase.calculators.calculator import Calculator, CalculatorSetupError
 
 from pyacemaker.domain_models import (
     DFTConfig,
+    HybridParams,
     LoggingConfig,
     MDConfig,
     PyAceConfig,
@@ -67,7 +68,7 @@ def mock_md_config() -> MDConfig:
         timestep=0.001,
         n_steps=1000,
         hybrid_potential=True,
-        hybrid_params={"lj/cut": "..."}
+        hybrid_params=HybridParams(zbl_cut_inner=2.0, zbl_cut_outer=2.5)
     )
 
 

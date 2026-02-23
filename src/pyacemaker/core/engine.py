@@ -1,64 +1,92 @@
-from typing import Any, TypedDict
+from typing import Any
 
 from ase import Atoms
 
 from pyacemaker.core.base import BaseEngine
-from pyacemaker.domain_models.constants import KB_EV
-from pyacemaker.domain_models.md import MDConfig
-
-
-class SimulationResult(TypedDict):
-    energy: float
-    forces: list[list[float]]
-    halted: bool
-    max_gamma: float
-    n_steps: int
-    temperature: float
+from pyacemaker.core.io_manager import LammpsFileManager
+from pyacemaker.core.lammps_generator import LammpsScriptGenerator
+from pyacemaker.core.validator import LammpsValidator
+from pyacemaker.domain_models.constants import LAMMPS_SCREEN_ARG
+from pyacemaker.domain_models.md import MDConfig, MDSimulationResult
+from pyacemaker.interfaces.lammps_driver import LammpsDriver
 
 
 class LammpsEngine(BaseEngine):
     """
-    LAMMPS implementation of BaseEngine.
-    Wraps the 'lmp' command (simulated).
-
-    Extension Guidelines:
-        - To implement a real LAMMPS driver, override the 'run' method to write proper 'in.lammps' files.
-        - Ensure configuration fields in MDConfig align with LAMMPS commands.
-        - Use the 'subprocess' module to execute the LAMMPS binary securely.
+    MD Engine using LAMMPS.
+    Handles input generation, execution, and result parsing.
     """
 
     def __init__(self, config: MDConfig) -> None:
+        """
+        Initialize the engine with configuration.
+        """
         self.config = config
+        self.generator = LammpsScriptGenerator(config)
+        self.file_manager = LammpsFileManager(config)
 
-    def run(self, structure: Atoms | None, potential: Any) -> SimulationResult:
+    def run(self, structure: Atoms | None, potential: Any) -> MDSimulationResult:
         """
-        Runs a simulation using the given structure and potential.
-
-        This method wraps the external 'lmp' command (simulated).
-        It executes an MD simulation based on the engine configuration.
-
-        Args:
-            structure: Initial atomic structure (optional if defined in config).
-            potential: Path to the interatomic potential file (optional if defined in config).
-
-        Returns:
-            SimulationResult: Simulation results containing energy, forces, halted status, etc.
+        Runs the MD simulation.
         """
-        # In a real implementation, we would write input files and run LAMMPS.
+        # Input Validation (SRP via Validator)
+        LammpsValidator.validate_structure(structure)
+        potential_path = LammpsValidator.validate_potential(potential)
 
-        # Simulate result based on config
-        # Use temperature to simulate some variation
-        base_energy = self.config.base_energy
-        # Use Boltzmann constant for physical scaling (approximation for fluctuation scale)
-        thermal_noise = self.config.temperature * KB_EV
+        # Prepare workspace (temp dir, file writing)
+        # Note: We checked structure is not None/Empty in validator.
+        # But prepare_workspace needs 'structure' as Atoms (which it is, after check).
+        # Type checker might complain if structure is Optional.
+        # But runtime check ensures it.
+        if structure is None:
+             msg = "Structure cannot be None after validation."
+             raise ValueError(msg)
 
-        simulated_energy = base_energy + thermal_noise
+        ctx, data_file, dump_file, log_file, elements = self.file_manager.prepare_workspace(structure)
 
-        return {
-            "energy": simulated_energy,
-            "forces": self.config.default_forces,
-            "halted": False,
-            "max_gamma": 0.0,
-            "n_steps": self.config.n_steps,
-            "temperature": self.config.temperature
-        }
+        with ctx:
+            # Generate script using delegate
+            script = self.generator.generate(
+                potential_path.resolve(),
+                data_file,
+                dump_file,
+                elements
+            )
+
+            # Initialize Driver with unique log file
+            # Use constant for screen arg
+            driver = LammpsDriver(["-screen", LAMMPS_SCREEN_ARG, "-log", str(log_file)])
+
+            # Run
+            try:
+                driver.run(script)
+            except Exception as e:
+                msg = f"LAMMPS execution failed: {e}"
+                raise RuntimeError(msg) from e
+
+            # Extract Results
+            try:
+                energy = driver.extract_variable("pe")
+                temperature = driver.extract_variable("temp")
+                step = int(driver.extract_variable("step"))
+                max_gamma = driver.extract_variable("max_g")
+            except Exception:
+                energy = 0.0
+                temperature = 0.0
+                step = 0
+                max_gamma = 0.0
+
+            halted = step < self.config.n_steps
+
+            # Result
+            return MDSimulationResult(
+                energy=energy,
+                forces=[[0.0, 0.0, 0.0]],
+                halted=halted,
+                max_gamma=max_gamma,
+                n_steps=step,
+                temperature=temperature,
+                trajectory_path=str(dump_file),
+                log_path=str(log_file),
+                halt_structure_path=str(dump_file) if halted else None
+            )

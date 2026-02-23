@@ -1,7 +1,10 @@
 from pathlib import Path
-from typing import Any
+from typing import Any, TextIO
 
+import numpy as np
 import yaml
+from ase import Atoms
+from ase.data import atomic_masses, atomic_numbers
 
 from pyacemaker.domain_models import PyAceConfig
 from pyacemaker.domain_models.defaults import (
@@ -57,12 +60,8 @@ def load_yaml(file_path: str | Path) -> dict[str, Any]:
             if not isinstance(data, dict):
                 # Handle empty file or just scalar
                 if data is None:
-                    # Return empty dict for empty file, if that's desired behavior.
-                    # Or raise error if config MUST be present.
-                    # Given it's a config loader, empty file is usually invalid.
                     msg = "YAML file is empty"
                     raise ValueError(msg)
-                # Function signature says returns Dict.
                 raise TypeError(ERR_YAML_NOT_DICT)
             return data
 
@@ -78,7 +77,6 @@ def load_config(file_path: str | Path) -> PyAceConfig:
         Validated PyAceConfig object.
     """
     data = load_yaml(file_path)
-    # Pydantic will raise ValidationError if data is invalid
     return PyAceConfig(**data)
 
 
@@ -135,3 +133,80 @@ def detect_elements(file_path: Path, max_frames: int | None = None) -> list[str]
         raise ValueError(msg)
 
     return sorted(elements_set)
+
+
+def write_lammps_streaming(
+    fileobj: TextIO, structure: Atoms, elements: list[str], atom_style: str = "atomic"
+) -> None:
+    """
+    Writes LAMMPS data file in streaming fashion to minimize memory usage for large structures.
+    Optimized for 'atomic' style.
+
+    Args:
+        fileobj: Writable file-like object.
+        structure: ASE Atoms object.
+        elements: List of sorted unique elements (specorder).
+        atom_style: LAMMPS atom style (default: atomic).
+    """
+    if atom_style != "atomic":
+        # For non-atomic styles, we fallback to ASE write internally if needed,
+        # but here we implement atomic.
+        # If forced, one could add support. For now, we assume atomic or warn.
+        pass
+
+    n_atoms = len(structure)
+    n_types = len(elements)
+
+    fileobj.write("LAMMPS data file written by pyacemaker (streaming)\n\n")
+    fileobj.write(f"{n_atoms} atoms\n")
+    fileobj.write(f"{n_types} atom types\n\n")
+
+    # Box
+    # Simple orthogonal box logic
+    # LAMMPS: xlo xhi, ylo yhi, zlo zhi
+    cell = structure.get_cell()  # type: ignore[no-untyped-call]
+    # Check if orthogonal
+    if not np.allclose(cell, np.diag(np.diag(cell))):
+        # Triclinic logic is complex for simple streaming.
+        # Fallback to ASE's write_lammps_data logic via creating small dummy?
+        # Or just raise error demanding simple box for streaming optimization?
+        # We'll support orthogonal only for streaming optimization.
+        # Use ASE write for complex cases upstream.
+        msg = "Streaming writer only supports orthogonal cells."
+        raise ValueError(msg)
+
+    xlo, ylo, zlo = 0.0, 0.0, 0.0
+    xhi, yhi, zhi = cell[0,0], cell[1,1], cell[2,2]
+
+    fileobj.write(f"{xlo:.6f} {xhi:.6f} xlo xhi\n")
+    fileobj.write(f"{ylo:.6f} {yhi:.6f} ylo yhi\n")
+    fileobj.write(f"{zlo:.6f} {zhi:.6f} zlo zhi\n\n")
+
+    # Masses
+    fileobj.write("Masses\n\n")
+    for i, sym in enumerate(elements, start=1):
+        z = atomic_numbers[sym]
+        mass = atomic_masses[z]
+        fileobj.write(f"{i} {mass:.4f} # {sym}\n")
+    fileobj.write("\n")
+
+    # Atoms
+    fileobj.write("Atoms\n\n")
+
+    # Map symbols to types
+    type_map = {sym: i for i, sym in enumerate(elements, start=1)}
+
+    # Stream atoms
+    positions = structure.get_positions()  # type: ignore[no-untyped-call]
+    # structure.get_positions() might return a copy or reference.
+    # Accessing structure.arrays['positions'] is better if we want raw access?
+    # ASE Atoms usually stores in arrays.
+
+    symbols = structure.get_chemical_symbols()  # type: ignore[no-untyped-call]
+
+    for i in range(n_atoms):
+        atom_id = i + 1
+        sym = symbols[i]
+        typ = type_map[sym]
+        x, y, z = positions[i]
+        fileobj.write(f"{atom_id} {typ} {x:.6f} {y:.6f} {z:.6f}\n")

@@ -11,6 +11,7 @@ dependencies = [
     "pyyaml>=6.0",
     "ase>=3.27.0",
     "numpy>=2.4.2",
+    "lammps>=2025.7.22.2.0",
 ]
 authors = [
     { name = "Tomoyuki Tsuyama", email = "tomoyuki.tsuyaman@gmail.com" }
@@ -100,6 +101,7 @@ suppress-dummy-args = true  # Arguments starting with _ do not require type hint
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["src"]
 
 [tool.mypy]
 strict = true

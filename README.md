@@ -30,6 +30,10 @@ Constructing MLIPs manually is tedious and error-prone. PyAceMaker automates the
     *   **Delta Learning**: Fits the difference between DFT and a physics-based baseline (LJ/ZBL) for robustness.
     *   **Active Set Optimization**: Uses D-optimality (MaxVol) to select the most informative structures, reducing training costs.
     *   **Automated Configuration**: Generates optimal `input.yaml` for Pacemaker based on dataset composition.
+*   **Molecular Dynamics (MD) Engine**:
+    *   Integrated LAMMPS driver for NPT/NVT simulations.
+    *   **Hybrid Potentials**: Overlays ACE with ZBL/LJ for safety during high-energy events.
+    *   **Uncertainty Watchdog**: Automatically halts simulations when the extrapolation grade ($\gamma$) exceeds a safe threshold.
 *   **Scalability**:
     *   **Streaming Data Processing**: Handles large datasets with O(1) memory usage.
     *   **Resume Capability**: Checkpoints state to JSON, allowing workflows to pause and resume.
@@ -39,6 +43,7 @@ Constructing MLIPs manually is tedious and error-prone. PyAceMaker automates the
 *   **Python**: >= 3.11
 *   **DFT Code**: Quantum Espresso (`pw.x` executable in PATH)
 *   **MLIP Trainer**: Pacemaker (`pace_train`, `pace_activeset` executables in PATH)
+*   **MD Engine**: LAMMPS Python Interface (`lammps` package, with `USER-PACE` support)
 
 ## Installation
 
