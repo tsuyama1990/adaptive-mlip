@@ -4,11 +4,11 @@ import os
 import shutil
 from pathlib import Path
 
-from ase import Atoms
-from ase.io import iread, read, write
+from ase.io import iread, write
 
 from pyacemaker.core.active_set import ActiveSetSelector
 from pyacemaker.core.base import BaseEngine, BaseGenerator, BaseOracle, BaseTrainer
+from pyacemaker.core.otf_manager import OTFManager
 from pyacemaker.domain_models import PyAceConfig
 from pyacemaker.domain_models.defaults import (
     FILENAME_CANDIDATES,
@@ -17,7 +17,6 @@ from pyacemaker.domain_models.defaults import (
     LOG_GENERATED_CANDIDATES,
     LOG_INIT_MODULES,
     LOG_ITERATION_COMPLETED,
-    LOG_MD_COMPLETED,
     LOG_MODULE_INIT_FAIL,
     LOG_MODULES_INIT_SUCCESS,
     LOG_POTENTIAL_TRAINED,
@@ -31,9 +30,7 @@ from pyacemaker.domain_models.defaults import (
     LOG_WORKFLOW_COMPLETED,
     LOG_WORKFLOW_CRASHED,
     TEMPLATE_ITER_DIR,
-    TEMPLATE_POTENTIAL_FILE,
 )
-from pyacemaker.domain_models.md import MDSimulationResult
 from pyacemaker.factory import ModuleFactory
 from pyacemaker.logger import setup_logger
 from pyacemaker.utils.misc import batched
@@ -69,6 +66,7 @@ class Orchestrator:
         self.trainer: BaseTrainer | None = None
         self.engine: BaseEngine | None = None
         self.active_set_selector: ActiveSetSelector | None = None
+        self.otf_manager: OTFManager | None = None
 
         self.load_state()
         self.logger.info(LOG_PROJECT_INIT.format(project_name=config.project_name))
@@ -83,10 +81,23 @@ class Orchestrator:
         self.logger.info(LOG_INIT_MODULES)
         try:
             # Create modules using factory
-            self.generator, self.oracle, self.trainer, self.engine = ModuleFactory.create_modules(
-                self.config
+            (
+                self.generator,
+                self.oracle,
+                self.trainer,
+                self.engine,
+                self.active_set_selector,
+            ) = ModuleFactory.create_modules(self.config)
+
+            # Initialize OTF Manager
+            self.otf_manager = OTFManager(
+                self.config,
+                self.generator,
+                self.oracle,
+                self.trainer,
+                self.engine,
+                self.active_set_selector,
             )
-            self.active_set_selector = ActiveSetSelector()
 
         except Exception as e:
             self.logger.exception("Failed to initialize modules")
@@ -241,162 +252,6 @@ class Orchestrator:
         # Assume result is a path to the potential file
         return Path(result) if isinstance(result, (str, Path)) else None
 
-    def _handle_halt_event(  # noqa: PLR0911
-        self,
-        result: MDSimulationResult,
-        potential_path: Path,
-        paths: dict[str, Path]
-    ) -> Path | None:
-        """
-        Handles an MD halt event by generating local candidates, selecting active set,
-        computing properties, and fine-tuning the potential.
-        """
-        if not (self.generator and self.oracle and self.trainer and self.active_set_selector):
-             self.logger.error("Modules not fully initialized.")
-             return None
-
-        if not result.halt_structure_path:
-             self.logger.error("No halt structure path in result.")
-             return None
-
-        try:
-            halt_structure = read(result.halt_structure_path)
-            if isinstance(halt_structure, list):
-                halt_structure = halt_structure[-1]
-            if not isinstance(halt_structure, Atoms):
-                 self.logger.error("Halt structure is not an Atoms object.")
-                 return None
-        except Exception:
-            self.logger.exception("Failed to read halt structure")
-            return None
-
-        # Generate Local Candidates
-        local_n = self.config.workflow.otf.local_n_candidates
-        candidates_gen = self.generator.generate_local(halt_structure, n_candidates=local_n)
-
-        # Select Active Set
-        n_select = self.config.workflow.otf.local_n_select
-        try:
-             # Generator returns iterator, so we can pass it directly.
-             # Note: select returns iterator too.
-             selected_gen = self.active_set_selector.select(
-                 candidates_gen,
-                 potential_path,
-                 n_select=n_select
-             )
-        except Exception:
-             self.logger.exception("Active set selection failed")
-             return None
-
-        # Compute properties (Oracle)
-        labelled_gen = self.oracle.compute(selected_gen)
-
-        # Append to training data
-        training_file = paths["training"] / FILENAME_TRAINING
-        count = 0
-        batch_size = self.config.workflow.batch_size
-        with training_file.open("a") as f:
-             for batch in batched(labelled_gen, n=batch_size):
-                 write(f, batch, format="extxyz")
-                 count += len(batch)
-
-        if count == 0:
-             self.logger.warning("No new training data generated from halt event.")
-             return None
-
-        self.logger.info(f"Added {count} new structures from OTF loop.")
-
-        # Fine-tune the potential
-        new_potential = self.trainer.train(training_file, initial_potential=potential_path)
-
-        return Path(new_potential) if isinstance(new_potential, (str, Path)) else None
-
-    def _run_otf_loop(self, paths: dict[str, Path], potential_path: Path | None) -> None:  # noqa: C901, PLR0912, PLR0915
-        """
-        Step 4: Deployment & Run (OTF Loop)
-        Deploys potential, runs MD, and handles active learning events.
-        """
-        if not potential_path or not potential_path.exists():
-            self.logger.warning("No potential to deploy/run MD.")
-            return
-
-        # Deploy potential
-        filename = TEMPLATE_POTENTIAL_FILE.format(iteration=self.iteration)
-        target_path = self.potentials_dir / filename
-        with contextlib.suppress(shutil.SameFileError):
-            shutil.copy(potential_path, target_path)
-        self.logger.info(f"Deployed potential to {target_path}")
-
-        if not self.engine:
-            return
-
-        # Load initial structure for MD
-        # Try to use first candidate from current iteration
-        candidates_file = paths["candidates"] / FILENAME_CANDIDATES
-        initial_structure = None
-        try:
-            if candidates_file.exists():
-                initial_structure = next(iread(str(candidates_file), index=0))
-        except (StopIteration, Exception):
-            self.logger.warning("Could not load initial structure from candidates.")
-
-        if initial_structure is None:
-             self.logger.warning("No valid initial structure for MD. Skipping simulation.")
-             return
-
-        current_potential = potential_path
-        retries = 0
-        max_retries = self.config.workflow.otf.max_retries
-
-        while retries <= max_retries:
-            self.logger.info(f"Starting MD run (attempt {retries}/{max_retries})")
-
-            try:
-                result = self.engine.run(structure=initial_structure, potential=current_potential)
-            except Exception:
-                self.logger.exception("MD execution failed")
-                break
-
-            if not result.halted:
-                self.logger.info(LOG_MD_COMPLETED)
-                break
-
-            self.logger.warning(
-                f"MD halted at step {result.n_steps} (Gamma: {result.max_gamma:.2f} > {self.config.workflow.otf.uncertainty_threshold})"
-            )
-
-            if retries >= max_retries:
-                self.logger.error("Max OTF retries reached. Moving to next iteration.")
-                break
-
-            # Handle Halt
-            new_potential = self._handle_halt_event(result, current_potential, paths)
-
-            if not new_potential:
-                self.logger.warning("Refinement failed. Aborting OTF loop.")
-                break
-
-            current_potential = new_potential
-
-            # Update initial structure for next run to continue from halt?
-            # Usually we want to continue, but LammpsEngine.run starts fresh.
-            # So we pass the halted structure as new initial structure.
-            if result.halt_structure_path:
-                try:
-                    new_init = read(result.halt_structure_path)
-                    if isinstance(new_init, list):
-                        new_init = new_init[-1]
-                    if isinstance(new_init, Atoms):
-                        initial_structure = new_init
-                    else:
-                        self.logger.error("Resume structure is invalid.")
-                        break
-                except Exception:
-                    self.logger.exception("Failed to read halt structure for resume")
-                    break
-
-            retries += 1
-
     def _run_active_learning_step(self) -> None:
         """
         Executes a single step of the active learning loop using modular methods.
@@ -406,7 +261,14 @@ class Orchestrator:
         self._explore(paths)
         self._label(paths)
         potential_path = self._train(paths)
-        self._run_otf_loop(paths, potential_path)
+
+        if self.otf_manager:
+            self.otf_manager.run_loop(
+                paths=paths,
+                potential_path=potential_path,
+                iteration=self.iteration,
+                potentials_dir=self.potentials_dir
+            )
 
     def run(self) -> None:
         """

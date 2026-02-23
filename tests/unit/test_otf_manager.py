@@ -1,5 +1,5 @@
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 from ase import Atoms
@@ -7,13 +7,13 @@ from ase.io import write
 
 from pyacemaker.core.active_set import ActiveSetSelector
 from pyacemaker.core.base import BaseEngine, BaseGenerator, BaseOracle, BaseTrainer
+from pyacemaker.core.otf_manager import OTFManager
 from pyacemaker.domain_models.config import PyAceConfig
 from pyacemaker.domain_models.dft import DFTConfig
 from pyacemaker.domain_models.md import MDConfig, MDSimulationResult
 from pyacemaker.domain_models.structure import StructureConfig
 from pyacemaker.domain_models.training import TrainingConfig
 from pyacemaker.domain_models.workflow import OTFConfig, WorkflowConfig
-from pyacemaker.orchestrator import Orchestrator
 
 
 @pytest.fixture
@@ -65,7 +65,7 @@ def mock_modules() -> tuple[MagicMock, MagicMock, MagicMock, MagicMock, MagicMoc
     active_set = MagicMock(spec=ActiveSetSelector)
     return generator, oracle, trainer, engine, active_set
 
-def test_orchestrator_otf_halt_loop(
+def test_otf_manager_halt_loop(
     mock_config: PyAceConfig,
     mock_modules: tuple[MagicMock, MagicMock, MagicMock, MagicMock, MagicMock],
     tmp_path: Path
@@ -111,22 +111,32 @@ def test_orchestrator_otf_halt_loop(
     initial_pot = tmp_path / "init.yace"
     initial_pot.touch()
 
+    # Paths
+    paths = {
+        "candidates": tmp_path / "candidates",
+        "training": tmp_path / "training",
+        "md_run": tmp_path / "md_run"
+    }
+    for p in paths.values():
+        p.mkdir(parents=True, exist_ok=True)
+
     # Create dummy candidate for initial structure
-    candidates_file = Path(mock_config.workflow.active_learning_dir) / "iter_001" / "candidates" / "candidates.xyz"
-    candidates_file.parent.mkdir(parents=True)
+    candidates_file = paths["candidates"] / "candidates.xyz"
     write(candidates_file, Atoms("Fe", cell=[2,2,2], pbc=True))
 
-    with patch("pyacemaker.orchestrator.ModuleFactory.create_modules", return_value=(generator, oracle, trainer, engine)):
-        orchestrator = Orchestrator(mock_config)
-        # Manually set active set selector since we patch create_modules but active_set is separate
-        # But initialize_modules overwrites it. So we mock ActiveSetSelector class.
+    otf_manager = OTFManager(
+        mock_config,
+        generator,
+        oracle,
+        trainer,
+        engine,
+        active_set
+    )
 
-        with patch("pyacemaker.orchestrator.ActiveSetSelector", return_value=active_set):
-             orchestrator.initialize_modules()
+    potentials_dir = tmp_path / "pots"
+    potentials_dir.mkdir()
 
-             # Call _run_otf_loop directly to test specific logic
-             paths = orchestrator._setup_iteration_directory(1)
-             orchestrator._run_otf_loop(paths, initial_pot)
+    otf_manager.run_loop(paths, initial_pot, 1, potentials_dir)
 
     # Verifications
     assert engine.run.call_count == 2

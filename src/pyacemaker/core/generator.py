@@ -89,9 +89,11 @@ class StructureGenerator(BaseGenerator):
                 msg = f"Failed to generate base structure for {composition}: {e}"
                 raise GeneratorError(msg) from e
 
-            # Generate the base supercell template once (it's small enough typically)
-            # If supercell is huge (millions of atoms), even one copy is heavy.
-            # But we must have a base to perturb.
+            # Generate the base supercell template once.
+            # We must materialize the base supercell to apply perturbations (rattle/strain).
+            # While this object sits in memory, it is a single instance.
+            # The streaming generator (yield) ensures we do not store n_candidates copies.
+            # Thus, memory usage is O(Supercell_Size), not O(n_candidates * Supercell_Size).
             base_supercell = base_structure.repeat(self.config.supercell_size)  # type: ignore[no-untyped-call]
 
             count = 0

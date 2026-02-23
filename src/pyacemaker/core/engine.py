@@ -33,6 +33,9 @@ class LammpsEngine(BaseEngine):
         LammpsValidator.validate_structure(structure)
         potential_path = LammpsValidator.validate_potential(potential)
 
+        # Ensure potential path is resolved and exists (double check for race conditions/symlinks)
+        potential_path = potential_path.resolve(strict=True)
+
         # Prepare workspace (temp dir, file writing)
         # Note: We checked structure is not None/Empty in validator.
         # But prepare_workspace needs 'structure' as Atoms (which it is, after check).
