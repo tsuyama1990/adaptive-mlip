@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -12,36 +13,27 @@ from pyacemaker.factory import ModuleFactory
 
 
 @pytest.fixture
-def mock_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> PyAceConfig:
+def mock_config(
+    mock_structure_config: Any,
+    mock_dft_config: Any,
+    mock_training_config: Any,
+    mock_md_config: Any,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch
+) -> PyAceConfig:
     monkeypatch.chdir(tmp_path)
-    (tmp_path / "Fe_pseudo.UPF").touch()
+    # Create required pseudo file used in shared fixture
+    (tmp_path / "Fe.UPF").touch()
 
-    # Minimal config to satisfy Pydantic
+    # Update DFT config to use the created file and match element
+    mock_dft_config.pseudopotentials = {"Fe": "Fe.UPF"}
+
     return PyAceConfig(
         project_name="TestFactory",
-        structure={
-            "elements": ["Fe"],
-            "supercell_size": [1, 1, 1],
-            "policy_name": "cold_start"
-        },
-        dft={
-            "code": "qe",
-            "functional": "PBE",
-            "kpoints_density": 0.04,
-            "encut": 500.0,
-            "pseudopotentials": {"Fe": "Fe_pseudo.UPF"},
-        },
-        training={
-            "potential_type": "ace",
-            "cutoff_radius": 5.0,
-            "max_basis_size": 500
-        },
-        md={
-            "temperature": 300,
-            "pressure": 0.0,
-            "timestep": 1.0,
-            "n_steps": 10
-        },
+        structure=mock_structure_config,
+        dft=mock_dft_config,
+        training=mock_training_config,
+        md=mock_md_config,
         workflow={"max_iterations": 1},
     )
 

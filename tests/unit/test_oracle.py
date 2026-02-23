@@ -171,16 +171,13 @@ def test_dft_manager_invalid_input(mock_dft_config: DFTConfig) -> None:
     manager = DFTManager(mock_dft_config)
     atoms_list = [Atoms("H")]
 
+    # Check that it raises TypeError immediately upon calling next()
+    # because generator execution is deferred.
+    # We want to ensure it fails.
+    gen = manager.compute(atoms_list) # type: ignore[arg-type]
+
     with pytest.raises(TypeError, match="must be an Iterator"):
-        # Validation happens immediately when generator is created
-        # We need to call next() to trigger the code execution up to the first yield?
-        # No, compute is a generator function. The code *before* the first yield runs only when
-        # next() is called? Or does it?
-        # Actually, in Python generator functions, execution starts only when next() is called.
-        # So we MUST call next() or iterate to trigger validation.
-        # But wait, type checking `isinstance(structures, Iterator)` is at the top of the function.
-        # Yes, generator function body execution is deferred.
-        next(manager.compute(atoms_list))  # type: ignore[arg-type]
+        next(gen)
 
 def test_dft_manager_empty_iterator(mock_dft_config: DFTConfig) -> None:
     """Test compute handles empty iterator correctly with warning."""

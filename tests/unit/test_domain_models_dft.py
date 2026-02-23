@@ -1,6 +1,7 @@
+from pathlib import Path
+
 import pytest
 from pydantic import ValidationError
-from pathlib import Path
 
 from pyacemaker.domain_models import DFTConfig
 

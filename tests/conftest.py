@@ -19,7 +19,12 @@ from tests.constants import TEST_ENERGY_GENERIC
 
 
 @pytest.fixture
-def mock_dft_config() -> DFTConfig:
+def mock_dft_config(tmp_path: Any, monkeypatch: Any) -> DFTConfig:
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "H.UPF").touch()
+    (tmp_path / "O.UPF").touch()
+    (tmp_path / "Fe.UPF").touch()
+
     return DFTConfig(
         code="pw.x",
         functional="PBE",
@@ -30,6 +35,35 @@ def mock_dft_config() -> DFTConfig:
         smearing_width=0.1,
         diagonalization="david",
         pseudopotentials={"H": "H.UPF", "O": "O.UPF", "Fe": "Fe.UPF"},
+    )
+
+@pytest.fixture
+def mock_structure_config() -> StructureConfig:
+    return StructureConfig(
+        elements=["Fe"],
+        supercell_size=[2, 2, 2],
+        policy_name=ExplorationPolicy.COLD_START,
+    )
+
+@pytest.fixture
+def mock_training_config() -> TrainingConfig:
+    return TrainingConfig(
+        potential_type="ace",
+        cutoff_radius=5.0,
+        max_basis_size=500,
+        delta_learning=True,
+        active_set_optimization=True
+    )
+
+@pytest.fixture
+def mock_md_config() -> MDConfig:
+    return MDConfig(
+        temperature=300.0,
+        pressure=1.0,
+        timestep=0.001,
+        n_steps=1000,
+        hybrid_potential=True,
+        hybrid_params={"lj/cut": "..."}
     )
 
 

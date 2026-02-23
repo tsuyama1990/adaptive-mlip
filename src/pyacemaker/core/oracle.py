@@ -32,6 +32,14 @@ class DFTManager(BaseOracle):
         self.config = config
         self.driver = driver or QEDriver()
 
+        # Cache strategies to avoid recreation on every compute call
+        self.strategies: list[Callable[[DFTConfig], None] | None] = [
+            None,
+            self._strategy_reduce_beta,
+            self._strategy_increase_smearing,
+            self._strategy_use_cg
+        ]
+
     def compute(self, structures: Iterator[Atoms], batch_size: int = 10) -> Iterator[Atoms]:
         """
         Computes DFT properties for stream of structures.
@@ -60,43 +68,52 @@ class DFTManager(BaseOracle):
         # Strict streaming: Process one by one.
         # We do NOT use batched() here to avoid even small batch materialization in memory
         # as per strict audit requirements.
-        iterator_empty = True
 
+        # Attempt to get the first item to verify iterator is not empty
+        try:
+            first_structure = next(structures)
+        except StopIteration:
+            import warnings
+            warnings.warn("Oracle received empty iterator. No calculations performed.", UserWarning, stacklevel=2)
+            return
+
+        # Process first item
+        yield self._process_structure(first_structure)
+
+        # Process rest
         for atoms in structures:
-            iterator_empty = False
+            yield self._process_structure(atoms)
 
-            # Apply Periodic Embedding if configured
-            # This handles cluster carving -> box conversion as per Spec 3.2
-            if self.config.embedding_buffer:
-                # embed_cluster returns a new Atoms object (copy=True default)
-                structure_to_compute = embed_cluster(atoms, buffer=self.config.embedding_buffer)
-            else:
-                structure_to_compute = atoms
+    def _process_structure(self, atoms: Atoms) -> Atoms:
+        """
+        Applies embedding and computes properties for a single structure.
 
-            yield self._compute_single(structure_to_compute)
+        Args:
+            atoms: The input atomic structure.
 
-        if iterator_empty:
-             # Audit requirement: "Add explicit handling for empty iterators with appropriate error messages."
-             # Returning empty iterator is valid, but logging helps debug.
-             import warnings
-             warnings.warn("Oracle received empty iterator. No calculations performed.", UserWarning, stacklevel=2)
+        Returns:
+            Atoms: The structure with computed properties (energy, forces, stress).
+                   If embedding is configured, properties are computed for the embedded cluster.
+        """
+        # Apply Periodic Embedding if configured
+        if self.config.embedding_buffer:
+            structure_to_compute = embed_cluster(atoms, buffer=self.config.embedding_buffer)
+        else:
+            structure_to_compute = atoms
+
+        return self._compute_single(structure_to_compute)
 
     def _get_strategies(self) -> list[Callable[[DFTConfig], None] | None]:
         """
         Returns a list of self-healing strategies.
-        """
-        # We can extract these to methods or classes if they get complex.
-        # For now, we keep them simple but avoid unnecessary re-creation if possible.
-        # But they depend on instance config.
-        # To avoid re-creation, we could use functools.partial or make them instance methods.
 
-        # Method-based strategies to avoid closure recreation overhead
-        return [
-            None,
-            self._strategy_reduce_beta,
-            self._strategy_increase_smearing,
-            self._strategy_use_cg
-        ]
+        These strategies are applied sequentially if the initial calculation fails.
+        Each strategy modifies the configuration in place to attempt recovery (e.g., reducing mixing beta).
+
+        Returns:
+            List of callable strategies (or None for the initial attempt).
+        """
+        return self.strategies
 
     def _strategy_reduce_beta(self, c: DFTConfig) -> None:
         c.mixing_beta *= self.config.mixing_beta_factor

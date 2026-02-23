@@ -6,16 +6,6 @@ from pyacemaker.core.trainer import PacemakerTrainer
 from pyacemaker.domain_models.training import TrainingConfig
 
 
-@pytest.fixture
-def mock_training_config() -> TrainingConfig:
-    return TrainingConfig(
-        potential_type="ace",
-        cutoff_radius=5.0,
-        max_basis_size=500,
-        delta_learning=True,
-        active_set_optimization=True
-    )
-
 def test_pacemaker_trainer_train_success(mock_training_config: TrainingConfig, tmp_path: Path) -> None:
     trainer = PacemakerTrainer(mock_training_config)
 
