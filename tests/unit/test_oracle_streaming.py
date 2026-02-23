@@ -10,7 +10,10 @@ from pyacemaker.domain_models import DFTConfig
 
 
 @pytest.fixture
-def mock_dft_config() -> DFTConfig:
+def mock_dft_config(tmp_path, monkeypatch) -> DFTConfig:
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "H.UPF").touch()
+
     return DFTConfig(
         code="pw.x",
         functional="PBE",

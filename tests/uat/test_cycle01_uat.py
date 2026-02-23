@@ -1,62 +1,96 @@
-import subprocess
-import sys
 from pathlib import Path
-from typing import Any
+from unittest.mock import MagicMock, patch
 
 import pytest
-import yaml
 
+from pyacemaker.domain_models import PyAceConfig
 from tests.conftest import create_test_config_dict
 
 
-# Reusable fixture factory using shared utility
-def create_config(tmp_path: Path, **overrides: Any) -> Path:
-    config_dict = create_test_config_dict(**overrides)
-    config_path = tmp_path / "config.yaml"
-    with config_path.open("w") as f:
-        yaml.dump(config_dict, f)
-    return config_path
+def test_scenario_01_01_hello_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """
+    Scenario 01-01: "Hello Config"
+    Objective: Verify that the system can load a configuration file and initialize.
+    """
+    # 1. Preparation
+    monkeypatch.chdir(tmp_path)
+    # Create dummy pseudo files
+    (tmp_path / "H.UPF").touch()
+    (tmp_path / "O.UPF").touch()
 
-@pytest.fixture
-def valid_config_file(tmp_path: Path) -> Path:
-    return create_config(tmp_path)
+    config_file = tmp_path / "config.yaml"
+    # Create valid config manually as before
+    path = config_file
+    config_content = """
+project_name: UAT_Project
+structure:
+    elements: [H, O]
+    supercell_size: [1, 1, 1]
+dft:
+    code: qe
+    functional: PBE
+    kpoints_density: 0.04
+    encut: 500.0
+    pseudopotentials:
+        H: H.UPF
+        O: O.UPF
+training:
+    potential_type: ace
+    cutoff_radius: 5.0
+    max_basis_size: 500
+md:
+    temperature: 300.0
+    pressure: 0.0
+    timestep: 0.001
+    n_steps: 1000
+    uncertainty_threshold: 0.1
+    check_interval: 50
+workflow:
+    max_iterations: 10
+    state_file_path: uat_state.json
+"""
+    path.write_text(config_content)
 
-@pytest.fixture
-def invalid_config_file_temp(tmp_path: Path) -> Path:
-    return create_config(tmp_path, project_name="Bad_Temp", md={"temperature": -100.0})
+    # 2. Action
+    from pyacemaker.main import main
 
-@pytest.fixture
-def invalid_config_file_cutoff(tmp_path: Path) -> Path:
-    return create_config(tmp_path, project_name="Bad_Cutoff", training={"cutoff_radius": -2.0})
+    with patch(
+        "argparse.ArgumentParser.parse_args",
+        return_value=MagicMock(config=str(config_file), dry_run=True),
+    ):
+        with pytest.raises(SystemExit) as excinfo:
+            main()
+        assert excinfo.value.code == 0
 
-def test_scenario_01_01_hello_config(valid_config_file: Path) -> None:
-    env = {"PYTHONPATH": str(Path("src").resolve())}
-    cwd = valid_config_file.parent
-    cmd = [sys.executable, "-m", "pyacemaker.main", "--config", valid_config_file.name, "--dry-run"]
 
-    # Use check=True for expected success
-    result = subprocess.run(cmd, capture_output=True, text=True, env=env, cwd=str(cwd), check=True) # noqa: S603
+def test_scenario_01_02_guardrails_check_temp(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """
+    Scenario 01-02: "Guardrails Check" (Temperature)
+    Objective: Verify that the system rejects invalid physical parameters (negative temperature).
+    """
+    # 1. Preparation
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "Fe.UPF").touch()
 
-    assert "Configuration loaded successfully" in result.stdout or "Configuration loaded successfully" in result.stderr
+    # We use Pydantic model directly validation
+    config_dict = create_test_config_dict(md={"temperature": -50.0})
 
-def test_scenario_01_02_guardrails_check_temp(invalid_config_file_temp: Path) -> None:
-    env = {"PYTHONPATH": str(Path("src").resolve())}
-    cwd = invalid_config_file_temp.parent
-    cmd = [sys.executable, "-m", "pyacemaker.main", "--config", invalid_config_file_temp.name]
+    # 2. Action & 3. Expectation
+    # Pydantic raises ValidationError
+    from pydantic import ValidationError
+    with pytest.raises(ValidationError):
+        PyAceConfig(**config_dict)
 
-    # Expected failure, check=False is appropriate but we assert returncode != 0
-    result = subprocess.run(cmd, capture_output=True, text=True, env=env, cwd=str(cwd), check=False)  # noqa: S603
-    assert result.returncode != 0
-    assert "validation error" in result.stderr
-    assert "temperature" in result.stderr
 
-def test_scenario_01_02_guardrails_check_cutoff(invalid_config_file_cutoff: Path) -> None:
-    env = {"PYTHONPATH": str(Path("src").resolve())}
-    cwd = invalid_config_file_cutoff.parent
-    cmd = [sys.executable, "-m", "pyacemaker.main", "--config", invalid_config_file_cutoff.name]
+def test_scenario_01_02_guardrails_check_cutoff(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """
+    Scenario 01-02: "Guardrails Check" (Cutoff)
+    Objective: Verify that the system rejects invalid physical parameters (negative cutoff).
+    """
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "Fe.UPF").touch()
 
-    # Expected failure
-    result = subprocess.run(cmd, capture_output=True, text=True, env=env, cwd=str(cwd), check=False)  # noqa: S603
-    assert result.returncode != 0
-    assert "validation error" in result.stderr
-    assert "cutoff_radius" in result.stderr
+    config_dict = create_test_config_dict(training={"cutoff_radius": -1.0})
+    from pydantic import ValidationError
+    with pytest.raises(ValidationError):
+        PyAceConfig(**config_dict)

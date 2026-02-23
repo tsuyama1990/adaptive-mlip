@@ -3,12 +3,16 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from pyacemaker.core.exceptions import ConfigError
+from pyacemaker.core.generator import StructureGenerator
 from pyacemaker.domain_models import PyAceConfig
-from pyacemaker.factory import Cycle01Engine, Cycle01Generator, Cycle01Trainer, ModuleFactory
+from pyacemaker.factory import Cycle01Engine, Cycle01Trainer, ModuleFactory
 
 
 @pytest.fixture
-def mock_config() -> PyAceConfig:
+def mock_config(tmp_path, monkeypatch) -> PyAceConfig:
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "Fe.UPF").touch()
+
     # Minimal config to satisfy Pydantic
     return PyAceConfig.model_validate({
         "project_name": "TestFactory",
@@ -34,7 +38,7 @@ def test_module_factory_create_modules(mock_config: PyAceConfig) -> None:
     with patch("pyacemaker.factory.DFTManager") as MockDFTManager:
         gen, oracle, trainer, engine = ModuleFactory.create_modules(mock_config)
 
-        assert isinstance(gen, Cycle01Generator)
+        assert isinstance(gen, StructureGenerator)
         assert isinstance(trainer, Cycle01Trainer)
         assert isinstance(engine, Cycle01Engine)
 

@@ -1,5 +1,14 @@
+from enum import StrEnum
+
 from ase.data import chemical_symbols
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+
+class ExplorationPolicy(StrEnum):
+    COLD_START = "cold_start"
+    RANDOM_RATTLE = "random_rattle"
+    STRAIN = "strain"
+    DEFECTS = "defects"
 
 
 class StructureConfig(BaseModel):
@@ -12,13 +21,23 @@ class StructureConfig(BaseModel):
         ..., min_length=3, max_length=3, description="Supercell size [nx, ny, nz]"
     )
 
-
-    # Adaptive Exploration Policy Parameters (Spec Section 3.1)
-    adaptive_ratio: float = Field(
-        0.0, ge=0.0, le=1.0, description="MD/MC Ratio (0.0 = Pure MD, 1.0 = Pure MC)"
+    # Exploration Policy Configuration
+    policy_name: ExplorationPolicy = Field(
+        default=ExplorationPolicy.COLD_START,
+        description="Exploration policy to use"
     )
-    defect_density: float = Field(0.0, ge=0.0, description="Concentration of defects to introduce")
-    strain_range: float = Field(0.0, ge=0.0, description="Range of strain for elastic sampling")
+    rattle_stdev: float = Field(
+        default=0.1, ge=0.0, description="Standard deviation for random rattle (Angstrom)"
+    )
+    strain_mode: str = Field(
+        default="volume", description="Mode for strain application (volume, shear, mixed)"
+    )
+    vacancy_rate: float = Field(
+        default=0.0, ge=0.0, le=1.0, description="Rate of vacancies to introduce"
+    )
+    num_structures: int = Field(
+        default=1, ge=1, description="Number of structures to generate"
+    )
 
     @field_validator("elements")
     @classmethod
@@ -26,6 +45,12 @@ class StructureConfig(BaseModel):
         if not v:
             msg = "Elements list cannot be empty"
             raise ValueError(msg)
+
+        # Check for duplicates
+        if len(v) != len(set(v)):
+             msg = "Elements list cannot contain duplicates"
+             raise ValueError(msg)
+
         valid_symbols = set(chemical_symbols)
         for el in v:
             if el not in valid_symbols:

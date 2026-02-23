@@ -7,6 +7,15 @@ FILENAME_CANDIDATES = "candidates.xyz"
 FILENAME_TRAINING = "training_data.xyz"
 FILENAME_POTENTIAL = "potential.yace"
 
+# Default Configuration Values (Moved from domain models to constants)
+DEFAULT_STATE_FILE = "state.json"
+DEFAULT_DATA_DIR = "data"
+DEFAULT_ACTIVE_LEARNING_DIR = "active_learning"
+DEFAULT_POTENTIALS_DIR = "potentials"
+DEFAULT_BATCH_SIZE = 5
+DEFAULT_N_CANDIDATES = 10
+DEFAULT_CHECKPOINT_INTERVAL = 1
+
 # Logging Messages
 LOG_PROJECT_INIT = "Project: {project_name} initialized."
 LOG_CONFIG_LOADED = "Configuration loaded successfully."

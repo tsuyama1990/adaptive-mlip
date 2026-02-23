@@ -3,35 +3,56 @@ from unittest.mock import patch
 import numpy as np
 import pytest
 from ase import Atoms
+from ase.calculators.calculator import Calculator
 
 from pyacemaker.constants import TEST_ENERGY_H2O
 from pyacemaker.core.oracle import DFTManager
 from pyacemaker.domain_models import DFTConfig
-from tests.conftest import MockCalculator
 
-# Monkeypatch calculate to return specific UAT values if needed,
-# or better, rely on conftest MockCalculator if generic values suffice.
-# UAT checks for -14.5. Conftest gives -13.6.
-# Let's subclass to keep UAT values.
 
-class UATMockCalculator(MockCalculator):
-    """Subclass to provide UAT-specific energy values."""
+class UATMockCalculator(Calculator):
+    """
+    Mock ASE calculator for testing purposes.
+    Can simulate failures and setup errors.
+    """
+
+    def __init__(self, fail_count: int = 0, setup_error: bool = False) -> None:
+        super().__init__()  # type: ignore[no-untyped-call]
+        self.implemented_properties = ["energy", "forces", "stress"]
+        self.fail_count = fail_count
+        self.setup_error = setup_error
+        self.attempts = 0
+
     def calculate(
         self,
         atoms: Atoms | None = None,
         properties: list[str] | None = None,
         system_changes: list[str] | None = None,
     ) -> None:
-        super().calculate(atoms, properties, system_changes)
-        # Override with UAT specific values
-        self.results["energy"] = TEST_ENERGY_H2O
-        # Ensure forces shape matches atoms
-        n_atoms = len(atoms) if atoms else 3
-        self.results["forces"] = np.zeros((n_atoms, 3))
+        self.attempts += 1
+
+        if self.setup_error:
+            msg = "Setup failed"
+            raise RuntimeError(msg)
+
+        if self.attempts <= self.fail_count:
+            # Simulate SCF failure
+            msg = "Convergence not achieved"
+            raise RuntimeError(msg)
+
+        self.results = {
+            "energy": TEST_ENERGY_H2O,
+            "forces": np.zeros((len(atoms) if atoms else 3, 3)),
+            "stress": np.array([0.0] * 6),
+        }
 
 
 @pytest.fixture
-def uat_dft_config() -> DFTConfig:
+def uat_dft_config(tmp_path, monkeypatch) -> DFTConfig:
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "H.UPF").touch()
+    (tmp_path / "O.UPF").touch()
+
     return DFTConfig(
         code="pw.x",
         functional="PBE",
@@ -45,7 +66,7 @@ def uat_dft_config() -> DFTConfig:
     )
 
 
-def test_uat_02_01_single_point_calculation(uat_dft_config: DFTConfig) -> None:
+def test_uat_02_01_single_point_calculation(uat_dft_config: DFTConfig, monkeypatch) -> None:
     """
     Scenario 02-01: Single Point Calculation.
     Verify that the system can run a simple DFT calculation (mocked).
@@ -54,13 +75,20 @@ def test_uat_02_01_single_point_calculation(uat_dft_config: DFTConfig) -> None:
     h2o = Atoms("H2O", positions=[[0, 0, 0], [0, 0, 0.96], [0, 0.96, 0]], cell=[10, 10, 10], pbc=True)
 
     # 2. Action: Run DFTManager with mocked driver
-    with patch("pyacemaker.core.oracle.QEDriver") as MockDriver:
-        manager = DFTManager(uat_dft_config)
-        mock_driver_instance = MockDriver.return_value
-        mock_driver_instance.get_calculator.return_value = UATMockCalculator(fail_count=0)
+    # We patch QEDriver but we also need to ensure the driver instance returned
+    # has a get_calculator method that returns our calculator
 
-        # Use explicit iteration to avoid list() materialization risk in principle,
-        # though [h2o] is small.
+    # We patch at the source where DFTManager imports it or uses it
+    # DFTManager imports QEDriver from interfaces.qe_driver
+
+    with patch("pyacemaker.core.oracle.QEDriver") as MockDriverClass:
+        mock_driver_instance = MockDriverClass.return_value
+        # Mock get_calculator to return a UATMockCalculator instance
+        mock_driver_instance.get_calculator.side_effect = lambda atoms, config: UATMockCalculator(fail_count=0)
+
+        manager = DFTManager(uat_dft_config)
+
+        # Use explicit iteration
         gen = manager.compute(iter([h2o]))
         result = next(gen)
 
@@ -78,14 +106,20 @@ def test_uat_02_02_self_healing(uat_dft_config: DFTConfig, caplog: pytest.LogCap
     h2o = Atoms("H2O", positions=[[0, 0, 0], [0, 0, 0.96], [0, 0.96, 0]], cell=[10, 10, 10], pbc=True)
 
     # 2. Action: Run DFTManager with failure
-    with patch("pyacemaker.core.oracle.QEDriver") as MockDriver:
-        manager = DFTManager(uat_dft_config)
-        mock_driver_instance = MockDriver.return_value
+    with patch("pyacemaker.core.oracle.QEDriver") as MockDriverClass:
+        mock_driver_instance = MockDriverClass.return_value
 
         # Mock failure on first attempt, success on second
+        # We need side_effect to return distinct calculator instances or handle state
+        # But here get_calculator is called with (atoms, config)
+        # We can use side_effect on the mock method
+
         calc_fail = UATMockCalculator(fail_count=1)
         calc_success = UATMockCalculator(fail_count=0)
+
         mock_driver_instance.get_calculator.side_effect = [calc_fail, calc_success]
+
+        manager = DFTManager(uat_dft_config)
 
         gen = manager.compute(iter([h2o]))
         result = next(gen)
