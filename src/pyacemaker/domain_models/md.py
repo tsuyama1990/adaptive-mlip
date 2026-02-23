@@ -1,6 +1,16 @@
-from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, PositiveFloat, PositiveInt
+
+
+class HybridParams(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    zbl_cut_inner: PositiveFloat = Field(
+        2.0, description="Inner cutoff radius for ZBL potential (Angstrom)"
+    )
+    zbl_cut_outer: PositiveFloat = Field(
+        2.5, description="Outer cutoff radius for ZBL potential (Angstrom)"
+    )
 
 
 class MDSimulationResult(BaseModel):
@@ -13,6 +23,7 @@ class MDSimulationResult(BaseModel):
     n_steps: int = Field(..., description="Number of steps actually performed")
     temperature: float = Field(..., description="Average or final temperature")
     trajectory_path: str | None = Field(None, description="Path to the trajectory file")
+    log_path: str | None = Field(None, description="Path to the simulation log file")
     halt_structure_path: str | None = Field(
         None, description="Path to the structure where halt occurred"
     )
@@ -47,8 +58,8 @@ class MDConfig(BaseModel):
     hybrid_potential: bool = Field(
         False, description="Use hybrid potential (ACE + LJ/ZBL)"
     )
-    hybrid_params: dict[str, Any] = Field(
-        default_factory=dict, description="Parameters for hybrid potential baseline"
+    hybrid_params: HybridParams = Field(
+        default_factory=HybridParams, description="Parameters for hybrid potential baseline"
     )
 
     # Spec Section 3.4 (OTF)

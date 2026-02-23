@@ -34,7 +34,14 @@ class LammpsDriver:
 
         Args:
             script: String containing LAMMPS commands (can be multi-line).
+
+        Raises:
+            ValueError: If script contains non-ASCII characters (basic safety check).
         """
+        if not script.isascii():
+             msg = "Script contains non-ASCII characters, which may be unsafe."
+             raise ValueError(msg)
+
         for line in script.split("\n"):
             cmd = line.strip()
             if cmd:
@@ -72,22 +79,19 @@ class LammpsDriver:
         # Gather positions (type 1 = double, count 3)
         # Returns a ctypes pointer to array of doubles
         x_ptr = self.lmp.gather_atoms("x", 1, 3)
-        # Convert to numpy array
-        x_np = np.ctypeslib.as_array(x_ptr, shape=(natoms, 3))
-        # Copy to ensure we own the memory (gather_atoms returns internal memory)
-        positions = np.copy(x_np)
+        # Convert to numpy array view (no copy yet)
+        positions_view = np.ctypeslib.as_array(x_ptr, shape=(natoms, 3))
 
         # Gather types (type 0 = integer, count 1)
         # Returns a ctypes pointer to array of ints
         types_ptr = self.lmp.gather_atoms("type", 0, 1)
-        types_np = np.ctypeslib.as_array(types_ptr, shape=(natoms,))
-        types = np.copy(types_np)
+        types_view = np.ctypeslib.as_array(types_ptr, shape=(natoms,))
 
         # Map types to symbols
         # LAMMPS types are 1-based. elements list is 0-based.
         # type i corresponds to elements[i-1]
         try:
-            symbols = [elements[t - 1] for t in types]
+            symbols = [elements[t - 1] for t in types_view]
         except IndexError as e:
              msg = f"LAMMPS type index out of range for elements list: {e}"
              raise ValueError(msg) from e
@@ -110,4 +114,6 @@ class LammpsDriver:
             [xz, yz, lz]
         ])
 
-        return Atoms(symbols=symbols, positions=positions, cell=cell, pbc=periodicity)
+        # ASE Atoms constructor will copy the positions array if it's a numpy array.
+        # We pass the view 'positions_view'.
+        return Atoms(symbols=symbols, positions=positions_view, cell=cell, pbc=periodicity)

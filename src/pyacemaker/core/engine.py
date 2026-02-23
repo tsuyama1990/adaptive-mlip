@@ -1,4 +1,6 @@
+import tempfile
 import uuid
+from pathlib import Path
 from typing import Any
 
 from ase import Atoms
@@ -8,6 +10,7 @@ from ase.io import write
 from pyacemaker.core.base import BaseEngine
 from pyacemaker.domain_models.md import MDConfig, MDSimulationResult
 from pyacemaker.interfaces.lammps_driver import LammpsDriver
+from pyacemaker.utils.structure import get_species_order
 
 
 class LammpsEngine(BaseEngine):
@@ -48,10 +51,8 @@ class LammpsEngine(BaseEngine):
 
         if self.config.hybrid_potential:
             # Hybrid overlay: PACE + ZBL
-            # Parameters (inner/outer cutoffs) should come from config or defaults
-            zbl_cut_inner = self.config.hybrid_params.get("zbl_cut_inner", 2.0)
-            zbl_cut_outer = self.config.hybrid_params.get("zbl_cut_outer", 2.5)
-            lines.append(f"pair_style hybrid/overlay pace zbl {zbl_cut_inner} {zbl_cut_outer}")
+            params = self.config.hybrid_params
+            lines.append(f"pair_style hybrid/overlay pace zbl {params.zbl_cut_inner} {params.zbl_cut_outer}")
 
             # PACE
             lines.append(f"pair_coeff * * pace {potential_path} {species_str}")
@@ -130,61 +131,77 @@ class LammpsEngine(BaseEngine):
              msg = "Structure must be provided."
              raise ValueError(msg)
 
-        # Prepare filenames with UUID to prevent collisions
-        run_id = uuid.uuid4().hex[:8]
-        data_file = f"data_{run_id}.lmp"
-        dump_file = f"dump_{run_id}.lammpstrj"
-        log_file = f"log_{run_id}.lammps"
+        # Use temporary directory for intermediate files to prevent clutter/race conditions
+        with tempfile.TemporaryDirectory() as tmp_dir_str:
+            tmp_dir = Path(tmp_dir_str)
+            run_id = uuid.uuid4().hex[:8]
 
-        # Get elements for specorder
-        elements = sorted({atom.symbol for atom in structure})
+            # Intermediate files (in temp)
+            data_file = tmp_dir / f"data_{run_id}.lmp"
 
-        # Write structure to LAMMPS data format
-        # Use atomic style
-        try:
-            write(data_file, structure, format="lammps-data", specorder=elements, atom_style="atomic")
-        except Exception as e:
-            msg = f"Failed to write LAMMPS data file: {e}"
-            raise RuntimeError(msg) from e
+            # Output files (in CWD for persistence)
+            # We want to return paths to files that persist after temp dir cleanup.
+            cwd = Path.cwd()
+            dump_file = cwd / f"dump_{run_id}.lammpstrj"
+            log_file = cwd / f"log_{run_id}.lammps"
 
-        # Generate script
-        script = self._generate_input_script(
-            structure, str(potential), data_file, dump_file, elements
-        )
+            # Get elements for specorder
+            elements = get_species_order(structure)
 
-        # Initialize Driver with unique log file
-        driver = LammpsDriver(["-screen", "none", "-log", log_file])
+            # Write structure to LAMMPS data file in temp dir
+            try:
+                write(str(data_file), structure, format="lammps-data", specorder=elements, atom_style="atomic")
+            except Exception as e:
+                msg = f"Failed to write LAMMPS data file: {e}"
+                raise RuntimeError(msg) from e
 
-        # Run
-        try:
-            driver.run(script)
-        except Exception as e:
-            msg = f"LAMMPS execution failed: {e}"
-            raise RuntimeError(msg) from e
+            # Generate script
+            # Note: LAMMPS script needs paths.
+            # If we pass absolute paths, it works regardless of CWD.
+            # data_file is absolute (tmp_dir).
+            # dump_file is absolute (cwd).
+            # potential_path might be relative. We should resolve it?
+            # Or assume LAMMPS runs in CWD?
+            # LammpsDriver runs in current process, so CWD is same.
 
-        # Extract Results
-        try:
-            energy = driver.extract_variable("pe")
-            temperature = driver.extract_variable("temp")
-            step = int(driver.extract_variable("step"))
-            max_gamma = driver.extract_variable("max_g")
-        except Exception:
-            # If variables not available, return defaults
-            energy = 0.0
-            temperature = 0.0
-            step = 0
-            max_gamma = 0.0
+            script = self._generate_input_script(
+                structure, str(potential), str(data_file), str(dump_file), elements
+            )
 
-        halted = step < self.config.n_steps
+            # Initialize Driver with unique log file
+            driver = LammpsDriver(["-screen", "none", "-log", str(log_file)])
 
-        # Result
-        return MDSimulationResult(
-            energy=energy,
-            forces=[[0.0, 0.0, 0.0]], # Placeholder as we dump trajectory
-            halted=halted,
-            max_gamma=max_gamma,
-            n_steps=step,
-            temperature=temperature,
-            trajectory_path=dump_file,
-            halt_structure_path=dump_file if halted else None
-        )
+            # Run
+            try:
+                driver.run(script)
+            except Exception as e:
+                msg = f"LAMMPS execution failed: {e}"
+                raise RuntimeError(msg) from e
+
+            # Extract Results
+            try:
+                energy = driver.extract_variable("pe")
+                temperature = driver.extract_variable("temp")
+                step = int(driver.extract_variable("step"))
+                max_gamma = driver.extract_variable("max_g")
+            except Exception:
+                # If variables not available, return defaults
+                energy = 0.0
+                temperature = 0.0
+                step = 0
+                max_gamma = 0.0
+
+            halted = step < self.config.n_steps
+
+            # Result
+            return MDSimulationResult(
+                energy=energy,
+                forces=[[0.0, 0.0, 0.0]], # Placeholder as we dump trajectory
+                halted=halted,
+                max_gamma=max_gamma,
+                n_steps=step,
+                temperature=temperature,
+                trajectory_path=str(dump_file),
+                log_path=str(log_file),
+                halt_structure_path=str(dump_file) if halted else None
+            )
