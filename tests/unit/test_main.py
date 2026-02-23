@@ -33,9 +33,13 @@ workflow:
     p = tmp_path / "config.yaml"
     p.write_text(config_data)
 
-    with patch(
-        "argparse.ArgumentParser.parse_args", return_value=MagicMock(config=str(p), dry_run=True)
-    ), patch("pathlib.Path.cwd", return_value=tmp_path):
+    with (
+        patch(
+            "argparse.ArgumentParser.parse_args",
+            return_value=MagicMock(config=str(p), dry_run=True),
+        ),
+        patch("pathlib.Path.cwd", return_value=tmp_path),
+    ):
         with pytest.raises(SystemExit) as e:
             main()
         assert e.value.code == 0
@@ -92,9 +96,13 @@ project_name: BadConfig
     p = tmp_path / "bad.yaml"
     p.write_text(config_data)
 
-    with patch(
-        "argparse.ArgumentParser.parse_args", return_value=MagicMock(config=str(p), dry_run=False)
-    ), patch("pathlib.Path.cwd", return_value=tmp_path):
+    with (
+        patch(
+            "argparse.ArgumentParser.parse_args",
+            return_value=MagicMock(config=str(p), dry_run=False),
+        ),
+        patch("pathlib.Path.cwd", return_value=tmp_path),
+    ):
         with pytest.raises(SystemExit) as e:
             main()
         assert e.value.code == 1

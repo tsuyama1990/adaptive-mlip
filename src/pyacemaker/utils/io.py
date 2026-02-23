@@ -25,7 +25,7 @@ def load_yaml(file_path: str | Path) -> dict[str, Any]:
 
     Raises:
         FileNotFoundError: If the file does not exist.
-        ValueError: If path is invalid or attempts traversal.
+        ValueError: If path is invalid, attempts traversal, or file is empty.
         yaml.YAMLError: If the YAML is invalid.
     """
     path = Path(file_path).resolve()
@@ -53,12 +53,17 @@ def load_yaml(file_path: str | Path) -> dict[str, Any]:
             raise ValueError(msg) from e
         else:
             if not isinstance(data, dict):
-                # Handle empty file or just scalar
-                if data is None:
-                    return {}
-                raise ValueError(ERR_YAML_NOT_DICT)
+                 # Handle empty file or just scalar
+                 if data is None:
+                     msg = "YAML file is empty"
+                     raise ValueError(msg)
+                 # TRY004 suggestion: raising TypeError might be better for "not dict",
+                 # but ValueError is also common for "content invalid".
+                 # To satisfy Ruff, we can suppress or change.
+                 # Let's check strict requirement. "Prefer TypeError exception for invalid type".
+                 # The function signature says returns Dict.
+                 raise TypeError(ERR_YAML_NOT_DICT)
             return data
-
 
 def load_config(file_path: str | Path) -> PyAceConfig:
     """

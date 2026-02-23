@@ -14,3 +14,12 @@ class WorkflowConfig(BaseModel):
     state_file_path: str = Field(
         default="state.json", description="Path to the state checkpoint file"
     )
+
+    # New fields to avoid magic numbers
+    batch_size: PositiveInt = Field(
+        default=5, description="Number of structures to process in a batch"
+    )
+    n_candidates: PositiveInt = Field(
+        default=10, description="Number of candidate structures to generate per iteration"
+    )
+    checkpoint_interval: PositiveInt = Field(default=1, description="Save state every N iterations")

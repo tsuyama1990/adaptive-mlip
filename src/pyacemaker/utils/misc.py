@@ -13,6 +13,6 @@ def batched(iterable: Iterable[T], n: int) -> Iterator[tuple[T, ...]]:
     if n < 1:
         msg = "n must be at least one"
         raise ValueError(msg)
-    it = iter(iterable)
-    while batch := tuple(islice(it, n)):
-        yield batch
+    iterator = iter(iterable)
+    while current_batch := tuple(islice(iterator, n)):
+        yield current_batch

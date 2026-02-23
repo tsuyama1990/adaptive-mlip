@@ -6,6 +6,7 @@ from unittest.mock import Mock
 import pytest
 from ase import Atoms
 
+from pyacemaker.constants import LOG_COMPUTED_PROPERTIES, LOG_ITERATION_COMPLETED
 from pyacemaker.core.base import BaseEngine, BaseGenerator, BaseOracle, BaseTrainer
 from pyacemaker.domain_models import (
     DFTConfig,
@@ -27,10 +28,10 @@ class FakeGenerator(BaseGenerator):
 
 
 class FakeOracle(BaseOracle):
-    def compute(self, structures: list[Atoms], batch_size: int = 10) -> list[Atoms]:
+    def compute(self, structures: Iterator[Atoms], batch_size: int = 10) -> Iterator[Atoms]:
         for atoms in structures:
             atoms.info["energy"] = -10.0
-        return structures
+            yield atoms
 
 
 class FakeTrainer(BaseTrainer):
@@ -53,8 +54,7 @@ def mock_config(tmp_path: Path) -> PyAceConfig:
         training=TrainingConfig(potential_type="ace", cutoff_radius=4.0, max_basis_size=100),
         md=MDConfig(temperature=300.0, pressure=0.0, timestep=0.001, n_steps=100),
         workflow=WorkflowConfig(
-            max_iterations=2,
-            state_file_path=str(tmp_path / "test_state.json"),  # Configurable state file
+            max_iterations=2, state_file_path=str(tmp_path / "test_state.json")
         ),
         logging=LoggingConfig(level="DEBUG", log_file=str(tmp_path / "test.log")),
     )
@@ -63,11 +63,10 @@ def mock_config(tmp_path: Path) -> PyAceConfig:
 def test_orchestrator_initialization(mock_config: PyAceConfig) -> None:
     orch = Orchestrator(mock_config)
     assert orch.iteration == 0
-    # Verify state file path is taken from config
     assert orch.state_file.name == "test_state.json"
 
 
-def test_orchestrator_loop_with_fakes(mock_config: PyAceConfig) -> None:
+def test_orchestrator_loop_with_fakes(mock_config: PyAceConfig, caplog: Any) -> None:
     orch = Orchestrator(mock_config)
 
     # Inject Fakes
@@ -83,6 +82,10 @@ def test_orchestrator_loop_with_fakes(mock_config: PyAceConfig) -> None:
     assert orch.state_file.exists()
     assert "iteration" in orch.state_file.read_text()
 
+    # Verify logging output
+    assert LOG_COMPUTED_PROPERTIES.format(count=10) in caplog.text
+    assert LOG_ITERATION_COMPLETED.format(iteration=1) in caplog.text
+
 
 def test_orchestrator_checkpointing(mock_config: PyAceConfig) -> None:
     # 1. Save state
@@ -92,7 +95,6 @@ def test_orchestrator_checkpointing(mock_config: PyAceConfig) -> None:
 
     # 2. Load state
     orch2 = Orchestrator(mock_config)
-    # Orchestrator loads state in __init__
     assert orch2.iteration == 5
 
 

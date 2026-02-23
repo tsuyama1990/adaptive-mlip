@@ -38,17 +38,26 @@ def test_load_yaml_invalid_yaml(tmp_path: Path) -> None:
 def test_load_yaml_empty(tmp_path: Path) -> None:
     p = tmp_path / "empty.yaml"
     p.touch()
-    with patch("pathlib.Path.cwd", return_value=tmp_path):
-        assert load_yaml(p) == {}
+    # Combine patch and pytest.raises into single with statement
+    # However, Python < 3.9 doesn't support parenthesized context managers cleanly
+    # if we strictly follow older styles, but we target >=3.11.
+    # The SIM117 suggests combining nested.
+
+    with (
+        patch("pathlib.Path.cwd", return_value=tmp_path),
+        pytest.raises(ValueError, match="YAML file is empty")
+    ):
+        load_yaml(p)
 
 def test_load_yaml_not_dict(tmp_path: Path) -> None:
     p = tmp_path / "list.yaml"
     with p.open("w") as f:
         f.write("- item1\n- item2")
 
+    # Updated to TypeError for TRY004
     with (
         patch("pathlib.Path.cwd", return_value=tmp_path),
-        pytest.raises(ValueError, match="must contain a dictionary")
+        pytest.raises(TypeError, match="must contain a dictionary")
     ):
         load_yaml(p)
 
