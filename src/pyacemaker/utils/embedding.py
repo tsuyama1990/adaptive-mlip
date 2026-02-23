@@ -2,7 +2,7 @@ import numpy as np
 from ase import Atoms
 from numpy.typing import NDArray
 
-from pyacemaker.constants import EMBEDDING_TOLERANCE_CELL
+from pyacemaker.domain_models.constants import EMBEDDING_TOLERANCE_CELL
 
 
 def embed_cluster(cluster: Atoms, buffer: float, copy: bool = True) -> Atoms:
@@ -41,14 +41,16 @@ def embed_cluster(cluster: Atoms, buffer: float, copy: bool = True) -> Atoms:
         msg = f"Buffer is excessively large: {buffer} (limit 1000.0)"
         raise ValueError(msg)
 
-    # Get bounding box (no copy)
-    positions: NDArray[np.float64] = cluster.get_positions()  # type: ignore[no-untyped-call]
+    # Optimization: Use .positions property to avoid copy if possible
+    # ASE .positions returns a reference to the internal array.
+    positions: NDArray[np.float64] = cluster.positions
 
-    # Validation: Ensure positions is valid (redundant if ASE is valid, but good for type safety)
+    # Validation: Ensure positions is valid
     if positions.ndim != 2 or positions.shape[1] != 3:
         msg = f"Invalid positions shape: {positions.shape}. Expected (N, 3)."
         raise ValueError(msg)
 
+    # Calculate bounding box efficiently (requires scanning array, unavoidable)
     min_xyz = np.min(positions, axis=0)
     max_xyz = np.max(positions, axis=0)
 
@@ -68,20 +70,17 @@ def embed_cluster(cluster: Atoms, buffer: float, copy: bool = True) -> Atoms:
 
     # Handle object creation vs modification
     if copy:
-        # Create a deep copy of the Atoms object to ensure positions are not shared
+        # Create a deep copy of the Atoms object
         target = cluster.copy()  # type: ignore[no-untyped-call]
+        # Copy positions array to ensure independence
         target.positions = target.positions.copy()
     else:
-        # In-place modification of the original object: absolutely no new copies
+        # In-place modification of the original object
         target = cluster
 
-    # Modify the target (whether it's the copy or original)
+    # Modify the target
     target.set_cell(cell_lengths)
     target.set_pbc(True)
     target.positions += shift
 
-    # Explicit cast to Atoms to satisfy type checker if ASE doesn't return strictly Atoms
-    # or just return as is, assuming target is Atoms.
-    # The ignore was because mypy thinks ASE methods might return something else?
-    # Actually ASE copy() returns 'Atoms' (or subclasses).
     return target  # type: ignore[no-any-return]

@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
 
@@ -10,7 +11,10 @@ from pyacemaker.domain_models import DFTConfig
 
 
 @pytest.fixture
-def mock_dft_config() -> DFTConfig:
+def mock_dft_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> DFTConfig:
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "H.UPF").touch()
+
     return DFTConfig(
         code="pw.x",
         functional="PBE",
@@ -42,14 +46,21 @@ def test_dft_manager_streaming_behavior(mock_dft_config: DFTConfig) -> None:
     manager = DFTManager(mock_dft_config, driver=mock_driver)
 
     # 3. Call compute
-    # If it tries to list() the input, it will hang (infinite loop) or OOM.
+    # This should return a generator immediately without hanging
     stream = manager.compute(infinite_structures())
 
-    # 4. Consume just a few items
+    # 4. Consume just a few items manually
+    # Do NOT use list(stream) as it would be infinite
     first = next(stream)
     second = next(stream)
 
     assert len(first) == 1
     assert len(second) == 1
+
     # If we reached here, it means compute didn't consume the whole iterator.
+    # Verify driver calls matches consumed count
     assert mock_driver.get_calculator.call_count == 2
+
+    # Optional: consume one more to be sure
+    next(stream)
+    assert mock_driver.get_calculator.call_count == 3

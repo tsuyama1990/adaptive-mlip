@@ -6,7 +6,9 @@ from pathlib import Path
 
 from ase.io import iread, write
 
-from pyacemaker.constants import (
+from pyacemaker.core.base import BaseEngine, BaseGenerator, BaseOracle, BaseTrainer
+from pyacemaker.domain_models import PyAceConfig
+from pyacemaker.domain_models.defaults import (
     FILENAME_CANDIDATES,
     FILENAME_TRAINING,
     LOG_COMPUTED_PROPERTIES,
@@ -29,8 +31,6 @@ from pyacemaker.constants import (
     TEMPLATE_ITER_DIR,
     TEMPLATE_POTENTIAL_FILE,
 )
-from pyacemaker.core.base import BaseEngine, BaseGenerator, BaseOracle, BaseTrainer
-from pyacemaker.domain_models import PyAceConfig
 from pyacemaker.factory import ModuleFactory
 from pyacemaker.logger import setup_logger
 from pyacemaker.utils.misc import batched

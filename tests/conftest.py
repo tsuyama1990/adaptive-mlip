@@ -5,7 +5,6 @@ import pytest
 from ase import Atoms
 from ase.calculators.calculator import Calculator, CalculatorSetupError
 
-from pyacemaker.constants import TEST_ENERGY_GENERIC
 from pyacemaker.domain_models import (
     DFTConfig,
     LoggingConfig,
@@ -15,6 +14,8 @@ from pyacemaker.domain_models import (
     TrainingConfig,
     WorkflowConfig,
 )
+from pyacemaker.domain_models.structure import ExplorationPolicy
+from tests.constants import TEST_ENERGY_GENERIC
 
 
 @pytest.fixture
@@ -78,9 +79,8 @@ def create_test_config_dict(**overrides: Any) -> dict[str, Any]:
     structure = StructureConfig(
         elements=["Fe"],
         supercell_size=[1, 1, 1],
-        adaptive_ratio=0.5,
-        defect_density=0.01,
-        strain_range=0.05
+        policy_name=ExplorationPolicy.COLD_START,
+        # adaptive_ratio, defect_density, strain_range removed
     )
     dft = DFTConfig(
         code="qe",

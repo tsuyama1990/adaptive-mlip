@@ -3,19 +3,19 @@ from typing import Any
 
 import yaml
 
-from pyacemaker.constants import (
+from pyacemaker.domain_models import PyAceConfig
+from pyacemaker.domain_models.defaults import (
     ERR_CONFIG_NOT_FOUND,
     ERR_PATH_NOT_FILE,
     ERR_PATH_TRAVERSAL,
     ERR_YAML_NOT_DICT,
     ERR_YAML_PARSE,
 )
-from pyacemaker.domain_models import PyAceConfig
 
 
 def load_yaml(file_path: str | Path) -> dict[str, Any]:
     """
-    Loads a YAML file into a dictionary with path safety checks.
+    Loads a YAML file into a dictionary with strict path safety checks.
 
     Args:
         file_path: Path to the YAML file.
@@ -28,17 +28,22 @@ def load_yaml(file_path: str | Path) -> dict[str, Any]:
         ValueError: If path is invalid, attempts traversal, or file is empty.
         yaml.YAMLError: If the YAML is invalid.
     """
-    path = Path(file_path).resolve()
-    base_dir = Path.cwd().resolve()
+    try:
+        # resolve(strict=True) ensures path exists and resolves symlinks canonically.
+        path = Path(file_path).resolve(strict=True)
+    except FileNotFoundError as e:
+        msg = ERR_CONFIG_NOT_FOUND.format(path=file_path)
+        raise FileNotFoundError(msg) from e
+    except OSError as e:
+        msg = f"Error resolving path {file_path}: {e}"
+        raise ValueError(msg) from e
+
+    base_dir = Path.cwd().resolve(strict=True)
 
     # Path Sanitization: Ensure path doesn't traverse outside allowed scope (CWD)
     if not path.is_relative_to(base_dir):
         msg = ERR_PATH_TRAVERSAL.format(path=path, base=base_dir)
         raise ValueError(msg)
-
-    if not path.exists():
-        msg = ERR_CONFIG_NOT_FOUND.format(path=path)
-        raise FileNotFoundError(msg)
 
     # Ensure it's a file, not a directory
     if not path.is_file():
@@ -57,11 +62,6 @@ def load_yaml(file_path: str | Path) -> dict[str, Any]:
                 if data is None:
                     msg = "YAML file is empty"
                     raise ValueError(msg)
-                # TRY004 suggestion: raising TypeError might be better for "not dict",
-                # but ValueError is also common for "content invalid".
-                # To satisfy Ruff, we can suppress or change.
-                # Let's check strict requirement. "Prefer TypeError exception for invalid type".
-                # The function signature says returns Dict.
                 raise TypeError(ERR_YAML_NOT_DICT)
             return data
 

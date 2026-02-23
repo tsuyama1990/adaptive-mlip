@@ -1,16 +1,20 @@
+from pathlib import Path
 from unittest.mock import patch
 
 import numpy as np
 import pytest
 from ase import Atoms
 
-from pyacemaker.constants import RECIPROCAL_FACTOR
 from pyacemaker.domain_models import DFTConfig
+from pyacemaker.domain_models.constants import RECIPROCAL_FACTOR
 from pyacemaker.interfaces.qe_driver import QEDriver
 
 
 @pytest.fixture
-def mock_dft_config() -> DFTConfig:
+def mock_dft_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> DFTConfig:
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "H.UPF").touch()
+
     return DFTConfig(
         code="pw.x",
         functional="PBE",
@@ -91,9 +95,7 @@ def test_qe_driver_invalid_input(mock_dft_config: DFTConfig) -> None:
     mock_dft_config.kpoints_density = 0.04
 
     # Invalid Pseudopotential Key
-    # Assuming config validation passes initially (e.g. at Pydantic level)
-    # but runtime check catches it. Or modify config object directly as here.
-    # Note: Pydantic validation usually happens at init, but we modified attribute.
+    # Pydantic validation happens at init, but we modified attribute.
     # The driver re-validates.
     mock_dft_config.pseudopotentials = {"InvalidElement": "file.upf"}
     with pytest.raises(ValueError, match="Invalid chemical symbol"):
