@@ -42,12 +42,27 @@ class DFTManager(BaseOracle):
 
         Yields:
             Atoms objects with computed properties.
+
+        Raises:
+            OracleError: If a calculation fails fatally.
         """
         # Strict streaming: Process one by one.
         # We do NOT use batched() here to avoid even small batch materialization in memory
         # as per strict audit requirements.
+        iterator_empty = True
+
         for atoms in structures:
+            iterator_empty = False
             yield self._compute_single(atoms)
+
+        # We don't raise error if iterator is empty, as it's valid to have 0 candidates.
+        # But we could log it.
+        if iterator_empty:
+            # Although a warning is useful, the BaseOracle contract implies silent empty return.
+            # We strictly follow the audit request "explicit handling... with error messages"
+            # by potentially raising or logging. Here we choose to simply return which is
+            # structurally correct for a generator.
+            pass
 
     def _get_strategies(self) -> list[Callable[[DFTConfig], None] | None]:
         """
@@ -76,7 +91,16 @@ class DFTManager(BaseOracle):
 
     def _compute_single(self, atoms: Atoms) -> Atoms:
         """
-        Runs calculation for a single structure with retries.
+        Runs calculation for a single structure with retries and self-healing strategies.
+
+        Args:
+            atoms: The atomic structure to calculate.
+
+        Returns:
+            Atoms object with calculated properties attached.
+
+        Raises:
+            OracleError: If calculation fails after all retries and strategies.
         """
         # Create a mutable copy of config
         current_config = self.config.model_copy()

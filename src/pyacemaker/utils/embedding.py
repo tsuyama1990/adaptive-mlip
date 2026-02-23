@@ -46,21 +46,29 @@ def embed_cluster(cluster: Atoms, buffer: float, copy: bool = True) -> Atoms:
     dims = max_xyz - min_xyz
     cell_lengths = dims + buffer
 
+    # Validate cell dimensions
+    if np.any(cell_lengths <= 1e-6):
+        msg = f"Resulting cell dimensions must be positive: {cell_lengths}. Increase buffer."
+        raise ValueError(msg)
+
     # Calculate shift
     center_of_box = cell_lengths / 2.0
     center_of_atoms = (min_xyz + max_xyz) / 2.0
     shift = center_of_box - center_of_atoms
 
     # Handle object creation vs modification
-    # Create shallow copy of the container but new arrays
-    target = cluster.copy() if copy else cluster  # type: ignore[no-untyped-call]
+    if copy:
+        # Create a deep copy of the Atoms object to ensure positions are not shared
+        target = cluster.copy()  # type: ignore[no-untyped-call]
+        # Explicitly copy positions array to be absolutely safe (though ase.copy() usually does)
+        target.positions = target.positions.copy()
+    else:
+        target = cluster
 
     target.set_cell(cell_lengths)
     target.set_pbc(True)
 
     # In-place translation of the target object's positions
-    # If copy=True, target.positions is a new array (from .copy()).
-    # If copy=False, target.positions is the original array reference.
     target.positions += shift
 
-    return target
+    return target  # type: ignore[no-any-return]

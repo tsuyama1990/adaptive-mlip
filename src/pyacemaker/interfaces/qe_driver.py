@@ -1,14 +1,11 @@
-import math
 from typing import Any
 
+import numpy as np
 from ase import Atoms
 from ase.calculators.espresso import Espresso
 
+from pyacemaker.constants import RECIPROCAL_FACTOR
 from pyacemaker.domain_models import DFTConfig
-
-# Physics constant for Reciprocal Lattice Vector conversion
-# b_i = 2 * pi / a_i (for orthogonal cells)
-RECIPROCAL_FACTOR = 2 * math.pi
 
 
 class QEDriver:
@@ -26,7 +23,19 @@ class QEDriver:
 
         Returns:
             Configured Espresso calculator.
+
+        Raises:
+            ValueError: If configuration parameters are invalid/unsafe.
         """
+        # Security: Validate sensitive parameters (though Pydantic does most heavy lifting)
+        # Here we double check constraints relevant to runtime context
+        if config.encut <= 0:
+            msg = "Energy cutoff must be positive."
+            raise ValueError(msg)
+        if config.kpoints_density <= 0:
+            msg = "K-points density must be positive."
+            raise ValueError(msg)
+
         # Calculate k-points
         kpts = self._calculate_kpoints(atoms, config.kpoints_density)
 
@@ -60,7 +69,7 @@ class QEDriver:
 
     def _calculate_kpoints(self, atoms: Atoms, spacing: float) -> tuple[int, int, int]:
         """
-        Calculates k-point mesh based on k-spacing.
+        Calculates k-point mesh based on k-spacing using vectorized operations.
         N_i = ceil(2 * pi / (|a_i| * spacing))
 
         Args:
@@ -71,22 +80,28 @@ class QEDriver:
             Tuple of (k_x, k_y, k_z).
         """
         cell = atoms.get_cell()  # type: ignore[no-untyped-call]
-        # lengths() call is cheap (returns cached lengths if cell hasn't changed, or simple norm)
         lengths = cell.lengths()
         pbc = atoms.get_pbc()  # type: ignore[no-untyped-call]
 
-        # Optimize loop: direct computation
-        kpts_list: list[int] = []
+        # Use NumPy for vectorized computation
+        # 1. Mask non-PBC or small dimensions (force to 1 k-point)
+        # lengths < 1e-3 is effectively zero dimension
+        valid_mask = pbc & (lengths >= 1e-3)
 
-        # Precompute constant
+        # 2. Compute k-points for valid dimensions.
+        # N is calculated as ceil( (2*pi/spacing) / L )
+        # Avoid division by zero by using safe indexing or where
+        # We calculate for all, then replace invalid ones with 1
         factor = RECIPROCAL_FACTOR / spacing
 
-        for i in range(3):
-            if not pbc[i] or lengths[i] < 1e-3:
-                kpts_list.append(1)
-            else:
-                # N = (2*pi/L) / spacing = (2*pi/spacing) / L
-                k_val = math.ceil(factor / lengths[i])
-                kpts_list.append(max(1, int(k_val)))
+        # Calculate raw values where lengths > 0 to avoid warning, though valid_mask handles logic
+        # Replace 0 lengths with 1.0 temporarily to avoid div/0 in pure numpy
+        safe_lengths = np.where(lengths < 1e-9, 1.0, lengths)
 
-        return tuple(kpts_list) # type: ignore
+        k_vals = np.ceil(factor / safe_lengths).astype(int)
+
+        # Apply mask: if valid, use k_vals, else 1
+        # Also ensure at least 1
+        final_kpts = np.where(valid_mask, np.maximum(1, k_vals), 1)
+
+        return tuple(final_kpts.tolist())

@@ -4,8 +4,9 @@ import numpy as np
 import pytest
 from ase import Atoms
 
+from pyacemaker.constants import RECIPROCAL_FACTOR
 from pyacemaker.domain_models import DFTConfig
-from pyacemaker.interfaces.qe_driver import RECIPROCAL_FACTOR, QEDriver
+from pyacemaker.interfaces.qe_driver import QEDriver
 
 
 @pytest.fixture

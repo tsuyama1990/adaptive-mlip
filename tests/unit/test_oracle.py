@@ -1,13 +1,12 @@
 from unittest.mock import MagicMock
 
-import numpy as np
 import pytest
 from ase import Atoms
-from ase.calculators.calculator import Calculator, CalculatorSetupError
 
 from pyacemaker.core.exceptions import OracleError
 from pyacemaker.core.oracle import DFTManager
 from pyacemaker.domain_models import DFTConfig
+from tests.conftest import MockCalculator
 
 
 @pytest.fixture
@@ -23,40 +22,6 @@ def mock_dft_config() -> DFTConfig:
         diagonalization="david",
         pseudopotentials={"H": "H.UPF"},
     )
-
-
-class MockCalculator(Calculator):
-    """Mock ASE calculator that can simulate failure."""
-
-    def __init__(self, fail_count: int = 0, setup_error: bool = False) -> None:
-        super().__init__()  # type: ignore[no-untyped-call]
-        self.implemented_properties = ["energy", "forces", "stress"]
-        self.fail_count = fail_count
-        self.setup_error = setup_error
-        self.attempts = 0
-
-    def calculate(
-        self,
-        atoms: Atoms | None = None,
-        properties: list[str] | None = None,
-        system_changes: list[str] | None = None,
-    ) -> None:
-        self.attempts += 1
-
-        if self.setup_error:
-            msg = "Setup failed"
-            raise CalculatorSetupError(msg)
-
-        if self.attempts <= self.fail_count:
-            # Simulate SCF failure (which usually raises RuntimeError in ASE)
-            msg = "Convergence not achieved"
-            raise RuntimeError(msg)
-
-        self.results = {
-            "energy": -13.6,
-            "forces": np.array([[0.0, 0.0, 0.0]]),
-            "stress": np.array([0.0] * 6),
-        }
 
 
 def test_dft_manager_compute_success(mock_dft_config: DFTConfig) -> None:
