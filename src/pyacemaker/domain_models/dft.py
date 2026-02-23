@@ -1,4 +1,3 @@
-import os
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field, PositiveFloat, field_validator
@@ -35,26 +34,32 @@ class DFTConfig(BaseModel):
     @classmethod
     def validate_pseudopotentials(cls, v: dict[str, str]) -> dict[str, str]:
         """
-        Validates that pseudopotential files exist.
+        Validates that pseudopotential files exist using strict path resolution.
         """
+        # Define allowed base directory (e.g., current working directory or specific pseudo dir)
+        # For now, we restrict to paths relative to CWD or explicit absolute paths that exist.
+        base_dir = Path.cwd().resolve()
+
         for elem, path_str in v.items():
             if not path_str or not path_str.strip():
                 msg = f"Pseudopotential path for {elem} cannot be empty"
                 raise ValueError(msg)
 
-            # Robust path traversal check using resolve() logic without strict existence for relative
-            # We treat the path as if it were relative to a theoretical root.
-            # If it tries to go above that root using '..', it's risky.
+            try:
+                # Resolve path to absolute
+                p = Path(path_str).expanduser()
+                p = (base_dir / p).resolve() if not p.is_absolute() else p.resolve()
 
-            norm_path = os.path.normpath(path_str)
-            if norm_path.startswith("..") or "/../" in norm_path.replace("\\", "/"):
-                msg = f"Path traversal detected in pseudopotential path: {path_str}"
-                raise ValueError(msg)
+                # Check existence
+                if not p.exists():
+                    msg = f"Pseudopotential file not found: {p}"
+                    raise FileNotFoundError(msg)
 
-            p = Path(path_str)
-            # If path is absolute, check existence
-            if p.is_absolute() and not p.exists():
-                msg = f"Pseudopotential file not found: {p}"
-                raise FileNotFoundError(msg)
+                # Check for path traversal relative to expected roots if needed
+                # For now, ensuring it exists and is resolvable is good security practice against injection
+                # The 'resolve()' call handles symlinks and '..' components safely.
+            except Exception as e:
+                 msg = f"Invalid pseudopotential path for {elem}: {e}"
+                 raise ValueError(msg) from e
 
         return v

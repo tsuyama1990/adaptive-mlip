@@ -28,26 +28,30 @@ def test_structure_config_invalid_supercell() -> None:
         StructureConfig(elements=["Fe"], supercell_size=[1, 1])  # Too short
 
 
-def test_dft_config_valid() -> None:
+def test_dft_config_valid(tmp_path) -> None:
+    # Use tmp_path to create dummy file
+    (tmp_path / "Fe.UPF").touch()
+
     config = DFTConfig(
         code="quantum_espresso",
         functional="PBE",
         kpoints_density=0.04,
         encut=500.0,
-        pseudopotentials={"Fe": "Fe.pbe-n-kjpaw_psl.1.0.0.UPF"},
+        pseudopotentials={"Fe": str(tmp_path / "Fe.UPF")},
     )
     assert config.encut == 500.0
-    assert config.pseudopotentials["Fe"] == "Fe.pbe-n-kjpaw_psl.1.0.0.UPF"
+    assert config.pseudopotentials["Fe"].endswith("Fe.UPF")
 
 
-def test_dft_config_invalid_encut() -> None:
+def test_dft_config_invalid_encut(tmp_path) -> None:
+    (tmp_path / "Fe.UPF").touch()
     with pytest.raises(ValidationError):
         DFTConfig(
             code="qe",
             functional="PBE",
             kpoints_density=0.04,
             encut=-100.0,
-            pseudopotentials={"Fe": "Fe.UPF"},
+            pseudopotentials={"Fe": str(tmp_path / "Fe.UPF")},
         )  # Must be positive
 
 
@@ -95,7 +99,9 @@ def test_workflow_config_valid() -> None:
 
 def test_workflow_config_default() -> None:
     config = WorkflowConfig(max_iterations=10)
-    assert config.state_file_path == "state.json"
+    # Default is now None, use accessor
+    assert config.state_file_path is None
+    assert config.get_state_path() == "state.json"
     assert config.active_learning_dir == "active_learning"
     assert config.potentials_dir == "potentials"
     assert config.checkpoint_interval == 1
@@ -119,14 +125,16 @@ def test_logging_config_invalid_level() -> None:
         LoggingConfig(level="VERBOSE")  # Invalid level
 
 
-def test_pyace_config_valid() -> None:
+def test_pyace_config_valid(tmp_path) -> None:
+    (tmp_path / "Al.UPF").touch()
+
     structure = StructureConfig(elements=["Al"], supercell_size=[1, 1, 1])
     dft = DFTConfig(
         code="qe",
         functional="PBE",
         kpoints_density=0.04,
         encut=400.0,
-        pseudopotentials={"Al": "Al.UPF"},
+        pseudopotentials={"Al": str(tmp_path / "Al.UPF")},
     )
     training = TrainingConfig(potential_type="ace", cutoff_radius=4.5, max_basis_size=500)
     md = MDConfig(temperature=300.0, pressure=0.0, timestep=0.001, n_steps=1000)
@@ -147,14 +155,16 @@ def test_pyace_config_valid() -> None:
     assert config.logging.level == "INFO"
 
 
-def test_pyace_config_missing_field() -> None:
+def test_pyace_config_missing_field(tmp_path) -> None:
+    (tmp_path / "Al.UPF").touch()
+
     structure = StructureConfig(elements=["Al"], supercell_size=[1, 1, 1])
     dft = DFTConfig(
         code="qe",
         functional="PBE",
         kpoints_density=0.04,
         encut=400.0,
-        pseudopotentials={"Al": "Al.UPF"},
+        pseudopotentials={"Al": str(tmp_path / "Al.UPF")},
     )
     training = TrainingConfig(potential_type="ace", cutoff_radius=4.5, max_basis_size=500)
     md = MDConfig(temperature=300.0, pressure=0.0, timestep=0.001, n_steps=1000)

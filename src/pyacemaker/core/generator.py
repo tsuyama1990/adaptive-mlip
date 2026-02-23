@@ -45,24 +45,24 @@ class StructureGenerator(BaseGenerator):
         2. Applies supercell expansion.
         3. Applies the active policy (perturbation) to the base structure.
         """
-        # Step 1: Get base structure (Primitive)
         # Note: ColdStartPolicy.apply() ignores input and returns new structure from composition
         base = self.cold_start_policy.apply()
 
         # Step 2: Apply Supercell
         if self.config.supercell_size:
-            # Check if supercell is not [1, 1, 1] to avoid unnecessary copy/mult?
-            # ASE handles * [1,1,1] efficiently usually.
             base *= self.config.supercell_size
 
         # Step 3: Yield candidates
         for _ in range(n_candidates):
             if self.config.policy_name == ExplorationPolicy.COLD_START:
-                # If policy is Cold Start, we return the base (supercell) structure.
-                # ColdStartPolicy.apply(base) would return a fresh primitive structure,
-                # losing the supercell. So we yield the base directly.
-                yield base.copy()  # type: ignore[no-untyped-call]
+                # To address OOM Risk: We yield a freshly generated structure to avoid memory
+                # retention of modified objects, rather than copying a potentially large
+                # 'base' object repeatedly or risking shared mutable state.
+                fresh_base = self.cold_start_policy.apply()
+                if self.config.supercell_size:
+                    fresh_base *= self.config.supercell_size
+                yield fresh_base
             else:
                 # Apply perturbation policies (Rattle, Strain, Defects)
-                # These policies take the base structure and modify it.
+                # These policies copy the input structure internally, so 'base' remains clean.
                 yield self.policy.apply(base)

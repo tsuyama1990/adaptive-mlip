@@ -1,3 +1,5 @@
+import tempfile
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -16,6 +18,15 @@ from pyacemaker.domain_models import (
     WorkflowConfig,
 )
 
+# Global temporary directory for dummy pseudopotentials
+# Kept alive for the duration of the test session
+_TEMP_PSEUDO_DIR = tempfile.TemporaryDirectory()
+_TEMP_PSEUDO_PATH = Path(_TEMP_PSEUDO_DIR.name)
+
+# Create common dummy pseudopotentials
+for el in ["H", "He", "Li", "Be", "B", "C", "N", "O", "F", "Ne", "Na", "Mg", "Al", "Si", "P", "S", "Cl", "Ar", "K", "Ca", "Fe", "Pt"]:
+    (_TEMP_PSEUDO_PATH / f"{el}.UPF").touch()
+
 
 @pytest.fixture
 def mock_dft_config() -> DFTConfig:
@@ -28,7 +39,11 @@ def mock_dft_config() -> DFTConfig:
         smearing_type="mv",
         smearing_width=0.1,
         diagonalization="david",
-        pseudopotentials={"H": "H.UPF", "O": "O.UPF", "Fe": "Fe.UPF"},
+        pseudopotentials={
+            "H": str(_TEMP_PSEUDO_PATH / "H.UPF"),
+            "O": str(_TEMP_PSEUDO_PATH / "O.UPF"),
+            "Fe": str(_TEMP_PSEUDO_PATH / "Fe.UPF")
+        },
     )
 
 
@@ -38,12 +53,18 @@ class MockCalculator(Calculator):
     Can simulate failures and setup errors.
     """
 
-    def __init__(self, fail_count: int = 0, setup_error: bool = False) -> None:
+    def __init__(
+        self,
+        fail_count: int = 0,
+        setup_error: bool = False,
+        use_sparse: bool = True  # Optimization: Use sparse-like or minimal arrays
+    ) -> None:
         super().__init__()  # type: ignore[no-untyped-call]
         self.implemented_properties = ["energy", "forces", "stress"]
         self.fail_count = fail_count
         self.setup_error = setup_error
         self.attempts = 0
+        self.use_sparse = use_sparse
 
     def calculate(
         self,
@@ -51,21 +72,32 @@ class MockCalculator(Calculator):
         properties: list[str] | None = None,
         system_changes: list[str] | None = None,
     ) -> None:
-        self.attempts += 1
 
         if self.setup_error:
-            msg = "Setup failed"
+            # Simulate setup failure before incrementing attempts (usually immediate)
+            self.attempts += 1
+            msg = "Setup failed: Missing pseudopotential or invalid input"
             raise CalculatorSetupError(msg)
+
+        self.attempts += 1
 
         if self.attempts <= self.fail_count:
             # Simulate SCF failure
             msg = "Convergence not achieved"
             raise RuntimeError(msg)
 
+        n_atoms = len(atoms) if atoms else 1
+
+        # Memory Optimization: Use float32 or minimal allocation
+        # Forces: Array shape (N, 3)
+        # Stress: Array shape (6,)
+
+        dtype = np.float32 if self.use_sparse else np.float64
+
         self.results = {
             "energy": TEST_ENERGY_GENERIC,
-            "forces": np.array([[0.0, 0.0, 0.0]] * (len(atoms) if atoms else 1)),
-            "stress": np.array([0.0] * 6),
+            "forces": np.zeros((n_atoms, 3), dtype=dtype),
+            "stress": np.zeros(6, dtype=dtype),
         }
 
 
@@ -82,12 +114,13 @@ def create_test_config_dict(**overrides: Any) -> dict[str, Any]:
         defect_density=0.01,
         strain_range=0.05,
     )
+
     dft = DFTConfig(
         code="qe",
         functional="PBE",
         kpoints_density=0.04,
         encut=500.0,
-        pseudopotentials={"Fe": "Fe.UPF"},
+        pseudopotentials={"Fe": str(_TEMP_PSEUDO_PATH / "Fe.UPF")},
         mixing_beta=0.7,
         smearing_type="mv",
         smearing_width=0.1,
@@ -128,7 +161,8 @@ def create_test_config_dict(**overrides: Any) -> dict[str, Any]:
     )
 
     # 3. Export to dict
-    config_dict = full_config.model_dump()
+    # Use mode='json' to ensure Enums are serialized to strings, which plays nicer with YAML dump
+    config_dict = full_config.model_dump(mode="json")
 
     # 4. Apply overrides (Simple deep merge)
     for key, value in overrides.items():

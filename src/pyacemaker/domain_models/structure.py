@@ -15,7 +15,9 @@ class ExplorationPolicy(StrEnum):
 class StructureConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    elements: list[str] = Field(..., min_length=1, description="List of elements in the system")
+    elements: list[str] = Field(
+        ..., min_length=1, description="List of elements in the system"
+    )
     supercell_size: list[int] = Field(
         ..., min_length=3, max_length=3, description="Supercell size [nx, ny, nz]"
     )
@@ -57,10 +59,15 @@ class StructureConfig(BaseModel):
             msg = "Elements list cannot be empty"
             raise ValueError(msg)
         valid_symbols = set(chemical_symbols)
+        seen = set()
         for el in v:
             if el not in valid_symbols:
                 msg = f"Invalid chemical symbol: {el}"
                 raise ValueError(msg)
+            if el in seen:
+                msg = f"Duplicate element symbol: {el}"
+                raise ValueError(msg)
+            seen.add(el)
         return v
 
     @field_validator("supercell_size")

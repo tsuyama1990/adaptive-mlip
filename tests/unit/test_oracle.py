@@ -11,7 +11,11 @@ from tests.conftest import MockCalculator
 
 
 @pytest.fixture
-def mock_dft_config() -> DFTConfig:
+def mock_dft_config(tmp_path) -> DFTConfig:
+    # Create dummy pseudopotential file
+    pseudo_file = tmp_path / "H.UPF"
+    pseudo_file.touch()
+
     return DFTConfig(
         code="pw.x",
         functional="PBE",
@@ -21,7 +25,7 @@ def mock_dft_config() -> DFTConfig:
         smearing_type="mv",
         smearing_width=0.1,
         diagonalization="david",
-        pseudopotentials={"H": "H.UPF"},
+        pseudopotentials={"H": str(pseudo_file)},
     )
 
 
@@ -163,14 +167,6 @@ def test_dft_manager_invalid_input(mock_dft_config: DFTConfig) -> None:
     atoms_list = [Atoms("H")]
 
     with pytest.raises(TypeError, match="must be an Iterator"):
-        # Validation happens immediately when generator is created
-        # We need to call next() to trigger the code execution up to the first yield?
-        # No, compute is a generator function. The code *before* the first yield runs only when
-        # next() is called? Or does it?
-        # Actually, in Python generator functions, execution starts only when next() is called.
-        # So we MUST call next() or iterate to trigger validation.
-        # But wait, type checking `isinstance(structures, Iterator)` is at the top of the function.
-        # Yes, generator function body execution is deferred.
         next(manager.compute(atoms_list))  # type: ignore[arg-type]
 
 
@@ -179,8 +175,10 @@ def test_dft_manager_empty_iterator(mock_dft_config: DFTConfig) -> None:
     manager = DFTManager(mock_dft_config)
     empty_iter: iter = iter([])  # type: ignore
 
-    with pytest.warns(UserWarning, match="Oracle received empty iterator"):
-        # Explicit loop without list() materialization for safety
-        results = list(manager.compute(empty_iter))
+    def consume_all() -> int:
+        return sum(1 for _ in manager.compute(empty_iter))
 
-    assert len(results) == 0
+    with pytest.warns(UserWarning, match="Oracle received empty iterator"):
+        count = consume_all()
+
+    assert count == 0

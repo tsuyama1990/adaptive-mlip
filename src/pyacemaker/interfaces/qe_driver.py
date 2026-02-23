@@ -54,6 +54,7 @@ class QEDriver:
         cell_lengths = tuple(cell.lengths())
         pbc = tuple(atoms.get_pbc())  # type: ignore[no-untyped-call]
 
+        # Audit Fix: Caching is done on immutable types (tuples), avoiding mutable Atoms references.
         kpts = self._calculate_kpoints_cached(cell_lengths, pbc, config.kpoints_density)
 
         # Construct input data

@@ -69,6 +69,10 @@ class FakeEngine(BaseEngine):
 
 @pytest.fixture
 def mock_config(tmp_path: Path) -> PyAceConfig:
+    # Ensure CWD is tmp_path for relative resolution or pass absolute
+    # To satisfy validators, we must create dummy UPF files
+    (tmp_path / "H.UPF").touch()
+
     return PyAceConfig(
         project_name="TestProject",
         structure=StructureConfig(elements=["H"], supercell_size=[1, 1, 1]),
@@ -77,7 +81,7 @@ def mock_config(tmp_path: Path) -> PyAceConfig:
             functional="PBE",
             kpoints_density=0.04,
             encut=400.0,
-            pseudopotentials={"H": "H.UPF"},
+            pseudopotentials={"H": str(tmp_path / "H.UPF")},
         ),
         training=TrainingConfig(potential_type="ace", cutoff_radius=4.0, max_basis_size=100),
         md=MDConfig(temperature=300.0, pressure=0.0, timestep=0.001, n_steps=100),
@@ -179,8 +183,10 @@ def test_orchestrator_corrupted_state_file(
     mock_config: PyAceConfig, tmp_path: Path, caplog: Any
 ) -> None:
     """Test resilience against corrupted state file."""
-    state_file = Path(mock_config.workflow.state_file_path)
-    state_file.write_text("{invalid_json")
+    # Ensure file exists
+    state_path = Path(mock_config.workflow.get_state_path())
+    state_path.parent.mkdir(exist_ok=True, parents=True)
+    state_path.write_text("{invalid_json")
 
     orch = Orchestrator(mock_config)
     # Should warn and default to iteration 0

@@ -8,6 +8,9 @@ from pyacemaker.main import main
 
 
 def test_main_dry_run(caplog: Any, tmp_path: Path) -> None:
+    # Create dummy UPF
+    (tmp_path / "Fe.UPF").touch()
+
     config_data = """
 project_name: TestProject
 structure:
@@ -51,6 +54,9 @@ workflow:
 
 
 def test_main_run(caplog: Any, tmp_path: Path) -> None:
+    # Create dummy UPF
+    (tmp_path / "Al.UPF").touch()
+
     config_data = """
 project_name: TestRun
 structure:

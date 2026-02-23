@@ -1,3 +1,4 @@
+
 from pydantic import BaseModel, ConfigDict, Field, PositiveInt
 
 
@@ -11,8 +12,8 @@ class WorkflowConfig(BaseModel):
     convergence_force: float = Field(
         default=0.01, gt=0, description="Force convergence criteria in eV/Angstrom"
     )
-    state_file_path: str = Field(
-        default="state.json", description="Path to the state checkpoint file"
+    state_file_path: str | None = Field(
+        default=None, description="Path to the state checkpoint file (defaults to state.json if not set)"
     )
 
     # New fields to avoid magic numbers
@@ -34,3 +35,7 @@ class WorkflowConfig(BaseModel):
     potentials_dir: str = Field(
         default="potentials", description="Directory for storing trained potentials"
     )
+
+    def get_state_path(self) -> str:
+        """Returns the configured state file path or a default."""
+        return self.state_file_path or "state.json"

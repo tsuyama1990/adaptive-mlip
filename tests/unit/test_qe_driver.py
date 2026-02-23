@@ -10,7 +10,10 @@ from pyacemaker.interfaces.qe_driver import QEDriver
 
 
 @pytest.fixture
-def mock_dft_config() -> DFTConfig:
+def mock_dft_config(tmp_path) -> DFTConfig:
+    # Create dummy pseudopotential
+    (tmp_path / "H.UPF").touch()
+
     return DFTConfig(
         code="pw.x",
         functional="PBE",
@@ -20,7 +23,7 @@ def mock_dft_config() -> DFTConfig:
         smearing_type="mv",
         smearing_width=0.02,
         diagonalization="david",
-        pseudopotentials={"H": "H.UPF"},
+        pseudopotentials={"H": str(tmp_path / "H.UPF")},
     )
 
 
@@ -133,4 +136,5 @@ def test_qe_driver_parameters(mock_dft_config: DFTConfig) -> None:
 
         # Check pseudopotentials
         pseudos = kwargs.get("pseudopotentials")
-        assert pseudos == {"H": "H.UPF"}
+        # Ensure path is string and correct
+        assert pseudos["H"].endswith("H.UPF")
