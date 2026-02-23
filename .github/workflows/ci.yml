@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, master, "dev/**", "feature/**" ]
+  pull_request:
+    branches: [ main, master, "dev/**", "feature/**" ]
+
+jobs:
+  quality:
+    name: Code Quality
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Install Dependencies
+        run: uv sync --all-extras --dev
+
+      - name: Lint (Ruff)
+        run: uv run ruff check .
+
+      - name: Check Formatting (Ruff)
+        run: uv run ruff format --check .
+
+      - name: Type Check (Mypy)
+        run: uv run mypy .
+
+      - name: Run Tests (Pytest)
+        run: uv run pytest

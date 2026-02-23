@@ -1,0 +1,49 @@
+version: '3.8'
+
+services:
+  ac-cdd:
+    build: /home/tomo/project/ac-cdd
+    image: ac-cdd
+    container_name: ac-cdd-agent
+
+    env_file:
+      - .ac_cdd/.env
+
+    # Mount current directory to /app
+    volumes:
+      - .:/app
+
+      # Git authentication - SSH keys only (not .gitconfig to avoid conflicts)
+      - ${HOME}/.ssh:/root/.ssh:ro
+
+      # SSH Agent socket (for SSH agent forwarding)
+      - ${SSH_AUTH_SOCK:-/dev/null}:${SSH_AUTH_SOCK:-/dev/null}
+      # Optional: Mount global config if exists
+      # - ${HOME}/.ac_cdd/.env:/root/.ac_cdd/.env
+
+
+
+    environment:
+      # Pass Host UID/GID to fix permission issues
+      - HOST_UID=${UID:-1000}
+      - HOST_GID=${GID:-1000}
+
+      # SSH Agent forwarding (recommended for security)
+      - SSH_AUTH_SOCK=${SSH_AUTH_SOCK}
+      # GitHub Token (alternative to SSH)
+      # - GH_TOKEN=${GH_TOKEN}
+
+      # Configuration Examples (Override here if needed)
+      # - AC_CDD_REVIEWER__SMART_MODEL=openrouter/anthropic/claude-3-5-sonnet
+
+      # Final Resort for Git Identity (if still facing issues)
+      # - GIT_AUTHOR_NAME=AC-CDD-Agent
+      # - GIT_AUTHOR_EMAIL=agent@ac-cdd.com
+
+      # Keep container alive or run command
+      # entrypoint.sh is the entrypoint, CMD is passed to it
+    command: [ "ac-cdd" ]
+
+    # Interactive mode support
+    stdin_open: true
+    tty: true
