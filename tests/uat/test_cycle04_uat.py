@@ -26,8 +26,9 @@ def test_uat_fit_potential(tmp_path: Path) -> None:
     trainer = PacemakerTrainer(config)
 
     # Use run_command patch to simulate success without real Pacemaker
+    # And verify config file content
     with patch("pyacemaker.core.trainer.run_command") as mock_run, \
-         patch("pyacemaker.core.trainer.dump_yaml"):
+         patch("pyacemaker.core.trainer.dump_yaml") as mock_dump:
 
         # Simulate output file creation
         (tmp_path / "output_potential.yace").touch()
@@ -36,6 +37,10 @@ def test_uat_fit_potential(tmp_path: Path) -> None:
 
         assert result.name == "output_potential.yace"
         mock_run.assert_called_once()
+
+        # Verify dumped config in UAT context
+        args, _ = mock_dump.call_args
+        assert args[0]["potential"]["elements"] == ["H"]
 
 def test_uat_active_set_selection(tmp_path: Path) -> None:
     pool = [Atoms('H') for _ in range(20)]

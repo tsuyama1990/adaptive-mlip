@@ -37,7 +37,8 @@ class PacemakerTrainer(BaseTrainer):
         Raises:
             TrainerError: If the training data file does not exist or format is invalid.
         """
-        data_path = Path(training_data_path)
+        data_path = Path(training_data_path).resolve()
+        self._validate_path_safe(data_path)
         self._validate_training_data(data_path)
 
         # Determine output directory (same as data file)
@@ -63,6 +64,14 @@ class PacemakerTrainer(BaseTrainer):
 
         return potential_path
 
+    def _validate_path_safe(self, path: Path) -> None:
+        """Ensures path is safe from traversal and injection."""
+        s = str(path)
+        dangerous_chars = [";", "&", "|", "`", "$", "(", ")", "<", ">", "\n", "\r"]
+        if any(c in s for c in dangerous_chars):
+             msg = f"Path contains invalid characters: {path}"
+             raise TrainerError(msg)
+
     def _validate_training_data(self, data_path: Path) -> None:
         """Validates existence and basic format of training data."""
         if not data_path.exists():
@@ -78,6 +87,10 @@ class PacemakerTrainer(BaseTrainer):
             msg = f"Training data file is empty: {data_path}"
             raise TrainerError(msg)
 
+    def _raise_no_elements_error(self) -> None:
+        msg = "No elements detected in training data (file might be effectively empty)."
+        raise TrainerError(msg)
+
     def _generate_pacemaker_config(
         self, data_path: Path, output_path: Path
     ) -> dict[str, Any]:
@@ -88,14 +101,9 @@ class PacemakerTrainer(BaseTrainer):
         else:
             try:
                 # Scan first few frames to detect elements
-                # Reading just one frame might be insufficient for mixed datasets.
-                # Scanning 10 frames is a reasonable compromise.
                 elements_set = set()
                 fmt = "extxyz" if data_path.suffix == ".xyz" else None
-                # Use iread for streaming
                 # iread format requires str, not None. But ASE handles None = autodetect.
-                # To satisfy mypy, we cast or default. 'extxyz' is safest if extension matches.
-                # If fmt is None, iread uses filename.
                 read_fmt = fmt if fmt else ""
                 for i, atoms in enumerate(iread(data_path, index=":", format=read_fmt)):
                     # atoms from iread is Atoms object
@@ -105,8 +113,7 @@ class PacemakerTrainer(BaseTrainer):
                 elements = sorted(elements_set)
 
                 if not elements:
-                     msg = "No elements detected in training data (file might be effectively empty)."
-                     raise TrainerError(msg)
+                     self._raise_no_elements_error()
 
             except Exception as e:
                 msg = f"Could not detect elements from {data_path}. Please provide 'elements' in config or ensure data is valid: {e}"

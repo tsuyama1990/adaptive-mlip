@@ -6,6 +6,7 @@ from ase import Atoms
 from ase.io import iread, write
 
 from pyacemaker.core.exceptions import ActiveSetError
+from pyacemaker.utils.misc import batched
 from pyacemaker.utils.process import run_command
 
 
@@ -50,14 +51,23 @@ class ActiveSetSelector:
             candidates_file = tmp_path / "candidates.xyz"
             output_file = tmp_path / "selected.xyz"
 
-            # Stream write candidates to disk to avoid loading all into memory
+            # Stream write candidates to disk using buffering/chunking
+            # This avoids I/O bottleneck of writing 1-by-1 and Memory bottleneck of loading all.
+            # Using batched() from utils.misc
             count = 0
             try:
-                # Open file once and write frame by frame
+                # Open file once and write in chunks
+                # We use append=True logic manually by keeping file open?
+                # ASE write supports writing a list of images.
+                # batched returns a tuple of items.
+                BATCH_SIZE = 1000
                 with candidates_file.open("w") as f:
-                    for atoms in candidates:
-                        write(f, atoms, format="extxyz")
-                        count += 1
+                    for batch in batched(candidates, BATCH_SIZE):
+                        # Convert tuple to list for ASE
+                        # write supports list of Atoms
+                        # We must specify format explicitly for streaming write usually
+                        write(f, list(batch), format="extxyz")
+                        count += len(batch)
             except Exception as e:
                 msg = f"Failed to write candidates to temporary file: {e}"
                 raise ActiveSetError(msg) from e
@@ -92,14 +102,13 @@ class ActiveSetSelector:
                 msg = "Active set selection failed: Output file not created."
                 raise ActiveSetError(msg)
 
-            # Check file integrity (simple empty check, format check implicitly done by read)
+            # Check file integrity
             if output_file.stat().st_size == 0:
                  msg = "Active set selection failed: Output file is empty."
                  raise ActiveSetError(msg)
 
             # Stream read selected structures to avoid memory spikes
             try:
-                # iread returns an iterator. We yield from it to keep the generator active.
                 yield from iread(output_file, index=":")
             except Exception as e:
                 msg = f"Failed to read selected structures: {e}"
@@ -120,9 +129,6 @@ class ActiveSetSelector:
         Allows spaces and common filename characters.
         """
         s = str(path)
-        # Blacklist of shell metacharacters that are dangerous even in list args (if tool has bugs)
-        # or just generally indicative of injection attempts in filenames.
-        # Note: subprocess(shell=False) handles spaces correctly.
         dangerous_chars = [";", "&", "|", "`", "$", "(", ")", "<", ">", "\n", "\r"]
         if any(c in s for c in dangerous_chars):
              msg = f"Path contains invalid characters: {path}"

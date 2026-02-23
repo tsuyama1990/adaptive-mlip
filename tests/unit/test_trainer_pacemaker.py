@@ -19,7 +19,7 @@ def config() -> TrainingConfig:
         max_basis_size=2,
         output_filename="test_pot.yace",
         delta_learning=True,
-        # elements not provided, must be detected
+        elements=["H"],
         seed=123,
         max_iterations=500,
         batch_size=20
@@ -32,8 +32,6 @@ def trainer(config: TrainingConfig) -> PacemakerTrainer:
 def test_train_element_detection_scanning(trainer: PacemakerTrainer, tmp_path: Path) -> None:
     # Create mixed dataset
     data_path = tmp_path / "train.xyz"
-    # First frame only Fe
-    # Second frame Fe + Pt
     atoms1 = Atoms("Fe", positions=[[0,0,0]])
     atoms2 = Atoms("FePt", positions=[[0,0,0], [1,1,1]])
     write(data_path, [atoms1, atoms2])
@@ -45,6 +43,9 @@ def test_train_element_detection_scanning(trainer: PacemakerTrainer, tmp_path: P
 
         # Create dummy output
         (tmp_path / "test_pot.yace").touch()
+
+        # Update config to force detection (clear elements)
+        trainer.config.elements = None
 
         trainer.train(data_path)
 
@@ -59,6 +60,15 @@ def test_train_validation_empty_file(trainer: PacemakerTrainer, tmp_path: Path) 
 
     with pytest.raises(TrainerError, match="is empty"):
         trainer.train(data_path)
+
+def test_train_validation_bad_path(trainer: PacemakerTrainer) -> None:
+    with pytest.raises(TrainerError, match="Path contains invalid characters"):
+        # We need a path that exists relative or mock existence, but validation is first
+        # But validation checks characters first?
+        # Actually validation checks resolve() which might fail if not exist?
+        # _validate_path_safe uses str(path).
+        # We can pass a path with bad chars.
+        trainer.train(Path("bad/;/path.xyz"))
 
 def test_train_process_fail_util(trainer: PacemakerTrainer, tmp_path: Path) -> None:
     data_path = tmp_path / "train.xyz"

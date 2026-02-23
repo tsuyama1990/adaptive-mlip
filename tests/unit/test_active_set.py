@@ -19,8 +19,8 @@ def selector() -> ActiveSetSelector:
 def candidates() -> list[Atoms]:
     return [Atoms('H', positions=[[0, 0, 0]]) for _ in range(20)]
 
-def test_select_active_set_io_streaming(selector: ActiveSetSelector, candidates: list[Atoms], tmp_path: Path) -> None:
-    """Test I/O operations without mocking internal file logic."""
+def test_select_active_set_io_streaming_batched(selector: ActiveSetSelector, candidates: list[Atoms], tmp_path: Path) -> None:
+    """Test I/O operations with batching."""
 
     # Mock run_command to create output file
     def side_effect(cmd: list[str], **kwargs: Any) -> MagicMock:
@@ -38,16 +38,28 @@ def test_select_active_set_io_streaming(selector: ActiveSetSelector, candidates:
         pot_path.touch()
 
         # select() returns iterator
+        # Test large batch if needed, but 20 < BATCH_SIZE(1000) so just checks basic flow
         result_iter = selector.select(candidates, pot_path, n_select=5)
 
-        # Consume iterator to trigger logic
+        # Consume iterator
         selected = list(result_iter)
 
         assert len(selected) == 5
         mock_run.assert_called_once()
 
+def test_select_active_set_write_fail(selector: ActiveSetSelector, candidates: list[Atoms], tmp_path: Path) -> None:
+    """Test handling of write failure (e.g. permission error simulated by exception)."""
+
+    pot_path = tmp_path / "dummy.yace"
+    pot_path.touch()
+
+    with patch("pyacemaker.core.active_set.write") as mock_write:
+        mock_write.side_effect = OSError("Disk full")
+
+        with pytest.raises(ActiveSetError, match="Failed to write candidates"):
+            list(selector.select(candidates, pot_path, n_select=5))
+
 def test_select_active_set_partial_failure(selector: ActiveSetSelector, candidates: list[Atoms], tmp_path: Path) -> None:
-    """Test handling of partial/empty output file."""
 
     def side_effect(cmd: list[str], **kwargs: Any) -> MagicMock:
         out_idx = cmd.index("--output")
