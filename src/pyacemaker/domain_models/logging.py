@@ -20,21 +20,34 @@ class LoggingConfig(BaseModel):
     def validate_log_file(cls, v: str | None) -> str | None:
         if v:
             path = Path(v)
-            try:
-                # Resolve to absolute path to check traversal
-                abs_path = path.resolve()
-                cwd = Path.cwd().resolve()
-                if not abs_path.is_relative_to(cwd):
-                    msg = f"Log file path must be inside the project directory: {v}"
-                    raise ValueError(msg)
-            except (ValueError, RuntimeError) as e:
-                # Re-raise nicely formatted
-                if isinstance(e, ValueError) and "must be inside" in str(e):
-                    raise
-                msg = f"Invalid log file path: {e}"
-                raise ValueError(msg) from e
-
             if path.is_dir():
                 msg = f"Log file path must be a file, not a directory: {v}"
                 raise ValueError(msg)
+
+            try:
+                # Use strict resolve to follow symlinks and check traversal
+                # If path does not exist, check if parent exists and is valid
+                if path.exists():
+                    abs_path = path.resolve(strict=True)
+                else:
+                    # Resolve parent directory strictly
+                    parent = path.parent
+                    if not parent.exists():
+                        # Create if doesn't exist? No, config validation shouldn't create dirs
+                        # But log setup might. Let's resolve what we can.
+                        # For security, we ensure the parent is within CWD
+                        pass
+
+                    # Resolve as much as possible relative to CWD
+                    abs_path = path.absolute().resolve(strict=False)
+
+                cwd = Path.cwd().resolve(strict=True)
+            except (ValueError, RuntimeError, OSError) as e:
+                msg = f"Invalid log file path resolution: {e}"
+                raise ValueError(msg) from e
+
+            if not abs_path.is_relative_to(cwd):
+                msg = f"Log file path must be inside the project directory: {v}"
+                raise ValueError(msg)
+
         return v

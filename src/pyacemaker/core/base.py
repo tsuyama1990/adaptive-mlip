@@ -25,6 +25,12 @@ class BaseGenerator(ABC):
 
         Returns:
             Iterator yielding ASE Atoms objects.
+            If generation cannot produce any structures, the iterator should be empty
+            (or raise an error if 0 is invalid for the context).
+
+        Raises:
+            RuntimeError: If generation fails due to internal errors or configuration issues.
+            ValueError: If input parameters are invalid.
 
         Example:
             class RandomGenerator(BaseGenerator):
@@ -51,6 +57,11 @@ class BaseOracle(ABC):
 
         Returns:
             Iterator of ASE Atoms objects with computed properties attached (e.g. in atoms.info).
+            If the input iterator is empty, the returned iterator should also be empty.
+
+        Raises:
+            RuntimeError: If calculation fails (e.g., DFT convergence error, connection error).
+            ValueError: If input structures are invalid.
 
         Example:
             class DFTOracle(BaseOracle):
@@ -82,6 +93,10 @@ class BaseTrainer(ABC):
         Returns:
             Trained potential object or path to potential file.
 
+        Raises:
+            RuntimeError: If training fails (e.g., MLIP code crash, insufficient data).
+            FileNotFoundError: If training data file does not exist.
+
         Example:
             class PacemakerTrainer(BaseTrainer):
                 def train(self, path):
@@ -97,16 +112,19 @@ class BaseEngine(ABC):
     """
 
     @abstractmethod
-    def run(self, structure: Atoms, potential: Any) -> Any:
+    def run(self, structure: Atoms | None, potential: Any) -> Any:
         """
         Runs a simulation using the given structure and potential.
 
         Args:
-            structure: Initial structure.
-            potential: Trained potential.
+            structure: Initial structure. May be None if engine loads from file/config.
+            potential: Trained potential. May be None if engine loads from file/config.
 
         Returns:
             Simulation result (trajectory, final structure, etc.).
+
+        Raises:
+            RuntimeError: If simulation fails (e.g., segmentation fault, physics explosion).
 
         Example:
             class LAMMPSEngine(BaseEngine):

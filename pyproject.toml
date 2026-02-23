@@ -99,9 +99,9 @@ max-complexity = 10  # Exceeding this prompts function splitting (prevent AI lon
 suppress-dummy-args = true  # Arguments starting with _ do not require type hints
 
 [tool.pytest.ini_options]
-addopts = "--cov=dev_src --cov=src --cov-report=term-missing"
 testpaths = ["tests"]
 
 [tool.mypy]
 strict = true
 ignore_missing_imports = true
+exclude = ["build/"]

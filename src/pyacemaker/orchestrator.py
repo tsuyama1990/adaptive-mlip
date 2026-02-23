@@ -1,9 +1,14 @@
+import contextlib
 import json
+import os
+import shutil
 from pathlib import Path
 
-from ase.io import write
+from ase.io import iread, write
 
 from pyacemaker.constants import (
+    FILENAME_CANDIDATES,
+    FILENAME_TRAINING,
     LOG_COMPUTED_PROPERTIES,
     LOG_GENERATED_CANDIDATES,
     LOG_INIT_MODULES,
@@ -21,9 +26,12 @@ from pyacemaker.constants import (
     LOG_STATE_SAVED,
     LOG_WORKFLOW_COMPLETED,
     LOG_WORKFLOW_CRASHED,
+    TEMPLATE_ITER_DIR,
+    TEMPLATE_POTENTIAL_FILE,
 )
 from pyacemaker.core.base import BaseEngine, BaseGenerator, BaseOracle, BaseTrainer
 from pyacemaker.domain_models import PyAceConfig
+from pyacemaker.factory import ModuleFactory
 from pyacemaker.logger import setup_logger
 from pyacemaker.utils.misc import batched
 
@@ -47,6 +55,10 @@ class Orchestrator:
         self.state_file = Path(config.workflow.state_file_path)
         self.data_dir = Path(config.workflow.data_dir)
         self.data_dir.mkdir(exist_ok=True)
+        self.active_learning_dir = Path(config.workflow.active_learning_dir)
+        self.active_learning_dir.mkdir(exist_ok=True)
+        self.potentials_dir = Path(config.workflow.potentials_dir)
+        self.potentials_dir.mkdir(exist_ok=True)
 
         # Core modules (placeholders for Cycle 01)
         self.generator: BaseGenerator | None = None
@@ -66,8 +78,10 @@ class Orchestrator:
         """
         self.logger.info(LOG_INIT_MODULES)
         try:
-            # In future cycles, we will instantiate concrete classes here based on config.
-            pass
+            # Create modules using factory
+            self.generator, self.oracle, self.trainer, self.engine = ModuleFactory.create_modules(
+                self.config
+            )
 
         except Exception as e:
             self.logger.exception("Failed to initialize modules")
@@ -96,59 +110,159 @@ class Orchestrator:
             except Exception as e:
                 self.logger.warning(LOG_STATE_LOAD_FAIL.format(error=e))
 
-    def _run_active_learning_step(self) -> None:
+    def _ensure_directory(self, path: Path) -> None:
         """
-        Executes a single step of the active learning loop with file-based streaming.
-        Uses buffering to optimize I/O.
-        """
+        Creates a directory and verifies write permissions.
 
-        # 1. Generate & Label Candidates (Streaming to Disk)
-        total_candidates = 0
+        Args:
+            path: Path to the directory.
+
+        Raises:
+            RuntimeError: If path exists but is not a directory.
+            PermissionError: If directory is not writable.
+            OSError: If directory creation fails.
+        """
+        try:
+            path.mkdir(parents=True, exist_ok=True)
+            if not path.is_dir():
+                msg = f"Path {path} exists but is not a directory."
+                raise RuntimeError(msg)
+            if not os.access(path, os.W_OK):
+                msg = f"Directory {path} is not writable."
+                raise PermissionError(msg)
+        except OSError as e:
+            self.logger.critical(f"Failed to create directory {path}: {e}")
+            raise
+
+    def _setup_iteration_directory(self, iteration: int) -> dict[str, Path]:
+        """
+        Creates the directory structure for the current iteration.
+
+        Args:
+            iteration: Current iteration number.
+
+        Returns:
+            Dictionary of paths for the iteration.
+        """
+        iter_dirname = TEMPLATE_ITER_DIR.format(iteration=iteration)
+        iter_dir = self.active_learning_dir / iter_dirname
+        paths = {
+            "root": iter_dir,
+            "candidates": iter_dir / "candidates",
+            "dft_calc": iter_dir / "dft_calc",
+            "training": iter_dir / "training",
+            "md_run": iter_dir / "md_run",
+        }
+
+        for p in paths.values():
+            self._ensure_directory(p)
+
+        return paths
+
+    def _explore(self, paths: dict[str, Path]) -> None:
+        """
+        Step 1: Exploration
+        Generates candidate structures and saves them to the candidates directory.
+        Uses streaming write to avoid opening/closing files repeatedly.
+        """
+        if not self.generator:
+            return
+
         n_candidates = self.config.workflow.n_candidates
         batch_size = self.config.workflow.batch_size
-        training_file = self.data_dir / f"training_iter_{self.iteration}.xyz"
+        candidates_file = paths["candidates"] / FILENAME_CANDIDATES
 
-        if self.generator and self.oracle:
-            # Generator returns iterator
-            candidate_stream = self.generator.generate(n_candidates=n_candidates)
+        candidate_stream = self.generator.generate(n_candidates=n_candidates)
+        total = 0
 
-            # Oracle consumes iterator and returns iterator
-            labelled_stream = self.oracle.compute(candidate_stream, batch_size=batch_size)
+        # Open file once and append batches
+        with candidates_file.open("a") as f:
+            for batch in batched(candidate_stream, n=batch_size):
+                # batched returns a tuple, ase.io.write accepts a sequence of Atoms.
+                # No need to convert tuple to list.
+                write(f, batch, format="extxyz")
+                total += len(batch)
 
-            # I/O Optimization: Buffer structures in memory (chunk) before writing
-            # Write mode: overwrite for first batch, then append
-            file_mode = "w"
+        self.logger.info(LOG_GENERATED_CANDIDATES.format(count=total))
 
+    def _label(self, paths: dict[str, Path]) -> None:
+        """
+        Step 2: Labeling (Oracle)
+        Reads candidate structures, computes properties, and saves labelled data.
+        Uses streaming read and write.
+        """
+        if not self.oracle:
+            return
+
+        candidates_file = paths["candidates"] / FILENAME_CANDIDATES
+        if not candidates_file.exists():
+            self.logger.warning("No candidates found to label.")
+            return
+
+        batch_size = self.config.workflow.batch_size
+        training_file = paths["training"] / FILENAME_TRAINING
+
+        # Read from candidates file efficiently using streaming iterator
+        candidate_stream = iread(str(candidates_file), index=":", format="extxyz")
+
+        labelled_stream = self.oracle.compute(candidate_stream, batch_size=batch_size)
+        total = 0
+
+        # Open file once and append batches
+        with training_file.open("a") as f:
             for batch in batched(labelled_stream, n=batch_size):
-                # 'batch' is a tuple of Atoms from 'batched'
-                write(training_file, list(batch), format="extxyz", append=(file_mode == "a"))
-                file_mode = "a"  # Switch to append after first write
-                total_candidates += len(batch)
+                write(f, batch, format="extxyz")
+                total += len(batch)
 
-            self.logger.info(LOG_COMPUTED_PROPERTIES.format(count=total_candidates))
+        self.logger.info(LOG_COMPUTED_PROPERTIES.format(count=total))
 
-        elif self.generator:
-            # Just consume generator if no oracle (mock mode)
-            for _ in self.generator.generate(n_candidates=n_candidates):
-                total_candidates += 1
-            self.logger.info(LOG_GENERATED_CANDIDATES.format(count=total_candidates))
-        else:
-            # Explicit check for missing modules if expected
-            # For Cycle 01, we might run with neither (empty loop), but let's log warning
-            pass
+    def _train(self, paths: dict[str, Path]) -> Path | None:
+        """
+        Step 3: Training
+        Trains the potential using the labelled data.
+        Returns path to the trained potential.
+        """
+        if not self.trainer:
+            return None
 
-        # 3. Train potential
-        if self.trainer:
-            if training_file.exists():
-                _ = self.trainer.train(training_data_path=training_file)
-                self.logger.info(LOG_POTENTIAL_TRAINED)
-            else:
-                self.logger.warning("No training data found, skipping training.")
+        training_file = paths["training"] / FILENAME_TRAINING
+        if not training_file.exists():
+            self.logger.warning("No training data found, skipping training.")
+            return None
 
-        # 4. Run MD
+        result = self.trainer.train(training_data_path=training_file)
+        self.logger.info(LOG_POTENTIAL_TRAINED)
+
+        # Assume result is a path to the potential file
+        return Path(result) if isinstance(result, (str, Path)) else None
+
+    def _deploy(self, paths: dict[str, Path], potential_path: Path | None) -> None:
+        """
+        Step 4: Deployment & Run
+        Deploys the potential and runs MD/Engine.
+        """
+        if potential_path and potential_path.exists():
+            filename = TEMPLATE_POTENTIAL_FILE.format(iteration=self.iteration)
+            target_path = self.potentials_dir / filename
+            with contextlib.suppress(shutil.SameFileError):
+                shutil.copy(potential_path, target_path)
+            self.logger.info(f"Deployed potential to {target_path}")
+
         if self.engine:
-            self.engine.run(structure=None, potential=None)  # type: ignore[arg-type]
+            # We assume Engine handles None structure/potential or finds them from config
+            self.engine.run(structure=None, potential=None)
             self.logger.info(LOG_MD_COMPLETED)
+
+    def _run_active_learning_step(self) -> None:
+        """
+        Executes a single step of the active learning loop using modular methods.
+        """
+        paths = self._setup_iteration_directory(self.iteration)
+
+        self._explore(paths)
+        self._label(paths)
+        potential_path = self._train(paths)
+        self._deploy(paths, potential_path)
 
     def run(self) -> None:
         """

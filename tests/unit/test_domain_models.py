@@ -42,8 +42,9 @@ def test_dft_config_invalid_encut() -> None:
 
 def test_dft_config_missing_field() -> None:
     with pytest.raises(ValidationError):
-        DFTConfig(code="qe", functional="PBE", kpoints_density=0.04)  # type: ignore[call-arg]
-        # Missing encut
+        DFTConfig.model_validate(
+            {"code": "qe", "functional": "PBE", "kpoints_density": 0.04}
+        )  # Missing encut
 
 
 def test_training_config_valid() -> None:
@@ -69,14 +70,31 @@ def test_md_config_invalid_temperature() -> None:
 
 
 def test_workflow_config_valid() -> None:
-    config = WorkflowConfig(max_iterations=10, state_file_path="custom_state.json")
+    config = WorkflowConfig(
+        max_iterations=10,
+        state_file_path="custom_state.json",
+        active_learning_dir="my_al_dir",
+        potentials_dir="my_pots",
+    )
     assert config.max_iterations == 10
     assert config.state_file_path == "custom_state.json"
+    assert config.active_learning_dir == "my_al_dir"
+    assert config.potentials_dir == "my_pots"
 
 
 def test_workflow_config_default() -> None:
     config = WorkflowConfig(max_iterations=10)
     assert config.state_file_path == "state.json"
+    assert config.active_learning_dir == "active_learning"
+    assert config.potentials_dir == "potentials"
+    assert config.checkpoint_interval == 1
+
+
+def test_workflow_config_invalid_checkpoint() -> None:
+    with pytest.raises(ValidationError):
+        WorkflowConfig(max_iterations=10, checkpoint_interval=0)  # Must be > 0
+    with pytest.raises(ValidationError):
+        WorkflowConfig(max_iterations=10, checkpoint_interval=-1)
 
 
 def test_logging_config_valid() -> None:
@@ -117,9 +135,13 @@ def test_pyace_config_missing_field() -> None:
     dft = DFTConfig(code="qe", functional="PBE", kpoints_density=0.04, encut=400.0)
     training = TrainingConfig(potential_type="ace", cutoff_radius=4.5, max_basis_size=500)
     md = MDConfig(temperature=300.0, pressure=0.0, timestep=0.001, n_steps=1000)
-    # Missing workflow
+    # Missing workflow, so we use model_validate with missing key to avoid mypy error on constructor
 
     with pytest.raises(ValidationError):
-        PyAceConfig(  # type: ignore[call-arg]
-            project_name="TestProject", structure=structure, dft=dft, training=training, md=md
-        )
+        PyAceConfig.model_validate({
+            "project_name": "TestProject",
+            "structure": structure.model_dump(),
+            "dft": dft.model_dump(),
+            "training": training.model_dump(),
+            "md": md.model_dump()
+        })
