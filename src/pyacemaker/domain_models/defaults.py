@@ -43,3 +43,8 @@ ERR_PATH_NOT_FILE = "Path is not a file: {path}"
 ERR_PATH_TRAVERSAL = "Path traversal detected: {path} is outside {base}"
 ERR_YAML_PARSE = "Error parsing YAML file: {error}"
 ERR_YAML_NOT_DICT = "YAML file must contain a dictionary."
+
+# Pacemaker Defaults
+DEFAULT_DELTA_SPLINE_BINS = 100
+DEFAULT_EVALUATOR = "tensorpot"
+DEFAULT_DISPLAY_STEP = 50

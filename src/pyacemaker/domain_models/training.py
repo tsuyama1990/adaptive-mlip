@@ -1,7 +1,12 @@
 
 from pydantic import BaseModel, ConfigDict, Field, PositiveFloat, field_validator, model_validator
 
-from pyacemaker.domain_models.defaults import FILENAME_POTENTIAL
+from pyacemaker.domain_models.defaults import (
+    DEFAULT_DELTA_SPLINE_BINS,
+    DEFAULT_DISPLAY_STEP,
+    DEFAULT_EVALUATOR,
+    FILENAME_POTENTIAL,
+)
 
 
 class PacemakerConfig(BaseModel):
@@ -35,9 +40,13 @@ class PacemakerConfig(BaseModel):
     optimizer: str = Field("BFGS", description="Optimization algorithm")
 
     # Advanced Settings (Moved from hardcoded values)
-    delta_spline_bins: int = Field(100, description="Number of bins for delta spline", gt=0)
-    evaluator: str = Field("tensorpot", description="Backend evaluator for potential")
-    display_step: int = Field(50, description="Frequency of logging during training", gt=0)
+    delta_spline_bins: int = Field(
+        DEFAULT_DELTA_SPLINE_BINS, description="Number of bins for delta spline", gt=0
+    )
+    evaluator: str = Field(DEFAULT_EVALUATOR, description="Backend evaluator for potential")
+    display_step: int = Field(
+        DEFAULT_DISPLAY_STEP, description="Frequency of logging during training", gt=0
+    )
 
 
 class TrainingConfig(BaseModel):

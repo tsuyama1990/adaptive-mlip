@@ -41,7 +41,13 @@ def test_uat_fit_potential(tmp_path: Path) -> None:
 
         # Verify dumped config in UAT context
         args, _ = mock_dump.call_args
-        assert args[0]["potential"]["elements"] == ["H"]
+        config_dict = args[0]
+        assert config_dict["potential"]["elements"] == ["H"]
+
+        # Verify new advanced settings are passed correctly
+        assert config_dict["potential"]["delta_spline_bins"] == 100
+        assert config_dict["backend"]["evaluator"] == "tensorpot"
+        assert config_dict["backend"]["display_step"] == 50
 
 def test_uat_active_set_selection(tmp_path: Path) -> None:
     pool = [Atoms('H') for _ in range(20)]

@@ -1,14 +1,13 @@
 import shutil
+import subprocess
 from pathlib import Path
 from typing import Any
-
-from ase.io import iread
 
 from pyacemaker.core.base import BaseTrainer
 from pyacemaker.core.exceptions import TrainerError
 from pyacemaker.domain_models.training import TrainingConfig
 from pyacemaker.utils.delta import get_lj_params
-from pyacemaker.utils.io import dump_yaml
+from pyacemaker.utils.io import detect_elements, dump_yaml
 from pyacemaker.utils.process import run_command
 
 
@@ -59,8 +58,13 @@ class PacemakerTrainer(BaseTrainer):
         cmd = ["pace_train", str(input_yaml_path)]
         try:
             run_command(cmd)
+        except subprocess.CalledProcessError as e:
+            # Capture specific subprocess error
+            msg = f"Training failed with exit code {e.returncode}: {e}"
+            raise TrainerError(msg) from e
         except Exception as e:
-            msg = f"Training failed: {e}"
+            # Catch other unexpected errors
+            msg = f"Training failed unexpectedly: {e}"
             raise TrainerError(msg) from e
 
         if not potential_path.exists():
@@ -84,9 +88,6 @@ class PacemakerTrainer(BaseTrainer):
             msg = f"Training data file is empty: {data_path}"
             raise TrainerError(msg)
 
-    def _raise_no_elements_error(self) -> None:
-        msg = "No elements detected in training data (file might be effectively empty)."
-        raise TrainerError(msg)
 
     def _generate_pacemaker_config(
         self, data_path: Path, output_path: Path
@@ -97,22 +98,8 @@ class PacemakerTrainer(BaseTrainer):
             elements = sorted(self.config.elements)
         else:
             try:
-                # Scan first few frames to detect elements
-                elements_set = set()
-                fmt = "extxyz" if data_path.suffix == ".xyz" else None
-                # iread format requires str, not None. But ASE handles None = autodetect.
-                read_fmt = fmt if fmt else ""
-                for i, atoms in enumerate(iread(data_path, index=":", format=read_fmt)):
-                    # atoms from iread is Atoms object
-                    elements_set.update(atoms.get_chemical_symbols())  # type: ignore[no-untyped-call]
-                    if i >= 10:  # Stop after 10 frames
-                        break
-                elements = sorted(elements_set)
-
-                if not elements:
-                     self._raise_no_elements_error()
-
-            except Exception as e:
+                elements = detect_elements(data_path, max_frames=10)
+            except ValueError as e:
                 msg = f"Could not detect elements from {data_path}. Please provide 'elements' in config or ensure data is valid: {e}"
                 raise TrainerError(msg) from e
 
