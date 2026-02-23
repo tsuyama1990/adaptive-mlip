@@ -1,3 +1,4 @@
+import os
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
@@ -39,6 +40,9 @@ class FakeOracle(BaseOracle):
 
 
 class FakeTrainer(BaseTrainer):
+    def __init__(self, output_dir: Path) -> None:
+        self.output_dir = output_dir
+
     def train(self, training_data_path: str | Path) -> Any:
         # Verify the file exists and is not empty
         path = Path(training_data_path)
@@ -47,14 +51,14 @@ class FakeTrainer(BaseTrainer):
             raise RuntimeError(msg)
 
         # Create a dummy potential file so deployment works
-        pot_path = Path("fake_potential.yace")
+        pot_path = self.output_dir / "fake_potential.yace"
         pot_path.touch()
         return pot_path
 
 
 class FakeEngine(BaseEngine):
     def run(self, structure: Atoms, potential: Any) -> Any:
-        return "simulation_result"
+        return {"status": "success", "trajectory": "path/to/traj"}
 
 
 @pytest.fixture
@@ -71,8 +75,10 @@ def mock_config(tmp_path: Path) -> PyAceConfig:
             n_candidates=10,
             batch_size=2,
             data_dir=str(tmp_path / "data"),
+            active_learning_dir=str(tmp_path / "active_learning"),
+            potentials_dir=str(tmp_path / "potentials"),
         ),
-        # Using a simple relative path ensures it passes validation against CWD
+        # Use simple name for log file, logging setup will resolve it relative to CWD (tmp_path in test)
         logging=LoggingConfig(level="DEBUG", log_file="test.log"),
     )
 
@@ -87,8 +93,6 @@ def test_orchestrator_loop_with_fakes(
     mock_config: PyAceConfig, tmp_path: Path, caplog: Any
 ) -> None:
     # Safely change CWD to tmp_path to test relative path logic without polluting /app
-    import os
-
     original_cwd = Path.cwd()
     os.chdir(tmp_path)
 
@@ -102,7 +106,7 @@ def test_orchestrator_loop_with_fakes(
         # Inject Fakes
         orch.generator = FakeGenerator()
         orch.oracle = FakeOracle()
-        orch.trainer = FakeTrainer()
+        orch.trainer = FakeTrainer(output_dir=tmp_path)
         orch.engine = FakeEngine()
 
         # Run loop
@@ -126,7 +130,8 @@ def test_orchestrator_loop_with_fakes(
         training_file = iter_dir / "training" / "training_data.xyz"
         assert training_file.exists()
         # Check if file content looks like XYZ (ase write)
-        assert "Lattice" in training_file.read_text() or "Properties" in training_file.read_text()
+        content = training_file.read_text()
+        assert "Lattice" in content or "Properties" in content
 
         # Verify deployed potential
         potentials_dir = Path(config.workflow.potentials_dir)
@@ -142,7 +147,7 @@ def test_orchestrator_loop_with_fakes(
         os.chdir(original_cwd)
 
 
-def test_orchestrator_checkpointing(mock_config: PyAceConfig, tmp_path: Path) -> None:
+def test_orchestrator_checkpointing(mock_config: PyAceConfig) -> None:
     # 1. Save state
     orch1 = Orchestrator(mock_config)
     orch1.iteration = 5
@@ -153,7 +158,7 @@ def test_orchestrator_checkpointing(mock_config: PyAceConfig, tmp_path: Path) ->
     assert orch2.iteration == 5
 
 
-def test_orchestrator_error_handling(mock_config: PyAceConfig) -> None:
+def test_orchestrator_error_handling_generator(mock_config: PyAceConfig) -> None:
     orch = Orchestrator(mock_config)
     mock_gen = Mock(spec=BaseGenerator)
     mock_gen.generate.side_effect = RuntimeError("Generator failed")
@@ -161,3 +166,30 @@ def test_orchestrator_error_handling(mock_config: PyAceConfig) -> None:
 
     with pytest.raises(RuntimeError):
         orch.run()
+
+
+def test_orchestrator_error_handling_oracle_stream(
+    mock_config: PyAceConfig, tmp_path: Path
+) -> None:
+    # Safely change CWD to tmp_path to test relative path logic without polluting /app
+    original_cwd = Path.cwd()
+    os.chdir(tmp_path)
+    try:
+        orch = Orchestrator(mock_config)
+        orch.generator = FakeGenerator()
+
+        # Oracle that fails during iteration
+        class FailingOracle(BaseOracle):
+            def compute(
+                self, structures: Iterator[Atoms], batch_size: int = 10
+            ) -> Iterator[Atoms]:
+                msg = "Oracle computation failed"
+                raise RuntimeError(msg)
+
+        orch.oracle = FailingOracle()
+
+        # Should crash cleanly
+        with pytest.raises(RuntimeError, match="Oracle computation failed"):
+            orch.run()
+    finally:
+        os.chdir(original_cwd)

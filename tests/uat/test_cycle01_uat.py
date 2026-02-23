@@ -50,9 +50,9 @@ def test_scenario_01_01_hello_config(valid_config_file: Path) -> None:
     cwd = valid_config_file.parent
     cmd = [sys.executable, "-m", "pyacemaker.main", "--config", valid_config_file.name, "--dry-run"]
 
-    result = subprocess.run(cmd, capture_output=True, text=True, env=env, cwd=str(cwd), check=False) # noqa: S603
+    # Use check=True for expected success
+    result = subprocess.run(cmd, capture_output=True, text=True, env=env, cwd=str(cwd), check=True) # noqa: S603
 
-    assert result.returncode == 0, f"Process failed. Stderr: {result.stderr}"
     assert "Configuration loaded successfully" in result.stdout or "Configuration loaded successfully" in result.stderr
 
 def test_scenario_01_02_guardrails_check_temp(invalid_config_file_temp: Path) -> None:
@@ -60,6 +60,7 @@ def test_scenario_01_02_guardrails_check_temp(invalid_config_file_temp: Path) ->
     cwd = invalid_config_file_temp.parent
     cmd = [sys.executable, "-m", "pyacemaker.main", "--config", invalid_config_file_temp.name]
 
+    # Expected failure, check=False is appropriate but we assert returncode != 0
     result = subprocess.run(cmd, capture_output=True, text=True, env=env, cwd=str(cwd), check=False)  # noqa: S603
     assert result.returncode != 0
     assert "validation error" in result.stderr
@@ -70,6 +71,7 @@ def test_scenario_01_02_guardrails_check_cutoff(invalid_config_file_cutoff: Path
     cwd = invalid_config_file_cutoff.parent
     cmd = [sys.executable, "-m", "pyacemaker.main", "--config", invalid_config_file_cutoff.name]
 
+    # Expected failure
     result = subprocess.run(cmd, capture_output=True, text=True, env=env, cwd=str(cwd), check=False)  # noqa: S603
     assert result.returncode != 0
     assert "validation error" in result.stderr
