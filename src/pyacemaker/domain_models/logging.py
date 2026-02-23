@@ -25,11 +25,11 @@ class LoggingConfig(BaseModel):
                 raise ValueError(msg)
 
             try:
-                # Resolve to absolute path to check traversal
-                abs_path = path.resolve()
-                cwd = Path.cwd().resolve()
-            except (ValueError, RuntimeError) as e:
-                msg = f"Invalid log file path: {e}"
+                # Use strict resolve to follow symlinks and check traversal
+                abs_path = path.resolve(strict=False)
+                cwd = Path.cwd().resolve(strict=True)
+            except (ValueError, RuntimeError, OSError) as e:
+                msg = f"Invalid log file path resolution: {e}"
                 raise ValueError(msg) from e
 
             if not abs_path.is_relative_to(cwd):

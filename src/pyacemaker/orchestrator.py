@@ -1,5 +1,6 @@
 import contextlib
 import json
+import os
 import shutil
 from pathlib import Path
 
@@ -26,6 +27,7 @@ from pyacemaker.constants import (
 )
 from pyacemaker.core.base import BaseEngine, BaseGenerator, BaseOracle, BaseTrainer
 from pyacemaker.domain_models import PyAceConfig
+from pyacemaker.factory import ModuleFactory
 from pyacemaker.logger import setup_logger
 from pyacemaker.utils.misc import batched
 
@@ -72,8 +74,10 @@ class Orchestrator:
         """
         self.logger.info(LOG_INIT_MODULES)
         try:
-            # In future cycles, we will instantiate concrete classes here based on config.
-            pass
+            # Create modules using factory
+            self.generator, self.oracle, self.trainer, self.engine = ModuleFactory.create_modules(
+                self.config
+            )
 
         except Exception as e:
             self.logger.exception("Failed to initialize modules")
@@ -121,8 +125,19 @@ class Orchestrator:
             "md_run": iter_dir / "md_run",
         }
 
-        for p in paths.values():
-            p.mkdir(parents=True, exist_ok=True)
+        try:
+            for p in paths.values():
+                p.mkdir(parents=True, exist_ok=True)
+                # Verify write permissions (basic check)
+                if not p.is_dir():
+                    msg = f"Path {p} exists but is not a directory."
+                    raise RuntimeError(msg)
+                if not os.access(p, os.W_OK):
+                    msg = f"Directory {p} is not writable."
+                    raise PermissionError(msg)
+        except OSError as e:
+            self.logger.critical(f"Failed to create directory structure: {e}")
+            raise
 
         return paths
 

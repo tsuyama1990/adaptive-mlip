@@ -22,6 +22,7 @@ from pyacemaker.domain_models import (
     TrainingConfig,
     WorkflowConfig,
 )
+from pyacemaker.factory import ModuleFactory
 from pyacemaker.orchestrator import Orchestrator
 
 
@@ -89,9 +90,11 @@ def test_orchestrator_initialization(mock_config: PyAceConfig) -> None:
     assert orch.state_file.name == "test_state.json"
 
 
-def test_orchestrator_loop_with_fakes(
-    mock_config: PyAceConfig, tmp_path: Path, caplog: Any
+def test_integration_workflow_complete(
+    mock_config: PyAceConfig, tmp_path: Path, caplog: Any, monkeypatch: Any
 ) -> None:
+    """Comprehensive integration test for the full active learning loop."""
+
     # Safely change CWD to tmp_path to test relative path logic without polluting /app
     original_cwd = Path.cwd()
     os.chdir(tmp_path)
@@ -101,15 +104,18 @@ def test_orchestrator_loop_with_fakes(
     config = mock_config.model_copy()
 
     try:
+        # Mock factory to return our fakes
+        def mock_create_modules(cfg: PyAceConfig) -> tuple[Any, Any, Any, Any]:
+            return (
+                FakeGenerator(),
+                FakeOracle(),
+                FakeTrainer(output_dir=tmp_path),
+                FakeEngine(),
+            )
+
+        monkeypatch.setattr(ModuleFactory, "create_modules", mock_create_modules)
+
         orch = Orchestrator(config)
-
-        # Inject Fakes
-        orch.generator = FakeGenerator()
-        orch.oracle = FakeOracle()
-        orch.trainer = FakeTrainer(output_dir=tmp_path)
-        orch.engine = FakeEngine()
-
-        # Run loop
         orch.run()
 
         assert orch.iteration == 2
@@ -158,26 +164,38 @@ def test_orchestrator_checkpointing(mock_config: PyAceConfig) -> None:
     assert orch2.iteration == 5
 
 
-def test_orchestrator_error_handling_generator(mock_config: PyAceConfig) -> None:
+def test_orchestrator_corrupted_state_file(mock_config: PyAceConfig, tmp_path: Path, caplog: Any) -> None:
+    """Test resilience against corrupted state file."""
+    state_file = Path(mock_config.workflow.state_file_path)
+    state_file.write_text("{invalid_json")
+
     orch = Orchestrator(mock_config)
+    # Should warn and default to iteration 0
+    assert orch.iteration == 0
+    assert "Failed to load state" in caplog.text or "state load fail" in caplog.text.lower()
+
+
+def test_orchestrator_error_handling_generator(mock_config: PyAceConfig, monkeypatch: Any) -> None:
     mock_gen = Mock(spec=BaseGenerator)
     mock_gen.generate.side_effect = RuntimeError("Generator failed")
-    orch.generator = mock_gen
 
+    def mock_create_modules(cfg: PyAceConfig) -> tuple[Any, Any, Any, Any]:
+        return mock_gen, None, None, None
+
+    monkeypatch.setattr(ModuleFactory, "create_modules", mock_create_modules)
+
+    orch = Orchestrator(mock_config)
     with pytest.raises(RuntimeError):
         orch.run()
 
 
 def test_orchestrator_error_handling_oracle_stream(
-    mock_config: PyAceConfig, tmp_path: Path
+    mock_config: PyAceConfig, tmp_path: Path, monkeypatch: Any
 ) -> None:
     # Safely change CWD to tmp_path to test relative path logic without polluting /app
     original_cwd = Path.cwd()
     os.chdir(tmp_path)
     try:
-        orch = Orchestrator(mock_config)
-        orch.generator = FakeGenerator()
-
         # Oracle that fails during iteration
         class FailingOracle(BaseOracle):
             def compute(
@@ -186,7 +204,12 @@ def test_orchestrator_error_handling_oracle_stream(
                 msg = "Oracle computation failed"
                 raise RuntimeError(msg)
 
-        orch.oracle = FailingOracle()
+        def mock_create_modules(cfg: PyAceConfig) -> tuple[Any, Any, Any, Any]:
+             return FakeGenerator(), FailingOracle(), None, None
+
+        monkeypatch.setattr(ModuleFactory, "create_modules", mock_create_modules)
+
+        orch = Orchestrator(mock_config)
 
         # Should crash cleanly
         with pytest.raises(RuntimeError, match="Oracle computation failed"):
