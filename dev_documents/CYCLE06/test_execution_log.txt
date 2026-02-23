@@ -1,0 +1,13 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.12, pytest-9.0.2, pluggy-1.6.0
+rootdir: /app
+configfile: pyproject.toml
+plugins: cov-7.0.0
+collected 14 items
+
+tests/unit/test_loop.py ...                                              [ 21%]
+tests/e2e/test_orchestrator_loop.py ...                                  [ 42%]
+tests/uat/test_cycle06_uat.py ..                                         [ 57%]
+tests/e2e/test_orchestrator.py ......                                    [100%]
+
+============================== 14 passed in 0.18s ==============================

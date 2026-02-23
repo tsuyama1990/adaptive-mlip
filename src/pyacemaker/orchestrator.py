@@ -1,13 +1,13 @@
-import contextlib
-import json
 import os
 import shutil
 from pathlib import Path
 
-from ase.io import iread, write
+from ase import Atoms
+from ase.io import iread, read, write
 
 from pyacemaker.core.active_set import ActiveSetSelector
 from pyacemaker.core.base import BaseEngine, BaseGenerator, BaseOracle, BaseTrainer
+from pyacemaker.core.loop import LoopState
 from pyacemaker.core.otf_manager import OTFManager
 from pyacemaker.domain_models import PyAceConfig
 from pyacemaker.domain_models.defaults import (
@@ -30,7 +30,9 @@ from pyacemaker.domain_models.defaults import (
     LOG_WORKFLOW_COMPLETED,
     LOG_WORKFLOW_CRASHED,
     TEMPLATE_ITER_DIR,
+    TEMPLATE_POTENTIAL_FILE,
 )
+from pyacemaker.domain_models.md import MDSimulationResult
 from pyacemaker.factory import ModuleFactory
 from pyacemaker.logger import setup_logger
 from pyacemaker.utils.misc import batched
@@ -51,7 +53,7 @@ class Orchestrator:
         """
         self.config = config
         self.logger = setup_logger(config=config.logging, project_name=config.project_name)
-        self.iteration = 0
+
         self.state_file = Path(config.workflow.state_file_path)
         self.data_dir = Path(config.workflow.data_dir)
         self.data_dir.mkdir(exist_ok=True)
@@ -60,7 +62,7 @@ class Orchestrator:
         self.potentials_dir = Path(config.workflow.potentials_dir)
         self.potentials_dir.mkdir(exist_ok=True)
 
-        # Core modules (placeholders for Cycle 01)
+        # Core modules (placeholders)
         self.generator: BaseGenerator | None = None
         self.oracle: BaseOracle | None = None
         self.trainer: BaseTrainer | None = None
@@ -68,6 +70,7 @@ class Orchestrator:
         self.active_set_selector: ActiveSetSelector | None = None
         self.otf_manager: OTFManager | None = None
 
+        # Initialize State
         self.load_state()
         self.logger.info(LOG_PROJECT_INIT.format(project_name=config.project_name))
 
@@ -89,7 +92,7 @@ class Orchestrator:
                 self.active_set_selector,
             ) = ModuleFactory.create_modules(self.config)
 
-            # Initialize OTF Manager
+            # Initialize OTF Manager (Optional helper)
             self.otf_manager = OTFManager(
                 self.config,
                 self.generator,
@@ -105,38 +108,26 @@ class Orchestrator:
 
         self.logger.info(LOG_MODULES_INIT_SUCCESS)
 
-    def save_state(self) -> None:
-        """Saves the current iteration state to a JSON file."""
-        state = {"iteration": self.iteration}
+    def load_state(self) -> None:
+        """Loads the iteration state using LoopState."""
         try:
-            with self.state_file.open("w") as f:
-                json.dump(state, f)
-            self.logger.debug(LOG_STATE_SAVED.format(state=state))
+            self.loop_state = LoopState.load(self.state_file)
+            self.logger.info(LOG_STATE_LOAD_SUCCESS.format(iteration=self.loop_state.iteration))
+        except Exception as e:
+            self.logger.warning(LOG_STATE_LOAD_FAIL.format(error=e))
+            self.loop_state = LoopState()
+
+    def save_state(self) -> None:
+        """Saves the current iteration state."""
+        try:
+            self.loop_state.save(self.state_file)
+            self.logger.debug(LOG_STATE_SAVED.format(state=self.loop_state.model_dump()))
         except Exception as e:
             self.logger.warning(LOG_STATE_SAVE_FAIL.format(error=e))
-
-    def load_state(self) -> None:
-        """Loads the iteration state from a JSON file if it exists."""
-        if self.state_file.exists():
-            try:
-                with self.state_file.open("r") as f:
-                    state = json.load(f)
-                    self.iteration = state.get("iteration", 0)
-                self.logger.info(LOG_STATE_LOAD_SUCCESS.format(iteration=self.iteration))
-            except Exception as e:
-                self.logger.warning(LOG_STATE_LOAD_FAIL.format(error=e))
 
     def _ensure_directory(self, path: Path) -> None:
         """
         Creates a directory and verifies write permissions.
-
-        Args:
-            path: Path to the directory.
-
-        Raises:
-            RuntimeError: If path exists but is not a directory.
-            PermissionError: If directory is not writable.
-            OSError: If directory creation fails.
         """
         try:
             path.mkdir(parents=True, exist_ok=True)
@@ -153,12 +144,6 @@ class Orchestrator:
     def _setup_iteration_directory(self, iteration: int) -> dict[str, Path]:
         """
         Creates the directory structure for the current iteration.
-
-        Args:
-            iteration: Current iteration number.
-
-        Returns:
-            Dictionary of paths for the iteration.
         """
         iter_dirname = TEMPLATE_ITER_DIR.format(iteration=iteration)
         iter_dir = self.active_learning_dir / iter_dirname
@@ -176,11 +161,7 @@ class Orchestrator:
         return paths
 
     def _explore(self, paths: dict[str, Path]) -> None:
-        """
-        Step 1: Exploration
-        Generates candidate structures and saves them to the candidates directory.
-        Uses streaming write to avoid opening/closing files repeatedly.
-        """
+        """Step 1: Exploration (Cold Start)"""
         if not self.generator:
             return
 
@@ -191,22 +172,15 @@ class Orchestrator:
         candidate_stream = self.generator.generate(n_candidates=n_candidates)
         total = 0
 
-        # Open file once and append batches
         with candidates_file.open("a") as f:
             for batch in batched(candidate_stream, n=batch_size):
-                # batched returns a tuple, ase.io.write accepts a sequence of Atoms.
-                # No need to convert tuple to list.
                 write(f, batch, format="extxyz")
                 total += len(batch)
 
         self.logger.info(LOG_GENERATED_CANDIDATES.format(count=total))
 
     def _label(self, paths: dict[str, Path]) -> None:
-        """
-        Step 2: Labeling (Oracle)
-        Reads candidate structures, computes properties, and saves labelled data.
-        Uses streaming read and write.
-        """
+        """Step 2: Labeling (Oracle)"""
         if not self.oracle:
             return
 
@@ -218,13 +192,11 @@ class Orchestrator:
         batch_size = self.config.workflow.batch_size
         training_file = paths["training"] / FILENAME_TRAINING
 
-        # Read from candidates file efficiently using streaming iterator
         candidate_stream = iread(str(candidates_file), index=":", format="extxyz")
 
         labelled_stream = self.oracle.compute(candidate_stream, batch_size=batch_size)
         total = 0
 
-        # Open file once and append batches
         with training_file.open("a") as f:
             for batch in batched(labelled_stream, n=batch_size):
                 write(f, batch, format="extxyz")
@@ -232,12 +204,8 @@ class Orchestrator:
 
         self.logger.info(LOG_COMPUTED_PROPERTIES.format(count=total))
 
-    def _train(self, paths: dict[str, Path]) -> Path | None:
-        """
-        Step 3: Training
-        Trains the potential using the labelled data.
-        Returns path to the trained potential.
-        """
+    def _train(self, paths: dict[str, Path], initial_potential: Path | None = None) -> Path | None:
+        """Step 3: Training"""
         if not self.trainer:
             return None
 
@@ -246,29 +214,145 @@ class Orchestrator:
             self.logger.warning("No training data found, skipping training.")
             return None
 
-        result = self.trainer.train(training_data_path=training_file)
+        result = self.trainer.train(training_data_path=training_file, initial_potential=initial_potential)
         self.logger.info(LOG_POTENTIAL_TRAINED)
 
-        # Assume result is a path to the potential file
         return Path(result) if isinstance(result, (str, Path)) else None
 
-    def _run_active_learning_step(self) -> None:
-        """
-        Executes a single step of the active learning loop using modular methods.
-        """
-        paths = self._setup_iteration_directory(self.iteration)
+    def _check_initial_potential(self) -> None:
+        """Checks if initial potential exists, if not generates one (Cold Start)."""
+        if self.loop_state.current_potential and self.loop_state.current_potential.exists():
+            self.logger.info(f"Using existing potential: {self.loop_state.current_potential}")
+            return
+
+        self.logger.info("No initial potential found. Starting Cold Start procedure.")
+
+        # Use iteration 0 for cold start
+        paths = self._setup_iteration_directory(0)
 
         self._explore(paths)
         self._label(paths)
         potential_path = self._train(paths)
 
-        if self.otf_manager:
-            self.otf_manager.run_loop(
-                paths=paths,
-                potential_path=potential_path,
-                iteration=self.iteration,
-                potentials_dir=self.potentials_dir
-            )
+        if potential_path:
+            self.loop_state.current_potential = potential_path
+            self.loop_state.iteration = 0
+            self.save_state()
+            self.logger.info(f"Cold start completed. Initial potential: {potential_path}")
+        else:
+            msg = "Cold start failed to produce a potential."
+            raise RuntimeError(msg)
+
+    def _get_initial_structure(self, iteration: int) -> Atoms | None:
+        """Returns an initial structure for MD."""
+        # Try to get from candidates of previous iteration or iteration 0
+        # If iteration > 0, we can check iteration 0 candidates
+        if not self.generator:
+            return None
+
+        try:
+             # Just generate one fresh if needed, it's safer than relying on files existence
+             # But for reproducibility, using saved candidates is better.
+             # Let's try to read from iter_000/candidates/candidates.xyz
+             iter0_paths = self._setup_iteration_directory(0)
+             cand_file = iter0_paths["candidates"] / FILENAME_CANDIDATES
+             if cand_file.exists():
+                 return next(iread(str(cand_file), index=0))
+
+             # Fallback to generator
+             return next(self.generator.generate(n_candidates=1))
+        except Exception:
+             self.logger.warning("Failed to get initial structure.")
+             return None
+
+    def _refine_potential(self, result: MDSimulationResult, potential_path: Path, paths: dict[str, Path]) -> Path | None:
+        """Refines potential upon Halt."""
+        if not result.halt_structure_path or not self.generator or not self.active_set_selector or not self.oracle or not self.trainer:
+            return None
+
+        try:
+            halt_structure = read(result.halt_structure_path)
+            if isinstance(halt_structure, list):
+                halt_structure = halt_structure[-1]
+
+            # Generate local candidates
+            local_n = self.config.workflow.otf.local_n_candidates
+            candidates_gen = self.generator.generate_local(halt_structure, n_candidates=local_n)
+
+            # Select Active Set
+            n_select = self.config.workflow.otf.local_n_select
+            selected_gen = self.active_set_selector.select(candidates_gen, potential_path, n_select=n_select)
+
+            # Label
+            labelled_gen = self.oracle.compute(selected_gen)
+
+            # Append to training data
+            training_file = paths["training"] / FILENAME_TRAINING
+            count = 0
+            batch_size = self.config.workflow.batch_size
+
+            with training_file.open("a") as f:
+                for batch in batched(labelled_gen, n=batch_size):
+                    write(f, list(batch), format="extxyz")
+                    count += len(batch)
+
+            self.logger.info(f"Refinement: Added {count} new structures.")
+
+            # Fine-tune
+            return self._train(paths, initial_potential=potential_path)
+
+        except Exception:
+            self.logger.exception("Refinement failed")
+            return None
+
+    def _run_loop_iteration(self) -> None:
+        """Executes one iteration of the active learning loop."""
+        iteration = self.loop_state.iteration + 1
+        paths = self._setup_iteration_directory(iteration)
+        self.logger.info(LOG_START_ITERATION.format(iteration=iteration, max_iterations=self.config.workflow.max_iterations))
+
+        # 1. Deploy Potential
+        potential_filename = TEMPLATE_POTENTIAL_FILE.format(iteration=iteration)
+        deployed_potential = self.potentials_dir / potential_filename
+
+        if self.loop_state.current_potential:
+             if self.loop_state.current_potential != deployed_potential:
+                shutil.copy(self.loop_state.current_potential, deployed_potential)
+        else:
+            msg = "No current potential to deploy."
+            raise RuntimeError(msg)
+
+        # 2. Run MD
+        initial_structure = self._get_initial_structure(iteration)
+        if not initial_structure:
+             self.logger.warning("No structure for MD. Skipping iteration.")
+             self.loop_state.iteration = iteration
+             self.save_state()
+             return
+
+        if self.engine:
+            result = self.engine.run(structure=initial_structure, potential=deployed_potential)
+
+            if result.halted:
+                self.logger.info(f"MD Halted at step {result.n_steps}. Triggering refinement.")
+                new_potential = self._refine_potential(result, deployed_potential, paths)
+                if new_potential:
+                    self.loop_state.current_potential = new_potential
+                    self.logger.info(f"Potential refined to: {new_potential}")
+            else:
+                 self.logger.info(LOG_ITERATION_COMPLETED.format(iteration=iteration))
+
+        self.loop_state.iteration = iteration
+        self.save_state()
+
+    def _finalize(self) -> None:
+        """Finalizes the workflow by deploying the best potential."""
+        production_dir = Path("production")
+        production_dir.mkdir(exist_ok=True)
+        if self.loop_state.current_potential:
+             target = production_dir / "potential.yace"
+             shutil.copy(self.loop_state.current_potential, target)
+             self.logger.info(f"Deployed best potential to {target}")
 
     def run(self) -> None:
         """
@@ -278,29 +362,14 @@ class Orchestrator:
 
         try:
             self.initialize_modules()
+            self._check_initial_potential()
 
-            max_iterations = self.config.workflow.max_iterations
-            start_iter = self.iteration
-            checkpoint_interval = self.config.workflow.checkpoint_interval
+            while self.loop_state.iteration < self.config.workflow.max_iterations:
+                 self._run_loop_iteration()
 
-            for i in range(start_iter, max_iterations):
-                self.iteration = i + 1
-                self.logger.info(
-                    LOG_START_ITERATION.format(
-                        iteration=self.iteration, max_iterations=max_iterations
-                    )
-                )
-
-                self._run_active_learning_step()
-
-                # Checkpoint based on interval
-                if self.iteration % checkpoint_interval == 0:
-                    self.save_state()
-
-                self.logger.info(LOG_ITERATION_COMPLETED.format(iteration=self.iteration))
+            self._finalize()
+            self.logger.info(LOG_WORKFLOW_COMPLETED)
 
         except Exception as e:
             self.logger.critical(LOG_WORKFLOW_CRASHED.format(error=e))
             raise
-
-        self.logger.info(LOG_WORKFLOW_COMPLETED)

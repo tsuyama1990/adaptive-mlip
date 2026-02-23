@@ -43,7 +43,7 @@ class OTFManager:
         self.engine = engine
         self.active_set_selector = active_set_selector
 
-    def run_loop(
+    def run_loop(  # noqa: C901, PLR0912, PLR0915
         self,
         paths: dict[str, Path],
         potential_path: Path | None,
@@ -137,7 +137,7 @@ class OTFManager:
 
             retries += 1
 
-    def _handle_halt_event(
+    def _handle_halt_event(  # noqa: PLR0911
         self,
         result: MDSimulationResult,
         potential_path: Path,

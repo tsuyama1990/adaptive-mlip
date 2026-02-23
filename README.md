@@ -36,7 +36,7 @@ Constructing MLIPs manually is tedious and error-prone. PyAceMaker automates the
     *   **Uncertainty Watchdog**: Automatically halts simulations when the extrapolation grade ($\gamma$) exceeds a safe threshold.
 *   **Scalability**:
     *   **Streaming Data Processing**: Handles large datasets with O(1) memory usage.
-    *   **Resume Capability**: Checkpoints state to JSON, allowing workflows to pause and resume.
+    *   **Resume Capability**: Checkpoints state to `state.json`, allowing workflows to pause and resume from the exact iteration and potential version.
 
 ## Requirements
 
