@@ -89,12 +89,15 @@ class LammpsScriptGenerator:
         """Generates output settings (thermo and dump)."""
         buffer.write(f"thermo {self.config.thermo_freq}\n")
 
-        style = "step temp pe press"
-        dump_cols = "id type x y z"
+        style_parts = ["step", "temp", "pe", "press"]
+        dump_parts = ["id", "type", "x", "y", "z"]
 
         if self.config.fix_halt:
-            style += " v_max_g"
-            dump_cols += " c_gamma"
+            style_parts.append("v_max_g")
+            dump_parts.append("c_gamma")
+
+        style = " ".join(style_parts)
+        dump_cols = " ".join(dump_parts)
 
         quoted_dump = self._quote(dump_file)
         buffer.write(f"thermo_style custom {style}\n")

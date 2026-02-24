@@ -1,7 +1,12 @@
-from unittest.mock import MagicMock, patch
-from ase import Atoms
 from pathlib import Path
+from unittest.mock import MagicMock, patch
+
+import pytest
+from ase import Atoms
+
 from pyacemaker.core.active_set import ActiveSetSelector
+from pyacemaker.core.exceptions import ActiveSetError
+
 
 def test_select_with_anchor_basic(tmp_path: Path) -> None:
     selector = ActiveSetSelector()
@@ -55,3 +60,15 @@ def test_select_with_anchor_only_one(tmp_path: Path) -> None:
         assert len(result) == 1
         assert result[0].get_chemical_symbols()[0] == 'He'  # type: ignore[no-untyped-call]
         mock_run.assert_not_called()
+
+def test_validate_path_traversal() -> None:
+    """Test path traversal validation."""
+    selector = ActiveSetSelector()
+    with pytest.raises(ActiveSetError, match="Path cannot contain '..'"):
+        selector._validate_path_safe(Path("foo/../bar"))
+
+def test_validate_path_flag_injection() -> None:
+    """Test flag injection validation."""
+    selector = ActiveSetSelector()
+    with pytest.raises(ActiveSetError, match="Path cannot start with '-'"):
+        selector._validate_path_safe(Path("-rf"))

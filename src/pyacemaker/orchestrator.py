@@ -324,7 +324,12 @@ class Orchestrator:
             # Extract local cluster (S0)
             radius = self.config.structure.local_extraction_radius
             buffer = self.config.structure.local_buffer_radius
-            s0_cluster = extract_local_region(halt_structure, center_idx, radius, buffer)
+
+            try:
+                s0_cluster = extract_local_region(halt_structure, center_idx, radius, buffer)
+            except Exception:
+                self.logger.exception(f"Failed to extract local region around atom {center_idx}")
+                return None
 
             # Generate local candidates (perturbations of S0)
             local_n = self.config.workflow.otf.local_n_candidates

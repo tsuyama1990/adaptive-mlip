@@ -59,7 +59,7 @@ class MDConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     temperature: PositiveFloat = Field(..., description="Simulation temperature in Kelvin")
-    pressure: float = Field(..., ge=0.0, description="Simulation pressure in Bar")
+    pressure: float = Field(..., ge=0.0, le=1.0e6, description="Simulation pressure in Bar (Max 1 MBar)")
     timestep: PositiveFloat = Field(..., description="Timestep in ps")
     n_steps: int = Field(..., gt=0, description="Number of MD steps")
 

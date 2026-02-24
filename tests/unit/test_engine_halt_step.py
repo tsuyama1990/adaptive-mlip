@@ -1,9 +1,11 @@
-import pytest
-from unittest.mock import patch
-from ase import Atoms
 from pathlib import Path
+from unittest.mock import patch
+
+from ase import Atoms
+
 from pyacemaker.core.engine import LammpsEngine
 from pyacemaker.domain_models.md import MDConfig
+
 
 def test_lammps_engine_halt_step_populated(tmp_path: Path) -> None:
     # Mock config

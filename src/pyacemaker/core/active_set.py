@@ -90,7 +90,9 @@ class ActiveSetSelector:
             batch_size = 1000
             with file_path.open("w") as f:
                 for batch in batched(candidates, batch_size):
-                    write(f, list(batch), format="extxyz")
+                    # batched returns a tuple, which ase.io.write iterates over correctly.
+                    # This avoids materializing a list.
+                    write(f, batch, format="extxyz")
                     count += len(batch)
         except Exception as e:
             msg = f"Failed to write candidates to temporary file: {e}"
@@ -133,9 +135,13 @@ class ActiveSetSelector:
         s = str(path)
         dangerous_chars = [";", "&", "|", "`", "$", "(", ")", "<", ">", "\n", "\r"]
         if any(c in s for c in dangerous_chars):
-             msg = f"Path contains invalid characters: {path}"
-             raise ActiveSetError(msg)
+            msg = f"Path contains invalid characters: {path}"
+            raise ActiveSetError(msg)
 
         if s.startswith("-"):
-             msg = f"Path cannot start with '-': {path}"
-             raise ActiveSetError(msg)
+            msg = f"Path cannot start with '-': {path}"
+            raise ActiveSetError(msg)
+
+        if ".." in s:
+            msg = f"Path cannot contain '..': {path}"
+            raise ActiveSetError(msg)
