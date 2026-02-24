@@ -6,6 +6,10 @@ from ase import Atoms
 from ase.io import iread, write
 
 from pyacemaker.core.exceptions import ActiveSetError
+from pyacemaker.domain_models.defaults import (
+    DEFAULT_ACTIVE_SET_CHUNK_SIZE,
+    DEFAULT_ACTIVE_SET_OVERSAMPLING_FACTOR,
+)
 from pyacemaker.utils.misc import batched
 from pyacemaker.utils.path import validate_path_safe
 from pyacemaker.utils.process import run_command
@@ -16,13 +20,6 @@ class ActiveSetSelector:
     Selects the most informative structures from a candidate pool using D-optimality.
     Wraps the 'pace_activeset' command from Pacemaker.
     """
-
-    # Chunk size for processing large datasets to avoid OOM in external tool
-    CHUNK_SIZE = 10000
-
-    # Oversampling factor for intermediate selection steps
-    # We select more from chunks to ensure global optimum is likely included
-    OVERSAMPLING_FACTOR = 5
 
     def select(
         self,
@@ -123,7 +120,10 @@ class ActiveSetSelector:
         """Process chunks of candidates and return paths to intermediate selection files."""
         intermediate_files: list[Path] = []
 
-        for chunk_idx, batch in enumerate(batched(candidates, self.CHUNK_SIZE)):
+        # Use centralized default constant for chunk size
+        # iterate over batched(candidates) which yields tuples (materialized chunks)
+        # This is memory safe as long as CHUNK_SIZE is reasonable.
+        for chunk_idx, batch in enumerate(batched(candidates, DEFAULT_ACTIVE_SET_CHUNK_SIZE)):
             chunk_file = tmp_path / f"chunk_{chunk_idx}.xyz"
             selected_chunk_file = tmp_path / f"selected_chunk_{chunk_idx}.xyz"
 
@@ -131,7 +131,9 @@ class ActiveSetSelector:
             count = self._write_candidates(batch, chunk_file)
             if count > 0:
                 # Determine how many to select from this chunk
-                n_chunk_select = min(n_select * self.OVERSAMPLING_FACTOR, count)
+                n_chunk_select = min(
+                    n_select * DEFAULT_ACTIVE_SET_OVERSAMPLING_FACTOR, count
+                )
 
                 # Run selection on chunk
                 self._execute_selection(

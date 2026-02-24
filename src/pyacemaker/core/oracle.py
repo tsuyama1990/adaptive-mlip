@@ -40,14 +40,12 @@ class DFTManager(BaseOracle):
             self._strategy_use_cg
         ]
 
-    def compute(self, structures: Iterator[Atoms], batch_size: int = 10) -> Iterator[Atoms]:
+    def compute(self, structures: Iterator[Atoms]) -> Iterator[Atoms]:
         """
         Computes DFT properties for stream of structures.
 
         Args:
             structures: Iterator of Atoms objects.
-            batch_size: Ignored in this implementation to ensure strict streaming (one-by-one).
-                        Kept for interface compatibility.
 
         Yields:
             Atoms objects with computed properties.

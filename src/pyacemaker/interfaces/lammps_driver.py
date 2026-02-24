@@ -1,9 +1,12 @@
 
 import re
+import shlex
 
 import numpy as np
 from ase import Atoms
 from lammps import lammps
+
+from pyacemaker.core.exceptions import LammpsDriverError
 
 
 class LammpsDriver:
@@ -35,20 +38,32 @@ class LammpsDriver:
         except Exception as e:
             # Catch OSError (missing lib) or other initialization errors
             msg = f"Failed to initialize LAMMPS: {e}"
-            raise RuntimeError(msg) from e
+            raise LammpsDriverError(msg) from e
 
     def _validate_command(self, cmd: str) -> None:
         """Validates a single command against security rules."""
         if not self.SAFE_CMD_PATTERN.match(cmd):
             msg = f"Command contains forbidden characters: {cmd}"
-            raise ValueError(msg)
+            raise LammpsDriverError(msg)
 
-        if "shell" in cmd.split(): # Tokenize to avoid matching 'shell' inside words? "myshell" is ok.
-            # LAMMPS command is usually first token.
-            # But 'shell' can be anywhere? No, usually 'shell cmd'.
-            # We blacklist 'shell' token.
+        # Tokenize using shlex to correctly handle quotes
+        try:
+            tokens = shlex.split(cmd)
+        except ValueError as e:
+             msg = f"Command has unbalanced quotes or invalid syntax: {cmd}"
+             raise LammpsDriverError(msg) from e
+
+        if not tokens:
+            return
+
+        # Check for forbidden commands
+        if "shell" in tokens:
             msg = "Script contains forbidden command 'shell'."
-            raise ValueError(msg)
+            raise LammpsDriverError(msg)
+
+        if "python" in tokens:
+             msg = "Script contains forbidden command 'python'."
+             raise LammpsDriverError(msg)
 
     def run(self, script: str) -> None:
         """
@@ -58,17 +73,29 @@ class LammpsDriver:
             script: String containing LAMMPS commands (can be multi-line).
 
         Raises:
-            ValueError: If script contains non-ASCII characters or unsafe commands.
+            LammpsDriverError: If script contains non-ASCII characters or unsafe commands.
         """
         if not script.isascii():
              msg = "Script contains non-ASCII characters, which may be unsafe."
-             raise ValueError(msg)
+             raise LammpsDriverError(msg)
 
-        for line in script.split("\n"):
+        # Use splitlines() to handle various line endings (\n, \r, \r\n) safely
+        for line in script.splitlines():
             cmd = line.strip()
-            if cmd:
-                self._validate_command(cmd)
-                self.lmp.command(cmd)
+            # Skip comments and empty lines
+            if not cmd or cmd.startswith("#"):
+                continue
+
+            # Remove trailing comments if any?
+            # LAMMPS comments start with #.
+            # shlex.split with comments=True handles this?
+            # But we want to validate the *command* part.
+            # Simple approach: split by # and take first part?
+            # But # can be inside quotes?
+            # shlex handles this.
+
+            self._validate_command(cmd)
+            self.lmp.command(cmd)
 
     def extract_variable(self, name: str) -> float:
         """
@@ -117,7 +144,7 @@ class LammpsDriver:
             symbols = [elements[t - 1] for t in types_view]
         except IndexError as e:
              msg = f"LAMMPS type index out of range for elements list: {e}"
-             raise ValueError(msg) from e
+             raise LammpsDriverError(msg) from e
 
         # Get cell
         # extract_box returns (boxlo, boxhi, xy, yz, xz, periodicity, box_change)

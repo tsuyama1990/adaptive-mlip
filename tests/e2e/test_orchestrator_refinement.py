@@ -36,7 +36,7 @@ class FakeGenerator(BaseGenerator):
             yield base_structure.copy()  # type: ignore[no-untyped-call]
 
 class FakeOracle(BaseOracle):
-    def compute(self, structures: Iterator[Atoms], batch_size: int = 10) -> Iterator[Atoms]:
+    def compute(self, structures: Iterator[Atoms]) -> Iterator[Atoms]:
         for atoms in structures:
             atoms.info["energy"] = -5.0
             yield atoms

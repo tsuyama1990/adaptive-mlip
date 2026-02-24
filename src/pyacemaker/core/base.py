@@ -73,13 +73,12 @@ class BaseOracle(ABC):
     """
 
     @abstractmethod
-    def compute(self, structures: Iterator[Atoms], batch_size: int = 10) -> Iterator[Atoms]:
+    def compute(self, structures: Iterator[Atoms]) -> Iterator[Atoms]:
         """
         Computes properties (energy, forces, stress) for the given structures.
 
         Args:
             structures: Iterator of ASE Atoms objects.
-            batch_size: Number of structures to compute in a single batch (if supported).
 
         Returns:
             Iterator of ASE Atoms objects with computed properties attached (e.g. in atoms.info).
@@ -91,11 +90,10 @@ class BaseOracle(ABC):
 
         Example:
             class DFTOracle(BaseOracle):
-                def compute(self, structures, batch_size=10):
-                    for batch in batched(structures, batch_size):
-                        results = run_dft(batch)
-                        for res in results:
-                            yield res
+                def compute(self, structures):
+                    for atom in structures:
+                        res = run_dft(atom)
+                        yield res
         """
 
 

@@ -88,6 +88,10 @@ class DFTConfig(BaseModel):
             msg = f"Pseudopotential path for {elem} cannot be empty"
             raise ValueError(msg)
 
+        if len(path_str) > 4096:
+            msg = f"Pseudopotential path for {elem} is too long ({len(path_str)} > 4096)"
+            raise ValueError(msg)
+
         try:
             p = Path(path_str)
             # resolve(strict=True) will raise FileNotFoundError if file doesn't exist.
