@@ -6,6 +6,8 @@ from ase import Atoms
 from ase.io import iread, write
 
 from pyacemaker.core.exceptions import ActiveSetError
+from pyacemaker.domain_models.constants import DANGEROUS_PATH_CHARS
+from pyacemaker.utils.misc import batched
 from pyacemaker.utils.process import run_command
 
 
@@ -88,25 +90,20 @@ class ActiveSetSelector:
 
     def _write_candidates(self, candidates: Iterable[Atoms], file_path: Path) -> int:
         """
-        Writes candidates to disk by streaming iterator directly to ASE write.
-        This avoids batching materialization entirely.
+        Writes candidates to disk using explicit batch streaming.
+        Iterates over the generator in chunks and writes each chunk immediately.
+        This ensures O(batch_size) memory usage.
         """
         count = 0
+        batch_size = 1000
         try:
-            # ase.io.write supports writing an iterable of Atoms.
-            # However, it doesn't return count. We need to wrap it to count.
-            # But wrapping might break internal optimizations if any.
-            # To be safe and compliant with "NEVER load entire datasets", we pass the iterator.
-            # To count, we can use a pass-through generator.
-
-            def counting_generator(iterable: Iterable[Atoms]) -> Iterator[Atoms]:
-                nonlocal count
-                for atoms in iterable:
-                    count += 1
-                    yield atoms
-
-            write(file_path, counting_generator(candidates), format="extxyz")  # type: ignore[arg-type]
-
+            # Open the file once and append each batch
+            with file_path.open("w") as f:
+                # batched returns a tuple of Atoms. ASE write accepts Sequence[Atoms].
+                # We iterate the main generator and write small tuples.
+                for batch in batched(candidates, batch_size):
+                    write(f, batch, format="extxyz")
+                    count += len(batch)
         except Exception as e:
             msg = f"Failed to write candidates to temporary file: {e}"
             raise ActiveSetError(msg) from e
@@ -153,7 +150,6 @@ class ActiveSetSelector:
              raise ActiveSetError(msg) from e
 
         s = str(resolved)
-        dangerous_chars = [";", "&", "|", "`", "$", "(", ")", "<", ">", "\n", "\r", "%"]
-        if any(c in s for c in dangerous_chars):
+        if any(c in s for c in DANGEROUS_PATH_CHARS):
             msg = f"Path contains invalid characters: {path}"
             raise ActiveSetError(msg)

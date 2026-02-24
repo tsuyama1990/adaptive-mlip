@@ -10,6 +10,10 @@ KB_EV = 8.617333262e-5  # Boltzmann constant in eV/K
 DEFAULT_RAM_DISK_PATH = "/dev/shm"  # noqa: S108
 LAMMPS_SCREEN_ARG = "none"
 
+# Security Constants
+# Characters that are considered dangerous in file paths or shell commands
+DANGEROUS_PATH_CHARS = [";", "&", "|", "`", "$", "(", ")", "<", ">", "\n", "\r", "%"]
+
 # Embedding Constants
 EMBEDDING_TOLERANCE_CELL = 1e-6
 EMBEDDING_TOLERANCE_LENGTH = 1e-9

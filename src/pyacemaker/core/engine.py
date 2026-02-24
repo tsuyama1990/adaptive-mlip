@@ -18,13 +18,19 @@ class LammpsEngine(BaseEngine):
     Handles input generation, execution, and result parsing.
     """
 
-    def __init__(self, config: MDConfig) -> None:
+    def __init__(
+        self,
+        config: MDConfig,
+        generator: LammpsScriptGenerator | None = None,
+        file_manager: LammpsFileManager | None = None
+    ) -> None:
         """
         Initialize the engine with configuration.
+        Allows dependency injection for generator and file manager.
         """
         self.config = config
-        self.generator = LammpsScriptGenerator(config)
-        self.file_manager = LammpsFileManager(config)
+        self.generator = generator or LammpsScriptGenerator(config)
+        self.file_manager = file_manager or LammpsFileManager(config)
 
     def run(self, structure: Atoms | None, potential: Any) -> MDSimulationResult:
         """

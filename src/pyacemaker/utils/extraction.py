@@ -33,7 +33,8 @@ def extract_local_region(
     total_cutoff = radius + buffer
 
     # Use ASE's neighbor_list to find neighbors respecting PBC
-    # neighbor_list uses cell lists internally for O(N) efficiency with valid cutoffs.
+    # neighbor_list uses cell lists internally for O(N) efficiency with valid cutoffs (when cutoff << cell size).
+    # For very large structures, this is significantly faster than O(N^2) pairwise calculation.
     # returns i (center indices), j (neighbor indices), D (distance vectors)
     # D is vector from atom i to atom j
     i_indices, j_indices, D_vectors = neighbor_list('ijD', structure, cutoff=total_cutoff)  # type: ignore[no-untyped-call]

@@ -206,7 +206,7 @@ class Orchestrator:
                 # Still use batched to avoid holding too many in memory before write
                 # But file is kept open.
                 for batch in batched(candidate_stream, n=batch_size):
-                    write(f, list(batch), format="extxyz")
+                    write(f, batch, format="extxyz")
                     total += len(batch)
 
             self.logger.info(LOG_GENERATED_CANDIDATES.format(count=total))
@@ -241,7 +241,7 @@ class Orchestrator:
             # Open file once for appending
             with training_file.open("a") as f:
                 for batch in batched(labelled_stream, n=batch_size):
-                    write(f, list(batch), format="extxyz")
+                    write(f, batch, format="extxyz")
                     total += len(batch)
 
             self.logger.info(LOG_COMPUTED_PROPERTIES.format(count=total))
@@ -373,7 +373,7 @@ class Orchestrator:
 
         with training_file.open("a") as f:
             for batch in batched(labelled_gen, n=batch_size):
-                write(f, list(batch), format="extxyz")
+                write(f, batch, format="extxyz")
                 count += len(batch)
 
         return count
