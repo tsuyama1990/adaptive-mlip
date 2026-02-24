@@ -167,3 +167,17 @@ class BaseEngine(ABC):
                     subprocess.run(["lmp", ...])
                     return MDSimulationResult(...)
         """
+
+    @abstractmethod
+    def compute_static_properties(self, structure: Atoms, potential: Any) -> MDSimulationResult:
+        """
+        Computes static properties (energy, forces, stress) for a structure.
+        Equivalent to a 0-step MD run or minimization.
+
+        Args:
+            structure: Structure to compute properties for.
+            potential: Potential to use.
+
+        Returns:
+            MDSimulationResult containing energy, forces, etc.
+        """

@@ -1,9 +1,14 @@
 
+import logging
 import re
 
 import numpy as np
 from ase import Atoms
 from lammps import lammps
+
+from pyacemaker.domain_models.constants import LAMMPS_SAFE_CMD_PATTERN
+
+logger = logging.getLogger(__name__)
 
 
 class LammpsDriver:
@@ -13,11 +18,7 @@ class LammpsDriver:
     """
 
     # Whitelist of allowed characters in LAMMPS commands
-    # Alphanumeric, whitespace, and specific safe symbols used in LAMMPS syntax.
-    # Allowed: _ - . / = ' " # * $ { } ( ) [ ] , : + > <
-    # Note: ; | & are strictly forbidden (shell metachars).
-    # Backticks ` are forbidden.
-    SAFE_CMD_PATTERN = re.compile(r"^[a-zA-Z0-9_\-\.\/\=\s\'\"\#\*\$\{\}\(\)\[\],:\+\>\<]+$")
+    SAFE_CMD_PATTERN = re.compile(LAMMPS_SAFE_CMD_PATTERN)
 
     def __init__(self, cmdargs: list[str] | None = None) -> None:
         """
@@ -43,12 +44,18 @@ class LammpsDriver:
             msg = f"Command contains forbidden characters: {cmd}"
             raise ValueError(msg)
 
-        if "shell" in cmd.split(): # Tokenize to avoid matching 'shell' inside words? "myshell" is ok.
-            # LAMMPS command is usually first token.
-            # But 'shell' can be anywhere? No, usually 'shell cmd'.
-            # We blacklist 'shell' token.
+        # Check for shell metacharacters explicitly, though regex should cover it.
+        # Double check for ` $ ( )` which might be used for subshells if regex allows them.
+        # Our regex ALLOWS $ { } ( ) for variable expansion.
+        # But we must forbid 'shell' command.
+        tokens = cmd.split()
+        if "shell" in tokens:
             msg = "Script contains forbidden command 'shell'."
             raise ValueError(msg)
+
+        # Additional check: `package` command with `load` can load shared objects.
+        # Ideally, we restrict commands to a safe subset, but LAMMPS has many commands.
+        # Blocking 'shell' is the primary defense against RCE.
 
     def run(self, script: str) -> None:
         """
@@ -140,3 +147,39 @@ class LammpsDriver:
         # ASE Atoms constructor will copy the positions array if it's a numpy array.
         # We pass the view 'positions_view'.
         return Atoms(symbols=symbols, positions=positions_view, cell=cell, pbc=periodicity)
+
+    def get_forces(self) -> np.ndarray:
+        """
+        Retrieve forces for all atoms.
+
+        Returns:
+            Numpy array of shape (N, 3) containing forces.
+        """
+        natoms = self.lmp.get_natoms()
+        if natoms == 0:
+            return np.zeros((0, 3))
+
+        # Gather forces (type 1 = double, count 3)
+        f_ptr = self.lmp.gather_atoms("f", 1, 3)
+        forces_view = np.ctypeslib.as_array(f_ptr, shape=(natoms, 3))
+        # Copy to ensure ownership
+        return forces_view.copy()
+
+    def get_stress(self) -> np.ndarray:
+        """
+        Retrieve stress tensor for the system (Voigt notation).
+        Units: Pressure units (usually Bar or similar).
+        """
+        try:
+            pxx = self.extract_variable("pxx")
+            pyy = self.extract_variable("pyy")
+            pzz = self.extract_variable("pzz")
+            pyz = self.extract_variable("pyz")
+            pxz = self.extract_variable("pxz")
+            pxy = self.extract_variable("pxy")
+            # Convert to Stress (Voigt) = [-pxx, -pyy, -pzz, -pyz, -pxz, -pxy]
+            # Pressure is negative stress.
+            return np.array([-pxx, -pyy, -pzz, -pyz, -pxz, -pxy])
+        except Exception:
+            logger.warning("Failed to extract stress tensor. Returning zero vector.")
+            return np.zeros(6)

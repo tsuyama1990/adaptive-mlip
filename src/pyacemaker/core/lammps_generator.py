@@ -104,6 +104,17 @@ class LammpsScriptGenerator:
         buffer.write(f"thermo_style custom {style}\n")
         buffer.write(f"dump traj all custom {self.config.dump_freq} {quoted_dump} {dump_cols}\n")
 
+        # Define variables for extraction via Python interface
+        buffer.write("variable pe equal pe\n")
+        buffer.write("variable temp equal temp\n")
+        buffer.write("variable step equal step\n")
+        buffer.write("variable pxx equal pxx\n")
+        buffer.write("variable pyy equal pyy\n")
+        buffer.write("variable pzz equal pzz\n")
+        buffer.write("variable pxy equal pxy\n")
+        buffer.write("variable pxz equal pxz\n")
+        buffer.write("variable pyz equal pyz\n")
+
     def _gen_post_run_diagnostics(self, buffer: TextIO) -> None:
         """Generates post-run diagnostic prints."""
 

@@ -1,5 +1,6 @@
 import os
 import shutil
+from collections.abc import Iterable
 from pathlib import Path
 
 import numpy as np
@@ -10,6 +11,7 @@ from pyacemaker.core.active_set import ActiveSetSelector
 from pyacemaker.core.base import BaseEngine, BaseGenerator, BaseOracle, BaseTrainer
 from pyacemaker.core.exceptions import OrchestratorError
 from pyacemaker.core.loop import LoopState
+from pyacemaker.core.validator import Validator
 from pyacemaker.domain_models import PyAceConfig
 from pyacemaker.domain_models.defaults import (
     DEFAULT_PRODUCTION_DIR,
@@ -72,6 +74,7 @@ class Orchestrator:
         self.trainer: BaseTrainer | None = None
         self.engine: BaseEngine | None = None
         self.active_set_selector: ActiveSetSelector | None = None
+        self.validator: Validator | None = None
 
         # Initialize State
         self.load_state()
@@ -93,6 +96,7 @@ class Orchestrator:
                 self.trainer,
                 self.engine,
                 self.active_set_selector,
+                self.validator,
             ) = ModuleFactory.create_modules(self.config)
 
         except Exception as e:
@@ -166,6 +170,49 @@ class Orchestrator:
 
         return created_paths
 
+    def _stream_write(
+        self,
+        generator: Iterable[Atoms],
+        filepath: Path,
+        batch_size: int = 100,
+        append: bool = False,
+    ) -> int:
+        """
+        Writes atoms from a generator to a file in chunks to balance I/O and memory.
+        Uses `batched` to process chunks.
+
+        Args:
+            generator: Iterable of Atoms objects.
+            filepath: Path to output file.
+            batch_size: Number of atoms per write operation.
+            append: Whether to append to the file or overwrite.
+
+        Returns:
+            Total number of atoms written.
+        """
+        count = 0
+
+        # Ensure parent dir exists
+        filepath.parent.mkdir(parents=True, exist_ok=True)
+
+        # Iterate in batches
+        # batched returns a tuple of items.
+        for batch in batched(generator, batch_size):
+            # Write chunk
+            # ase.io.write handles list of atoms.
+            # If append is False for first chunk, subsequent chunks MUST append.
+            # So we control 'append' logic manually?
+            # Actually, ase.io.write(..., append=True) appends to file.
+            # If append=False (initial call), it overwrites.
+            # But subsequent batches must append.
+
+            current_append = append or (count > 0)
+
+            write(filepath, batch, format="extxyz", append=current_append)
+            count += len(batch)
+
+        return count
+
     def _setup_iteration_directory(self, iteration: int) -> dict[str, Path]:
         """
         Creates the directory structure for the current iteration.
@@ -198,16 +245,13 @@ class Orchestrator:
 
         try:
             candidate_stream = self.generator.generate(n_candidates=n_candidates)
-            total = 0
-
-            # Use ASE write in append mode with the generator directly.
-            # This avoids manual batching and list materialization completely.
-            # 'append=True' ensures we don't overwrite if file exists (from previous batches if any, though here it's one call).
-            # ASE iterates over candidate_stream.
-            write(candidates_file, candidate_stream, format="extxyz", append=True)  # type: ignore[arg-type]
-
-            # For now, we log "Written candidates" as total count is unknown due to streaming
-            total = -1
+            # Use explicit chunked streaming
+            total = self._stream_write(
+                candidate_stream,
+                candidates_file,
+                batch_size=self.config.workflow.batch_size,
+                append=True
+            )
 
             self.logger.info(LOG_GENERATED_CANDIDATES.format(count=total))
         except Exception as e:
@@ -236,11 +280,13 @@ class Orchestrator:
 
             # Streaming computation
             labelled_stream = self.oracle.compute(candidate_stream, batch_size=batch_size)
-            total = 0
 
-            # Use ASE write in append mode
-            write(training_file, labelled_stream, format="extxyz", append=True)  # type: ignore[arg-type]
-            total = -1
+            total = self._stream_write(
+                labelled_stream,
+                training_file,
+                batch_size=batch_size,
+                append=True
+            )
 
             self.logger.info(LOG_COMPUTED_PROPERTIES.format(count=total))
         except Exception as e:
@@ -366,15 +412,14 @@ class Orchestrator:
 
         # Append to training data
         training_file = paths["training"] / FILENAME_TRAINING
-        count = 0
         batch_size = self.config.workflow.batch_size
 
-        with training_file.open("a") as f:
-            for batch in batched(labelled_gen, n=batch_size):
-                write(f, batch, format="extxyz")
-                count += len(batch)
-
-        return count
+        return self._stream_write(
+            labelled_gen,
+            training_file,
+            batch_size=batch_size,
+            append=True
+        )
 
     def _refine_potential(self, result: MDSimulationResult, potential_path: Path, paths: dict[str, Path]) -> Path | None:
         """
@@ -464,13 +509,31 @@ class Orchestrator:
             raise OrchestratorError(msg) from e
 
     def _finalize(self) -> None:
-        """Finalizes the workflow by deploying the best potential."""
+        """Finalizes the workflow by deploying and validating the best potential."""
         production_dir = Path(DEFAULT_PRODUCTION_DIR)
         production_dir.mkdir(exist_ok=True)
+        potential_target = production_dir / FILENAME_POTENTIAL
+
         if self.loop_state.current_potential:
-             target = production_dir / FILENAME_POTENTIAL
-             shutil.copy(self.loop_state.current_potential, target)
-             self.logger.info(f"Deployed best potential to {target}")
+            shutil.copy(self.loop_state.current_potential, potential_target)
+            self.logger.info(f"Deployed best potential to {potential_target}")
+
+            if self.validator:
+                report_path = production_dir / "validation_report.html"
+                # Get a structure for validation. Use initial structure of last iteration.
+                structure = self._get_initial_structure(self.loop_state.iteration)
+
+                if structure:
+                    self.logger.info("Running final validation...")
+                    result = self.validator.validate(potential_target, report_path, structure)
+                    status = (
+                        "PASSED"
+                        if (result.phonon_stable and result.elastic_stable)
+                        else "FAILED"
+                    )
+                    self.logger.info(f"Validation {status}. Report saved to {report_path}")
+                else:
+                    self.logger.warning("Could not retrieve structure for validation.")
 
     def run(self) -> None:
         """

@@ -15,6 +15,11 @@ LAMMPS_SCREEN_ARG = "none"
 # Characters that are considered dangerous in file paths or shell commands
 DANGEROUS_PATH_CHARS = [";", "&", "|", "`", "$", "(", ")", "<", ">", "\n", "\r", "%"]
 
+# Allowed characters in LAMMPS commands: Alphanumeric, whitespace, and safe symbols.
+# Allowed: _ - . / = ' " # * $ { } ( ) [ ] , : + > <
+# Strictly forbidden: ; | & ` (shell metachars)
+LAMMPS_SAFE_CMD_PATTERN = r"^[a-zA-Z0-9_\-\.\/\=\s\'\"\#\*\$\{\}\(\)\[\],:\+\>\<]+$"
+
 # Embedding Constants
 EMBEDDING_TOLERANCE_CELL = 1e-6
 EMBEDDING_TOLERANCE_LENGTH = 1e-9

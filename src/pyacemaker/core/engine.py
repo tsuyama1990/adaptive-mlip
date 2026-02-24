@@ -93,10 +93,14 @@ class LammpsEngine(BaseEngine):
                     energy = driver.extract_variable("pe")
                     temperature = driver.extract_variable("temp")
                     step = int(driver.extract_variable("step"))
+                    forces = driver.get_forces().tolist()
+                    stress = driver.get_stress().tolist()
                 except Exception:
                     energy = 0.0
                     temperature = 0.0
                     step = 0
+                    forces = [[0.0, 0.0, 0.0]]
+                    stress = [0.0] * 6
 
                 max_gamma = 0.0
                 if self.config.fix_halt:
@@ -115,7 +119,8 @@ class LammpsEngine(BaseEngine):
                 # Result
                 return MDSimulationResult(
                     energy=energy,
-                    forces=[[0.0, 0.0, 0.0]],
+                    forces=forces,
+                    stress=stress,
                     halted=halted,
                     max_gamma=max_gamma,
                     n_steps=step,
@@ -129,16 +134,57 @@ class LammpsEngine(BaseEngine):
                 if hasattr(driver, "close"):
                     driver.close()
 
+    def compute_static_properties(self, structure: Atoms, potential: Any) -> MDSimulationResult:
+        """
+        Computes static properties (energy, forces, stress) for a structure.
+        Equivalent to a 0-step MD run.
+        """
+        static_config = self.config.model_copy(update={
+            "n_steps": 0,
+            "minimize": False,
+            "thermo_freq": 1,
+            "dump_freq": 0
+        })
+
+        engine = LammpsEngine(static_config)
+        return engine.run(structure, potential)
+
+    def _ensure_script_readable(self, script_path: Path) -> None:
+        """Helper to ensure script path exists."""
+        if not script_path.exists():
+            msg = f"Input script not found: {script_path}"
+            raise FileNotFoundError(msg)
+
     def _execute_simulation(self, driver: LammpsDriver, script_path: Path) -> None:
-        """Executes the simulation script with error handling."""
+        """
+        Executes the simulation script with standardized error handling.
+
+        Args:
+            driver: Initialized LammpsDriver instance.
+            script_path: Path to the LAMMPS input script.
+
+        Raises:
+            RuntimeError: Wraps any failure during execution with context.
+        """
         try:
-            # We assume driver.run takes script content.
-            # Reading small script file is safe.
-            driver.run(script_path.read_text())
+            # Ensure script is readable
+            self._ensure_script_readable(script_path)
+
+            script_content = script_path.read_text(encoding="utf-8")
+            driver.run(script_content)
+
+        except FileNotFoundError as e:
+            msg = f"Simulation setup failed: {e}"
+            raise RuntimeError(msg) from e
+        except ValueError as e:
+            # Catch validation errors from driver (unsafe content)
+            msg = f"Simulation security validation failed: {e}"
+            raise RuntimeError(msg) from e
         except RuntimeError as e:
-            # Capture specific LAMMPS runtime errors
-            msg = f"LAMMPS execution failed: {e}"
+            # Catch LAMMPS internal errors (e.g., lost atoms)
+            msg = f"LAMMPS engine execution failed: {e}"
             raise RuntimeError(msg) from e
         except Exception as e:
-            msg = f"Unexpected error during LAMMPS execution: {e}"
+            # Catch unexpected errors
+            msg = f"Unexpected error during simulation execution: {e}"
             raise RuntimeError(msg) from e
