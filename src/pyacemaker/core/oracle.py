@@ -37,7 +37,7 @@ class DFTManager(BaseOracle):
             None,
             self._strategy_reduce_beta,
             self._strategy_increase_smearing,
-            self._strategy_use_cg
+            self._strategy_use_cg,
         ]
 
     def compute(self, structures: Iterator[Atoms], batch_size: int = 10) -> Iterator[Atoms]:
@@ -82,8 +82,13 @@ class DFTManager(BaseOracle):
             yield self._process_structure(atoms)
 
         if count == 0:
-             import warnings
-             warnings.warn("Oracle received empty iterator. No calculations performed.", UserWarning, stacklevel=2)
+            import warnings
+
+            warnings.warn(
+                "Oracle received empty iterator. No calculations performed.",
+                UserWarning,
+                stacklevel=2,
+            )
 
     def _process_structure(self, atoms: Atoms) -> Atoms:
         """

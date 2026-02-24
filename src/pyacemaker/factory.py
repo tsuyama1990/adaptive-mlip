@@ -5,6 +5,7 @@ from pyacemaker.core.exceptions import ConfigError
 from pyacemaker.core.generator import StructureGenerator
 from pyacemaker.core.oracle import DFTManager
 from pyacemaker.core.trainer import PacemakerTrainer
+from pyacemaker.core.validator import Validator
 from pyacemaker.domain_models import PyAceConfig
 
 
@@ -16,7 +17,14 @@ class ModuleFactory:
     @staticmethod
     def create_modules(
         config: PyAceConfig,
-    ) -> tuple[BaseGenerator, BaseOracle, BaseTrainer, BaseEngine, ActiveSetSelector]:
+    ) -> tuple[
+        BaseGenerator,
+        BaseOracle,
+        BaseTrainer,
+        BaseEngine,
+        ActiveSetSelector,
+        Validator,
+    ]:
         """
         Creates instances of core modules based on the provided configuration.
 
@@ -33,6 +41,7 @@ class ModuleFactory:
                 - BaseTrainer (e.g., PacemakerTrainer)
                 - BaseEngine (e.g., LammpsEngine)
                 - ActiveSetSelector
+                - Validator
 
         Raises:
             ConfigError: If configuration is invalid or missing required fields.
@@ -59,6 +68,9 @@ class ModuleFactory:
             # Active Set Selector
             active_set_selector = ActiveSetSelector()
 
+            # Validator
+            validator = Validator(config)
+
         except Exception as e:
             msg = f"Failed to create modules: {e}"
             raise RuntimeError(msg) from e
@@ -69,4 +81,5 @@ class ModuleFactory:
             trainer,
             engine,
             active_set_selector,
+            validator,
         )

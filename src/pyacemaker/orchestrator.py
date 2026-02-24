@@ -4,12 +4,14 @@ from pathlib import Path
 
 import numpy as np
 from ase import Atoms
-from ase.io import iread, read, write
+from ase.io import iread, read
+from ase.io.extxyz import write_extxyz
 
 from pyacemaker.core.active_set import ActiveSetSelector
 from pyacemaker.core.base import BaseEngine, BaseGenerator, BaseOracle, BaseTrainer
 from pyacemaker.core.exceptions import OrchestratorError
 from pyacemaker.core.loop import LoopState
+from pyacemaker.core.validator import Validator
 from pyacemaker.domain_models import PyAceConfig
 from pyacemaker.domain_models.defaults import (
     DEFAULT_PRODUCTION_DIR,
@@ -36,6 +38,7 @@ from pyacemaker.domain_models.defaults import (
     TEMPLATE_POTENTIAL_FILE,
 )
 from pyacemaker.domain_models.md import MDSimulationResult
+from pyacemaker.domain_models.validation import ValidationReport, ValidationStatus
 from pyacemaker.factory import ModuleFactory
 from pyacemaker.logger import setup_logger
 from pyacemaker.utils.extraction import extract_local_region
@@ -72,6 +75,7 @@ class Orchestrator:
         self.trainer: BaseTrainer | None = None
         self.engine: BaseEngine | None = None
         self.active_set_selector: ActiveSetSelector | None = None
+        self.validator: Validator | None = None
 
         # Initialize State
         self.load_state()
@@ -93,6 +97,7 @@ class Orchestrator:
                 self.trainer,
                 self.engine,
                 self.active_set_selector,
+                self.validator,
             ) = ModuleFactory.create_modules(self.config)
 
         except Exception as e:
@@ -155,7 +160,7 @@ class Orchestrator:
             # Attempt rollback for newly created directories
             for p in reversed(created_paths):
                 try:
-                    if p.is_dir() and not any(p.iterdir()): # Only delete empty directories
+                    if p.is_dir() and not any(p.iterdir()):  # Only delete empty directories
                         p.rmdir()
                 except OSError:
                     self.logger.warning(f"Failed to rollback directory creation for {p}")
@@ -192,22 +197,19 @@ class Orchestrator:
             return
 
         n_candidates = self.config.workflow.n_candidates
-        # We can use batched for chunking, but opening file once is key.
-        # ase.io.write can write a list of atoms.
+        # Use streaming write with explicit batching to ensure memory safety
+        batch_size = self.config.workflow.batch_size
         candidates_file = paths["candidates"] / FILENAME_CANDIDATES
 
         try:
             candidate_stream = self.generator.generate(n_candidates=n_candidates)
             total = 0
 
-            # Use ASE write in append mode with the generator directly.
-            # This avoids manual batching and list materialization completely.
-            # 'append=True' ensures we don't overwrite if file exists (from previous batches if any, though here it's one call).
-            # ASE iterates over candidate_stream.
-            write(candidates_file, candidate_stream, format="extxyz", append=True)  # type: ignore[arg-type]
-
-            # For now, we log "Written candidates" as total count is unknown due to streaming
-            total = -1
+            # Open file in append mode and write chunks
+            with candidates_file.open("a") as f:
+                for batch in batched(candidate_stream, n=batch_size):
+                    write_extxyz(f, batch)
+                    total += len(batch)
 
             self.logger.info(LOG_GENERATED_CANDIDATES.format(count=total))
         except Exception as e:
@@ -232,15 +234,19 @@ class Orchestrator:
 
         try:
             # Lazy read of candidates
+            # Note: iread returns iterator, but ASE's extxyz reader might not support index slice efficiently
+            # However, for our purposes, streaming is key.
             candidate_stream = iread(str(candidates_file), index=":", format="extxyz")
 
             # Streaming computation
             labelled_stream = self.oracle.compute(candidate_stream, batch_size=batch_size)
             total = 0
 
-            # Use ASE write in append mode
-            write(training_file, labelled_stream, format="extxyz", append=True)  # type: ignore[arg-type]
-            total = -1
+            # Use chunked write to avoid loading entire stream
+            with training_file.open("a") as f:
+                for batch in batched(labelled_stream, n=batch_size):
+                    write_extxyz(f, batch)
+                    total += len(batch)
 
             self.logger.info(LOG_COMPUTED_PROPERTIES.format(count=total))
         except Exception as e:
@@ -257,7 +263,9 @@ class Orchestrator:
             self.logger.warning("No training data found, skipping training.")
             return None
 
-        result = self.trainer.train(training_data_path=training_file, initial_potential=initial_potential)
+        result = self.trainer.train(
+            training_data_path=training_file, initial_potential=initial_potential
+        )
         self.logger.info(LOG_POTENTIAL_TRAINED)
 
         return Path(result) if isinstance(result, (str, Path)) else None
@@ -292,18 +300,21 @@ class Orchestrator:
             return None
 
         try:
-             # Try to get from candidates of previous iteration or iteration 0
-             iter0_paths = self._setup_iteration_directory(0)
-             cand_file = iter0_paths["candidates"] / FILENAME_CANDIDATES
-             if cand_file.exists():
-                 # Use next() on iread to get just the first frame efficiently
-                 return next(iread(str(cand_file), index=0))
+            # Try to get from candidates of previous iteration or iteration 0
+            # Use iteration - 1 if > 0, else 0
+            target_iter = max(0, iteration - 1)
+            paths = self._setup_iteration_directory(target_iter)
+            cand_file = paths["candidates"] / FILENAME_CANDIDATES
 
-             # Fallback to generator
-             return next(self.generator.generate(n_candidates=1))
+            if cand_file.exists():
+                # Use next() on iread to get just the first frame efficiently
+                return next(iread(str(cand_file), index=0))
+
+            # Fallback to generator
+            return next(self.generator.generate(n_candidates=1))
         except Exception:
-             self.logger.warning("Failed to get initial structure.")
-             return None
+            self.logger.warning("Failed to get initial structure.")
+            return None
 
     def _get_max_gamma_atom_index(self, structure: Atoms) -> int:
         """Finds the index of the atom with the maximum gamma value."""
@@ -336,10 +347,7 @@ class Orchestrator:
             return None
 
     def _select_and_label(
-        self,
-        s0_cluster: Atoms,
-        potential_path: Path,
-        paths: dict[str, Path]
+        self, s0_cluster: Atoms, potential_path: Path, paths: dict[str, Path]
     ) -> int:
         """
         Generates local candidates, selects active set, labels them, and writes to training file.
@@ -355,10 +363,7 @@ class Orchestrator:
         # Select Active Set (including S0 as anchor)
         n_select = self.config.workflow.otf.local_n_select
         selected_gen = self.active_set_selector.select(
-            candidates_gen,
-            potential_path,
-            n_select=n_select,
-            anchor=s0_cluster
+            candidates_gen, potential_path, n_select=n_select, anchor=s0_cluster
         )
 
         # Label
@@ -371,22 +376,30 @@ class Orchestrator:
 
         with training_file.open("a") as f:
             for batch in batched(labelled_gen, n=batch_size):
-                write(f, batch, format="extxyz")
+                write_extxyz(f, batch)
                 count += len(batch)
 
         return count
 
-    def _refine_potential(self, result: MDSimulationResult, potential_path: Path, paths: dict[str, Path]) -> Path | None:
+    def _refine_potential(
+        self, result: MDSimulationResult, potential_path: Path, paths: dict[str, Path]
+    ) -> Path | None:
         """
         Refines potential upon Halt.
         Orchestrates extraction, selection, labeling, and retraining.
         """
-        if not result.halt_structure_path or not self.generator or not self.active_set_selector or not self.oracle or not self.trainer:
+        if (
+            not result.halt_structure_path
+            or not self.generator
+            or not self.active_set_selector
+            or not self.oracle
+            or not self.trainer
+        ):
             return None
 
         threshold = self.config.workflow.otf.uncertainty_threshold
         if result.max_gamma <= threshold and not result.halted:
-             return None
+            return None
 
         try:
             s0_cluster = self._extract_cluster(result.halt_structure_path)
@@ -409,7 +422,7 @@ class Orchestrator:
         deployed_potential = self.potentials_dir / potential_filename
 
         if self.loop_state.current_potential:
-             if self.loop_state.current_potential != deployed_potential:
+            if self.loop_state.current_potential != deployed_potential:
                 shutil.copy(self.loop_state.current_potential, deployed_potential)
         else:
             msg = "No current potential to deploy."
@@ -417,18 +430,22 @@ class Orchestrator:
 
         return deployed_potential
 
-    def _run_md_simulation(self, iteration: int, deployed_potential: Path) -> MDSimulationResult | None:
+    def _run_md_simulation(
+        self, iteration: int, deployed_potential: Path
+    ) -> MDSimulationResult | None:
         """Runs the MD simulation."""
         initial_structure = self._get_initial_structure(iteration)
         if not initial_structure:
-             self.logger.warning("No structure for MD. Skipping iteration.")
-             return None
+            self.logger.warning("No structure for MD. Skipping iteration.")
+            return None
 
         if self.engine:
             return self.engine.run(structure=initial_structure, potential=deployed_potential)
         return None
 
-    def _handle_md_halt(self, result: MDSimulationResult, deployed_potential: Path, paths: dict[str, Path]) -> None:
+    def _handle_md_halt(
+        self, result: MDSimulationResult, deployed_potential: Path, paths: dict[str, Path]
+    ) -> None:
         """Handles MD halt logic and triggers refinement."""
         if result.halted:
             self.logger.info(f"MD Halted at step {result.n_steps}. Triggering refinement.")
@@ -440,13 +457,19 @@ class Orchestrator:
                     self.loop_state.current_potential = new_potential
                     self.logger.info(f"Potential refined to: {new_potential}")
         else:
-             self.logger.info(LOG_ITERATION_COMPLETED.format(iteration=self.loop_state.iteration + 1))
+            self.logger.info(
+                LOG_ITERATION_COMPLETED.format(iteration=self.loop_state.iteration + 1)
+            )
 
     def _run_loop_iteration(self) -> None:
         """Executes one iteration of the active learning loop."""
         iteration = self.loop_state.iteration + 1
         paths = self._setup_iteration_directory(iteration)
-        self.logger.info(LOG_START_ITERATION.format(iteration=iteration, max_iterations=self.config.workflow.max_iterations))
+        self.logger.info(
+            LOG_START_ITERATION.format(
+                iteration=iteration, max_iterations=self.config.workflow.max_iterations
+            )
+        )
 
         try:
             deployed_potential = self._deploy_potential(iteration)
@@ -463,14 +486,37 @@ class Orchestrator:
             msg = f"Iteration {iteration} failed: {e}"
             raise OrchestratorError(msg) from e
 
+    def _validate_potential(self, potential_path: Path) -> ValidationReport:
+        """Run validation on the potential."""
+        if not self.validator:
+            return ValidationReport(overall_status=ValidationStatus.SKIPPED)
+
+        structure = self._get_initial_structure(0)
+        if not structure:
+            self.logger.warning("No structure available for validation.")
+            return ValidationReport(overall_status=ValidationStatus.ERROR)
+
+        validation_dir = self.active_learning_dir / "validation"
+        return self.validator.validate(potential_path, structure, validation_dir)
+
     def _finalize(self) -> None:
         """Finalizes the workflow by deploying the best potential."""
-        production_dir = Path(DEFAULT_PRODUCTION_DIR)
-        production_dir.mkdir(exist_ok=True)
         if self.loop_state.current_potential:
-             target = production_dir / FILENAME_POTENTIAL
-             shutil.copy(self.loop_state.current_potential, target)
-             self.logger.info(f"Deployed best potential to {target}")
+            # Validation
+            try:
+                report = self._validate_potential(self.loop_state.current_potential)
+                if report.overall_status == ValidationStatus.FAIL:
+                    self.logger.warning("Potential validation FAILED! Proceeding with caution.")
+                else:
+                    self.logger.info(f"Potential validation status: {report.overall_status}")
+            except Exception:
+                self.logger.exception("Validation failed with exception.")
+
+            production_dir = Path(DEFAULT_PRODUCTION_DIR)
+            production_dir.mkdir(exist_ok=True)
+            target = production_dir / FILENAME_POTENTIAL
+            shutil.copy(self.loop_state.current_potential, target)
+            self.logger.info(f"Deployed best potential to {target}")
 
     def run(self) -> None:
         """
@@ -483,7 +529,7 @@ class Orchestrator:
             self._check_initial_potential()
 
             while self.loop_state.iteration < self.config.workflow.max_iterations:
-                 self._run_loop_iteration()
+                self._run_loop_iteration()
 
             self._finalize()
             self.logger.info(LOG_WORKFLOW_COMPLETED)

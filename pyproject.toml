@@ -12,6 +12,9 @@ dependencies = [
     "ase>=3.27.0",
     "numpy>=2.4.2",
     "lammps>=2025.7.22.2.0",
+    "phonopy>=2.20.0",
+    "matplotlib>=3.7.0",
+    "jinja2>=3.1.0",
 ]
 authors = [
     { name = "Tomoyuki Tsuyama", email = "tomoyuki.tsuyaman@gmail.com" }
@@ -24,6 +27,7 @@ dev = [
     "pytest",
     "pytest-cov",
     "types-pyyaml>=6.0.12.20250915",
+    "pytest-mock>=3.10.0",
 ]
 
 [tool.ruff]

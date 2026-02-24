@@ -6,10 +6,7 @@ from pyacemaker.utils.embedding import embed_cluster
 
 
 def extract_local_region(
-    structure: Atoms,
-    center_index: int,
-    radius: float,
-    buffer: float
+    structure: Atoms, center_index: int, radius: float, buffer: float
 ) -> Atoms:
     """
     Extracts a local cluster around a specific atom from a structure.
@@ -37,10 +34,10 @@ def extract_local_region(
     # For very large structures, this is significantly faster than O(N^2) pairwise calculation.
     # returns i (center indices), j (neighbor indices), D (distance vectors)
     # D is vector from atom i to atom j
-    i_indices, j_indices, D_vectors = neighbor_list('ijD', structure, cutoff=total_cutoff)  # type: ignore[no-untyped-call]
+    i_indices, j_indices, D_vectors = neighbor_list("ijD", structure, cutoff=total_cutoff)  # type: ignore[no-untyped-call]
 
     # Filter for our center atom
-    mask = (i_indices == center_index)
+    mask = i_indices == center_index
     neighbors_indices = j_indices[mask]
     vectors = D_vectors[mask]
 
@@ -100,11 +97,7 @@ def extract_local_region(
 
     # Create Atoms object
     # pbc=False initially, embed_cluster will handle boxing
-    cluster = Atoms(
-        symbols=cluster_symbols,
-        positions=cluster_positions,
-        pbc=False
-    )
+    cluster = Atoms(symbols=cluster_symbols, positions=cluster_positions, pbc=False)
 
     # Store weights in arrays
     # 'force_weight' is standard for Pacemaker

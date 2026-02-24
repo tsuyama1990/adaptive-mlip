@@ -47,7 +47,7 @@ def test_uat_03_01_generate_candidates() -> None:
 
     # Verify we can consume the rest without keeping them
     remaining_count = sum(1 for _ in stream)
-    assert remaining_count == 8 # 10 - 2
+    assert remaining_count == 8  # 10 - 2
 
 
 def test_uat_03_02_defect_generation() -> None:

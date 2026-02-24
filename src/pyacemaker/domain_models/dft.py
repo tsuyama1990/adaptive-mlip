@@ -40,8 +40,6 @@ class DFTConfig(BaseModel):
     )
 
     # Strategy Multipliers
-    # Note: mixing_beta_factor is used to REDUCE mixing_beta (new_beta = beta * factor)
-    #       smearing_width_factor is used to INCREASE smearing_width (new_width = width * factor)
     mixing_beta_factor: float = Field(
         DEFAULT_DFT_MIXING_BETA_FACTOR,
         gt=0.0,
@@ -59,62 +57,59 @@ class DFTConfig(BaseModel):
         ..., description="Mapping of element symbols to pseudopotential filenames"
     )
 
+    @staticmethod
+    def _validate_single_pp(elem: str, path_str: str) -> None:
+        """Helper to validate a single pseudopotential file."""
+        import os
+
+        if not path_str or not path_str.strip():
+            msg = f"Pseudopotential path for {elem} cannot be empty"
+            raise ValueError(msg)
+
+        try:
+            p = Path(path_str)
+            resolved_path = p.resolve(strict=True)
+
+            if p.is_symlink():
+                msg = f"Symlinks are not allowed for pseudopotentials: {path_str}"
+                raise ValueError(msg)
+
+            if not resolved_path.is_file():
+                msg = f"Pseudopotential path is not a file: {resolved_path}"
+                raise ValueError(msg)
+
+            if not os.access(resolved_path, os.R_OK):
+                msg = f"Pseudopotential file is not readable: {resolved_path}"
+                raise PermissionError(msg)
+
+        except FileNotFoundError as e:
+            msg = f"Pseudopotential file not found: {path_str}"
+            raise ValueError(msg) from e
+        except OSError as e:
+            msg = f"Invalid pseudopotential path {path_str}: {e}"
+            raise ValueError(msg) from e
+
+        # Header check
+        try:
+            with resolved_path.open("rb") as f:
+                header = f.read(100)
+                try:
+                    text_header = header.decode("utf-8")
+                    if "<UPF" not in text_header and "PP_HEADER" not in text_header:
+                        pass
+                except UnicodeDecodeError as e:
+                    msg = f"Pseudopotential file {path_str} does not appear to be a valid text-based UPF file."
+                    raise ValueError(msg) from e
+        except OSError as e:
+            msg = f"Could not read pseudopotential file {path_str}: {e}"
+            raise ValueError(msg) from e
+
     @field_validator("pseudopotentials")
     @classmethod
     def validate_pseudopotentials(cls, v: dict[str, str]) -> dict[str, str]:
         """
-        Validates that pseudopotential files exist.
-        Allows absolute paths (e.g. system libraries).
-        Disallows symlinks for security/portability.
+        Validates that pseudopotential files exist and are safe.
         """
         for elem, path_str in v.items():
-            if not path_str or not path_str.strip():
-                msg = f"Pseudopotential path for {elem} cannot be empty"
-                raise ValueError(msg)
-
-            try:
-                p = Path(path_str)
-                # resolve(strict=True) will raise FileNotFoundError if file doesn't exist.
-                resolved_path = p.resolve(strict=True)
-
-                # Explicitly disallow symlinks
-                if p.is_symlink():
-                     msg = f"Symlinks are not allowed for pseudopotentials: {path_str}"
-                     raise ValueError(msg)
-
-                # Check if it's a file
-                if not resolved_path.is_file():
-                    msg = f"Pseudopotential path is not a file: {resolved_path}"
-                    raise ValueError(msg)
-
-            except FileNotFoundError as e:
-                msg = f"Pseudopotential file not found: {path_str}"
-                raise ValueError(msg) from e
-            except OSError as e:
-                msg = f"Invalid pseudopotential path {path_str}: {e}"
-                raise ValueError(msg) from e
-
-            # Content Validation: Check for UPF header
-            # We read the first few lines to ensure it looks like a pseudopotential file.
-            # Standard UPF files start with <UPF version="..."> or similar XML/text.
-            try:
-                with resolved_path.open("rb") as f:
-                    # Read first 100 bytes
-                    header = f.read(100)
-                    # Check for typical UPF signatures or at least that it's not binary garbage
-                    # UPF v1/v2 are text-based.
-                    # We check for '<UPF' or 'PP_HEADER' (older formats) or just ensure it's text.
-                    try:
-                        text_header = header.decode("utf-8")
-                        if "<UPF" not in text_header and "PP_HEADER" not in text_header:
-                             # Weak check, but better than nothing.
-                             # If neither present, maybe warn? For now, we just enforce utf-8 decodeable.
-                             pass
-                    except UnicodeDecodeError as e:
-                         msg = f"Pseudopotential file {path_str} does not appear to be a valid text-based UPF file."
-                         raise ValueError(msg) from e
-            except OSError as e:
-                 msg = f"Could not read pseudopotential file {path_str}: {e}"
-                 raise ValueError(msg) from e
-
+            cls._validate_single_pp(elem, path_str)
         return v

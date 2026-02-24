@@ -176,7 +176,7 @@ def write_lammps_streaming(
         raise ValueError(msg)
 
     xlo, ylo, zlo = 0.0, 0.0, 0.0
-    xhi, yhi, zhi = cell[0,0], cell[1,1], cell[2,2]
+    xhi, yhi, zhi = cell[0, 0], cell[1, 1], cell[2, 2]
 
     fileobj.write(f"{xlo:.6f} {xhi:.6f} xlo xhi\n")
     fileobj.write(f"{ylo:.6f} {yhi:.6f} ylo yhi\n")

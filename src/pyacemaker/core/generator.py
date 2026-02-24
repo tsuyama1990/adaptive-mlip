@@ -71,8 +71,8 @@ class StructureGenerator(BaseGenerator):
 
         # Validate policy configuration first
         if not isinstance(self.config.policy_name, ExplorationPolicy):
-             msg = f"Invalid policy name: {self.config.policy_name}"
-             raise TypeError(msg)
+            msg = f"Invalid policy name: {self.config.policy_name}"
+            raise TypeError(msg)
 
         # Step 2: Apply Policy (Streaming)
         # Create the supercell template lazily inside the generator.
@@ -101,10 +101,10 @@ class StructureGenerator(BaseGenerator):
 
             # Verify it's an iterator to enforce streaming contract at runtime
             if not isinstance(policy_iter, Iterator):
-                 # Convert iterable to iterator if needed
-                 iter_policy = iter(policy_iter)
+                # Convert iterable to iterator if needed
+                iter_policy = iter(policy_iter)
             else:
-                 iter_policy = policy_iter
+                iter_policy = policy_iter
 
             for structure in iter_policy:
                 if count >= n_candidates:

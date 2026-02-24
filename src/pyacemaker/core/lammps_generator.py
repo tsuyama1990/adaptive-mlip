@@ -3,7 +3,13 @@ from typing import TextIO
 
 from ase.data import atomic_numbers
 
-from pyacemaker.domain_models.defaults import DEFAULT_MD_MINIMIZE_FTOL, DEFAULT_MD_MINIMIZE_TOL
+from pyacemaker.domain_models.defaults import (
+    DEFAULT_LAMMPS_ATOM_MODIFY,
+    DEFAULT_LAMMPS_BOUNDARY,
+    DEFAULT_LAMMPS_UNITS,
+    DEFAULT_MD_MINIMIZE_FTOL,
+    DEFAULT_MD_MINIMIZE_TOL,
+)
 from pyacemaker.domain_models.md import MDConfig
 
 
@@ -29,7 +35,9 @@ class LammpsScriptGenerator:
         if self.config.hybrid_potential:
             # Hybrid overlay: PACE + ZBL
             params = self.config.hybrid_params
-            buffer.write(f"pair_style hybrid/overlay pace zbl {params.zbl_cut_inner} {params.zbl_cut_outer}\n")
+            buffer.write(
+                f"pair_style hybrid/overlay pace zbl {params.zbl_cut_inner} {params.zbl_cut_outer}\n"
+            )
 
             # PACE
             buffer.write(f"pair_coeff * * pace {quoted_pot} {species_str}\n")
@@ -42,7 +50,7 @@ class LammpsScriptGenerator:
                 for j in range(i, n_types):
                     el_j = elements[j]
                     z_j = atomic_numbers[el_j]
-                    buffer.write(f"pair_coeff {i+1} {j+1} zbl {z_i} {z_j}\n")
+                    buffer.write(f"pair_coeff {i + 1} {j + 1} zbl {z_i} {z_j}\n")
         else:
             # Pure PACE
             buffer.write("pair_style pace\n")
@@ -72,7 +80,9 @@ class LammpsScriptGenerator:
     def _gen_execution(self, buffer: TextIO) -> None:
         """Generates minimization and MD run commands."""
         if self.config.minimize:
-            buffer.write(f"minimize {DEFAULT_MD_MINIMIZE_TOL} {DEFAULT_MD_MINIMIZE_FTOL} 100 1000\n")
+            buffer.write(
+                f"minimize {DEFAULT_MD_MINIMIZE_TOL} {DEFAULT_MD_MINIMIZE_FTOL} 100 1000\n"
+            )
 
         # Calculate damping parameters
         tdamp = self.config.tdamp_factor * self.config.timestep
@@ -121,9 +131,11 @@ class LammpsScriptGenerator:
         quoted_data = self._quote(data_file)
 
         buffer.write("clear\n")
-        buffer.write("units metal\n")
+        buffer.write(f"units {DEFAULT_LAMMPS_UNITS}\n")
         buffer.write(f"atom_style {self.config.atom_style}\n")
-        buffer.write("boundary p p p\n")
+        if self.config.atom_style == "atomic":
+            buffer.write(f"atom_modify {DEFAULT_LAMMPS_ATOM_MODIFY}\n")
+        buffer.write(f"boundary {DEFAULT_LAMMPS_BOUNDARY}\n")
         buffer.write(f"read_data {quoted_data}\n")
 
         self._gen_potential(buffer, potential_path, elements)

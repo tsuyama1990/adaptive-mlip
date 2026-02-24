@@ -20,17 +20,14 @@ class StrainMode(StrEnum):
 class StructureConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    elements: list[str] = Field(
-        ..., min_length=1, description="List of elements in the system"
-    )
+    elements: list[str] = Field(..., min_length=1, description="List of elements in the system")
     supercell_size: list[int] = Field(
         ..., min_length=3, max_length=3, description="Supercell size [nx, ny, nz]"
     )
 
     # Exploration Policy Configuration
     policy_name: ExplorationPolicy = Field(
-        default=ExplorationPolicy.COLD_START,
-        description="Exploration policy to use"
+        default=ExplorationPolicy.COLD_START, description="Exploration policy to use"
     )
     rattle_stdev: float = Field(
         default=0.1, ge=0.0, description="Standard deviation for random rattle (Angstrom)"
@@ -44,16 +41,18 @@ class StructureConfig(BaseModel):
     vacancy_rate: float = Field(
         default=0.0, ge=0.0, le=1.0, description="Rate of vacancies to introduce"
     )
-    num_structures: int = Field(
-        default=1, ge=1, description="Number of structures to generate"
-    )
+    num_structures: int = Field(default=1, ge=1, description="Number of structures to generate")
 
     # Local Active Learning Settings
     local_extraction_radius: float = Field(
-        default=6.0, gt=0.0, description="Radius for extracting local clusters around high uncertainty atoms (Angstrom)"
+        default=6.0,
+        gt=0.0,
+        description="Radius for extracting local clusters around high uncertainty atoms (Angstrom)",
     )
     local_buffer_radius: float = Field(
-        default=4.0, ge=0.0, description="Buffer radius added to extraction for force masking (Angstrom)"
+        default=4.0,
+        ge=0.0,
+        description="Buffer radius added to extraction for force masking (Angstrom)",
     )
 
     @field_validator("elements")
@@ -65,8 +64,8 @@ class StructureConfig(BaseModel):
 
         # Check for duplicates
         if len(v) != len(set(v)):
-             msg = "Elements list cannot contain duplicates"
-             raise ValueError(msg)
+            msg = "Elements list cannot contain duplicates"
+            raise ValueError(msg)
 
         valid_symbols = set(chemical_symbols)
         for el in v:

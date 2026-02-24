@@ -1,7 +1,9 @@
 import logging
+import re
 import subprocess
 
 logger = logging.getLogger(__name__)
+
 
 def run_command(
     cmd: list[str],
@@ -28,25 +30,16 @@ def run_command(
         FileNotFoundError: If executable is not found.
     """
     # Strict Argument Validation (Allowlist)
-    # We allow alphanumeric, dot, dash, underscore, slash, equal, comma, colon.
-    # This covers paths, simple options, and numbers.
-    # Special characters (like &, ;, |, $) which are dangerous in shells are rejected.
-    import re
-    # More permissive regex for typical file paths and CLI args, but blocking shell metachars
-    # Allowing spaces in paths is tricky but " " is safe if not parsed by shell.
-    # However, since shell=False, the main risk is the command itself being malicious if arguments are passed to a sub-shell.
-    # But here we just want to ensure "integrity" of arguments.
-
-    # Check for dangerous shell characters even if shell=False, as a defense-in-depth measure.
-    # This prevents arguments that might be interpreted by the executed program in a dangerous way.
-    dangerous_chars = re.compile(r"[;&|`$]")
+    # Block dangerous shell characters even if shell=False.
+    # Expanded list of dangerous characters.
+    dangerous_chars = re.compile(r"[;&|`$<>(){}\n\t*?]")
     for arg in cmd:
         if dangerous_chars.search(arg):
-             msg = f"Argument contains potentially dangerous characters: {arg}"
-             raise ValueError(msg)
+            # Redact argument in error message
+            msg = "Argument contains potentially dangerous characters (redacted)"
+            raise ValueError(msg)
 
     # Mask potentially sensitive arguments (basic heuristic)
-    # We redact arguments that look like they might be sensitive keys or very long strings
     safe_cmd = []
     for arg in cmd:
         if len(arg) > 100:  # Truncate very long args
@@ -67,8 +60,15 @@ def run_command(
             shell=False,  # Enforce security
         )
     except subprocess.CalledProcessError as e:
-        logger.exception(f"Command failed: {safe_cmd_str}. Exit code: {e.returncode}. Stderr: {e.stderr}")
-        raise
+        # Sanitize exception message to avoid exposing raw arguments
+        sanitized_stderr = e.stderr[-200:] if e.stderr else "No stderr captured"
+        logger.exception(
+            f"Command failed: {safe_cmd_str}. Exit code: {e.returncode}. Stderr: {sanitized_stderr}"
+        )
+        # Raise with sanitized message
+        raise subprocess.CalledProcessError(
+            returncode=e.returncode, cmd=safe_cmd_str, output=e.output, stderr=e.stderr
+        ) from e
     except FileNotFoundError:
         logger.exception(f"Executable not found: {cmd[0]}")
         raise

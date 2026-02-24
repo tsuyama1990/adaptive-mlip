@@ -52,19 +52,34 @@ class LammpsFileManager:
         elements = get_species_order(structure)
 
         try:
-            # Optimization: Use streaming writer for large structures to avoid OOM
+            # Optimization: Use streaming writer for larger structures to avoid OOM.
+            # Lowered threshold to 1000 to prefer efficient writing.
             # Only supports 'atomic' style and orthogonal boxes for now.
-            if len(structure) > 10000 and self.config.atom_style == "atomic":
-                logger.info("Streaming large structure (%d atoms) to disk.", len(structure))
+            if len(structure) > 1000 and self.config.atom_style == "atomic":
+                logger.info("Streaming structure (%d atoms) to disk.", len(structure))
                 try:
                     with data_file.open("w") as f:
                         write_lammps_streaming(f, structure, elements)
                 except ValueError:
                     # Fallback if non-orthogonal or other issue
-                    logger.warning("Streaming failed (e.g. non-orthogonal). Falling back to ASE write.")
-                    write(str(data_file), structure, format="lammps-data", specorder=elements, atom_style=self.config.atom_style)
+                    logger.warning(
+                        "Streaming failed (e.g. non-orthogonal). Falling back to ASE write."
+                    )
+                    write(
+                        str(data_file),
+                        structure,
+                        format="lammps-data",
+                        specorder=elements,
+                        atom_style=self.config.atom_style,
+                    )
             else:
-                write(str(data_file), structure, format="lammps-data", specorder=elements, atom_style=self.config.atom_style)
+                write(
+                    str(data_file),
+                    structure,
+                    format="lammps-data",
+                    specorder=elements,
+                    atom_style=self.config.atom_style,
+                )
         except Exception as e:
             temp_dir_ctx.cleanup()
             msg = f"Failed to write LAMMPS data file: {e}"

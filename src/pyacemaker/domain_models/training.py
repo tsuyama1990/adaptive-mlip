@@ -1,4 +1,3 @@
-
 from pydantic import BaseModel, ConfigDict, Field, PositiveFloat, field_validator, model_validator
 
 from pyacemaker.domain_models.defaults import (
@@ -34,18 +33,14 @@ class PacemakerConfig(BaseModel):
         default_factory=lambda: [1.0, 1.0, 1.0, 1.5],
         description="Parameters for FinnisSinclair embedding",
     )
-    ndensity: int = Field(
-        DEFAULT_PACEMAKER_NDENSITY, description="Density expansion order", gt=0
-    )
+    ndensity: int = Field(DEFAULT_PACEMAKER_NDENSITY, description="Density expansion order", gt=0)
 
     # Bond settings
     rad_base: str = Field(DEFAULT_PACEMAKER_RAD_BASE, description="Radial basis function type")
     rad_parameters: list[float] = Field(
         default_factory=lambda: [1.0], description="Radial basis parameters"
     )
-    max_deg: int = Field(
-        DEFAULT_PACEMAKER_MAX_DEG, description="Maximum degree of expansion", gt=0
-    )
+    max_deg: int = Field(DEFAULT_PACEMAKER_MAX_DEG, description="Maximum degree of expansion", gt=0)
     r0: float = Field(DEFAULT_PACEMAKER_R0, description="Radial cutoff shift", gt=0)
 
     # Loss settings
@@ -87,9 +82,7 @@ class TrainingConfig(BaseModel):
     max_iterations: int = Field(
         DEFAULT_TRAINING_MAX_ITERATIONS, description="Maximum training iterations", gt=0
     )
-    batch_size: int = Field(
-        DEFAULT_TRAINING_BATCH_SIZE, description="Training batch size", gt=0
-    )
+    batch_size: int = Field(DEFAULT_TRAINING_BATCH_SIZE, description="Training batch size", gt=0)
     elements: list[str] | None = Field(
         None, description="List of chemical elements in the dataset (optional optimization)"
     )
@@ -114,9 +107,7 @@ class TrainingConfig(BaseModel):
 
     # Spec Section 3.3
     delta_learning: bool = Field(False, description="Use LJ baseline for delta learning")
-    active_set_optimization: bool = Field(
-        False, description="Use MaxVol selection for active set"
-    )
+    active_set_optimization: bool = Field(False, description="Use MaxVol selection for active set")
     active_set_size: int | None = Field(
         None, description="Target number of structures for active set", gt=0
     )

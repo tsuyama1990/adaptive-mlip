@@ -3,9 +3,11 @@ from collections.abc import Iterable, Iterator
 from pathlib import Path
 
 from ase import Atoms
-from ase.io import iread, write
+from ase.io import iread
+from ase.io.extxyz import write_extxyz
 
 from pyacemaker.core.exceptions import ActiveSetError
+from pyacemaker.utils.misc import batched
 from pyacemaker.utils.path import validate_path_safe
 from pyacemaker.utils.process import run_command
 
@@ -82,35 +84,32 @@ class ActiveSetSelector:
                 raise ActiveSetError(msg)
 
             try:
-                yield from iread(output_file, index=":")
+                yield from iread(str(output_file), index=":", format="extxyz")
             except Exception as e:
                 msg = f"Failed to read selected structures: {e}"
                 raise ActiveSetError(msg) from e
 
     def _write_candidates(self, candidates: Iterable[Atoms], file_path: Path) -> int:
         """
-        Writes candidates to disk using pure streaming.
-        Passes the iterator directly to ASE write to avoid any intermediate batch materialization.
+        Writes candidates to disk using chunked streaming.
+        Uses `batched` and `write_extxyz` to ensure O(1) memory usage.
         """
         count = 0
-
-        # Generator wrapper to count items while streaming
-        def counting_wrapper(iterable: Iterable[Atoms]) -> Iterator[Atoms]:
-            nonlocal count
-            for atoms in iterable:
-                count += 1
-                yield atoms
+        BATCH_SIZE = 1000  # Configurable batch size
 
         try:
-            # write() iterates over the generator and writes frame by frame.
-            # This is O(1) memory usage relative to dataset size.
-            write(file_path, counting_wrapper(candidates), format="extxyz")  # type: ignore[arg-type]
+            with file_path.open("a") as f:
+                for batch in batched(candidates, BATCH_SIZE):
+                    write_extxyz(f, batch)
+                    count += len(batch)
         except Exception as e:
             msg = f"Failed to write candidates to temporary file: {e}"
             raise ActiveSetError(msg) from e
         return count
 
-    def _execute_selection(self, candidates_file: Path, potential_path: Path, output_file: Path, n_select: int) -> None:
+    def _execute_selection(
+        self, candidates_file: Path, potential_path: Path, output_file: Path, n_select: int
+    ) -> None:
         """Constructs and runs the selection command."""
         self._validate_path_safe(candidates_file)
         self._validate_path_safe(potential_path)

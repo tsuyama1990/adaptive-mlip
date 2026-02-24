@@ -61,8 +61,8 @@ def test_dft_manager_self_healing(mock_dft_config: DFTConfig) -> None:
     mock_driver = MagicMock()
 
     # The calculator needs to fail first, then succeed.
-    calc_fail = MockCalculator(fail_count=1) # Fails once (attempt 1)
-    calc_success = MockCalculator(fail_count=0) # Succeeds (attempt 2)
+    calc_fail = MockCalculator(fail_count=1)  # Fails once (attempt 1)
+    calc_success = MockCalculator(fail_count=0)  # Succeeds (attempt 2)
 
     mock_driver.get_calculator.side_effect = [calc_fail, calc_success]
 
@@ -80,7 +80,7 @@ def test_dft_manager_self_healing(mock_dft_config: DFTConfig) -> None:
 
     # First call: original config
     call1_args = mock_driver.get_calculator.call_args_list[0]
-    config1 = call1_args[0][1] # second arg is config
+    config1 = call1_args[0][1]  # second arg is config
     assert config1.mixing_beta == 0.7
     assert config1.smearing_width == 0.1
     assert config1.diagonalization == "david"
@@ -141,7 +141,7 @@ def test_dft_manager_strategies(mock_dft_config: DFTConfig) -> None:
     strategies = manager._get_strategies()
 
     assert len(strategies) > 0
-    assert strategies[0] is None # First attempt is vanilla
+    assert strategies[0] is None  # First attempt is vanilla
 
     # Strategy 1: Reduce Beta
     strat_beta = strategies[1]
@@ -166,6 +166,7 @@ def test_dft_manager_strategies(mock_dft_config: DFTConfig) -> None:
     strat_cg(config_copy)
     assert config_copy.diagonalization == "cg"
 
+
 def test_dft_manager_invalid_input(mock_dft_config: DFTConfig) -> None:
     """Test compute raises TypeError for non-iterator input."""
     manager = DFTManager(mock_dft_config)
@@ -174,10 +175,11 @@ def test_dft_manager_invalid_input(mock_dft_config: DFTConfig) -> None:
     # Check that it raises TypeError immediately upon calling next()
     # because generator execution is deferred.
     # We want to ensure it fails.
-    gen = manager.compute(atoms_list) # type: ignore[arg-type]
+    gen = manager.compute(atoms_list)  # type: ignore[arg-type]
 
     with pytest.raises(TypeError, match="must be an Iterator"):
         next(gen)
+
 
 def test_dft_manager_empty_iterator(mock_dft_config: DFTConfig) -> None:
     """Test compute handles empty iterator correctly with warning."""
@@ -187,8 +189,10 @@ def test_dft_manager_empty_iterator(mock_dft_config: DFTConfig) -> None:
     # Explicit loop without list() materialization for safety
     # Use deque(..., maxlen=0) to consume iterator efficiently
     from collections import deque
+
     with pytest.warns(UserWarning, match="Oracle received empty iterator"):
         deque(manager.compute(empty_iter), maxlen=0)
+
 
 def test_dft_manager_embedding(mock_dft_config: DFTConfig, monkeypatch: pytest.MonkeyPatch) -> None:
     """Test that embedding is applied when configured."""
@@ -220,7 +224,7 @@ def test_dft_manager_embedding(mock_dft_config: DFTConfig, monkeypatch: pytest.M
     mock_embed.assert_called_once()
     args, kwargs = mock_embed.call_args
     assert args[0] == atoms
-    assert kwargs['buffer'] == 5.0
+    assert kwargs["buffer"] == 5.0
 
     # Check if result is the embedded one
     # DFTManager.compute yields the result of _compute_single(embedded_atoms)
