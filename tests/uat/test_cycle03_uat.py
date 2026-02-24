@@ -71,7 +71,11 @@ def test_uat_03_02_defect_generation() -> None:
 
     # 3. Expectation
     # Get pristine count
-    pristine_config = config.model_copy(update={"policy_name": ExplorationPolicy.COLD_START})
+    pristine_config = config.model_copy(update={
+        "policy_name": ExplorationPolicy.COLD_START,
+        "active_policies": [ExplorationPolicy.COLD_START],
+        "vacancy_rate": 0.0
+    })
     pristine_gen = StructureGenerator(pristine_config)
     pristine_atoms = next(pristine_gen.generate(1))
 

@@ -50,7 +50,8 @@ def test_dft_manager_compute_success(mock_dft_config: DFTConfig) -> None:
     assert result.get_potential_energy() == TEST_ENERGY_GENERIC  # type: ignore[no-untyped-call]
 
     # Verify get_calculator was called with correct config
-    mock_driver.get_calculator.assert_called_with(atoms, mock_dft_config)
+    from unittest.mock import ANY
+    mock_driver.get_calculator.assert_called_with(atoms, mock_dft_config, directory=ANY)
 
 
 def test_dft_manager_self_healing(mock_dft_config: DFTConfig) -> None:

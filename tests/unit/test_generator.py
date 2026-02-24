@@ -32,7 +32,7 @@ def test_rattle_policy() -> None:
     generator = StructureGenerator(config)
 
     # Check base structure first
-    base_gen = StructureGenerator(config.model_copy(update={"policy_name": ExplorationPolicy.COLD_START}))
+    base_gen = StructureGenerator(config.model_copy(update={"policy_name": ExplorationPolicy.COLD_START, "active_policies": [ExplorationPolicy.COLD_START]}))
     base = next(base_gen.generate(1))
 
     structures = list(generator.generate(n_candidates=5))
@@ -65,7 +65,7 @@ def test_defect_policy() -> None:
 
     assert len(structures) == 5
 
-    base_config = config.model_copy(update={"policy_name": ExplorationPolicy.COLD_START})
+    base_config = config.model_copy(update={"policy_name": ExplorationPolicy.COLD_START, "active_policies": [ExplorationPolicy.COLD_START]})
     base_gen = StructureGenerator(base_config)
     base_atoms = next(base_gen.generate(1))
 
@@ -84,7 +84,7 @@ def test_strain_policy() -> None:
 
     assert len(structures) == 5
 
-    base_config = config.model_copy(update={"policy_name": ExplorationPolicy.COLD_START})
+    base_config = config.model_copy(update={"policy_name": ExplorationPolicy.COLD_START, "active_policies": [ExplorationPolicy.COLD_START]})
     base_gen = StructureGenerator(base_config)
     base_atoms = next(base_gen.generate(1))
 

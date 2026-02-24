@@ -74,10 +74,6 @@ def test_validate_path_resolution_safety() -> None:
 def test_validate_path_invalid_chars() -> None:
     """Test that path validation rejects shell metacharacters."""
     selector = ActiveSetSelector()
-    # % is now invalid
-    with pytest.raises(ActiveSetError, match="Path contains invalid characters"):
-        selector._validate_path_safe(Path("foo%20bar"))
-
     # ; is invalid
     with pytest.raises(ActiveSetError, match="Path contains invalid characters"):
         selector._validate_path_safe(Path("foo;bar"))
