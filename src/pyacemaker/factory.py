@@ -4,8 +4,12 @@ from pyacemaker.core.engine import LammpsEngine
 from pyacemaker.core.exceptions import ConfigError
 from pyacemaker.core.generator import StructureGenerator
 from pyacemaker.core.oracle import DFTManager
+from pyacemaker.core.report import ReportGenerator
 from pyacemaker.core.trainer import PacemakerTrainer
+from pyacemaker.core.validator import Validator
 from pyacemaker.domain_models import PyAceConfig
+from pyacemaker.utils.elastic import ElasticCalculator
+from pyacemaker.utils.phonons import PhononCalculator
 
 
 class ModuleFactory:
@@ -16,7 +20,7 @@ class ModuleFactory:
     @staticmethod
     def create_modules(
         config: PyAceConfig,
-    ) -> tuple[BaseGenerator, BaseOracle, BaseTrainer, BaseEngine, ActiveSetSelector]:
+    ) -> tuple[BaseGenerator, BaseOracle, BaseTrainer, BaseEngine, ActiveSetSelector, Validator]:
         """
         Creates instances of core modules based on the provided configuration.
 
@@ -33,6 +37,7 @@ class ModuleFactory:
                 - BaseTrainer (e.g., PacemakerTrainer)
                 - BaseEngine (e.g., LammpsEngine)
                 - ActiveSetSelector
+                - Validator
 
         Raises:
             ConfigError: If configuration is invalid or missing required fields.
@@ -59,6 +64,23 @@ class ModuleFactory:
             # Active Set Selector
             active_set_selector = ActiveSetSelector()
 
+            # Validator
+            report_gen = ReportGenerator()
+            phonon_calc = PhononCalculator(
+                engine,
+                config.validation.phonon_supercell,
+                config.validation.phonon_displacement,
+                config.validation.phonon_imaginary_tol,
+            )
+            elastic_calc = ElasticCalculator(
+                engine,
+                config.validation.elastic_strain,
+                config.validation.elastic_steps,
+            )
+            validator = Validator(
+                config.validation, phonon_calc, elastic_calc, report_gen
+            )
+
         except Exception as e:
             msg = f"Failed to create modules: {e}"
             raise RuntimeError(msg) from e
@@ -69,4 +91,5 @@ class ModuleFactory:
             trainer,
             engine,
             active_set_selector,
+            validator,
         )

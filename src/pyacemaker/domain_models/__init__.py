@@ -4,6 +4,7 @@ from .logging import LoggingConfig
 from .md import HybridParams, MDConfig, MDSimulationResult
 from .structure import StructureConfig
 from .training import TrainingConfig
+from .validation import ValidationConfig, ValidationResult
 from .workflow import WorkflowConfig
 
 __all__ = [
@@ -15,5 +16,7 @@ __all__ = [
     "PyAceConfig",
     "StructureConfig",
     "TrainingConfig",
+    "ValidationConfig",
+    "ValidationResult",
     "WorkflowConfig",
 ]

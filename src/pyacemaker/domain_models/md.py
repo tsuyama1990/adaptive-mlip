@@ -43,6 +43,10 @@ class MDSimulationResult(BaseModel):
 
     energy: float = Field(..., description="Final potential energy of the system")
     forces: list[list[float]] = Field(..., description="Forces on atoms in the final frame")
+    stress: list[float] = Field(
+        default_factory=lambda: [0.0] * 6,
+        description="Stress tensor (Voigt: xx, yy, zz, yz, xz, xy) in Bar"
+    )
     halted: bool = Field(..., description="Whether the simulation was halted early")
     max_gamma: float = Field(..., description="Maximum extrapolation grade observed")
     n_steps: int = Field(..., description="Number of steps actually performed")

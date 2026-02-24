@@ -5,6 +5,7 @@ from .logging import LoggingConfig
 from .md import MDConfig
 from .structure import StructureConfig
 from .training import TrainingConfig
+from .validation import ValidationConfig
 from .workflow import WorkflowConfig
 
 
@@ -16,6 +17,9 @@ class PyAceConfig(BaseModel):
     dft: DFTConfig
     training: TrainingConfig
     md: MDConfig
+    validation: ValidationConfig = Field(
+        default_factory=ValidationConfig, description="Validation configuration"
+    )
     workflow: WorkflowConfig
     logging: LoggingConfig = Field(
         default_factory=LoggingConfig, description="Logging configuration"

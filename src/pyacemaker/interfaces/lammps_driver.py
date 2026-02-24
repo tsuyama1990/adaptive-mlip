@@ -140,3 +140,38 @@ class LammpsDriver:
         # ASE Atoms constructor will copy the positions array if it's a numpy array.
         # We pass the view 'positions_view'.
         return Atoms(symbols=symbols, positions=positions_view, cell=cell, pbc=periodicity)
+
+    def get_forces(self) -> np.ndarray:
+        """
+        Retrieve forces for all atoms.
+
+        Returns:
+            Numpy array of shape (N, 3) containing forces.
+        """
+        natoms = self.lmp.get_natoms()
+        if natoms == 0:
+            return np.zeros((0, 3))
+
+        # Gather forces (type 1 = double, count 3)
+        f_ptr = self.lmp.gather_atoms("f", 1, 3)
+        forces_view = np.ctypeslib.as_array(f_ptr, shape=(natoms, 3))
+        # Copy to ensure ownership
+        return forces_view.copy()
+
+    def get_stress(self) -> np.ndarray:
+        """
+        Retrieve stress tensor for the system (Voigt notation).
+        Units: Pressure units (usually Bar or similar).
+        """
+        try:
+            pxx = self.extract_variable("pxx")
+            pyy = self.extract_variable("pyy")
+            pzz = self.extract_variable("pzz")
+            pyz = self.extract_variable("pyz")
+            pxz = self.extract_variable("pxz")
+            pxy = self.extract_variable("pxy")
+            # Convert to Stress (Voigt) = [-pxx, -pyy, -pzz, -pyz, -pxz, -pxy]
+            # Pressure is negative stress.
+            return np.array([-pxx, -pyy, -pzz, -pyz, -pxz, -pxy])
+        except Exception:
+            return np.zeros(6)

@@ -93,10 +93,14 @@ class LammpsEngine(BaseEngine):
                     energy = driver.extract_variable("pe")
                     temperature = driver.extract_variable("temp")
                     step = int(driver.extract_variable("step"))
+                    forces = driver.get_forces().tolist()
+                    stress = driver.get_stress().tolist()
                 except Exception:
                     energy = 0.0
                     temperature = 0.0
                     step = 0
+                    forces = [[0.0, 0.0, 0.0]]
+                    stress = [0.0] * 6
 
                 max_gamma = 0.0
                 if self.config.fix_halt:
@@ -115,7 +119,8 @@ class LammpsEngine(BaseEngine):
                 # Result
                 return MDSimulationResult(
                     energy=energy,
-                    forces=[[0.0, 0.0, 0.0]],
+                    forces=forces,
+                    stress=stress,
                     halted=halted,
                     max_gamma=max_gamma,
                     n_steps=step,
@@ -128,6 +133,21 @@ class LammpsEngine(BaseEngine):
             finally:
                 if hasattr(driver, "close"):
                     driver.close()
+
+    def compute_static_properties(self, structure: Atoms, potential: Any) -> MDSimulationResult:
+        """
+        Computes static properties (energy, forces, stress) for a structure.
+        Equivalent to a 0-step MD run.
+        """
+        static_config = self.config.model_copy(update={
+            "n_steps": 0,
+            "minimize": False,
+            "thermo_freq": 1,
+            "dump_freq": 0
+        })
+
+        engine = LammpsEngine(static_config)
+        return engine.run(structure, potential)
 
     def _execute_simulation(self, driver: LammpsDriver, script_path: Path) -> None:
         """Executes the simulation script with error handling."""
