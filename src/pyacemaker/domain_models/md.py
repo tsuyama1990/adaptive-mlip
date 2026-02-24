@@ -9,6 +9,7 @@ from pyacemaker.domain_models.defaults import (
     DEFAULT_MD_BASE_ENERGY,
     DEFAULT_MD_CHECK_INTERVAL,
     DEFAULT_MD_DUMP_FREQ,
+    DEFAULT_MD_FORCES,
     DEFAULT_MD_HYBRID_ZBL_INNER,
     DEFAULT_MD_HYBRID_ZBL_OUTER,
     DEFAULT_MD_NEIGHBOR_SKIN,
@@ -95,7 +96,7 @@ class MDConfig(BaseModel):
         DEFAULT_MD_BASE_ENERGY, description="Baseline energy for mock simulation"
     )
     default_forces: list[list[float]] = Field(
-        default=[[0.0, 0.0, 0.0]], description="Default forces for mock simulation"
+        default=DEFAULT_MD_FORCES, description="Default forces for mock simulation"
     )
 
     # Spec Section 3.4 (Hybrid Potential & OTF)

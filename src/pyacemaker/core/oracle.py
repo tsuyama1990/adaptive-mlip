@@ -102,6 +102,14 @@ class DFTManager(BaseOracle):
         else:
             structure_to_compute = atoms
 
+        # Safety check for OOM prevention
+        if len(structure_to_compute) > 2000:
+            msg = (
+                f"Structure too large for DFT ({len(structure_to_compute)} atoms). "
+                "Skipping to prevent OOM/Hang."
+            )
+            raise OracleError(msg)
+
         return self._compute_single(structure_to_compute)
 
     def _get_strategies(self) -> list[Callable[[DFTConfig], None] | None]:

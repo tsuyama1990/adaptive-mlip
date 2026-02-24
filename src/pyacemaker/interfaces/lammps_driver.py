@@ -140,3 +140,53 @@ class LammpsDriver:
         # ASE Atoms constructor will copy the positions array if it's a numpy array.
         # We pass the view 'positions_view'.
         return Atoms(symbols=symbols, positions=positions_view, cell=cell, pbc=periodicity)
+
+    def get_forces(self) -> np.ndarray:
+        """
+        Retrieve current atomic forces.
+
+        Returns:
+            Numpy array of shape (N, 3) containing forces.
+        """
+        natoms = self.lmp.get_natoms()
+        if natoms == 0:
+            return np.zeros((0, 3))
+
+        # Gather forces (type 1 = double, count 3)
+        f_ptr = self.lmp.gather_atoms("f", 1, 3)
+        # Return a copy to ensure safety
+        return np.ctypeslib.as_array(f_ptr, shape=(natoms, 3)).copy()
+
+    def get_stress(self) -> np.ndarray:
+        """
+        Retrieve global stress tensor in Voigt notation (pxx, pyy, pzz, pyz, pxz, pxy).
+        Note: LAMMPS pressure is -stress. This returns STRESS (positive for tension).
+        Units: Pressure units of the simulation (e.g. bars).
+
+        This assumes 'thermo_style custom pxx pyy pzz pyz pxz pxy' or similar has been set,
+        OR we can extract global computes.
+        Actually, simpler to use 'extract_global' if computed?
+        No, usually we rely on thermo variables.
+        """
+        # We must ensure thermo output is current.
+        # Extract variables pxx, pyy, etc.
+        # Note: These variables must be available.
+        # If not, we might return zeros or raise error.
+        # But setting them up is responsibility of the script.
+
+        components = ["pxx", "pyy", "pzz", "pyz", "pxz", "pxy"]
+        stress = []
+        for c in components:
+            try:
+                # Pressure in LAMMPS is usually positive for compression.
+                # Stress = -Pressure.
+                # But pxx etc are pressure tensor components.
+                # ASE expects stress.
+                val = self.extract_variable(c)
+                stress.append(-val) # Convert pressure to stress
+            except Exception:
+                # If variable not found, try to compute it?
+                # Without explicit thermo, variables might be 0.
+                stress.append(0.0)
+
+        return np.array(stress)

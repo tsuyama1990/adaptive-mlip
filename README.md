@@ -25,17 +25,21 @@ Constructing MLIPs manually is tedious and error-prone. PyAceMaker automates the
 *   **DFT Management**:
     *   Automated Quantum Espresso execution via ASE.
     *   **Self-Healing**: Automatically retries failed calculations with adjusted parameters (e.g., mixing beta, smearing).
-    *   **Security**: Prevents path traversal and validates input configuration.
+    *   **Security**: Prevents path traversal via strict allowlists and validates input configuration.
 *   **Potential Training (Pacemaker)**:
     *   **Delta Learning**: Fits the difference between DFT and a physics-based baseline (LJ/ZBL) for robustness.
-    *   **Active Set Optimization**: Uses D-optimality (MaxVol) to select the most informative structures, reducing training costs.
+    *   **Active Set Optimization**: Uses D-optimality (MaxVol) to select the most informative structures, reducing training costs with O(1) memory usage via chunking.
     *   **Automated Configuration**: Generates optimal `input.yaml` for Pacemaker based on dataset composition.
 *   **Molecular Dynamics (MD) Engine**:
     *   Integrated LAMMPS driver for NPT/NVT simulations.
     *   **Hybrid Potentials**: Overlays ACE with ZBL/LJ for safety during high-energy events.
     *   **Uncertainty Watchdog**: Automatically halts simulations when the extrapolation grade ($\gamma$) exceeds a safe threshold.
+*   **Validation (The Guardian)**:
+    *   **Phonon Stability**: Calculates band structures and DOS using Phonopy, checking for imaginary frequencies.
+    *   **Mechanical Stability**: Computes Elastic Constants ($C_{ij}$) and Moduli (Bulk, Shear) via finite differences.
+    *   **Automated Reporting**: Generates HTML reports with embedded plots for easy inspection.
 *   **Scalability**:
-    *   **Streaming Data Processing**: Handles large datasets with O(1) memory usage.
+    *   **Streaming Data Processing**: Handles large datasets with minimal memory footprint.
     *   **Resume Capability**: Checkpoints state to `state.json`, allowing workflows to pause and resume from the exact iteration and potential version.
 
 ## Requirements
@@ -44,6 +48,7 @@ Constructing MLIPs manually is tedious and error-prone. PyAceMaker automates the
 *   **DFT Code**: Quantum Espresso (`pw.x` executable in PATH)
 *   **MLIP Trainer**: Pacemaker (`pace_train`, `pace_activeset` executables in PATH)
 *   **MD Engine**: LAMMPS Python Interface (`lammps` package, with `USER-PACE` support)
+*   **Validation**: Phonopy (optional, for phonon calculations)
 
 ## Installation
 
@@ -70,6 +75,8 @@ uv sync
         functional: "PBE"
         kpoints_density: 0.04
         encut: 500.0
+        # Security: Only allow pseudopotentials from specific directories
+        allowlist_paths: ["/opt/pseudos", "/usr/share/espresso/pseudo"]
         pseudopotentials:
             Fe: "Fe.pbe-n-kjpaw_psl.1.0.0.UPF"
             Pt: "Pt.pbe-n-kjpaw_psl.1.0.0.UPF"
@@ -85,6 +92,10 @@ uv sync
         pressure: 0.0
         timestep: 0.001
         n_steps: 5000
+    validation:
+        phonon_supercell: [2, 2, 2]
+        elastic_strain: 0.01
+        imaginary_frequency_tolerance: -0.05
     workflow:
         max_iterations: 10
         checkpoint_interval: 1
@@ -104,10 +115,10 @@ uv sync
 
 ```
 src/pyacemaker/
-├── core/               # Core business logic (Generator, Oracle, Trainer)
+├── core/               # Core business logic (Generator, Oracle, Trainer, Validator)
 ├── domain_models/      # Pydantic data schemas and validation
-├── interfaces/         # External code drivers (Quantum Espresso)
-├── utils/              # Helper functions (I/O, perturbations)
+├── interfaces/         # External code drivers (Quantum Espresso, LAMMPS)
+├── utils/              # Helper functions (I/O, perturbations, phonons, elastic)
 ├── factory.py          # Dependency injection
 ├── orchestrator.py     # Workflow state machine
 └── main.py             # CLI entry point

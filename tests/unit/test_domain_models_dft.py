@@ -120,37 +120,35 @@ def test_dft_config_empty_pseudopotential() -> None:
 
 
 def test_dft_config_external_paths(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Test that external paths (absolute or relative) are allowed if file exists."""
+    """Test that external paths require allowlisting."""
     monkeypatch.chdir(tmp_path)
 
-    # Create a file in parent directory (simulates system library)
     outside_dir = tmp_path.parent / "outside_dir"
     outside_dir.mkdir(exist_ok=True)
     outside_file = outside_dir / "secret.UPF"
     outside_file.touch()
 
     try:
-        # Case 1: Absolute path to outside file -> Allowed
+        # Case 1: External path WITHOUT allowlist -> Should Fail
+        with pytest.raises(ValidationError, match="not in allowed paths"):
+            DFTConfig(
+                code="qe",
+                functional="PBE",
+                kpoints_density=0.04,
+                encut=500.0,
+                pseudopotentials={"Fe": str(outside_file.absolute())},
+            )
+
+        # Case 2: External path WITH allowlist -> Should Succeed
         config = DFTConfig(
             code="qe",
             functional="PBE",
             kpoints_density=0.04,
             encut=500.0,
             pseudopotentials={"Fe": str(outside_file.absolute())},
+            allowlist_paths=[str(outside_dir)],
         )
         assert config.pseudopotentials["Fe"] == str(outside_file.absolute())
-
-        # Case 2: Relative path to outside file -> Allowed
-        # Construct relative path from tmp_path to outside_file
-        rel_path = "../outside_dir/secret.UPF"
-        config = DFTConfig(
-            code="qe",
-            functional="PBE",
-            kpoints_density=0.04,
-            encut=500.0,
-            pseudopotentials={"Fe": rel_path},
-        )
-        assert config.pseudopotentials["Fe"] == rel_path
 
     finally:
         # Cleanup

@@ -47,6 +47,7 @@ def mock_config(tmp_path: Path) -> PyAceConfig:
             "kpoints_density": 0.04,
             "encut": 500.0,
             "pseudopotentials": {"Fe": str(tmp_path / "Fe.UPF")},
+            "allowlist_paths": [str(tmp_path)],
             "mixing_beta": 0.7,
             "smearing_type": "mv",
             "smearing_width": 0.1,
