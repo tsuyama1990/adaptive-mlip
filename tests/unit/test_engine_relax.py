@@ -38,8 +38,9 @@ def test_lammps_engine_relax(mock_md_config: MDConfig, mock_driver_relax: Any, t
     assert result_atoms.get_chemical_symbols() == ["He"]
 
     # Verify script content
-    driver_instance.run.assert_called_once()
-    script = driver_instance.run.call_args[0][0]
+    driver_instance.run_file.assert_called_once()
+    script_path = Path(driver_instance.run_file.call_args[0][0])
+    script = script_path.read_text()
 
     assert "minimize" in script
     assert "min_style cg" in script
@@ -58,7 +59,7 @@ def test_lammps_engine_relax_missing_potential(mock_md_config: MDConfig, mock_dr
 
 def test_lammps_engine_relax_driver_fail(mock_md_config: MDConfig, mock_driver_relax: Any, tmp_path: Path) -> None:
     driver_instance = mock_driver_relax.return_value
-    driver_instance.run.side_effect = RuntimeError("Minimization failed")
+    driver_instance.run_file.side_effect = RuntimeError("Minimization failed")
 
     engine = LammpsEngine(mock_md_config)
     atoms = Atoms("H", cell=[10, 10, 10], pbc=True)

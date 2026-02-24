@@ -74,6 +74,12 @@ class StructureConfig(BaseModel):
     local_buffer_radius: float = Field(
         default=4.0, ge=0.0, description="Buffer radius added to extraction for force masking (Angstrom)"
     )
+    local_md_steps: int = Field(
+        default=50, gt=0, description="Number of MD steps for local micro-burst generation"
+    )
+    local_md_temp: float = Field(
+        default=2000.0, gt=0.0, description="Temperature for local micro-burst MD (K)"
+    )
 
     @field_validator("elements")
     @classmethod

@@ -1,6 +1,6 @@
-
 import logging
 import re
+from pathlib import Path
 
 import numpy as np
 from ase import Atoms
@@ -44,22 +44,14 @@ class LammpsDriver:
             msg = f"Command contains forbidden characters: {cmd}"
             raise ValueError(msg)
 
-        # Check for shell metacharacters explicitly, though regex should cover it.
-        # Double check for ` $ ( )` which might be used for subshells if regex allows them.
-        # Our regex ALLOWS $ { } ( ) for variable expansion.
-        # But we must forbid 'shell' command.
         tokens = cmd.split()
         if "shell" in tokens:
             msg = "Script contains forbidden command 'shell'."
             raise ValueError(msg)
 
-        # Additional check: `package` command with `load` can load shared objects.
-        # Ideally, we restrict commands to a safe subset, but LAMMPS has many commands.
-        # Blocking 'shell' is the primary defense against RCE.
-
     def run(self, script: str) -> None:
         """
-        Execute a LAMMPS script.
+        Execute a LAMMPS script provided as a string.
 
         Args:
             script: String containing LAMMPS commands (can be multi-line).
@@ -77,6 +69,43 @@ class LammpsDriver:
                 self._validate_command(cmd)
                 self.lmp.command(cmd)
 
+    def run_file(self, filepath: str | Path) -> None:
+        """
+        Execute a LAMMPS script from a file.
+        Preferable for large scripts to avoid memory overhead.
+
+        Args:
+            filepath: Path to the LAMMPS input script.
+        """
+        path = Path(filepath)
+        if not path.exists():
+            msg = f"Input script not found: {path}"
+            raise FileNotFoundError(msg)
+
+        # Basic security check: scan file for 'shell' command?
+        # Reading file defeats the purpose of streaming if we read it all.
+        # But for security, we might need to scan.
+        # However, if we trust the generator, we can skip.
+        # Given "Security" requirement, let's stream read and validate.
+        # But lammps.file() executes the file. It doesn't validate line by line in Python.
+        # If we use lammps.file(), we bypass _validate_command unless we pre-scan.
+        # Pre-scanning line by line is O(N) IO but O(1) memory.
+
+        with path.open("r", encoding="utf-8") as f:
+            for line in f:
+                cmd = line.strip()
+                # Ignore comments
+                if cmd.startswith("#"):
+                    continue
+                if cmd:
+                    # Remove comments from line end
+                    cmd = cmd.split("#")[0].strip()
+                    if cmd:
+                        self._validate_command(cmd)
+
+        # If validation passes, run file
+        self.lmp.file(str(path))
+
     def extract_variable(self, name: str) -> float:
         """
         Extract a global variable from LAMMPS.
@@ -87,7 +116,6 @@ class LammpsDriver:
         Returns:
             Value of the variable as a float.
         """
-        # extract_variable(name, group, type): type 0 = integer, 1 = double
         val = self.lmp.extract_variable(name, None, 0)
         return float(val)
 
@@ -101,51 +129,34 @@ class LammpsDriver:
         Returns:
             ASE Atoms object with current positions, cell, and species.
         """
-        # Get number of atoms
         natoms = self.lmp.get_natoms()
         if natoms == 0:
             return Atoms()
 
-        # Gather positions (type 1 = double, count 3)
-        # Returns a ctypes pointer to array of doubles
         x_ptr = self.lmp.gather_atoms("x", 1, 3)
-        # Convert to numpy array view (no copy yet)
         positions_view = np.ctypeslib.as_array(x_ptr, shape=(natoms, 3))
 
-        # Gather types (type 0 = integer, count 1)
-        # Returns a ctypes pointer to array of ints
         types_ptr = self.lmp.gather_atoms("type", 0, 1)
         types_view = np.ctypeslib.as_array(types_ptr, shape=(natoms,))
 
-        # Map types to symbols
-        # LAMMPS types are 1-based. elements list is 0-based.
-        # type i corresponds to elements[i-1]
         try:
             symbols = [elements[t - 1] for t in types_view]
         except IndexError as e:
              msg = f"LAMMPS type index out of range for elements list: {e}"
              raise ValueError(msg) from e
 
-        # Get cell
-        # extract_box returns (boxlo, boxhi, xy, yz, xz, periodicity, box_change)
         boxlo, boxhi, xy, yz, xz, periodicity, box_change = self.lmp.extract_box()
 
-        # Construct cell matrix
-        # LAMMPS uses a specific triclinic representation
         lx = boxhi[0] - boxlo[0]
         ly = boxhi[1] - boxlo[1]
         lz = boxhi[2] - boxlo[2]
 
-        # If orthogonal, xy=yz=xz=0.0
-        # ASE expects cell as 3x3 matrix.
         cell = np.array([
             [lx, 0.0, 0.0],
             [xy, ly, 0.0],
             [xz, yz, lz]
         ])
 
-        # ASE Atoms constructor will copy the positions array if it's a numpy array.
-        # We pass the view 'positions_view'.
         return Atoms(symbols=symbols, positions=positions_view, cell=cell, pbc=periodicity)
 
     def get_forces(self) -> np.ndarray:
@@ -159,10 +170,8 @@ class LammpsDriver:
         if natoms == 0:
             return np.zeros((0, 3))
 
-        # Gather forces (type 1 = double, count 3)
         f_ptr = self.lmp.gather_atoms("f", 1, 3)
         forces_view = np.ctypeslib.as_array(f_ptr, shape=(natoms, 3))
-        # Copy to ensure ownership
         return forces_view.copy()
 
     def get_stress(self) -> np.ndarray:
@@ -177,8 +186,6 @@ class LammpsDriver:
             pyz = self.extract_variable("pyz")
             pxz = self.extract_variable("pxz")
             pxy = self.extract_variable("pxy")
-            # Convert to Stress (Voigt) = [-pxx, -pyy, -pzz, -pyz, -pxz, -pxy]
-            # Pressure is negative stress.
             return np.array([-pxx, -pyy, -pzz, -pyz, -pxz, -pxy])
         except Exception:
             logger.warning("Failed to extract stress tensor. Returning zero vector.")

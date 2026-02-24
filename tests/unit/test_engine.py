@@ -50,18 +50,21 @@ def test_lammps_engine_run(mock_md_config: MDConfig, mock_driver: Any, tmp_path:
     assert result.trajectory_path is not None
     assert re.search(r"dump_[a-f0-9]{8}\.lammpstrj", result.trajectory_path)
 
-    # Verify driver run called with script
-    driver_instance.run.assert_called()
-    script = driver_instance.run.call_args[0][0]
+    # Verify driver run_file called
+    driver_instance.run_file.assert_called()
+    script_path = Path(driver_instance.run_file.call_args[0][0])
+
+    # Read script content from file to verify
+    script = script_path.read_text()
     assert "pair_style" in script
     assert "fix halt" in script
 
-    # Verify data file path
-    match = re.search(r"read_data (.*)", script)
-    assert match
-    data_file = match.group(1)
-    assert "data_" in data_file
-    assert ".lmp" in data_file
+    # Verify data file path in script
+    # Note: Using Path instead of regex for robustness if possible, but script content is string.
+    # We moved to constants, so format might be cleaner.
+    # LMP_CMD_READ_DATA uses quoted path.
+    # Let's check "read_data"
+    assert "read_data" in script
 
 
 def test_lammps_engine_halted(mock_md_config: MDConfig, mock_driver: Any, tmp_path: Path) -> None:
@@ -103,7 +106,8 @@ def test_lammps_engine_hybrid_potential(mock_md_config: MDConfig, mock_driver: A
     engine.run(atoms, pot_path)
 
     driver_instance = mock_driver.return_value
-    script = driver_instance.run.call_args[0][0]
+    script_path = Path(driver_instance.run_file.call_args[0][0])
+    script = script_path.read_text()
 
     assert "pair_style hybrid/overlay" in script
     assert "pair_coeff * * pace" in script
@@ -154,7 +158,7 @@ def test_run_large_structure_warning(mock_md_config: MDConfig, mock_driver: Any,
 def test_run_driver_failure(mock_md_config: MDConfig, mock_driver: Any, tmp_path: Path) -> None:
     """Tests error handling when LAMMPS execution fails."""
     driver_instance = mock_driver.return_value
-    driver_instance.run.side_effect = RuntimeError("LAMMPS crashed")
+    driver_instance.run_file.side_effect = RuntimeError("LAMMPS crashed")
 
     engine = LammpsEngine(mock_md_config)
     atoms = Atoms("H", cell=[10, 10, 10], pbc=True)

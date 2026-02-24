@@ -163,8 +163,9 @@ class MDMicroBurstPolicy(BasePolicy):
 
         # Configure short MD
         # Create a burst engine config
-        # Use a high temperature for exploration
-        burst_temp = max(config.rattle_stdev * 10000, 2000.0) # Heuristic mapping? No, just use reasonable high T
+        # Use configured parameters from StructureConfig
+        burst_temp = config.local_md_temp
+        burst_steps = config.local_md_steps
 
         # Accessing engine.config might be engine-specific (LammpsEngine)
         # Assuming LammpsEngine for now as it's the main implementation
@@ -172,7 +173,7 @@ class MDMicroBurstPolicy(BasePolicy):
              # Create a burst engine
              # Copy config and override
              burst_config = engine.config.model_copy(update={
-                 "n_steps": 50, # Short burst
+                 "n_steps": burst_steps,
                  "minimize": False,
                  "temperature": burst_temp,
                  "dump_freq": 0 # We only care about final structure, or manage manually
@@ -234,6 +235,6 @@ class CompositePolicy(BasePolicy):
         for i in range(remainder):
             counts[i] += 1
 
-        for policy, count in zip(self.policies, counts):
+        for policy, count in zip(self.policies, counts, strict=True):
             if count > 0:
                 yield from policy.generate(base_structure, config, n_structures=count, **kwargs)

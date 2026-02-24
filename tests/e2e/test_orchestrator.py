@@ -126,7 +126,7 @@ def mock_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> PyAceConfig:
 def test_orchestrator_initialization(mock_config: PyAceConfig) -> None:
     orch = Orchestrator(mock_config)
     assert orch.loop_state.iteration == 0
-    assert orch.state_file.name == "test_state.json"
+    assert orch.state_manager.state_file.name == "test_state.json"
 
 
 def test_integration_workflow_complete(
@@ -151,8 +151,8 @@ def test_integration_workflow_complete(
     orch.run()
 
     assert orch.loop_state.iteration == 2
-    assert orch.state_file.exists()
-    assert "iteration" in orch.state_file.read_text()
+    assert orch.state_manager.state_file.exists()
+    assert "iteration" in orch.state_manager.state_file.read_text()
 
     active_learning_dir = Path(config.workflow.active_learning_dir)
     assert active_learning_dir.exists()
@@ -171,7 +171,6 @@ def test_integration_workflow_complete(
     assert potentials_dir.exists()
     assert (potentials_dir / "generation_001.yace").exists()
 
-    # Count is 10 (n_candidates)
     assert LOG_COMPUTED_PROPERTIES.format(count=10) in caplog.text
     assert LOG_POTENTIAL_TRAINED in caplog.text
     assert LOG_ITERATION_COMPLETED.format(iteration=1) in caplog.text
@@ -180,7 +179,7 @@ def test_integration_workflow_complete(
 def test_orchestrator_checkpointing(mock_config: PyAceConfig) -> None:
     orch1 = Orchestrator(mock_config)
     orch1.loop_state.iteration = 5
-    orch1.save_state()
+    orch1.state_manager.save()
 
     orch2 = Orchestrator(mock_config)
     assert orch2.loop_state.iteration == 5

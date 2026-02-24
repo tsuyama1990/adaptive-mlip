@@ -1,4 +1,3 @@
-import os
 import shutil
 from collections.abc import Iterable
 from pathlib import Path
@@ -9,8 +8,9 @@ from ase.io import iread, read, write
 
 from pyacemaker.core.active_set import ActiveSetSelector
 from pyacemaker.core.base import BaseEngine, BaseGenerator, BaseOracle, BaseTrainer
+from pyacemaker.core.directory_manager import DirectoryManager
 from pyacemaker.core.exceptions import OrchestratorError
-from pyacemaker.core.loop import LoopState
+from pyacemaker.core.state_manager import StateManager
 from pyacemaker.core.validator import Validator
 from pyacemaker.domain_models import PyAceConfig
 from pyacemaker.domain_models.defaults import (
@@ -28,13 +28,8 @@ from pyacemaker.domain_models.defaults import (
     LOG_PROJECT_INIT,
     LOG_START_ITERATION,
     LOG_START_LOOP,
-    LOG_STATE_LOAD_FAIL,
-    LOG_STATE_LOAD_SUCCESS,
-    LOG_STATE_SAVE_FAIL,
-    LOG_STATE_SAVED,
     LOG_WORKFLOW_COMPLETED,
     LOG_WORKFLOW_CRASHED,
-    TEMPLATE_ITER_DIR,
     TEMPLATE_POTENTIAL_FILE,
 )
 from pyacemaker.domain_models.md import MDSimulationResult
@@ -60,11 +55,12 @@ class Orchestrator:
         self.config = config
         self.logger = setup_logger(config=config.logging, project_name=config.project_name)
 
-        self.state_file = Path(config.workflow.state_file_path)
+        # Initialize Managers
+        self.state_manager = StateManager(Path(config.workflow.state_file_path), self.logger)
+        self.dir_manager = DirectoryManager(Path(config.workflow.active_learning_dir), self.logger)
+
         self.data_dir = Path(config.workflow.data_dir)
         self.data_dir.mkdir(exist_ok=True)
-        self.active_learning_dir = Path(config.workflow.active_learning_dir)
-        self.active_learning_dir.mkdir(exist_ok=True)
         self.potentials_dir = Path(config.workflow.potentials_dir)
         self.potentials_dir.mkdir(exist_ok=True)
 
@@ -77,8 +73,13 @@ class Orchestrator:
         self.validator: Validator | None = None
 
         # Initialize State
-        self.load_state()
+        self.state_manager.load()
         self.logger.info(LOG_PROJECT_INIT.format(project_name=config.project_name))
+
+    @property
+    def loop_state(self):
+        # Expose loop_state for tests
+        return self.state_manager.state
 
     def initialize_modules(self) -> None:
         """
@@ -106,70 +107,6 @@ class Orchestrator:
 
         self.logger.info(LOG_MODULES_INIT_SUCCESS)
 
-    def load_state(self) -> None:
-        """Loads the iteration state using LoopState."""
-        try:
-            self.loop_state = LoopState.load(self.state_file)
-            self.logger.info(LOG_STATE_LOAD_SUCCESS.format(iteration=self.loop_state.iteration))
-        except Exception as e:
-            self.logger.warning(LOG_STATE_LOAD_FAIL.format(error=e))
-            self.loop_state = LoopState()
-
-    def save_state(self) -> None:
-        """Saves the current iteration state."""
-        try:
-            self.loop_state.save(self.state_file)
-            self.logger.debug(LOG_STATE_SAVED.format(state=self.loop_state.model_dump()))
-        except Exception as e:
-            self.logger.warning(LOG_STATE_SAVE_FAIL.format(error=e))
-
-    def _ensure_directory(self, path: Path) -> None:
-        """
-        Creates a directory and verifies write permissions.
-        Ensures partial directory creation is handled.
-        """
-        try:
-            path.mkdir(parents=True, exist_ok=True)
-            if not path.is_dir():
-                msg = f"Path {path} exists but is not a directory."
-                raise RuntimeError(msg)
-            if not os.access(path, os.W_OK):
-                msg = f"Directory {path} is not writable."
-                raise PermissionError(msg)
-        except OSError as e:
-            self.logger.critical(f"Failed to create directory {path}: {e}")
-            raise
-
-    def _create_iteration_directories(self, paths: dict[str, Path]) -> list[Path]:
-        """
-        Attempts to create all directories for an iteration atomically.
-        If any creation fails, it attempts to rollback created directories.
-        """
-        created_paths: list[Path] = []
-        try:
-            for p in paths.values():
-                if not p.exists():
-                    self._ensure_directory(p)
-                    created_paths.append(p)
-                else:
-                    # Just verify permission if it exists
-                    self._ensure_directory(p)
-        except Exception as e:
-            self.logger.exception("Failed to create iteration directories")
-            # Attempt rollback for newly created directories
-            for p in reversed(created_paths):
-                try:
-                    if p.is_dir() and not any(p.iterdir()): # Only delete empty directories
-                        p.rmdir()
-                except OSError:
-                    self.logger.warning(f"Failed to rollback directory creation for {p}")
-
-            # Wrap in OrchestratorError for consistency
-            msg = f"Failed to setup directory: {e}"
-            raise OrchestratorError(msg) from e
-
-        return created_paths
-
     def _stream_write(
         self,
         generator: Iterable[Atoms],
@@ -180,6 +117,7 @@ class Orchestrator:
         """
         Writes atoms from a generator to a file in chunks to balance I/O and memory.
         Uses `batched` to process chunks.
+        Optimized to open file once.
 
         Args:
             generator: Iterable of Atoms objects.
@@ -195,40 +133,18 @@ class Orchestrator:
         # Ensure parent dir exists
         filepath.parent.mkdir(parents=True, exist_ok=True)
 
-        # Iterate in batches
-        # batched returns a tuple of items.
-        for batch in batched(generator, batch_size):
-            # Write chunk
-            # ase.io.write handles list of atoms.
-            # If append is False for first chunk, subsequent chunks MUST append.
-            # So we control 'append' logic manually?
-            # Actually, ase.io.write(..., append=True) appends to file.
-            # If append=False (initial call), it overwrites.
-            # But subsequent batches must append.
+        mode = "a" if append else "w"
 
-            current_append = append or (count > 0)
-
-            write(filepath, batch, format="extxyz", append=current_append)
-            count += len(batch)
+        # Open file once
+        with filepath.open(mode) as f:
+            for batch in batched(generator, batch_size):
+                # Write chunk
+                # ase.io.write handles list of atoms and can write to file handle.
+                # format="extxyz" is standard for streaming.
+                write(f, batch, format="extxyz")
+                count += len(batch)
 
         return count
-
-    def _setup_iteration_directory(self, iteration: int) -> dict[str, Path]:
-        """
-        Creates the directory structure for the current iteration.
-        """
-        iter_dirname = TEMPLATE_ITER_DIR.format(iteration=iteration)
-        iter_dir = self.active_learning_dir / iter_dirname
-        paths = {
-            "root": iter_dir,
-            "candidates": iter_dir / "candidates",
-            "dft_calc": iter_dir / "dft_calc",
-            "training": iter_dir / "training",
-            "md_run": iter_dir / "md_run",
-        }
-
-        self._create_iteration_directories(paths)
-        return paths
 
     def _explore(self, paths: dict[str, Path]) -> None:
         """
@@ -239,8 +155,6 @@ class Orchestrator:
             return
 
         n_candidates = self.config.workflow.n_candidates
-        # We can use batched for chunking, but opening file once is key.
-        # ase.io.write can write a list of atoms.
         candidates_file = paths["candidates"] / FILENAME_CANDIDATES
 
         try:
@@ -310,23 +224,23 @@ class Orchestrator:
 
     def _check_initial_potential(self) -> None:
         """Checks if initial potential exists, if not generates one (Cold Start)."""
-        if self.loop_state.current_potential and self.loop_state.current_potential.exists():
-            self.logger.info(f"Using existing potential: {self.loop_state.current_potential}")
+        if self.state_manager.current_potential and self.state_manager.current_potential.exists():
+            self.logger.info(f"Using existing potential: {self.state_manager.current_potential}")
             return
 
         self.logger.info("No initial potential found. Starting Cold Start procedure.")
 
         # Use iteration 0 for cold start
-        paths = self._setup_iteration_directory(0)
+        paths = self.dir_manager.setup_iteration(0)
 
         self._explore(paths)
         self._label(paths)
         potential_path = self._train(paths)
 
         if potential_path:
-            self.loop_state.current_potential = potential_path
-            self.loop_state.iteration = 0
-            self.save_state()
+            self.state_manager.current_potential = potential_path
+            self.state_manager.iteration = 0
+            self.state_manager.save()
             self.logger.info(f"Cold start completed. Initial potential: {potential_path}")
         else:
             msg = "Cold start failed to produce a potential."
@@ -339,7 +253,7 @@ class Orchestrator:
 
         try:
              # Try to get from candidates of previous iteration or iteration 0
-             iter0_paths = self._setup_iteration_directory(0)
+             iter0_paths = self.dir_manager.setup_iteration(0)
              cand_file = iter0_paths["candidates"] / FILENAME_CANDIDATES
              if cand_file.exists():
                  # Use next() on iread to get just the first frame efficiently
@@ -460,9 +374,9 @@ class Orchestrator:
         potential_filename = TEMPLATE_POTENTIAL_FILE.format(iteration=iteration)
         deployed_potential = self.potentials_dir / potential_filename
 
-        if self.loop_state.current_potential:
-             if self.loop_state.current_potential != deployed_potential:
-                shutil.copy(self.loop_state.current_potential, deployed_potential)
+        if self.state_manager.current_potential:
+             if self.state_manager.current_potential != deployed_potential:
+                shutil.copy(self.state_manager.current_potential, deployed_potential)
         else:
             msg = "No current potential to deploy."
             raise OrchestratorError(msg)
@@ -489,10 +403,10 @@ class Orchestrator:
                 if not new_potential.exists():
                     self.logger.error(f"Refined potential path {new_potential} does not exist!")
                 else:
-                    self.loop_state.current_potential = new_potential
+                    self.state_manager.current_potential = new_potential
                     self.logger.info(f"Potential refined to: {new_potential}")
         else:
-             self.logger.info(LOG_ITERATION_COMPLETED.format(iteration=self.loop_state.iteration + 1))
+             self.logger.info(LOG_ITERATION_COMPLETED.format(iteration=self.state_manager.iteration + 1))
 
     def _adapt_strategy(self, result: MDSimulationResult) -> None:
         """
@@ -502,8 +416,8 @@ class Orchestrator:
 
     def _run_loop_iteration(self) -> None:
         """Executes one iteration of the active learning loop."""
-        iteration = self.loop_state.iteration + 1
-        paths = self._setup_iteration_directory(iteration)
+        iteration = self.state_manager.iteration + 1
+        paths = self.dir_manager.setup_iteration(iteration)
         self.logger.info(LOG_START_ITERATION.format(iteration=iteration, max_iterations=self.config.workflow.max_iterations))
 
         try:
@@ -514,8 +428,8 @@ class Orchestrator:
                 self._adapt_strategy(result)
                 self._handle_md_halt(result, deployed_potential, paths)
 
-            self.loop_state.iteration = iteration
-            self.save_state()
+            self.state_manager.iteration = iteration
+            self.state_manager.save()
 
         except Exception as e:
             self.logger.exception(f"Iteration {iteration} failed")
@@ -528,14 +442,14 @@ class Orchestrator:
         production_dir.mkdir(exist_ok=True)
         potential_target = production_dir / FILENAME_POTENTIAL
 
-        if self.loop_state.current_potential:
-            shutil.copy(self.loop_state.current_potential, potential_target)
+        if self.state_manager.current_potential:
+            shutil.copy(self.state_manager.current_potential, potential_target)
             self.logger.info(f"Deployed best potential to {potential_target}")
 
             if self.validator:
                 report_path = production_dir / "validation_report.html"
                 # Get a structure for validation. Use initial structure of last iteration.
-                structure = self._get_initial_structure(self.loop_state.iteration)
+                structure = self._get_initial_structure(self.state_manager.iteration)
 
                 if structure:
                     self.logger.info("Running final validation...")
@@ -559,7 +473,7 @@ class Orchestrator:
             self.initialize_modules()
             self._check_initial_potential()
 
-            while self.loop_state.iteration < self.config.workflow.max_iterations:
+            while self.state_manager.iteration < self.config.workflow.max_iterations:
                  self._run_loop_iteration()
 
             self._finalize()

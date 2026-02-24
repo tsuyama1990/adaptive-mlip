@@ -8,7 +8,18 @@ from pyacemaker.core.base import BaseEngine
 from pyacemaker.core.io_manager import LammpsFileManager
 from pyacemaker.core.lammps_generator import LammpsScriptGenerator
 from pyacemaker.core.validator import LammpsInputValidator
-from pyacemaker.domain_models.constants import LAMMPS_SCREEN_ARG
+from pyacemaker.domain_models.constants import (
+    LAMMPS_SCREEN_ARG,
+    LMP_CMD_ATOM_STYLE,
+    LMP_CMD_BOUNDARY,
+    LMP_CMD_CLEAR,
+    LMP_CMD_MIN_STYLE,
+    LMP_CMD_MINIMIZE,
+    LMP_CMD_NEIGH_MODIFY,
+    LMP_CMD_NEIGHBOR,
+    LMP_CMD_READ_DATA,
+    LMP_CMD_UNITS,
+)
 from pyacemaker.domain_models.md import MDConfig, MDSimulationResult
 from pyacemaker.interfaces.lammps_driver import LammpsDriver
 
@@ -45,10 +56,6 @@ class LammpsEngine(BaseEngine):
         potential_path = potential_path.resolve(strict=True)
 
         # Prepare workspace (temp dir, file writing)
-        # Note: We checked structure is not None/Empty in validator.
-        # But prepare_workspace needs 'structure' as Atoms (which it is, after check).
-        # Type checker might complain if structure is Optional.
-        # But runtime check ensures it.
         if structure is None:
              msg = "Structure cannot be None after validation."
              raise ValueError(msg)
@@ -56,22 +63,12 @@ class LammpsEngine(BaseEngine):
         ctx, data_file, dump_file, log_file, elements = self.file_manager.prepare_workspace(structure)
 
         with ctx:
-            # Create a temporary file for the input script to handle large scripts
-            # LammpsDriver expects a string script content or we can adapt it.
-            # LammpsDriver.run takes string. If we want to stream large script, we need to pass file.
-            # But python-lammps `commands_string` or `file` takes path.
-            # Assuming LammpsDriver.run wraps `lammps.commands_string` or `lammps.file`.
-            # If our LammpsDriver only takes string, we still have to load it.
-            # BUT, the generator refactor was to avoid holding it in memory *during generation*.
-            # We can write to a temp file, then read it? Or if LammpsDriver supports file path?
-            # Looking at interfaces/lammps_driver.py isn't possible (I can't see it now),
-            # but usually drivers support running from file.
-            # If not, we have to read it back.
-            # Let's write to "input.lmp" in temp dir.
-            input_script_path = Path(ctx.name) / "input.lmp" if hasattr(ctx, "name") else data_file.parent / "input.lmp"
-
-            # Since ctx is generic context manager, we assume data_file is in the temp dir.
-            input_script_path = data_file.parent / "input.lmp"
+            # Generate input script to file
+            # Assuming ctx has .name as temp dir path (if it's TemporaryDirectory)
+            # Or data_file.parent if managed by file_manager.
+            # file_manager.prepare_workspace returns ctx which is temp_dir_ctx.
+            temp_dir = Path(ctx.name) if hasattr(ctx, "name") else data_file.parent
+            input_script_path = temp_dir / "input.lmp"
 
             with input_script_path.open("w") as f:
                 self.generator.write_script(
@@ -83,7 +80,6 @@ class LammpsEngine(BaseEngine):
                 )
 
             # Initialize Driver with unique log file
-            # Use constant for screen arg
             driver = LammpsDriver(["-screen", LAMMPS_SCREEN_ARG, "-log", str(log_file)])
 
             try:
@@ -113,8 +109,6 @@ class LammpsEngine(BaseEngine):
                 halted = False
                 if self.config.fix_halt:
                     # If using fix halt, checking step count is a proxy for early termination
-                    # Assuming run starts at 0. If restart, logic might need adjustment.
-                    # For now, Cycle 01/02 implies fresh runs.
                     halted = step < self.config.n_steps
 
                 # Result
@@ -165,31 +159,37 @@ class LammpsEngine(BaseEngine):
         with ctx:
             # Build script
             script_lines = []
-            script_lines.append("clear")
-            script_lines.append("units metal")
-            script_lines.append(f"atom_style {self.config.atom_style}")
-            script_lines.append("boundary p p p")
-            script_lines.append(f"read_data \"{data_file}\"")
+            script_lines.append(LMP_CMD_CLEAR)
+            script_lines.append(LMP_CMD_UNITS)
+            script_lines.append(LMP_CMD_ATOM_STYLE.format(style=self.config.atom_style))
+            script_lines.append(LMP_CMD_BOUNDARY)
+            script_lines.append(LMP_CMD_READ_DATA.format(data_file=data_file))
 
             # Reuse generator for potential
             pot_buffer = io.StringIO()
             self.generator._gen_potential(pot_buffer, potential_path, elements)
             script_lines.append(pot_buffer.getvalue())
 
-            script_lines.append(f"neighbor {self.config.neighbor_skin} bin")
-            script_lines.append("neigh_modify delay 0 every 1 check yes")
+            script_lines.append(LMP_CMD_NEIGHBOR.format(skin=self.config.neighbor_skin))
+            script_lines.append(LMP_CMD_NEIGH_MODIFY)
 
             # Minimization settings
-            # strict tolerance for relaxation
-            script_lines.append("min_style cg")
-            script_lines.append("minimize 1.0e-6 1.0e-8 1000 10000")
+            script_lines.append(LMP_CMD_MIN_STYLE)
+            script_lines.append(LMP_CMD_MINIMIZE)
 
             full_script = "\n".join(script_lines)
+
+            # Write to file for execution
+            temp_dir = Path(ctx.name) if hasattr(ctx, "name") else data_file.parent
+            script_path = temp_dir / "relax.lmp"
+            script_path.write_text(full_script, encoding="utf-8")
 
             # Execute
             driver = LammpsDriver(["-screen", "none", "-log", str(log_file)])
             try:
-                driver.run(full_script)
+                # Use execute_simulation helper or direct driver run_file
+                # Direct file run
+                driver.run_file(str(script_path))
                 return driver.get_atoms(elements)
             finally:
                  if hasattr(driver, "close"):
@@ -204,33 +204,21 @@ class LammpsEngine(BaseEngine):
     def _execute_simulation(self, driver: LammpsDriver, script_path: Path) -> None:
         """
         Executes the simulation script with standardized error handling.
-
-        Args:
-            driver: Initialized LammpsDriver instance.
-            script_path: Path to the LAMMPS input script.
-
-        Raises:
-            RuntimeError: Wraps any failure during execution with context.
         """
         try:
-            # Ensure script is readable
             self._ensure_script_readable(script_path)
-
-            script_content = script_path.read_text(encoding="utf-8")
-            driver.run(script_content)
+            # Scalability: Use run_file to stream script execution
+            driver.run_file(str(script_path))
 
         except FileNotFoundError as e:
             msg = f"Simulation setup failed: {e}"
             raise RuntimeError(msg) from e
         except ValueError as e:
-            # Catch validation errors from driver (unsafe content)
             msg = f"Simulation security validation failed: {e}"
             raise RuntimeError(msg) from e
         except RuntimeError as e:
-            # Catch LAMMPS internal errors (e.g., lost atoms)
             msg = f"LAMMPS engine execution failed: {e}"
             raise RuntimeError(msg) from e
         except Exception as e:
-            # Catch unexpected errors
             msg = f"Unexpected error during simulation execution: {e}"
             raise RuntimeError(msg) from e
