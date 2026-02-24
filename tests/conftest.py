@@ -5,12 +5,12 @@ from unittest.mock import MagicMock
 # Mock lammps module globally before any imports that depend on it
 sys.modules["lammps"] = MagicMock()
 
-import numpy as np
-import pytest
-from ase import Atoms
-from ase.calculators.calculator import Calculator, CalculatorSetupError
+import numpy as np  # noqa: E402
+import pytest  # noqa: E402
+from ase import Atoms  # noqa: E402
+from ase.calculators.calculator import Calculator, CalculatorSetupError  # noqa: E402
 
-from pyacemaker.domain_models import (
+from pyacemaker.domain_models import (  # noqa: E402
     DFTConfig,
     HybridParams,
     LoggingConfig,
@@ -20,8 +20,8 @@ from pyacemaker.domain_models import (
     TrainingConfig,
     WorkflowConfig,
 )
-from pyacemaker.domain_models.structure import ExplorationPolicy
-from tests.constants import TEST_ENERGY_GENERIC
+from pyacemaker.domain_models.structure import ExplorationPolicy  # noqa: E402
+from tests.constants import TEST_ENERGY_GENERIC  # noqa: E402
 
 
 def create_dummy_pseudopotentials(path: Any, elements: list[str]) -> None:
