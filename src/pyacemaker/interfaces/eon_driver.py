@@ -43,7 +43,7 @@ class EONWrapper:
         """
         work_dir.mkdir(parents=True, exist_ok=True)
 
-        # 1. Generate Driver Script
+        # 1. Generate Driver Script (Buffered Write)
         driver_path = self._generate_pace_driver(work_dir, potential_path, elements)
 
         # Security: Validate driver path is within work_dir to prevent arbitrary chmod
@@ -69,6 +69,7 @@ class EONWrapper:
 
         try:
             # We assume initial structure (reactant.con) is already placed by the scenario.
+            # Security: Use list for subprocess args, no shell=True
             result = subprocess.run(
                 [eon_executable],
                 cwd=work_dir,
@@ -87,20 +88,22 @@ class EONWrapper:
 
     def _generate_config(self, work_dir: Path, driver_path: Path) -> None:
         """Generates config.ini for EON."""
-        config_content = f"""[Main]
-job = {self.config.job_type}
-temperature = {self.config.temperature}
-confidence = {self.config.confidence}
-random_seed = {self.config.random_seed}
-
-[Potential]
-type = {self.config.potential_type}
-command = {sys.executable} {driver_path.resolve()}
-
-[Saddle Search]
-method = {self.config.search_method}
-"""
-        (work_dir / EON_CONFIG_FILE).write_text(config_content)
+        lines = [
+            "[Main]",
+            f"job = {self.config.job_type}",
+            f"temperature = {self.config.temperature}",
+            f"confidence = {self.config.confidence}",
+            f"random_seed = {self.config.random_seed}",
+            "",
+            "[Potential]",
+            f"type = {self.config.potential_type}",
+            f"command = {sys.executable} {driver_path.resolve()}",
+            "",
+            "[Saddle Search]",
+            f"method = {self.config.search_method}",
+            "",
+        ]
+        (work_dir / EON_CONFIG_FILE).write_text("\n".join(lines))
 
     def _generate_pace_driver(
         self, work_dir: Path, potential_path: Path, elements: list[str] | None = None
@@ -114,93 +117,100 @@ method = {self.config.search_method}
         pot_path_str = str(potential_path.resolve())
         eon_fmt = EON_FORMAT
 
-        script = f"""#!/usr/bin/env python3
-import sys
-import numpy as np
-from ase.io import read
-from ase.calculators.lammpslib import LAMMPSlib
+        # Use buffered template or f-string
+        # Note: We are generating code. Special care for injection.
+        # potential_path is validated by MDConfig.
+        # elements list is from internal logic (scenario).
 
-def main():
-    try:
-        # Configuration injected by PyAceMaker
-        elements = {elements_repr}
-        pot_path = "{pot_path_str}"
-
-        # Read input from stdin (EON .con format)
-        atoms = read(sys.stdin, format='{eon_fmt}')
-
-        # Map types to symbols
-        if elements:
-            # EON uses 1-based type indices in .con files
-            # ASE read maps them to H, He... based on Z=type
-            numbers = atoms.get_atomic_numbers()
-            symbols = []
-            for z in numbers:
-                idx = z - 1
-                if 0 <= idx < len(elements):
-                    symbols.append(elements[idx])
-                else:
-                    symbols.append('X') # Unknown
-            atoms.set_chemical_symbols(symbols)
-
-        # Setup Calculator
-        # Construct LAMMPS commands
-        if elements:
-            elems_str = " ".join(elements)
-        else:
-            elems_str = " ".join(sorted(list(set(atoms.get_chemical_symbols()))))
-
-        # We need to ensure we use absolute path for potential in LAMMPS
-        # LAMMPSlib requires lammps-python
-
-        calc = LAMMPSlib(
-            lsp_cmd=None,
-            lammps_header=["units metal", "atom_style atomic", "boundary p p p"],
-            amendments=[f"pair_style pace", f"pair_coeff * * {{pot_path}} {{elems_str}}"],
-            log_file=None
-        )
-
-        atoms.calc = calc
-
-        # Compute
-        e = atoms.get_potential_energy()
-        forces = atoms.get_forces()
-
-        # Output in EON expected format (Energy + Forces)
-        # Format:
-        # Line 1: N
-        # Line 2: Energy
-        # Line 3-5: Box vectors
-        # Line 6+: Type X Y Z Fx Fy Fz
-
-        print(len(atoms))
-        print(f"{{e:.12f}}")
-        cell = atoms.get_cell()
-        for i in range(3):
-            print(f"{{cell[i][0]:.12f}} {{cell[i][1]:.12f}} {{cell[i][2]:.12f}}")
-
-        pos = atoms.get_positions()
-
-        # Reverse mapping: symbol -> index (1-based)
-        sym_map = {{sym: i+1 for i, sym in enumerate(elements)}} if elements else {{}}
-
-        for i in range(len(atoms)):
-            sym = atoms[i].symbol
-            type_idx = sym_map.get(sym, 1) # Default to 1 if not found
-            p = pos[i]
-            frc = forces[i]
-            print(f"{{type_idx}} {{p[0]:.12f}} {{p[1]:.12f}} {{p[2]:.12f}} {{frc[0]:.12f}} {{frc[1]:.12f}} {{frc[2]:.12f}}")
-
-    except Exception as e:
-        sys.stderr.write(f"Driver Error: {{e}}\\n")
-        sys.exit(1)
-
-if __name__ == "__main__":
-    main()
-"""
+        # We construct the script content line by line or using a safe template
+        script_lines = [
+            "#!/usr/bin/env python3",
+            "import sys",
+            "import numpy as np",
+            "from ase.io import read",
+            "from ase.calculators.lammpslib import LAMMPSlib",
+            "",
+            "def main():",
+            "    try:",
+            "        # Configuration injected by PyAceMaker",
+            f"        elements = {elements_repr}",
+            f"        pot_path = '{pot_path_str}'",
+            "",
+            "        # Read input from stdin (EON .con format)",
+            f"        atoms = read(sys.stdin, format='{eon_fmt}')",
+            "",
+            "        # Map types to symbols",
+            "        if elements:",
+            "            # EON uses 1-based type indices in .con files",
+            "            # ASE read maps them to H, He... based on Z=type",
+            "            numbers = atoms.get_atomic_numbers()",
+            "            symbols = []",
+            "            for z in numbers:",
+            "                idx = z - 1",
+            "                if 0 <= idx < len(elements):",
+            "                    symbols.append(elements[idx])",
+            "                else:",
+            "                    symbols.append('X') # Unknown",
+            "            atoms.set_chemical_symbols(symbols)",
+            "",
+            "        # Setup Calculator",
+            "        # Construct LAMMPS commands",
+            "        if elements:",
+            '            elems_str = " ".join(elements)',
+            "        else:",
+            '            elems_str = " ".join(sorted(list(set(atoms.get_chemical_symbols()))))',
+            "",
+            "        # We need to ensure we use absolute path for potential in LAMMPS",
+            "        # LAMMPSlib requires lammps-python",
+            "",
+            "        calc = LAMMPSlib(",
+            "            lsp_cmd=None,",
+            '            lammps_header=["units metal", "atom_style atomic", "boundary p p p"],',
+            '            amendments=[f"pair_style pace", f"pair_coeff * * {pot_path} {elems_str}"],',
+            "            log_file=None",
+            "        )",
+            "",
+            "        atoms.calc = calc",
+            "",
+            "        # Compute",
+            "        e = atoms.get_potential_energy()",
+            "        forces = atoms.get_forces()",
+            "",
+            "        # Output in EON expected format (Energy + Forces)",
+            "        # Format:",
+            "        # Line 1: N",
+            "        # Line 2: Energy",
+            "        # Line 3-5: Box vectors",
+            "        # Line 6+: Type X Y Z Fx Fy Fz",
+            "",
+            "        print(len(atoms))",
+            '        print(f"{e:.12f}")',
+            "        cell = atoms.get_cell()",
+            "        for i in range(3):",
+            '            print(f"{cell[i][0]:.12f} {cell[i][1]:.12f} {cell[i][2]:.12f}")',
+            "",
+            "        pos = atoms.get_positions()",
+            "",
+            "        # Reverse mapping: symbol -> index (1-based)",
+            "        sym_map = {sym: i+1 for i, sym in enumerate(elements)} if elements else {}",
+            "",
+            "        for i in range(len(atoms)):",
+            "            sym = atoms[i].symbol",
+            "            type_idx = sym_map.get(sym, 1) # Default to 1 if not found",
+            "            p = pos[i]",
+            "            frc = forces[i]",
+            '            print(f"{type_idx} {p[0]:.12f} {p[1]:.12f} {p[2]:.12f} {frc[0]:.12f} {frc[1]:.12f} {frc[2]:.12f}")',
+            "",
+            "    except Exception as e:",
+            '        sys.stderr.write(f"Driver Error: {e}\\n")',
+            "        sys.exit(1)",
+            "",
+            "if __name__ == '__main__':",
+            "    main()",
+        ]
 
         path = work_dir / EON_DRIVER_SCRIPT
-        path.write_text(script)
+        path.write_text("\n".join(script_lines))
         return path
 
     def parse_results(self, work_dir: Path) -> list[dict[str, Any]]:

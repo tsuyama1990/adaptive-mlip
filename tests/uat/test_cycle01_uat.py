@@ -4,6 +4,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from pyacemaker.domain_models import PyAceConfig
+from pyacemaker.utils.io import write_lammps_streaming
 from tests.conftest import create_test_config_dict
 
 
@@ -94,3 +95,36 @@ def test_scenario_01_02_guardrails_check_cutoff(tmp_path: Path, monkeypatch: pyt
     from pydantic import ValidationError
     with pytest.raises(ValidationError):
         PyAceConfig(**config_dict)
+
+def test_streaming_write_large_structure(tmp_path: Path) -> None:
+    """
+    Verify streaming writer for large structures.
+    Uses a generator or small structure to simulate the path.
+    """
+    from ase.build import bulk
+
+    atoms = bulk("Cu", "fcc", a=3.6)
+    atoms = atoms.repeat((2, 2, 2))
+
+    output_file = tmp_path / "stream_test.lmp"
+
+    with output_file.open("w") as f:
+        write_lammps_streaming(f, atoms, ["Cu"])
+
+    assert output_file.exists()
+    content = output_file.read_text()
+    assert "Atoms" in content
+    assert str(len(atoms)) in content
+
+def test_streaming_write_failure(tmp_path: Path) -> None:
+    """
+    Verify failure handling for streaming writer (e.g. invalid object).
+    """
+    class BadObj:
+        pass
+
+    output_file = tmp_path / "fail_test.lmp"
+
+    with pytest.raises(AttributeError): # Or other error depending on what fails first
+        with output_file.open("w") as f:
+            write_lammps_streaming(f, BadObj(), ["Cu"]) # type: ignore

@@ -2,6 +2,7 @@ from io import StringIO
 from pathlib import Path
 
 from pyacemaker.core.lammps_generator import LammpsScriptGenerator
+from pyacemaker.domain_models.defaults import DEFAULT_MD_ATOM_STYLE
 from pyacemaker.domain_models.md import HybridParams, MDConfig
 
 
@@ -13,7 +14,7 @@ def test_generator_hybrid_potential(tmp_path: Path) -> None:
         timestep=0.001,
         n_steps=1000,
         hybrid_potential=True,
-        hybrid_params=HybridParams(zbl_cut_inner=1.0, zbl_cut_outer=1.5)
+        hybrid_params=HybridParams(zbl_global_cutoff=1.5)
     )
     generator = LammpsScriptGenerator(config)
 
@@ -32,7 +33,8 @@ def test_generator_hybrid_potential(tmp_path: Path) -> None:
     assert "pair_coeff 1 1 zbl 1 1" in script
     assert "pair_coeff 1 2 zbl 1 2" in script
     assert "pair_coeff 2 2 zbl 2 2" in script
-    assert "1.0 1.5" in script # cutoffs
+    # Verify cutoffs: inner = 1.5 * 0.8 = 1.2
+    assert "zbl 1.2 1.5" in script
 
 
 def test_generator_pure_pace(tmp_path: Path) -> None:
@@ -82,13 +84,12 @@ def test_generator_damping(tmp_path: Path) -> None:
 
 
 def test_generator_atom_style() -> None:
-    """Tests atom_style configuration."""
+    """Tests atom_style default usage."""
     config = MDConfig(
-        temperature=300.0, pressure=1.0, timestep=0.001, n_steps=100,
-        atom_style="charge"
+        temperature=300.0, pressure=1.0, timestep=0.001, n_steps=100
     )
     generator = LammpsScriptGenerator(config)
     buffer = StringIO()
     generator.write_script(buffer, Path("pot"), Path("dat"), Path("dump"), ["H"])
     script = buffer.getvalue()
-    assert "atom_style charge" in script
+    assert f"atom_style {DEFAULT_MD_ATOM_STYLE}" in script

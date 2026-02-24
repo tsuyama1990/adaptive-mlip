@@ -1,16 +1,10 @@
-from typing import Any, Optional
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from pyacemaker.domain_models.constants import (
-    DEFAULT_BATCH_SIZE,
-    DEFAULT_CHECKPOINT_INTERVAL,
-    DEFAULT_N_CANDIDATES,
-    DEFAULT_RAM_DISK_PATH,
-    DEFAULT_STATE_FILE,
-)
 from pyacemaker.domain_models.defaults import (
     DEFAULT_MD_DUMP_FREQ,
+    DEFAULT_MD_HYBRID_ZBL_OUTER,
     DEFAULT_MD_N_STEPS,
     DEFAULT_MD_NEIGHBOR_SKIN,
     DEFAULT_MD_PDAMP,
@@ -32,10 +26,10 @@ class HybridParams(BaseModel):
         default_factory=dict,
         description="Cutoff distances for ZBL (inner, outer) per element pair.",
     )
-    # Example: {('Fe', 'Fe'): 0.5, ('Fe', 'Pt'): 0.6}
-    # For now, we simplify to a global ZBL cutoff or assume auto-generated.
+    # Re-introduced global cutoffs to match implementation needs
     zbl_global_cutoff: float = Field(
-        0.5, description="Global inner cutoff for ZBL (Angstroms) if not specified per pair"
+        DEFAULT_MD_HYBRID_ZBL_OUTER,
+        description="Global outer cutoff for ZBL (Angstroms)"
     )
 
 
@@ -47,7 +41,7 @@ class MDConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     temperature: float = Field(..., gt=0, description="Simulation temperature (K)")
-    pressure: float = Field(0.0, description="Simulation pressure (Bar)")
+    pressure: float = Field(0.0, ge=0.0, description="Simulation pressure (Bar)") # Typically positive or zero
     timestep: float = Field(DEFAULT_MD_TIMESTEP, gt=0, description="Timestep (ps)")
     n_steps: int = Field(DEFAULT_MD_N_STEPS, gt=0, description="Number of MD steps")
     thermo_freq: int = Field(
@@ -82,7 +76,7 @@ class MDConfig(BaseModel):
         False, description="Enable fix halt for uncertainty-driven early termination"
     )
     minimize: bool = Field(True, description="Perform minimization before MD run")
-    potential_path: Optional[str] = Field(None, description="Path to potential file")
+    potential_path: str | None = Field(None, description="Path to potential file")
 
     @field_validator("potential_path", mode="before")
     @classmethod

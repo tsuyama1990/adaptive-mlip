@@ -2,7 +2,7 @@ import logging
 import tempfile
 import uuid
 from pathlib import Path
-from typing import Any
+from typing import ContextManager
 
 from ase import Atoms
 from ase.io import write
@@ -24,7 +24,9 @@ class LammpsFileManager:
     def __init__(self, config: MDConfig) -> None:
         self.config = config
 
-    def prepare_workspace(self, structure: Atoms) -> tuple[Any, Path, Path, Path, list[str]]:
+    def prepare_workspace(
+        self, structure: Atoms
+    ) -> tuple[ContextManager[str], Path, Path, Path, list[str]]:
         """
         Creates temporary directory and writes structure file.
 
@@ -38,7 +40,6 @@ class LammpsFileManager:
             log_file: Path to output log file (in CWD).
             elements: List of element symbols in order.
         """
-        # RAM disk usage optimization via config
         # MDConfig doesn't have temp_dir, using default temp dir (None)
         temp_dir_ctx = tempfile.TemporaryDirectory()
         temp_dir = Path(temp_dir_ctx.name)
@@ -52,23 +53,27 @@ class LammpsFileManager:
         log_file = cwd / f"log_{run_id}.lammps"
 
         elements = get_species_order(structure)
-
         atom_style = DEFAULT_MD_ATOM_STYLE
 
         try:
-            # Optimization: Use streaming writer for large structures to avoid OOM
-            # Only supports 'atomic' style and orthogonal boxes for now.
-            if len(structure) > 10000 and atom_style == "atomic":
-                logger.info("Streaming large structure (%d atoms) to disk.", len(structure))
-                try:
-                    with data_file.open("w") as f:
-                        write_lammps_streaming(f, structure, elements)
-                except ValueError:
-                    # Fallback if non-orthogonal or other issue
-                    logger.warning("Streaming failed (e.g. non-orthogonal). Falling back to ASE write.")
-                    write(str(data_file), structure, format="lammps-data", specorder=elements, atom_style=atom_style)
-            else:
-                write(str(data_file), structure, format="lammps-data", specorder=elements, atom_style=atom_style)
+            # Scalability: Always attempt streaming write first for efficiency.
+            # This avoids loading the entire formatted string into memory.
+            try:
+                with data_file.open("w") as f:
+                    write_lammps_streaming(f, structure, elements, atom_style=atom_style)
+            except ValueError:
+                # Streaming might fail for non-orthogonal boxes or unsupported styles.
+                # Fallback to ASE write which is robust but less memory efficient.
+                logger.warning(
+                    "Streaming write failed (likely non-orthogonal box). Falling back to ASE."
+                )
+                write(
+                    str(data_file),
+                    structure,
+                    format="lammps-data",
+                    specorder=elements,
+                    atom_style=atom_style,
+                )
         except Exception as e:
             temp_dir_ctx.cleanup()
             msg = f"Failed to write LAMMPS data file: {e}"
