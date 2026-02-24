@@ -2,7 +2,7 @@
 
 ![Python](https://img.shields.io/badge/python-3.11+-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
-![Status](https://img.shields.io/badge/status-Verified-brightgreen.svg)
+![Status](https://img.shields.io/badge/status-Cycle%2007%20Verified-brightgreen.svg)
 
 **Adaptive machine learning interatomic potentials construction orchestrator.**
 
@@ -24,11 +24,11 @@ Constructing MLIPs manually is tedious and error-prone. PyAceMaker automates the
         *   **Defects**: Introduces vacancies to train for off-stoichiometry robustness.
 *   **DFT Management**:
     *   Automated Quantum Espresso execution via ASE.
-    *   **Self-Healing**: Automatically retries failed calculations with adjusted parameters (e.g., mixing beta, smearing).
+    *   **Self-Healing**: Automatically retries failed calculations with adjusted parameters.
     *   **Security**: Prevents path traversal and validates input configuration.
 *   **Potential Training (Pacemaker)**:
-    *   **Delta Learning**: Fits the difference between DFT and a physics-based baseline (LJ/ZBL) for robustness.
-    *   **Active Set Optimization**: Uses D-optimality (MaxVol) to select the most informative structures, reducing training costs.
+    *   **Delta Learning**: Fits the difference between DFT and a physics-based baseline (LJ/ZBL).
+    *   **Active Set Optimization**: Uses D-optimality (MaxVol) to select the most informative structures.
     *   **Automated Configuration**: Generates optimal `input.yaml` for Pacemaker based on dataset composition.
 *   **Molecular Dynamics (MD) Engine**:
     *   Integrated LAMMPS driver for NPT/NVT simulations.
@@ -40,7 +40,7 @@ Constructing MLIPs manually is tedious and error-prone. PyAceMaker automates the
     *   **Automated Reporting**: Generates HTML reports summarizing validation results.
 *   **Scalability**:
     *   **Streaming Data Processing**: Handles large datasets with O(1) memory usage.
-    *   **Resume Capability**: Checkpoints state to `state.json`, allowing workflows to pause and resume from the exact iteration and potential version.
+    *   **Resume Capability**: Checkpoints state to `state.json`, allowing workflows to pause and resume from the exact iteration.
 
 ## Requirements
 
@@ -71,7 +71,7 @@ uv sync
         policy_name: "random_rattle"
         rattle_stdev: 0.1
     dft:
-        code: "quantum_espresso"
+        code: "qe"
         functional: "PBE"
         kpoints_density: 0.04
         encut: 500.0
@@ -84,7 +84,6 @@ uv sync
         max_basis_size: 500
         delta_learning: true
         active_set_optimization: true
-        active_set_size: 100
     md:
         temperature: 1000.0
         pressure: 0.0
@@ -92,7 +91,10 @@ uv sync
         n_steps: 5000
     workflow:
         max_iterations: 10
-        checkpoint_interval: 1
+        state_file_path: "state.json"
+        data_dir: "data"
+        active_learning_dir: "active_learning"
+        potentials_dir: "potentials"
     validation:
         enabled: true
         phonon:
@@ -100,16 +102,19 @@ uv sync
             displacement: 0.01
         elastic:
             strain_magnitude: 0.01
+    logging:
+        level: "INFO"
+        log_file: "pyacemaker.log"
     ```
 
 2.  **Run PyAceMaker**:
 
     ```bash
     # Dry run to validate config
-    uv run pyacemaker --config config.yaml --dry-run
+    uv run python src/pyacemaker/main.py --config config.yaml --dry-run
 
     # Start the active learning loop
-    uv run pyacemaker --config config.yaml
+    uv run python src/pyacemaker/main.py --config config.yaml
     ```
 
 ## Architecture
@@ -124,3 +129,9 @@ src/pyacemaker/
 ├── orchestrator.py     # Workflow state machine
 └── main.py             # CLI entry point
 ```
+
+## Roadmap
+
+*   [ ] Support for VASP DFT code.
+*   [ ] Integration with MACE potentials.
+*   [ ] Advanced active learning strategies (Query by Committee).

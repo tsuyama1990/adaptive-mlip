@@ -33,7 +33,7 @@ def mock_dft_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> DFTConfi
     ("pbc", "expected_factor"),
     [
         ([True, True, True], 1.0),
-        ([False, False, False], 0.0), # Factor 0.0 implies result is 1 (max(1, 0))
+        ([False, False, False], 0.0),  # Factor 0.0 implies result is 1 (max(1, 0))
         ([True, True, False], 1.0),
     ],
 )
@@ -64,6 +64,7 @@ def test_qe_driver_kpoints_parametrized(
 
         assert kpts == tuple(expected_kpts)
 
+
 def test_qe_driver_kpoints_zero_length(mock_dft_config: DFTConfig) -> None:
     """Test k-point generation with zero-length cells (should default to 1)."""
     # Cell with zero volume or very small dimensions
@@ -78,6 +79,7 @@ def test_qe_driver_kpoints_zero_length(mock_dft_config: DFTConfig) -> None:
         # Implementation uses mask (lengths >= 1e-3). So should be 1.
         assert kpts == (1, 1, 1)
 
+
 def test_qe_driver_invalid_input(mock_dft_config: DFTConfig) -> None:
     """Test validation of invalid inputs."""
     driver = QEDriver()
@@ -87,7 +89,7 @@ def test_qe_driver_invalid_input(mock_dft_config: DFTConfig) -> None:
     mock_dft_config.encut = -10.0
     with pytest.raises(ValueError, match="Energy cutoff must be positive"):
         driver.get_calculator(atoms, mock_dft_config)
-    mock_dft_config.encut = 500.0 # Reset
+    mock_dft_config.encut = 500.0  # Reset
 
     # Negative K-point density
     mock_dft_config.kpoints_density = -0.04

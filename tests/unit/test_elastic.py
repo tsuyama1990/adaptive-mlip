@@ -21,6 +21,7 @@ def mock_md_config() -> MDConfig:
         pressure=1.0,
     )
 
+
 def test_elastic_calculator_calculate(mocker: Any, mock_md_config: MDConfig) -> None:
     mock_run_lammps = mocker.patch("pyacemaker.utils.elastic.run_static_lammps")
 
@@ -37,7 +38,9 @@ def test_elastic_calculator_calculate(mocker: Any, mock_md_config: MDConfig) -> 
 
     delta = 0.01
 
-    def side_effect(atoms: Atoms, potential: Path, config: MDConfig, file_manager: Any = None) -> tuple[float, np.ndarray, np.ndarray]:
+    def side_effect(
+        atoms: Atoms, potential: Path, config: MDConfig, file_manager: Any = None
+    ) -> tuple[float, np.ndarray, np.ndarray]:
         call_count = mock_run_lammps.call_count - 1
         j = call_count // 2
         sign = 1 if call_count % 2 == 0 else -1
@@ -54,7 +57,7 @@ def test_elastic_calculator_calculate(mocker: Any, mock_md_config: MDConfig) -> 
     config = ElasticConfig(strain_magnitude=delta)
     calc = ElasticCalculator(config, mock_md_config)
 
-    atoms = Atoms("Al", cell=[4,4,4], pbc=True)
+    atoms = Atoms("Al", cell=[4, 4, 4], pbc=True)
     potential_path = Path("dummy.yace")
 
     result = calc.calculate(atoms, potential_path)
@@ -68,16 +71,20 @@ def test_elastic_calculator_calculate(mocker: Any, mock_md_config: MDConfig) -> 
     # B = (C11 + 2C12)/3 = (100 + 100)/3 = 66.66
     assert np.isclose(result.bulk_modulus, 66.666, atol=0.1)
 
+
 def test_elastic_calculator_unstable(mocker: Any, mock_md_config: MDConfig) -> None:
     mock_run_lammps = mocker.patch("pyacemaker.utils.elastic.run_static_lammps")
 
     from ase.units import GPa
+
     C11 = -100 * GPa
     C_true = np.eye(6) * C11
 
     delta = 0.01
 
-    def side_effect(atoms: Atoms, potential: Path, config: MDConfig, file_manager: Any = None) -> tuple[float, np.ndarray, np.ndarray]:
+    def side_effect(
+        atoms: Atoms, potential: Path, config: MDConfig, file_manager: Any = None
+    ) -> tuple[float, np.ndarray, np.ndarray]:
         call_count = mock_run_lammps.call_count - 1
         j = call_count // 2
         sign = 1 if call_count % 2 == 0 else -1
@@ -90,7 +97,7 @@ def test_elastic_calculator_unstable(mocker: Any, mock_md_config: MDConfig) -> N
 
     config = ElasticConfig(strain_magnitude=delta)
     calc = ElasticCalculator(config, mock_md_config)
-    atoms = Atoms("Al", cell=[4,4,4], pbc=True)
+    atoms = Atoms("Al", cell=[4, 4, 4], pbc=True)
     potential_path = Path("dummy.yace")
 
     result = calc.calculate(atoms, potential_path)

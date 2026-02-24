@@ -21,14 +21,15 @@ def mock_md_config() -> MDConfig:
         pressure=1.0,
     )
 
+
 def test_phonon_calculator_calculate(mocker: Any, mock_md_config: MDConfig) -> None:
     mock_phonopy_cls = mocker.patch("pyacemaker.utils.phonons.Phonopy")
     mock_phonopy = mock_phonopy_cls.return_value
 
     mock_sc_atoms = mocker.MagicMock()
-    mock_sc_atoms.symbols = ["H"]*2
-    mock_sc_atoms.scaled_positions = np.array([[0,0,0], [0.5,0.5,0.5]])
-    mock_sc_atoms.cell = np.eye(3)*10.0
+    mock_sc_atoms.symbols = ["H"] * 2
+    mock_sc_atoms.scaled_positions = np.array([[0, 0, 0], [0.5, 0.5, 0.5]])
+    mock_sc_atoms.cell = np.eye(3) * 10.0
     mock_sc_atoms.__len__.return_value = 2
 
     mock_phonopy.supercells_with_displacements = [mock_sc_atoms]
@@ -45,7 +46,7 @@ def test_phonon_calculator_calculate(mocker: Any, mock_md_config: MDConfig) -> N
     config = PhononConfig()
     calc = PhononCalculator(config, mock_md_config)
 
-    atoms = Atoms("H", cell=[10,10,10], pbc=True)
+    atoms = Atoms("H", cell=[10, 10, 10], pbc=True)
     potential_path = Path("dummy.yace")
     output_dir = Path("output")
 
@@ -57,18 +58,19 @@ def test_phonon_calculator_calculate(mocker: Any, mock_md_config: MDConfig) -> N
     mock_run_lammps.assert_called_once()
 
     mock_phonopy.produce_force_constants.assert_called()
-    forces_arg = mock_phonopy.produce_force_constants.call_args[1]['forces']
+    forces_arg = mock_phonopy.produce_force_constants.call_args[1]["forces"]
     assert len(forces_arg) == 1
     assert np.allclose(forces_arg[0], np.zeros((2, 3)))
+
 
 def test_phonon_calculator_imaginary(mocker: Any, mock_md_config: MDConfig) -> None:
     mock_phonopy_cls = mocker.patch("pyacemaker.utils.phonons.Phonopy")
     mock_phonopy = mock_phonopy_cls.return_value
 
     mock_sc_atoms = mocker.MagicMock()
-    mock_sc_atoms.symbols = ["H"]*2
-    mock_sc_atoms.scaled_positions = np.array([[0,0,0], [0.5,0.5,0.5]])
-    mock_sc_atoms.cell = np.eye(3)*10.0
+    mock_sc_atoms.symbols = ["H"] * 2
+    mock_sc_atoms.scaled_positions = np.array([[0, 0, 0], [0.5, 0.5, 0.5]])
+    mock_sc_atoms.cell = np.eye(3) * 10.0
     mock_sc_atoms.__len__.return_value = 2
     mock_phonopy.supercells_with_displacements = [mock_sc_atoms]
 
@@ -83,7 +85,7 @@ def test_phonon_calculator_imaginary(mocker: Any, mock_md_config: MDConfig) -> N
 
     config = PhononConfig()
     calc = PhononCalculator(config, mock_md_config)
-    atoms = Atoms("H", cell=[10,10,10], pbc=True)
+    atoms = Atoms("H", cell=[10, 10, 10], pbc=True)
     potential_path = Path("dummy.yace")
     output_dir = Path("output")
 

@@ -1,4 +1,3 @@
-
 import re
 
 import numpy as np
@@ -43,7 +42,9 @@ class LammpsDriver:
             msg = f"Command contains forbidden characters: {cmd}"
             raise ValueError(msg)
 
-        if "shell" in cmd.split(): # Tokenize to avoid matching 'shell' inside words? "myshell" is ok.
+        if (
+            "shell" in cmd.split()
+        ):  # Tokenize to avoid matching 'shell' inside words? "myshell" is ok.
             # LAMMPS command is usually first token.
             # But 'shell' can be anywhere? No, usually 'shell cmd'.
             # We blacklist 'shell' token.
@@ -61,8 +62,8 @@ class LammpsDriver:
             ValueError: If script contains non-ASCII characters or unsafe commands.
         """
         if not script.isascii():
-             msg = "Script contains non-ASCII characters, which may be unsafe."
-             raise ValueError(msg)
+            msg = "Script contains non-ASCII characters, which may be unsafe."
+            raise ValueError(msg)
 
         for line in script.split("\n"):
             cmd = line.strip()
@@ -116,8 +117,8 @@ class LammpsDriver:
         try:
             symbols = [elements[t - 1] for t in types_view]
         except IndexError as e:
-             msg = f"LAMMPS type index out of range for elements list: {e}"
-             raise ValueError(msg) from e
+            msg = f"LAMMPS type index out of range for elements list: {e}"
+            raise ValueError(msg) from e
 
         # Get cell
         # extract_box returns (boxlo, boxhi, xy, yz, xz, periodicity, box_change)
@@ -131,11 +132,7 @@ class LammpsDriver:
 
         # If orthogonal, xy=yz=xz=0.0
         # ASE expects cell as 3x3 matrix.
-        cell = np.array([
-            [lx, 0.0, 0.0],
-            [xy, ly, 0.0],
-            [xz, yz, lz]
-        ])
+        cell = np.array([[lx, 0.0, 0.0], [xy, ly, 0.0], [xz, yz, lz]])
 
         # ASE Atoms constructor will copy the positions array if it's a numpy array.
         # We pass the view 'positions_view'.

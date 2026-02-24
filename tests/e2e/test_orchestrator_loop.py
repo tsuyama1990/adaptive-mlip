@@ -135,7 +135,9 @@ def test_resume_capability(mock_config: PyAceConfig, tmp_path: Path) -> None:
     pot_path = tmp_path / "pot.yace"
     # Ensure pot file exists for validation
     pot_path.touch()
-    state_file.write_text(f'{{"iteration": 1, "status": "RUNNING", "current_potential": "{pot_path}"}}')
+    state_file.write_text(
+        f'{{"iteration": 1, "status": "RUNNING", "current_potential": "{pot_path}"}}'
+    )
 
     # Re-initialize orchestrator to load state
     with pytest.MonkeyPatch.context() as mp:
@@ -168,7 +170,7 @@ def test_run_loop_iteration_halt(orchestrator: Orchestrator, tmp_path: Path) -> 
         n_steps=50,
         max_gamma=10.0,
         halted=True,
-        halt_structure_path=str(halt_path)
+        halt_structure_path=str(halt_path),
     )
 
     assert orchestrator.engine is not None

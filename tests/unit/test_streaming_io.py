@@ -26,8 +26,8 @@ def test_write_lammps_streaming_simple() -> None:
 
 
 def test_write_lammps_streaming_multiple_types() -> None:
-    atoms = Atoms("CO", positions=[[0,0,0], [1.2,0,0]], cell=[10,10,10], pbc=True)
-    elements = ["C", "O"] # Sorted order: C, O
+    atoms = Atoms("CO", positions=[[0, 0, 0], [1.2, 0, 0]], cell=[10, 10, 10], pbc=True)
+    elements = ["C", "O"]  # Sorted order: C, O
 
     buffer = StringIO()
     write_lammps_streaming(buffer, atoms, elements)

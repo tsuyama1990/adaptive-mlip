@@ -44,9 +44,7 @@ class Validator:
         # 1. Relax Structure
         logger.info("Relaxing base structure...")
         try:
-            relaxed_structure = relax_structure(
-                base_structure, potential_path, self.md_config
-            )
+            relaxed_structure = relax_structure(base_structure, potential_path, self.md_config)
         except Exception:
             logger.exception("Structure relaxation failed")
             return ValidationReport(overall_status=ValidationStatus.ERROR)
@@ -55,9 +53,7 @@ class Validator:
         logger.info("Running Phonon calculation...")
         phonon_calc = PhononCalculator(self.config.phonon, self.md_config)
         try:
-            phonon_result = phonon_calc.calculate(
-                relaxed_structure, potential_path, output_dir
-            )
+            phonon_result = phonon_calc.calculate(relaxed_structure, potential_path, output_dir)
         except Exception:
             logger.exception("Phonon calculation failed")
             phonon_result = None

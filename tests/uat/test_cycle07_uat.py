@@ -66,11 +66,12 @@ def test_scenario_07_01_validate_potential(uat_config: PyAceConfig, tmp_path: Pa
     # Setup Mocks
     # Important: ReportGenerator is instantiated inside Validator.__init__
     # We must patch the CLASS so that the instance used by Validator is a mock.
-    with patch("pyacemaker.core.validator.relax_structure") as mock_relax, \
-         patch("pyacemaker.core.validator.PhononCalculator") as MockPhonon, \
-         patch("pyacemaker.core.validator.ElasticCalculator") as MockElastic, \
-         patch("pyacemaker.core.validator.ReportGenerator") as MockReportGen:
-
+    with (
+        patch("pyacemaker.core.validator.relax_structure") as mock_relax,
+        patch("pyacemaker.core.validator.PhononCalculator") as MockPhonon,
+        patch("pyacemaker.core.validator.ElasticCalculator") as MockElastic,
+        patch("pyacemaker.core.validator.ReportGenerator") as MockReportGen,
+    ):
         # Mock instances
         mock_phonon_calc = MockPhonon.return_value
         mock_elastic_calc = MockElastic.return_value
@@ -127,11 +128,12 @@ def test_scenario_07_02_unstable_detection(uat_config: PyAceConfig, tmp_path: Pa
     """
     Scenario 07-02: Verify that the system flags an unstable potential.
     """
-    with patch("pyacemaker.core.validator.relax_structure") as mock_relax, \
-         patch("pyacemaker.core.validator.PhononCalculator") as MockPhonon, \
-         patch("pyacemaker.core.validator.ElasticCalculator") as MockElastic, \
-         patch("pyacemaker.core.validator.ReportGenerator") as MockReportGen: # noqa: F841
-
+    with (
+        patch("pyacemaker.core.validator.relax_structure") as mock_relax,
+        patch("pyacemaker.core.validator.PhononCalculator") as MockPhonon,
+        patch("pyacemaker.core.validator.ElasticCalculator") as MockElastic,
+        patch("pyacemaker.core.validator.ReportGenerator")
+    ):
         mock_phonon_calc = MockPhonon.return_value
         mock_elastic_calc = MockElastic.return_value
 

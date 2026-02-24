@@ -23,17 +23,15 @@ class PhononConfig(BaseModel):
 
     supercell_size: tuple[int, int, int] = Field(
         default=DEFAULT_VALIDATION_PHONON_SUPERCELL,
-        description="Supercell size for phonon calculation [nx, ny, nz]"
+        description="Supercell size for phonon calculation [nx, ny, nz]",
     )
     displacement: float = Field(
         default=DEFAULT_VALIDATION_PHONON_DISPLACEMENT,
         gt=0.0,
-        description="Atomic displacement distance for force constants"
+        description="Atomic displacement distance for force constants",
     )
     symprec: float = Field(
-        default=DEFAULT_VALIDATION_PHONON_SYMPREC,
-        gt=0.0,
-        description="Symmetry tolerance"
+        default=DEFAULT_VALIDATION_PHONON_SYMPREC, gt=0.0, description="Symmetry tolerance"
     )
 
 
@@ -43,7 +41,7 @@ class ElasticConfig(BaseModel):
     strain_magnitude: float = Field(
         default=DEFAULT_VALIDATION_ELASTIC_STRAIN,
         gt=0.0,
-        description="Magnitude of strain for elastic constant calculation"
+        description="Magnitude of strain for elastic constant calculation",
     )
 
 
@@ -51,17 +49,12 @@ class ValidationConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     phonon: PhononConfig = Field(
-        default_factory=PhononConfig,
-        description="Configuration for Phonon validation"
+        default_factory=PhononConfig, description="Configuration for Phonon validation"
     )
     elastic: ElasticConfig = Field(
-        default_factory=ElasticConfig,
-        description="Configuration for Elastic validation"
+        default_factory=ElasticConfig, description="Configuration for Elastic validation"
     )
-    enabled: bool = Field(
-        default=True,
-        description="Whether to run validation"
-    )
+    enabled: bool = Field(default=True, description="Whether to run validation")
 
 
 class PhononResult(BaseModel):

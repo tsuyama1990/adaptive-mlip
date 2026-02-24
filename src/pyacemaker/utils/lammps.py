@@ -21,6 +21,7 @@ def _generate_base_script(
     quoted_pot = f'"{potential_path}"'
     species_str = " ".join(elements)
 
+    # Use list building for performance instead of repeated string concatenation
     lines = [
         "clear",
         "units metal",
@@ -43,7 +44,7 @@ def _generate_base_script(
             for j in range(i, n_types):
                 el_j = elements[j]
                 z_j = atomic_numbers[el_j]
-                lines.append(f"pair_coeff {i+1} {j+1} zbl {z_i} {z_j}")
+                lines.append(f"pair_coeff {i + 1} {j + 1} zbl {z_i} {z_j}")
     else:
         lines.append("pair_style pace")
         lines.append(f"pair_coeff * * pace {quoted_pot} {species_str}")
@@ -65,14 +66,17 @@ def _generate_static_script(
     lines = _generate_base_script(data_file, potential_path, elements, config)
 
     # Variables for stress (pressure components in bars)
-    lines.append("variable pxx equal pxx")
-    lines.append("variable pyy equal pyy")
-    lines.append("variable pzz equal pzz")
-    lines.append("variable pxy equal pxy")
-    lines.append("variable pxz equal pxz")
-    lines.append("variable pyz equal pyz")
-
-    lines.append("run 0")
+    lines.extend(
+        [
+            "variable pxx equal pxx",
+            "variable pyy equal pyy",
+            "variable pzz equal pzz",
+            "variable pxy equal pxy",
+            "variable pxz equal pxz",
+            "variable pyz equal pyz",
+            "run 0",
+        ]
+    )
 
     return "\n".join(lines)
 
@@ -85,8 +89,7 @@ def _generate_relax_script(
 ) -> str:
     """Generates the LAMMPS script for structure relaxation."""
     lines = _generate_base_script(data_file, potential_path, elements, config)
-    lines.append("min_style cg")
-    lines.append("minimize 1.0e-6 1.0e-8 1000 10000")
+    lines.extend(["min_style cg", "minimize 1.0e-6 1.0e-8 1000 10000"])
     return "\n".join(lines)
 
 

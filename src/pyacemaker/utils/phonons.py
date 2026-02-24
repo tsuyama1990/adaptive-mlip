@@ -34,9 +34,7 @@ class PhononCalculator:
             cell=atoms.get_cell()[:],  # type: ignore[no-untyped-call]
         )
 
-    def calculate(
-        self, structure: Atoms, potential_path: Path, output_dir: Path
-    ) -> PhononResult:
+    def calculate(self, structure: Atoms, potential_path: Path, output_dir: Path) -> PhononResult:
         """
         Runs phonon calculation.
 

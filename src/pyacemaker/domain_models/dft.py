@@ -79,8 +79,8 @@ class DFTConfig(BaseModel):
 
                 # Explicitly disallow symlinks
                 if p.is_symlink():
-                     msg = f"Symlinks are not allowed for pseudopotentials: {path_str}"
-                     raise ValueError(msg)
+                    msg = f"Symlinks are not allowed for pseudopotentials: {path_str}"
+                    raise ValueError(msg)
 
                 # Check if it's a file
                 if not resolved_path.is_file():
@@ -107,14 +107,14 @@ class DFTConfig(BaseModel):
                     try:
                         text_header = header.decode("utf-8")
                         if "<UPF" not in text_header and "PP_HEADER" not in text_header:
-                             # Weak check, but better than nothing.
-                             # If neither present, maybe warn? For now, we just enforce utf-8 decodeable.
-                             pass
+                            # Weak check, but better than nothing.
+                            # If neither present, maybe warn? For now, we just enforce utf-8 decodeable.
+                            pass
                     except UnicodeDecodeError as e:
-                         msg = f"Pseudopotential file {path_str} does not appear to be a valid text-based UPF file."
-                         raise ValueError(msg) from e
+                        msg = f"Pseudopotential file {path_str} does not appear to be a valid text-based UPF file."
+                        raise ValueError(msg) from e
             except OSError as e:
-                 msg = f"Could not read pseudopotential file {path_str}: {e}"
-                 raise ValueError(msg) from e
+                msg = f"Could not read pseudopotential file {path_str}: {e}"
+                raise ValueError(msg) from e
 
         return v

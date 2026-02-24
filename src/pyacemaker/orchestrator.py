@@ -4,7 +4,8 @@ from pathlib import Path
 
 import numpy as np
 from ase import Atoms
-from ase.io import iread, read, write
+from ase.io import iread, read
+from ase.io.extxyz import write_extxyz
 
 from pyacemaker.core.active_set import ActiveSetSelector
 from pyacemaker.core.base import BaseEngine, BaseGenerator, BaseOracle, BaseTrainer
@@ -58,9 +59,7 @@ class Orchestrator:
             config: Validated PyAceConfig object.
         """
         self.config = config
-        self.logger = setup_logger(
-            config=config.logging, project_name=config.project_name
-        )
+        self.logger = setup_logger(config=config.logging, project_name=config.project_name)
 
         self.state_file = Path(config.workflow.state_file_path)
         self.data_dir = Path(config.workflow.data_dir)
@@ -112,9 +111,7 @@ class Orchestrator:
         """Loads the iteration state using LoopState."""
         try:
             self.loop_state = LoopState.load(self.state_file)
-            self.logger.info(
-                LOG_STATE_LOAD_SUCCESS.format(iteration=self.loop_state.iteration)
-            )
+            self.logger.info(LOG_STATE_LOAD_SUCCESS.format(iteration=self.loop_state.iteration))
         except Exception as e:
             self.logger.warning(LOG_STATE_LOAD_FAIL.format(error=e))
             self.loop_state = LoopState()
@@ -123,9 +120,7 @@ class Orchestrator:
         """Saves the current iteration state."""
         try:
             self.loop_state.save(self.state_file)
-            self.logger.debug(
-                LOG_STATE_SAVED.format(state=self.loop_state.model_dump())
-            )
+            self.logger.debug(LOG_STATE_SAVED.format(state=self.loop_state.model_dump()))
         except Exception as e:
             self.logger.warning(LOG_STATE_SAVE_FAIL.format(error=e))
 
@@ -165,14 +160,10 @@ class Orchestrator:
             # Attempt rollback for newly created directories
             for p in reversed(created_paths):
                 try:
-                    if p.is_dir() and not any(
-                        p.iterdir()
-                    ):  # Only delete empty directories
+                    if p.is_dir() and not any(p.iterdir()):  # Only delete empty directories
                         p.rmdir()
                 except OSError:
-                    self.logger.warning(
-                        f"Failed to rollback directory creation for {p}"
-                    )
+                    self.logger.warning(f"Failed to rollback directory creation for {p}")
 
             # Wrap in OrchestratorError for consistency
             msg = f"Failed to setup directory: {e}"
@@ -206,22 +197,19 @@ class Orchestrator:
             return
 
         n_candidates = self.config.workflow.n_candidates
-        # We can use batched for chunking, but opening file once is key.
-        # ase.io.write can write a list of atoms.
+        # Use streaming write with explicit batching to ensure memory safety
+        batch_size = self.config.workflow.batch_size
         candidates_file = paths["candidates"] / FILENAME_CANDIDATES
 
         try:
             candidate_stream = self.generator.generate(n_candidates=n_candidates)
             total = 0
 
-            # Use ASE write in append mode with the generator directly.
-            # This avoids manual batching and list materialization completely.
-            # 'append=True' ensures we don't overwrite if file exists (from previous batches if any, though here it's one call).
-            # ASE iterates over candidate_stream.
-            write(candidates_file, candidate_stream, format="extxyz", append=True)  # type: ignore[arg-type]
-
-            # For now, we log "Written candidates" as total count is unknown due to streaming
-            total = -1
+            # Open file in append mode and write chunks
+            with candidates_file.open("a") as f:
+                for batch in batched(candidate_stream, n=batch_size):
+                    write_extxyz(f, batch)
+                    total += len(batch)
 
             self.logger.info(LOG_GENERATED_CANDIDATES.format(count=total))
         except Exception as e:
@@ -246,26 +234,26 @@ class Orchestrator:
 
         try:
             # Lazy read of candidates
+            # Note: iread returns iterator, but ASE's extxyz reader might not support index slice efficiently
+            # However, for our purposes, streaming is key.
             candidate_stream = iread(str(candidates_file), index=":", format="extxyz")
 
             # Streaming computation
-            labelled_stream = self.oracle.compute(
-                candidate_stream, batch_size=batch_size
-            )
+            labelled_stream = self.oracle.compute(candidate_stream, batch_size=batch_size)
             total = 0
 
-            # Use ASE write in append mode
-            write(training_file, labelled_stream, format="extxyz", append=True)  # type: ignore[arg-type]
-            total = -1
+            # Use chunked write to avoid loading entire stream
+            with training_file.open("a") as f:
+                for batch in batched(labelled_stream, n=batch_size):
+                    write_extxyz(f, batch)
+                    total += len(batch)
 
             self.logger.info(LOG_COMPUTED_PROPERTIES.format(count=total))
         except Exception as e:
             msg = f"Labeling failed: {e}"
             raise OrchestratorError(msg) from e
 
-    def _train(
-        self, paths: dict[str, Path], initial_potential: Path | None = None
-    ) -> Path | None:
+    def _train(self, paths: dict[str, Path], initial_potential: Path | None = None) -> Path | None:
         """Step 3: Training"""
         if not self.trainer:
             return None
@@ -284,13 +272,8 @@ class Orchestrator:
 
     def _check_initial_potential(self) -> None:
         """Checks if initial potential exists, if not generates one (Cold Start)."""
-        if (
-            self.loop_state.current_potential
-            and self.loop_state.current_potential.exists()
-        ):
-            self.logger.info(
-                f"Using existing potential: {self.loop_state.current_potential}"
-            )
+        if self.loop_state.current_potential and self.loop_state.current_potential.exists():
+            self.logger.info(f"Using existing potential: {self.loop_state.current_potential}")
             return
 
         self.logger.info("No initial potential found. Starting Cold Start procedure.")
@@ -306,9 +289,7 @@ class Orchestrator:
             self.loop_state.current_potential = potential_path
             self.loop_state.iteration = 0
             self.save_state()
-            self.logger.info(
-                f"Cold start completed. Initial potential: {potential_path}"
-            )
+            self.logger.info(f"Cold start completed. Initial potential: {potential_path}")
         else:
             msg = "Cold start failed to produce a potential."
             raise OrchestratorError(msg)
@@ -320,8 +301,11 @@ class Orchestrator:
 
         try:
             # Try to get from candidates of previous iteration or iteration 0
-            iter0_paths = self._setup_iteration_directory(0)
-            cand_file = iter0_paths["candidates"] / FILENAME_CANDIDATES
+            # Use iteration - 1 if > 0, else 0
+            target_iter = max(0, iteration - 1)
+            paths = self._setup_iteration_directory(target_iter)
+            cand_file = paths["candidates"] / FILENAME_CANDIDATES
+
             if cand_file.exists():
                 # Use next() on iread to get just the first frame efficiently
                 return next(iread(str(cand_file), index=0))
@@ -338,9 +322,7 @@ class Orchestrator:
             gammas = structure.get_array("c_gamma")  # type: ignore[no-untyped-call]
             return int(np.argmax(gammas))
 
-        self.logger.warning(
-            "c_gamma not found in structure arrays. Using atom 0 as center."
-        )
+        self.logger.warning("c_gamma not found in structure arrays. Using atom 0 as center.")
         return 0
 
     def _extract_cluster(self, halt_structure_path: str) -> Atoms | None:
@@ -376,9 +358,7 @@ class Orchestrator:
 
         # Generate local candidates (perturbations of S0)
         local_n = self.config.workflow.otf.local_n_candidates
-        candidates_gen = self.generator.generate_local(
-            s0_cluster, n_candidates=local_n
-        )
+        candidates_gen = self.generator.generate_local(s0_cluster, n_candidates=local_n)
 
         # Select Active Set (including S0 as anchor)
         n_select = self.config.workflow.otf.local_n_select
@@ -396,7 +376,7 @@ class Orchestrator:
 
         with training_file.open("a") as f:
             for batch in batched(labelled_gen, n=batch_size):
-                write(f, batch, format="extxyz")
+                write_extxyz(f, batch)
                 count += len(batch)
 
         return count
@@ -460,9 +440,7 @@ class Orchestrator:
             return None
 
         if self.engine:
-            return self.engine.run(
-                structure=initial_structure, potential=deployed_potential
-            )
+            return self.engine.run(structure=initial_structure, potential=deployed_potential)
         return None
 
     def _handle_md_halt(
@@ -470,23 +448,17 @@ class Orchestrator:
     ) -> None:
         """Handles MD halt logic and triggers refinement."""
         if result.halted:
-            self.logger.info(
-                f"MD Halted at step {result.n_steps}. Triggering refinement."
-            )
+            self.logger.info(f"MD Halted at step {result.n_steps}. Triggering refinement.")
             new_potential = self._refine_potential(result, deployed_potential, paths)
             if new_potential:
                 if not new_potential.exists():
-                    self.logger.error(
-                        f"Refined potential path {new_potential} does not exist!"
-                    )
+                    self.logger.error(f"Refined potential path {new_potential} does not exist!")
                 else:
                     self.loop_state.current_potential = new_potential
                     self.logger.info(f"Potential refined to: {new_potential}")
         else:
             self.logger.info(
-                LOG_ITERATION_COMPLETED.format(
-                    iteration=self.loop_state.iteration + 1
-                )
+                LOG_ITERATION_COMPLETED.format(iteration=self.loop_state.iteration + 1)
             )
 
     def _run_loop_iteration(self) -> None:
@@ -534,13 +506,9 @@ class Orchestrator:
             try:
                 report = self._validate_potential(self.loop_state.current_potential)
                 if report.overall_status == ValidationStatus.FAIL:
-                    self.logger.warning(
-                        "Potential validation FAILED! Proceeding with caution."
-                    )
+                    self.logger.warning("Potential validation FAILED! Proceeding with caution.")
                 else:
-                    self.logger.info(
-                        f"Potential validation status: {report.overall_status}"
-                    )
+                    self.logger.info(f"Potential validation status: {report.overall_status}")
             except Exception:
                 self.logger.exception("Validation failed with exception.")
 

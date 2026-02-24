@@ -59,7 +59,9 @@ class MDConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     temperature: PositiveFloat = Field(..., description="Simulation temperature in Kelvin")
-    pressure: float = Field(..., ge=0.0, le=1.0e6, description="Simulation pressure in Bar (Max 1 MBar)")
+    pressure: float = Field(
+        ..., ge=0.0, le=1.0e6, description="Simulation pressure in Bar (Max 1 MBar)"
+    )
     timestep: PositiveFloat = Field(..., description="Timestep in ps")
     n_steps: int = Field(..., gt=0, description="Number of MD steps")
 
@@ -81,7 +83,7 @@ class MDConfig(BaseModel):
     # Advanced Settings
     temp_dir: str | None = Field(
         default_factory=_get_default_temp_dir,
-        description="Directory for temporary files (e.g., /dev/shm for RAM disk)"
+        description="Directory for temporary files (e.g., /dev/shm for RAM disk)",
     )
     tdamp_factor: PositiveFloat = Field(
         DEFAULT_MD_TDAMP_FACTOR, description="Temperature damping factor (multiplies timestep)"
@@ -99,19 +101,17 @@ class MDConfig(BaseModel):
     )
 
     # Spec Section 3.4 (Hybrid Potential & OTF)
-    hybrid_potential: bool = Field(
-        False, description="Use hybrid potential (ACE + LJ/ZBL)"
-    )
+    hybrid_potential: bool = Field(False, description="Use hybrid potential (ACE + LJ/ZBL)")
     hybrid_params: HybridParams = Field(
         default_factory=HybridParams, description="Parameters for hybrid potential baseline"
     )
 
     # Spec Section 3.4 (OTF)
-    fix_halt: bool = Field(
-        False, description="Enable OTF halting based on uncertainty"
-    )
+    fix_halt: bool = Field(False, description="Enable OTF halting based on uncertainty")
     uncertainty_threshold: float = Field(
-        DEFAULT_OTF_UNCERTAINTY_THRESHOLD, gt=0.0, description="Gamma threshold for halting simulation"
+        DEFAULT_OTF_UNCERTAINTY_THRESHOLD,
+        gt=0.0,
+        description="Gamma threshold for halting simulation",
     )
     check_interval: int = Field(
         DEFAULT_MD_CHECK_INTERVAL, gt=0, description="Step interval for uncertainty check"

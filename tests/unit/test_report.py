@@ -15,23 +15,17 @@ def test_report_generation(tmp_path: Path) -> None:
     plot_path.write_text("dummy image data")
 
     phonon = PhononResult(
-        has_imaginary_modes=False,
-        band_structure_path=plot_path,
-        status=ValidationStatus.PASS
+        has_imaginary_modes=False, band_structure_path=plot_path, status=ValidationStatus.PASS
     )
 
     elastic = ElasticResult(
         c_ij={"C11": 100.0, "C12": 50.0},
         bulk_modulus=66.7,
         is_mechanically_stable=True,
-        status=ValidationStatus.PASS
+        status=ValidationStatus.PASS,
     )
 
-    report = ValidationReport(
-        phonon=phonon,
-        elastic=elastic,
-        overall_status=ValidationStatus.PASS
-    )
+    report = ValidationReport(phonon=phonon, elastic=elastic, overall_status=ValidationStatus.PASS)
 
     generator = ReportGenerator()
     output_path = tmp_path / "report.html"
@@ -48,5 +42,6 @@ def test_report_generation(tmp_path: Path) -> None:
     assert "100.00" in content
 
     import base64
+
     expected_b64 = base64.b64encode(b"dummy image data").decode("utf-8")
     assert expected_b64 in content

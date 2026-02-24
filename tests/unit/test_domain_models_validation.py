@@ -45,7 +45,7 @@ def test_validation_config_custom() -> None:
     config = ValidationConfig(
         enabled=False,
         phonon=PhononConfig(supercell_size=(3, 3, 3)),
-        elastic=ElasticConfig(strain_magnitude=0.02)
+        elastic=ElasticConfig(strain_magnitude=0.02),
     )
     assert config.enabled is False
     assert config.phonon.supercell_size == (3, 3, 3)

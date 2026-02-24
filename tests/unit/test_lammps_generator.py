@@ -13,7 +13,7 @@ def test_generator_hybrid_potential(tmp_path: Path) -> None:
         timestep=0.001,
         n_steps=1000,
         hybrid_potential=True,
-        hybrid_params=HybridParams(zbl_cut_inner=1.0, zbl_cut_outer=1.5)
+        hybrid_params=HybridParams(zbl_cut_inner=1.0, zbl_cut_outer=1.5),
     )
     generator = LammpsScriptGenerator(config)
 
@@ -32,17 +32,13 @@ def test_generator_hybrid_potential(tmp_path: Path) -> None:
     assert "pair_coeff 1 1 zbl 1 1" in script
     assert "pair_coeff 1 2 zbl 1 2" in script
     assert "pair_coeff 2 2 zbl 2 2" in script
-    assert "1.0 1.5" in script # cutoffs
+    assert "1.0 1.5" in script  # cutoffs
 
 
 def test_generator_pure_pace(tmp_path: Path) -> None:
     """Tests script generation with pure PACE."""
     config = MDConfig(
-        temperature=300.0,
-        pressure=1.0,
-        timestep=0.001,
-        n_steps=1000,
-        hybrid_potential=False
+        temperature=300.0, pressure=1.0, timestep=0.001, n_steps=1000, hybrid_potential=False
     )
     generator = LammpsScriptGenerator(config)
 
@@ -67,7 +63,7 @@ def test_generator_damping(tmp_path: Path) -> None:
         timestep=0.002,
         n_steps=1000,
         tdamp_factor=50.0,
-        pdamp_factor=500.0
+        pdamp_factor=500.0,
     )
     generator = LammpsScriptGenerator(config)
 
@@ -84,8 +80,7 @@ def test_generator_damping(tmp_path: Path) -> None:
 def test_generator_atom_style() -> None:
     """Tests atom_style configuration."""
     config = MDConfig(
-        temperature=300.0, pressure=1.0, timestep=0.001, n_steps=100,
-        atom_style="charge"
+        temperature=300.0, pressure=1.0, timestep=0.001, n_steps=100, atom_style="charge"
     )
     generator = LammpsScriptGenerator(config)
     buffer = StringIO()

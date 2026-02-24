@@ -15,11 +15,15 @@ from pyacemaker.core.exceptions import ActiveSetError
 def selector() -> ActiveSetSelector:
     return ActiveSetSelector()
 
+
 @pytest.fixture
 def candidates() -> list[Atoms]:
-    return [Atoms('H', positions=[[0, 0, 0]]) for _ in range(20)]
+    return [Atoms("H", positions=[[0, 0, 0]]) for _ in range(20)]
 
-def test_select_active_set_io_streaming_batched(selector: ActiveSetSelector, candidates: list[Atoms], tmp_path: Path) -> None:
+
+def test_select_active_set_io_streaming_batched(
+    selector: ActiveSetSelector, candidates: list[Atoms], tmp_path: Path
+) -> None:
     """Test I/O operations with batching."""
 
     # Mock run_command to create output file
@@ -47,7 +51,10 @@ def test_select_active_set_io_streaming_batched(selector: ActiveSetSelector, can
         assert len(selected) == 5
         mock_run.assert_called_once()
 
-def test_select_active_set_write_fail(selector: ActiveSetSelector, candidates: list[Atoms], tmp_path: Path) -> None:
+
+def test_select_active_set_write_fail(
+    selector: ActiveSetSelector, candidates: list[Atoms], tmp_path: Path
+) -> None:
     """Test handling of write failure (e.g. permission error simulated by exception)."""
 
     pot_path = tmp_path / "dummy.yace"
@@ -59,12 +66,15 @@ def test_select_active_set_write_fail(selector: ActiveSetSelector, candidates: l
         with pytest.raises(ActiveSetError, match="Failed to write candidates"):
             list(selector.select(candidates, pot_path, n_select=5))
 
-def test_select_active_set_partial_failure(selector: ActiveSetSelector, candidates: list[Atoms], tmp_path: Path) -> None:
+
+def test_select_active_set_partial_failure(
+    selector: ActiveSetSelector, candidates: list[Atoms], tmp_path: Path
+) -> None:
 
     def side_effect(cmd: list[str], **kwargs: Any) -> MagicMock:
         out_idx = cmd.index("--output")
         out_path = Path(cmd[out_idx + 1])
-        out_path.touch() # Create empty file
+        out_path.touch()  # Create empty file
         return MagicMock(returncode=0)
 
     with patch("pyacemaker.core.active_set.run_command") as mock_run:
@@ -76,15 +86,19 @@ def test_select_active_set_partial_failure(selector: ActiveSetSelector, candidat
         with pytest.raises(ActiveSetError, match="Output file is empty"):
             list(selector.select(candidates, pot_path, n_select=5))
 
-def test_select_active_set_process_fail(selector: ActiveSetSelector, candidates: list[Atoms], tmp_path: Path) -> None:
-     pot_path = tmp_path / "dummy.yace"
-     pot_path.touch()
 
-     with patch("pyacemaker.core.active_set.run_command") as mock_run:
+def test_select_active_set_process_fail(
+    selector: ActiveSetSelector, candidates: list[Atoms], tmp_path: Path
+) -> None:
+    pot_path = tmp_path / "dummy.yace"
+    pot_path.touch()
+
+    with patch("pyacemaker.core.active_set.run_command") as mock_run:
         mock_run.side_effect = subprocess.CalledProcessError(1, "cmd", stderr="error")
 
         with pytest.raises(ActiveSetError, match="Active set execution failed"):
             list(selector.select(candidates, pot_path, n_select=5))
+
 
 def test_active_set_path_validation_strict(selector: ActiveSetSelector) -> None:
     bad_path = Path("path/with/;/injection")

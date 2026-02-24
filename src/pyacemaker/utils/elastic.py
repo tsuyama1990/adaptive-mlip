@@ -34,11 +34,7 @@ class ElasticCalculator:
         exx, eyy, ezz = strain_vector[0], strain_vector[1], strain_vector[2]
         eyz, exz, exy = strain_vector[3] / 2.0, strain_vector[4] / 2.0, strain_vector[5] / 2.0
 
-        strain_matrix = np.array([
-            [exx, exy, exz],
-            [exy, eyy, eyz],
-            [exz, eyz, ezz]
-        ])
+        strain_matrix = np.array([[exx, exy, exz], [exy, eyy, eyz], [exz, eyz, ezz]])
 
         # Deformation matrix F = I + epsilon (for small strains)
         deformation = np.eye(3) + strain_matrix
@@ -99,7 +95,7 @@ class ElasticCalculator:
         c_ij_dict = {}
         for i in range(6):
             for j in range(i, 6):  # Upper triangle
-                c_ij_dict[f"C{i+1}{j+1}"] = float(c_ij_gpa[i, j])
+                c_ij_dict[f"C{i + 1}{j + 1}"] = float(c_ij_gpa[i, j])
 
         status = ValidationStatus.PASS if is_stable else ValidationStatus.FAIL
 

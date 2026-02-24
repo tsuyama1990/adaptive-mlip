@@ -23,13 +23,13 @@ def test_lammps_engine_halt_step_populated(tmp_path: Path) -> None:
         # Simulate halted run at step 500
         driver.extract_variable.side_effect = lambda name: {
             "pe": -100.0,
-            "step": 500, # Halted at 500
+            "step": 500,  # Halted at 500
             "max_g": 10.0,
-            "temp": 300.0
+            "temp": 300.0,
         }.get(name, 0.0)
 
         engine = LammpsEngine(config)
-        atoms = Atoms("H", cell=[10,10,10], pbc=True)
+        atoms = Atoms("H", cell=[10, 10, 10], pbc=True)
         pot_path = tmp_path / "pot.yace"
         pot_path.touch()
 
@@ -37,6 +37,7 @@ def test_lammps_engine_halt_step_populated(tmp_path: Path) -> None:
 
         assert result.halted is True
         assert result.halt_step == 500
+
 
 def test_lammps_engine_halt_step_none_if_not_halted(tmp_path: Path) -> None:
     # Mock config
@@ -54,13 +55,13 @@ def test_lammps_engine_halt_step_none_if_not_halted(tmp_path: Path) -> None:
         # Simulate complete run
         driver.extract_variable.side_effect = lambda name: {
             "pe": -100.0,
-            "step": 1000, # Completed
+            "step": 1000,  # Completed
             "max_g": 0.05,
-            "temp": 300.0
+            "temp": 300.0,
         }.get(name, 0.0)
 
         engine = LammpsEngine(config)
-        atoms = Atoms("H", cell=[10,10,10], pbc=True)
+        atoms = Atoms("H", cell=[10, 10, 10], pbc=True)
         pot_path = tmp_path / "pot.yace"
         pot_path.touch()
 

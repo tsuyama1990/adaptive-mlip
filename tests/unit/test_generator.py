@@ -32,7 +32,9 @@ def test_rattle_policy() -> None:
     generator = StructureGenerator(config)
 
     # Check base structure first
-    base_gen = StructureGenerator(config.model_copy(update={"policy_name": ExplorationPolicy.COLD_START}))
+    base_gen = StructureGenerator(
+        config.model_copy(update={"policy_name": ExplorationPolicy.COLD_START})
+    )
     base = next(base_gen.generate(1))
 
     structures = list(generator.generate(n_candidates=5))
@@ -105,7 +107,7 @@ def test_generator_invalid_composition() -> None:
         msg = "Simulated failure"
         raise ValueError(msg)
 
-    generator.m3gnet.predict_structure = mock_raise # type: ignore
+    generator.m3gnet.predict_structure = mock_raise  # type: ignore
 
     with pytest.raises(GeneratorError, match="Failed to generate base structure"):
         next(generator.generate(1))
@@ -116,12 +118,14 @@ def test_generate_local() -> None:
         elements=["Fe"],
         supercell_size=[2, 2, 2],
         policy_name=ExplorationPolicy.COLD_START,
-        rattle_stdev=0.1
+        rattle_stdev=0.1,
     )
     generator = StructureGenerator(config)
 
     # Create dummy base structure
-    base = Atoms("Fe2", positions=[[0.0, 0.0, 0.0], [2.0, 0.0, 0.0]], cell=[4.0, 4.0, 4.0], pbc=True)
+    base = Atoms(
+        "Fe2", positions=[[0.0, 0.0, 0.0], [2.0, 0.0, 0.0]], cell=[4.0, 4.0, 4.0], pbc=True
+    )
 
     candidates = list(generator.generate_local(base, n_candidates=5))
 
