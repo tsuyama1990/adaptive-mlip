@@ -1,6 +1,6 @@
 # PyAceMaker
 
-![Python](https://img.shields.io/badge/python-3.11+-blue.svg)
+![Python](https://img.shields.io/badge/python-3.12+-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 ![Status](https://img.shields.io/badge/status-Verified-brightgreen.svg)
 
@@ -8,7 +8,7 @@
 
 ## Overview
 
-**PyAceMaker** is an automated workflow tool designed to construct robust Machine Learning Interatomic Potentials (MLIPs). It orchestrates the entire active learning loop: generating candidate structures, running DFT calculations (via Quantum Espresso), training potentials (e.g., ACE), and validating them through MD simulations.
+**PyAceMaker** is an automated workflow tool designed to construct robust Machine Learning Interatomic Potentials (MLIPs). It orchestrates the entire active learning loop: generating candidate structures, running DFT calculations (via Quantum Espresso), training potentials (e.g., ACE), and validating them through MD simulations. It also supports advanced production scenarios like long-timescale Kinetic Monte Carlo simulations.
 
 ### Why PyAceMaker?
 Constructing MLIPs manually is tedious and error-prone. PyAceMaker automates the "Active Learning" cycle, ensuring that your potential is trained on the most relevant structures—those where the current model is uncertain—thereby maximizing accuracy while minimizing expensive DFT calls.
@@ -32,18 +32,24 @@ Constructing MLIPs manually is tedious and error-prone. PyAceMaker automates the
     *   **Automated Configuration**: Generates optimal `input.yaml` for Pacemaker based on dataset composition.
 *   **Molecular Dynamics (MD) Engine**:
     *   Integrated LAMMPS driver for NPT/NVT simulations.
-    *   **Hybrid Potentials**: Overlays ACE with ZBL/LJ for safety during high-energy events.
+    *   **Hybrid Potentials**: Overlays ACE with ZBL/LJ for safety during high-energy events. Configurable global and per-pair cutoffs.
     *   **Uncertainty Watchdog**: Automatically halts simulations when the extrapolation grade ($\gamma$) exceeds a safe threshold.
+*   **Long-Timescale Simulation (aKMC)**:
+    *   **EON Integration**: Seamlessly runs Adaptive Kinetic Monte Carlo simulations using the EON software stack.
+    *   **Rare Event Sampling**: Explore diffusion and phase ordering phenomena beyond MD timescales.
+*   **Production Scenarios**:
+    *   **Fe/Pt on MgO**: Pre-configured "Grand Challenge" scenario for simulating deposition and L10 ordering.
 *   **Scalability**:
-    *   **Streaming Data Processing**: Handles large datasets with O(1) memory usage.
+    *   **Streaming Data Processing**: Handles large datasets (>100k structures) with O(1) memory usage.
     *   **Resume Capability**: Checkpoints state to `state.json`, allowing workflows to pause and resume from the exact iteration and potential version.
 
 ## Requirements
 
-*   **Python**: >= 3.11
+*   **Python**: >= 3.12
 *   **DFT Code**: Quantum Espresso (`pw.x` executable in PATH)
 *   **MLIP Trainer**: Pacemaker (`pace_train`, `pace_activeset` executables in PATH)
 *   **MD Engine**: LAMMPS Python Interface (`lammps` package, with `USER-PACE` support)
+*   **kMC Engine**: EON Client (`eonclient` executable in PATH) for aKMC scenarios.
 
 ## Installation
 
@@ -55,6 +61,10 @@ uv sync
 
 ## Usage
 
+### 1. Active Learning Loop
+
+Run the standard active learning loop to train a potential.
+
 1.  **Prepare Configuration**:
     Create a `config.yaml` file defining your project parameters.
 
@@ -63,31 +73,23 @@ uv sync
     structure:
         elements: ["Fe", "Pt"]
         supercell_size: [2, 2, 2]
-        policy_name: "random_rattle"
-        rattle_stdev: 0.1
     dft:
-        code: "quantum_espresso"
+        code: "qe"
         functional: "PBE"
-        kpoints_density: 0.04
-        encut: 500.0
         pseudopotentials:
-            Fe: "Fe.pbe-n-kjpaw_psl.1.0.0.UPF"
-            Pt: "Pt.pbe-n-kjpaw_psl.1.0.0.UPF"
+            Fe: "Fe.UPF"
+            Pt: "Pt.UPF"
     training:
         potential_type: "ace"
         cutoff_radius: 5.0
-        max_basis_size: 500
-        delta_learning: true
-        active_set_optimization: true
-        active_set_size: 100
     md:
         temperature: 1000.0
-        pressure: 0.0
-        timestep: 0.001
         n_steps: 5000
+        hybrid_potential: true
+        hybrid_params:
+            zbl_global_cutoff: 2.0
     workflow:
         max_iterations: 10
-        checkpoint_interval: 1
     ```
 
 2.  **Run PyAceMaker**:
@@ -100,13 +102,38 @@ uv sync
     uv run pyacemaker --config config.yaml
     ```
 
+### 2. Production Scenarios
+
+Run pre-defined scenarios using a trained potential.
+
+1.  **Prepare Configuration**:
+    Add scenario settings to your `config.yaml`.
+
+    ```yaml
+    # ... standard config ...
+    scenario:
+        name: "fept_mgo"
+        output_dir: "grand_challenge_run"
+    eon:
+        # Path to EON executable usually detected automatically
+        # eon_executable: "eonclient"
+        temperature: 600.0
+    ```
+
+2.  **Run Scenario**:
+
+    ```bash
+    uv run pyacemaker --config config.yaml --scenario fept_mgo
+    ```
+
 ## Architecture
 
 ```
 src/pyacemaker/
 ├── core/               # Core business logic (Generator, Oracle, Trainer)
 ├── domain_models/      # Pydantic data schemas and validation
-├── interfaces/         # External code drivers (Quantum Espresso)
+├── interfaces/         # External code drivers (QE, LAMMPS, EON)
+├── scenarios/          # Production scenarios (FePt/MgO)
 ├── utils/              # Helper functions (I/O, perturbations)
 ├── factory.py          # Dependency injection
 ├── orchestrator.py     # Workflow state machine

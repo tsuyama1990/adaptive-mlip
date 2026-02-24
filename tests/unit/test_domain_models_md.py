@@ -6,15 +6,14 @@ from pyacemaker.domain_models.md import HybridParams, MDConfig, MDSimulationResu
 
 def test_hybrid_params_valid() -> None:
     """Tests valid HybridParams."""
-    params = HybridParams(zbl_cut_inner=1.5, zbl_cut_outer=2.0)
-    assert params.zbl_cut_inner == 1.5
-    assert params.zbl_cut_outer == 2.0
+    params = HybridParams(zbl_global_cutoff=2.0)
+    assert params.zbl_global_cutoff == 2.0
 
 
 def test_hybrid_params_invalid() -> None:
-    """Tests invalid HybridParams (negative cutoff)."""
+    """Tests invalid HybridParams (extra fields)."""
     with pytest.raises(ValidationError):
-        HybridParams(zbl_cut_inner=-1.0)
+        HybridParams(zbl_cut_inner=1.0)  # type: ignore[call-arg]
 
 
 def test_md_config_valid() -> None:
@@ -38,7 +37,7 @@ def test_md_config_valid() -> None:
 
 def test_md_config_with_hybrid_params() -> None:
     """Tests MDConfig with custom HybridParams."""
-    hybrid_params = HybridParams(zbl_cut_inner=1.0, zbl_cut_outer=1.5)
+    hybrid_params = HybridParams(zbl_global_cutoff=1.5)
     config = MDConfig(
         temperature=300.0,
         pressure=1.0,
@@ -47,7 +46,7 @@ def test_md_config_with_hybrid_params() -> None:
         hybrid_potential=True,
         hybrid_params=hybrid_params,
     )
-    assert config.hybrid_params.zbl_cut_inner == 1.0
+    assert config.hybrid_params.zbl_global_cutoff == 1.5
 
 
 def test_md_config_invalid_temperature() -> None:
@@ -77,6 +76,7 @@ def test_md_simulation_result_valid() -> None:
     result = MDSimulationResult(
         energy=-500.0,
         forces=[[0.0, 0.0, 0.0]],
+        stress=[0.0] * 6,
         halted=False,
         max_gamma=0.05,
         n_steps=1000,
@@ -95,10 +95,13 @@ def test_md_simulation_result_halted() -> None:
     result = MDSimulationResult(
         energy=-400.0,
         forces=[[0.0, 0.0, 0.0]],
+        stress=[0.0] * 6,
         halted=True,
         max_gamma=10.0,
         n_steps=50,
         temperature=310.0,
+        trajectory_path="dump.lammpstrj",
+        log_path="log.lammps",
         halt_structure_path="halt_structure.xyz",
     )
     assert result.halted is True

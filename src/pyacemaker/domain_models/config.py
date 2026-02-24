@@ -1,8 +1,11 @@
+
 from pydantic import BaseModel, ConfigDict, Field
 
 from .dft import DFTConfig
+from .eon import EONConfig
 from .logging import LoggingConfig
 from .md import MDConfig
+from .scenario import ScenarioConfig
 from .structure import StructureConfig
 from .training import TrainingConfig
 from .validation import ValidationConfig
@@ -24,5 +27,9 @@ class PyAceConfig(BaseModel):
     logging: LoggingConfig = Field(
         default_factory=LoggingConfig, description="Logging configuration"
     )
+
+    # New configurations for Cycle 08
+    eon: EONConfig | None = Field(None, description="EON/kMC configuration")
+    scenario: ScenarioConfig | None = Field(None, description="Scenario configuration")
 
     # Removed no-op check_cutoff_supercell validator as per audit instruction ("remove dead code").

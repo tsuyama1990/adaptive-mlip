@@ -165,9 +165,12 @@ def test_run_loop_iteration_halt(orchestrator: Orchestrator, tmp_path: Path) -> 
         energy=-100.0,
         temperature=300.0,
         forces=[[0.0, 0.0, 0.0]],
+        stress=[0.0] * 6,
         n_steps=50,
         max_gamma=10.0,
         halted=True,
+        trajectory_path=str(halt_path),
+        log_path=str(tmp_path / "log.lammps"),
         halt_structure_path=str(halt_path)
     )
 
