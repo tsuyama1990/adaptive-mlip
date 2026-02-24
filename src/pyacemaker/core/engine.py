@@ -149,16 +149,42 @@ class LammpsEngine(BaseEngine):
         engine = LammpsEngine(static_config)
         return engine.run(structure, potential)
 
+    def _ensure_script_readable(self, script_path: Path) -> None:
+        """Helper to ensure script path exists."""
+        if not script_path.exists():
+            msg = f"Input script not found: {script_path}"
+            raise FileNotFoundError(msg)
+
     def _execute_simulation(self, driver: LammpsDriver, script_path: Path) -> None:
-        """Executes the simulation script with error handling."""
+        """
+        Executes the simulation script with standardized error handling.
+
+        Args:
+            driver: Initialized LammpsDriver instance.
+            script_path: Path to the LAMMPS input script.
+
+        Raises:
+            RuntimeError: Wraps any failure during execution with context.
+        """
         try:
-            # We assume driver.run takes script content.
-            # Reading small script file is safe.
-            driver.run(script_path.read_text())
+            # Ensure script is readable
+            self._ensure_script_readable(script_path)
+
+            script_content = script_path.read_text(encoding="utf-8")
+            driver.run(script_content)
+
+        except FileNotFoundError as e:
+            msg = f"Simulation setup failed: {e}"
+            raise RuntimeError(msg) from e
+        except ValueError as e:
+            # Catch validation errors from driver (unsafe content)
+            msg = f"Simulation security validation failed: {e}"
+            raise RuntimeError(msg) from e
         except RuntimeError as e:
-            # Capture specific LAMMPS runtime errors
-            msg = f"LAMMPS execution failed: {e}"
+            # Catch LAMMPS internal errors (e.g., lost atoms)
+            msg = f"LAMMPS engine execution failed: {e}"
             raise RuntimeError(msg) from e
         except Exception as e:
-            msg = f"Unexpected error during LAMMPS execution: {e}"
+            # Catch unexpected errors
+            msg = f"Unexpected error during simulation execution: {e}"
             raise RuntimeError(msg) from e

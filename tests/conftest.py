@@ -13,12 +13,9 @@ from ase.calculators.calculator import Calculator, CalculatorSetupError  # noqa:
 from pyacemaker.domain_models import (  # noqa: E402
     DFTConfig,
     HybridParams,
-    LoggingConfig,
     MDConfig,
-    PyAceConfig,
     StructureConfig,
     TrainingConfig,
-    WorkflowConfig,
 )
 from pyacemaker.domain_models.structure import ExplorationPolicy  # noqa: E402
 from tests.constants import TEST_ENERGY_GENERIC  # noqa: E402
@@ -118,68 +115,70 @@ class MockCalculator(Calculator):
 def create_test_config_dict(**overrides: Any) -> dict[str, Any]:
     """
     Helper to create a valid config dictionary using Pydantic defaults.
-    Ensures configuration is always valid and synced with domain models.
+    Constructs dictionary first to allow overrides before validation.
     """
-    # 1. Create default components
-    structure = StructureConfig(
-        elements=["Fe"],
-        supercell_size=[1, 1, 1],
-        policy_name=ExplorationPolicy.COLD_START,
-        # adaptive_ratio, defect_density, strain_range removed
-    )
-    dft = DFTConfig(
-        code="qe",
-        functional="PBE",
-        kpoints_density=0.04,
-        encut=500.0,
-        pseudopotentials={"Fe": "Fe.UPF"},
-        mixing_beta=0.7,
-        smearing_type="mv",
-        smearing_width=0.1,
-        diagonalization="david"
-    )
-    training = TrainingConfig(
-        potential_type="ace",
-        cutoff_radius=5.0,
-        max_basis_size=500,
-        delta_learning=True,
-        active_set_optimization=False
-    )
-    md = MDConfig(
-        temperature=300.0,
-        pressure=0.0,
-        timestep=0.001,
-        n_steps=1000,
-        uncertainty_threshold=5.0,
-        check_interval=10
-    )
-    workflow = WorkflowConfig(
-        max_iterations=10,
-        state_file_path="state.json",
-        active_learning_dir="active_learning",
-        potentials_dir="potentials"
-    )
-    logging = LoggingConfig()
+    # 1. Create default dictionary structure (NOT Pydantic objects yet)
+    # Use dummy value for validation that might fail if file doesn't exist,
+    # but we rely on overrides to fix it or loose validation context where applicable.
+    # Actually, we should use safe defaults for Pydantic construction if possible,
+    # but validation is strict.
 
-    # 2. Assemble full config
-    full_config = PyAceConfig(
-        project_name="TestProject",
-        structure=structure,
-        dft=dft,
-        training=training,
-        md=md,
-        workflow=workflow,
-        logging=logging
-    )
+    defaults = {
+        "project_name": "TestProject",
+        "structure": {
+            "elements": ["Fe"],
+            "supercell_size": [1, 1, 1],
+            "policy_name": ExplorationPolicy.COLD_START,
+        },
+        "dft": {
+            "code": "qe",
+            "functional": "PBE",
+            "kpoints_density": 0.04,
+            "encut": 500.0,
+            "pseudopotentials": {"Fe": "Fe.UPF"}, # Expects file to exist
+            "mixing_beta": 0.7,
+            "smearing_type": "mv",
+            "smearing_width": 0.1,
+            "diagonalization": "david"
+        },
+        "training": {
+            "potential_type": "ace",
+            "cutoff_radius": 5.0,
+            "max_basis_size": 500,
+            "delta_learning": True,
+            "active_set_optimization": False
+        },
+        "md": {
+            "temperature": 300.0,
+            "pressure": 0.0,
+            "timestep": 0.001,
+            "n_steps": 1000,
+            "uncertainty_threshold": 5.0,
+            "check_interval": 10
+        },
+        "validation": {}, # Use defaults
+        "workflow": {
+            "max_iterations": 10,
+            "state_file_path": "state.json",
+            "active_learning_dir": "active_learning",
+            "potentials_dir": "potentials",
+            "n_candidates": 10,
+            "batch_size": 5,
+            "otf": {
+                "uncertainty_threshold": 5.0,
+                "local_n_candidates": 20,
+                "local_n_select": 5,
+                "max_retries": 3
+            }
+        },
+        "logging": {}
+    }
 
-    # 3. Export to dict
-    config_dict = full_config.model_dump()
-
-    # 4. Apply overrides (Simple deep merge)
+    # 2. Apply overrides (Deep merge)
     for key, value in overrides.items():
-        if key in config_dict and isinstance(config_dict[key], dict) and isinstance(value, dict):
-             config_dict[key].update(value)
+        if key in defaults and isinstance(defaults[key], dict) and isinstance(value, dict):
+             defaults[key].update(value)
         else:
-             config_dict[key] = value
+             defaults[key] = value
 
-    return config_dict
+    return defaults
