@@ -1,0 +1,306 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.12, pytest-9.0.2, pluggy-1.6.0 -- /app/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /app
+configfile: pyproject.toml
+testpaths: tests
+plugins: cov-7.0.0
+collecting ... collected 232 items
+
+tests/e2e/test_engine_integration.py::test_engine_integration_workflow PASSED [  0%]
+tests/e2e/test_engine_integration.py::test_engine_integration_lammps_failure PASSED [  0%]
+tests/e2e/test_orchestrator.py::test_orchestrator_initialization PASSED  [  1%]
+tests/e2e/test_orchestrator.py::test_integration_workflow_complete PASSED [  1%]
+tests/e2e/test_orchestrator.py::test_orchestrator_checkpointing PASSED   [  2%]
+tests/e2e/test_orchestrator.py::test_orchestrator_corrupted_state_file PASSED [  2%]
+tests/e2e/test_orchestrator.py::test_orchestrator_directory_creation_error PASSED [  3%]
+tests/e2e/test_orchestrator.py::test_orchestrator_error_handling_generator PASSED [  3%]
+tests/e2e/test_orchestrator.py::test_orchestrator_error_handling_oracle_stream PASSED [  3%]
+tests/e2e/test_orchestrator_loop.py::test_cold_start PASSED              [  4%]
+tests/e2e/test_orchestrator_loop.py::test_resume_capability PASSED       [  4%]
+tests/e2e/test_orchestrator_loop.py::test_run_loop_iteration_halt PASSED [  5%]
+tests/e2e/test_orchestrator_refinement.py::test_orchestrator_refinement_logic PASSED [  5%]
+tests/e2e/test_orchestrator_refinement.py::test_orchestrator_refinement_extraction_failure PASSED [  6%]
+tests/integration/test_pacemaker_integration.py::test_pacemaker_integration_full_flow PASSED [  6%]
+tests/integration/test_pacemaker_integration.py::test_pacemaker_integration_failure_handling PASSED [  6%]
+tests/uat/test_cycle01_uat.py::test_scenario_01_01_hello_config PASSED   [  7%]
+tests/uat/test_cycle01_uat.py::test_scenario_01_02_guardrails_check_temp PASSED [  7%]
+tests/uat/test_cycle01_uat.py::test_scenario_01_02_guardrails_check_cutoff PASSED [  8%]
+tests/uat/test_cycle02_uat.py::test_uat_02_01_single_point_calculation PASSED [  8%]
+tests/uat/test_cycle02_uat.py::test_uat_02_02_self_healing PASSED        [  9%]
+tests/uat/test_cycle03_uat.py::test_uat_03_01_generate_candidates PASSED [  9%]
+tests/uat/test_cycle03_uat.py::test_uat_03_02_defect_generation PASSED   [  9%]
+tests/uat/test_cycle04_uat.py::test_uat_fit_potential PASSED             [ 10%]
+tests/uat/test_cycle04_uat.py::test_uat_fit_potential_failure PASSED     [ 10%]
+tests/uat/test_cycle04_uat.py::test_uat_active_set_selection PASSED      [ 11%]
+tests/uat/test_cycle06_uat.py::test_scenario_06_01_active_learning_campaign PASSED [ 11%]
+tests/uat/test_cycle06_uat.py::test_scenario_06_02_resume_capability PASSED [ 12%]
+tests/uat/test_cycle07_uat.py::test_uat_07_01_validate_potential_pass PASSED [ 12%]
+tests/uat/test_cycle07_uat.py::test_uat_07_02_unstable_detection PASSED  [ 12%]
+tests/unit/test_active_set.py::test_select_active_set_io_streaming_batched PASSED [ 13%]
+tests/unit/test_active_set.py::test_select_active_set_write_fail PASSED  [ 13%]
+tests/unit/test_active_set.py::test_select_active_set_partial_failure PASSED [ 14%]
+tests/unit/test_active_set.py::test_select_active_set_process_fail PASSED [ 14%]
+tests/unit/test_active_set.py::test_active_set_path_validation_strict PASSED [ 15%]
+tests/unit/test_active_set_anchor.py::test_select_with_anchor_basic PASSED [ 15%]
+tests/unit/test_active_set_anchor.py::test_select_with_anchor_only_one PASSED [ 15%]
+tests/unit/test_active_set_anchor.py::test_validate_path_resolution_safety PASSED [ 16%]
+tests/unit/test_active_set_anchor.py::test_validate_path_invalid_chars PASSED [ 16%]
+tests/unit/test_delta.py::test_get_lj_params_known_element PASSED        [ 17%]
+tests/unit/test_delta.py::test_get_lj_params_unknown_element_fallback PASSED [ 17%]
+tests/unit/test_delta.py::test_zbl_energy_repulsive PASSED               [ 18%]
+tests/unit/test_delta.py::test_zbl_energy_zero_at_cutoff PASSED          [ 18%]
+tests/unit/test_domain_models.py::test_structure_config_valid PASSED     [ 18%]
+tests/unit/test_domain_models.py::test_structure_config_invalid_element PASSED [ 19%]
+tests/unit/test_domain_models.py::test_structure_config_duplicates PASSED [ 19%]
+tests/unit/test_domain_models.py::test_structure_config_invalid_supercell PASSED [ 20%]
+tests/unit/test_domain_models.py::test_structure_config_policy PASSED    [ 20%]
+tests/unit/test_domain_models.py::test_dft_config_valid PASSED           [ 21%]
+tests/unit/test_domain_models.py::test_training_config_valid PASSED      [ 21%]
+tests/unit/test_domain_models.py::test_md_config_valid PASSED            [ 21%]
+tests/unit/test_domain_models.py::test_workflow_config_valid PASSED      [ 22%]
+tests/unit/test_domain_models.py::test_workflow_config_default PASSED    [ 22%]
+tests/unit/test_domain_models.py::test_logging_config_valid PASSED       [ 23%]
+tests/unit/test_domain_models.py::test_pyace_config_valid PASSED         [ 23%]
+tests/unit/test_domain_models_dft.py::test_dft_config_full_valid PASSED  [ 24%]
+tests/unit/test_domain_models_dft.py::test_dft_config_defaults PASSED    [ 24%]
+tests/unit/test_domain_models_dft.py::test_dft_config_invalid_mixing_beta[1.5] PASSED [ 25%]
+tests/unit/test_domain_models_dft.py::test_dft_config_invalid_mixing_beta[-0.1] PASSED [ 25%]
+tests/unit/test_domain_models_dft.py::test_dft_config_invalid_mixing_beta[0.0] PASSED [ 25%]
+tests/unit/test_domain_models_dft.py::test_dft_config_invalid_smearing_width[-0.1] PASSED [ 26%]
+tests/unit/test_domain_models_dft.py::test_dft_config_invalid_smearing_width[0.0] PASSED [ 26%]
+tests/unit/test_domain_models_dft.py::test_dft_config_extra_forbid PASSED [ 27%]
+tests/unit/test_domain_models_dft.py::test_dft_config_empty_pseudopotential PASSED [ 27%]
+tests/unit/test_domain_models_dft.py::test_dft_config_external_paths PASSED [ 28%]
+tests/unit/test_domain_models_dft.py::test_dft_config_symlinks_forbidden PASSED [ 28%]
+tests/unit/test_domain_models_dft.py::test_dft_config_file_not_found PASSED [ 28%]
+tests/unit/test_domain_models_dft.py::test_dft_config_embedding_buffer PASSED [ 29%]
+tests/unit/test_domain_models_eon.py::test_eon_config_valid PASSED       [ 29%]
+tests/unit/test_domain_models_eon.py::test_eon_config_defaults PASSED    [ 30%]
+tests/unit/test_domain_models_eon.py::test_eon_config_invalid_temp PASSED [ 30%]
+tests/unit/test_domain_models_eon.py::test_eon_config_invalid_confidence PASSED [ 31%]
+tests/unit/test_domain_models_eon.py::test_eon_config_extra_field PASSED [ 31%]
+tests/unit/test_domain_models_md.py::test_hybrid_params_valid PASSED     [ 31%]
+tests/unit/test_domain_models_md.py::test_hybrid_params_invalid PASSED   [ 32%]
+tests/unit/test_domain_models_md.py::test_md_config_valid PASSED         [ 32%]
+tests/unit/test_domain_models_md.py::test_md_config_with_hybrid_params PASSED [ 33%]
+tests/unit/test_domain_models_md.py::test_md_config_invalid_temperature PASSED [ 33%]
+tests/unit/test_domain_models_md.py::test_md_config_invalid_steps PASSED [ 34%]
+tests/unit/test_domain_models_md.py::test_md_simulation_result_valid PASSED [ 34%]
+tests/unit/test_domain_models_md.py::test_md_simulation_result_halted PASSED [ 34%]
+tests/unit/test_domain_models_scenario.py::test_scenario_config_valid PASSED [ 35%]
+tests/unit/test_domain_models_scenario.py::test_scenario_config_defaults PASSED [ 35%]
+tests/unit/test_domain_models_scenario.py::test_scenario_config_invalid_name PASSED [ 36%]
+tests/unit/test_domain_models_scenario.py::test_scenario_config_invalid_count PASSED [ 36%]
+tests/unit/test_domain_models_scenario.py::test_scenario_config_extra_field PASSED [ 37%]
+tests/unit/test_domain_models_training.py::test_training_config_defaults PASSED [ 37%]
+tests/unit/test_domain_models_training.py::test_training_config_filename_validation PASSED [ 37%]
+tests/unit/test_domain_models_training.py::test_training_config_active_set_size_valid PASSED [ 38%]
+tests/unit/test_domain_models_training.py::test_training_config_active_set_size_invalid_zero PASSED [ 38%]
+tests/unit/test_domain_models_training.py::test_training_config_active_set_size_invalid_negative PASSED [ 39%]
+tests/unit/test_domain_models_training.py::test_training_config_active_set_required PASSED [ 39%]
+tests/unit/test_domain_models_training.py::test_pacemaker_config_custom_values PASSED [ 40%]
+tests/unit/test_domain_models_validation.py::test_validation_config_defaults PASSED [ 40%]
+tests/unit/test_domain_models_validation.py::test_validation_config_custom PASSED [ 40%]
+tests/unit/test_domain_models_validation.py::test_validation_result_valid PASSED [ 41%]
+tests/unit/test_domain_models_validation.py::test_validation_result_missing_fields PASSED [ 41%]
+tests/unit/test_elastic.py::TestElasticCalculator::test_check_born_stability_cubic_stable PASSED [ 42%]
+tests/unit/test_elastic.py::TestElasticCalculator::test_check_born_stability_cubic_unstable PASSED [ 42%]
+tests/unit/test_elastic.py::TestElasticCalculator::test_calculate_bulk_modulus PASSED [ 43%]
+tests/unit/test_elastic.py::TestElasticCalculator::test_calculate_voigt_reuss_hill PASSED [ 43%]
+tests/unit/test_embedding.py::test_embed_cluster_basic PASSED            [ 43%]
+tests/unit/test_embedding.py::test_embed_cluster_copy PASSED             [ 44%]
+tests/unit/test_embedding.py::test_embed_cluster_inplace PASSED          [ 44%]
+tests/unit/test_embedding.py::test_embed_cluster_empty PASSED            [ 45%]
+tests/unit/test_embedding.py::test_embed_cluster_invalid_buffer PASSED   [ 45%]
+tests/unit/test_embedding.py::test_embed_cluster_large PASSED            [ 46%]
+tests/unit/test_embedding.py::test_embed_cluster_boundary_conditions PASSED [ 46%]
+tests/unit/test_engine.py::test_lammps_engine_run PASSED                 [ 46%]
+tests/unit/test_engine.py::test_lammps_engine_halted PASSED              [ 47%]
+tests/unit/test_engine.py::test_lammps_engine_hybrid_potential PASSED    [ 47%]
+tests/unit/test_engine.py::test_run_empty_structure_error PASSED         [ 48%]
+tests/unit/test_engine.py::test_run_missing_potential_error PASSED       [ 48%]
+tests/unit/test_engine.py::test_run_large_structure_warning PASSED       [ 49%]
+tests/unit/test_engine.py::test_run_driver_failure PASSED                [ 49%]
+tests/unit/test_engine_halt_step.py::test_lammps_engine_halt_step_populated PASSED [ 50%]
+tests/unit/test_engine_halt_step.py::test_lammps_engine_halt_step_none_if_not_halted PASSED [ 50%]
+tests/unit/test_engine_relax.py::test_lammps_engine_relax PASSED         [ 50%]
+tests/unit/test_engine_relax.py::test_lammps_engine_relax_missing_potential PASSED [ 51%]
+tests/unit/test_engine_relax.py::test_lammps_engine_relax_driver_fail PASSED [ 51%]
+tests/unit/test_eon_driver.py::test_eon_wrapper_init PASSED              [ 52%]
+tests/unit/test_eon_driver.py::test_eon_run PASSED                       [ 52%]
+tests/unit/test_eon_driver.py::test_generate_pace_driver PASSED          [ 53%]
+tests/unit/test_eon_driver.py::test_parse_results PASSED                 [ 53%]
+tests/unit/test_extraction.py::test_extract_local_region_basic PASSED    [ 53%]
+tests/unit/test_extraction.py::test_extract_local_region_pbc PASSED      [ 54%]
+tests/unit/test_factory.py::test_module_factory_create_modules PASSED    [ 54%]
+tests/unit/test_factory.py::test_module_factory_invalid_config PASSED    [ 55%]
+tests/unit/test_generator.py::test_cold_start_policy PASSED              [ 55%]
+tests/unit/test_generator.py::test_rattle_policy PASSED                  [ 56%]
+tests/unit/test_generator.py::test_defect_policy PASSED                  [ 56%]
+tests/unit/test_generator.py::test_strain_policy PASSED                  [ 56%]
+tests/unit/test_generator.py::test_generator_invalid_composition PASSED  [ 57%]
+tests/unit/test_generator.py::test_generate_local PASSED                 [ 57%]
+tests/unit/test_generator_local.py::test_generate_local_rattle PASSED    [ 58%]
+tests/unit/test_generator_local.py::test_generate_local_md_burst PASSED  [ 58%]
+tests/unit/test_io.py::test_load_yaml_valid PASSED                       [ 59%]
+tests/unit/test_io.py::test_load_yaml_file_not_found PASSED              [ 59%]
+tests/unit/test_io.py::test_load_yaml_invalid_yaml PASSED                [ 59%]
+tests/unit/test_io.py::test_load_yaml_empty PASSED                       [ 60%]
+tests/unit/test_io.py::test_load_yaml_not_dict PASSED                    [ 60%]
+tests/unit/test_io.py::test_load_yaml_directory PASSED                   [ 61%]
+tests/unit/test_io.py::test_load_config_valid PASSED                     [ 61%]
+tests/unit/test_io.py::test_load_config_invalid PASSED                   [ 62%]
+tests/unit/test_io.py::test_path_traversal_check PASSED                  [ 62%]
+tests/unit/test_io.py::test_dump_yaml PASSED                             [ 62%]
+tests/unit/test_io_manager.py::test_prepare_workspace PASSED             [ 63%]
+tests/unit/test_io_manager.py::test_prepare_workspace_large_structure_warning PASSED [ 63%]
+tests/unit/test_lammps_driver.py::test_lammps_driver_init PASSED         [ 64%]
+tests/unit/test_lammps_driver.py::test_lammps_driver_init_failure PASSED [ 64%]
+tests/unit/test_lammps_driver.py::test_lammps_driver_run PASSED          [ 65%]
+tests/unit/test_lammps_driver.py::test_lammps_driver_run_unsafe PASSED   [ 65%]
+tests/unit/test_lammps_driver.py::test_lammps_driver_run_forbidden_chars PASSED [ 65%]
+tests/unit/test_lammps_driver.py::test_lammps_driver_run_forbidden_command PASSED [ 66%]
+tests/unit/test_lammps_driver.py::test_lammps_driver_run_file_calls_command PASSED [ 66%]
+tests/unit/test_lammps_driver.py::test_lammps_driver_run_shell PASSED    [ 67%]
+tests/unit/test_lammps_driver.py::test_lammps_driver_extract_variable PASSED [ 67%]
+tests/unit/test_lammps_driver.py::test_lammps_driver_get_atoms PASSED    [ 68%]
+tests/unit/test_lammps_driver.py::test_lammps_driver_get_atoms_invalid_type PASSED [ 68%]
+tests/unit/test_lammps_driver_security.py::test_validate_command_safe PASSED [ 68%]
+tests/unit/test_lammps_driver_security.py::test_validate_command_unsafe_chars PASSED [ 69%]
+tests/unit/test_lammps_driver_security.py::test_validate_command_shell_token PASSED [ 69%]
+tests/unit/test_lammps_generator.py::test_generator_hybrid_potential PASSED [ 70%]
+tests/unit/test_lammps_generator.py::test_generator_pure_pace PASSED     [ 70%]
+tests/unit/test_lammps_generator.py::test_generator_damping PASSED       [ 71%]
+tests/unit/test_lammps_generator.py::test_generator_atom_style PASSED    [ 71%]
+tests/unit/test_lammps_generator_reorder.py::test_lammps_generator_order PASSED [ 71%]
+tests/unit/test_lammps_generator_reorder.py::test_lammps_generator_gamma_column PASSED [ 72%]
+tests/unit/test_loop.py::test_loop_state_initialization PASSED           [ 72%]
+tests/unit/test_loop.py::test_loop_state_save_load PASSED                [ 73%]
+tests/unit/test_loop.py::test_loop_state_load_non_existent PASSED        [ 73%]
+tests/unit/test_loop.py::test_loop_state_validation_path_not_exists PASSED [ 74%]
+tests/unit/test_loop.py::test_loop_state_validation_path_is_dir PASSED   [ 74%]
+tests/unit/test_loop.py::test_loop_state_validation_path_traversal PASSED [ 75%]
+tests/unit/test_loop.py::test_loop_state_corrupted_load PASSED           [ 75%]
+tests/unit/test_main.py::test_main_dry_run PASSED                        [ 75%]
+tests/unit/test_main.py::test_main_file_not_found PASSED                 [ 76%]
+tests/unit/test_main.py::test_main_run PASSED                            [ 76%]
+tests/unit/test_main_scenario.py::test_main_with_scenario_flag PASSED    [ 77%]
+tests/unit/test_main_scenario.py::test_main_without_scenario_flag PASSED [ 77%]
+tests/unit/test_oracle.py::test_dft_manager_compute_success PASSED       [ 78%]
+tests/unit/test_oracle.py::test_dft_manager_self_healing PASSED          [ 78%]
+tests/unit/test_oracle.py::test_dft_manager_fatal_error PASSED           [ 78%]
+tests/unit/test_oracle.py::test_dft_manager_setup_error PASSED           [ 79%]
+tests/unit/test_oracle.py::test_dft_manager_strategies PASSED            [ 79%]
+tests/unit/test_oracle.py::test_dft_manager_invalid_input PASSED         [ 80%]
+tests/unit/test_oracle.py::test_dft_manager_empty_iterator PASSED        [ 80%]
+tests/unit/test_oracle.py::test_dft_manager_embedding PASSED             [ 81%]
+tests/unit/test_oracle_streaming.py::test_dft_manager_streaming_behavior PASSED [ 81%]
+tests/unit/test_perturbations.py::test_rattle PASSED                     [ 81%]
+tests/unit/test_perturbations.py::test_apply_strain PASSED               [ 82%]
+tests/unit/test_perturbations.py::test_create_vacancy PASSED             [ 82%]
+tests/unit/test_phonons.py::TestPhononCalculator::test_check_stability_stable PASSED [ 83%]
+tests/unit/test_phonons.py::TestPhononCalculator::test_check_stability_unstable PASSED [ 83%]
+tests/unit/test_policies_new.py::test_composite_policy_distribution PASSED [ 84%]
+tests/unit/test_policies_new.py::test_md_micro_burst_policy PASSED       [ 84%]
+tests/unit/test_policies_new.py::test_md_micro_burst_fallback PASSED     [ 84%]
+tests/unit/test_policies_new.py::test_normal_mode_policy_fallback PASSED [ 85%]
+tests/unit/test_policy_factory.py::test_get_policy_single PASSED         [ 85%]
+tests/unit/test_policy_factory.py::test_get_policy_composite PASSED      [ 86%]
+tests/unit/test_policy_factory.py::test_get_local_policy PASSED          [ 86%]
+tests/unit/test_qe_driver.py::test_qe_driver_kpoints_parametrized[pbc0-1.0] PASSED [ 87%]
+tests/unit/test_qe_driver.py::test_qe_driver_kpoints_parametrized[pbc1-0.0] PASSED [ 87%]
+tests/unit/test_qe_driver.py::test_qe_driver_kpoints_parametrized[pbc2-1.0] PASSED [ 87%]
+tests/unit/test_qe_driver.py::test_qe_driver_kpoints_zero_length PASSED  [ 88%]
+tests/unit/test_qe_driver.py::test_qe_driver_invalid_input PASSED        [ 88%]
+tests/unit/test_qe_driver.py::test_qe_driver_parameters PASSED           [ 89%]
+tests/unit/test_qe_driver.py::test_qe_driver_directory_argument PASSED   [ 89%]
+tests/unit/test_report.py::test_generate_report_pass PASSED              [ 90%]
+tests/unit/test_report.py::test_generate_report_fail PASSED              [ 90%]
+tests/unit/test_scenarios.py::test_scenario_init PASSED                  [ 90%]
+tests/unit/test_scenarios.py::test_scenario_run PASSED                   [ 91%]
+tests/unit/test_scenarios.py::test_generate_surface_step PASSED          [ 91%]
+tests/unit/test_streaming_io.py::test_stream_write_chunking PASSED       [ 92%]
+tests/unit/test_streaming_io.py::test_stream_write_append_mode PASSED    [ 92%]
+tests/unit/test_trainer_pacemaker.py::test_train_missing_executable PASSED [ 93%]
+tests/unit/test_trainer_pacemaker.py::test_train_element_detection_scanning PASSED [ 93%]
+tests/unit/test_trainer_pacemaker.py::test_train_validation_empty_file PASSED [ 93%]
+tests/unit/test_trainer_pacemaker.py::test_train_process_fail_util PASSED [ 94%]
+tests/unit/test_trainer_pacemaker.py::test_train_initial_potential PASSED [ 94%]
+tests/unit/test_trainer_pacemaker.py::test_train_initial_potential_missing PASSED [ 95%]
+tests/unit/test_validator.py::TestValidator::test_validate_pass PASSED   [ 95%]
+tests/unit/test_validator.py::TestValidator::test_validate_fail_phonon PASSED [ 96%]
+tests/unit/test_validator.py::TestValidator::test_relax_structure PASSED [ 96%]
+tests/unit/test_validator.py::TestValidator::test_validate_structure_invalid_element PASSED [ 96%]
+tests/unit/test_validator_security.py::TestLammpsInputValidator::test_validate_potential_valid_tmp PASSED [ 97%]
+tests/unit/test_validator_security.py::TestLammpsInputValidator::test_validate_potential_valid_cwd PASSED [ 97%]
+tests/unit/test_validator_security.py::TestLammpsInputValidator::test_validate_potential_not_found PASSED [ 98%]
+tests/unit/test_validator_security.py::TestLammpsInputValidator::test_validate_potential_not_file PASSED [ 98%]
+tests/unit/test_validator_security.py::TestLammpsInputValidator::test_validate_potential_outside_allowed PASSED [ 99%]
+tests/unit/test_validator_security.py::TestLammpsInputValidator::test_validate_potential_symlink_traversal PASSED [ 99%]
+tests/unit/test_validator_security.py::TestLammpsInputValidator::test_validate_potential_relative_traversal PASSED [100%]
+
+------------------ generated xml file: /app/test_results.xml -------------------
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.12-final-0 _______________
+
+Name                                         Stmts   Miss  Cover   Missing
+--------------------------------------------------------------------------
+src/pyacemaker/__init__.py                       4      0   100%
+src/pyacemaker/core/__init__.py                  7      0   100%
+src/pyacemaker/core/active_set.py               71     10    86%   46-47, 60-61, 71, 77-78, 86-88
+src/pyacemaker/core/base.py                     26      0   100%
+src/pyacemaker/core/config_generator.py         36      3    92%   58-60
+src/pyacemaker/core/directory_manager.py        20      0   100%
+src/pyacemaker/core/engine.py                   90     18    80%   50, 62-63, 75, 77, 80-81, 116-121, 127-128, 158-166
+src/pyacemaker/core/exceptions.py                8      0   100%
+src/pyacemaker/core/generator.py                52     11    79%   36-39, 59, 62, 95, 105, 111, 113, 134
+src/pyacemaker/core/io_manager.py               38      7    82%   62-65, 68-71
+src/pyacemaker/core/lammps_generator.py         94      1    99%   75
+src/pyacemaker/core/loop.py                     69      3    96%   74-77
+src/pyacemaker/core/m3gnet_wrapper.py           16      4    75%   26-28, 45-47
+src/pyacemaker/core/oracle.py                   68      1    99%   71
+src/pyacemaker/core/policy.py                   96     16    83%   93-105, 165-167, 204, 209, 228, 233
+src/pyacemaker/core/policy_factory.py           27      5    81%   46, 52-53, 80-81
+src/pyacemaker/core/report.py                   12      1    92%   85
+src/pyacemaker/core/state_manager.py            34      2    94%   37-38
+src/pyacemaker/core/trainer.py                  54      9    83%   79-82, 85-86, 93-94, 97-98
+src/pyacemaker/core/validator.py                71     13    82%   43, 46, 55-60, 65-66, 72-73, 95, 155
+src/pyacemaker/domain_models/__init__.py        11      0   100%
+src/pyacemaker/domain_models/config.py          22      0   100%
+src/pyacemaker/domain_models/constants.py       51      0   100%
+src/pyacemaker/domain_models/defaults.py        80      0   100%
+src/pyacemaker/domain_models/dft.py             69     14    80%   76-77, 80-81, 95-96, 102-103, 119-124
+src/pyacemaker/domain_models/eon.py             10      0   100%
+src/pyacemaker/domain_models/logging.py         31      9    71%   24-25, 31, 39, 45-47, 50-51
+src/pyacemaker/domain_models/md.py              48      1    98%   27
+src/pyacemaker/domain_models/scenario.py         9      0   100%
+src/pyacemaker/domain_models/structure.py       61      4    93%   88-89, 107-108
+src/pyacemaker/domain_models/training.py        46      0   100%
+src/pyacemaker/domain_models/validation.py      17      0   100%
+src/pyacemaker/domain_models/workflow.py        21      0   100%
+src/pyacemaker/factory.py                       32      3    91%   84-86
+src/pyacemaker/interfaces/__init__.py            0      0   100%
+src/pyacemaker/interfaces/eon_driver.py         55     10    82%   63-68, 196, 204, 212-213
+src/pyacemaker/interfaces/lammps_driver.py      89      8    91%   82-83, 102, 135, 172, 191-193
+src/pyacemaker/interfaces/qe_driver.py          48      2    96%   111-112
+src/pyacemaker/logger.py                        22      1    95%   42
+src/pyacemaker/main.py                          53      7    87%   23-24, 32-33, 66, 69, 94
+src/pyacemaker/orchestrator.py                 243     35    86%   104-107, 156, 182, 186-187, 214, 218-219, 247-248, 253, 265-267, 285, 310, 352, 356, 369-371, 382-383, 391-392, 396, 405, 435-438, 465
+src/pyacemaker/scenarios/__init__.py             3      0   100%
+src/pyacemaker/scenarios/base_scenario.py       10      0   100%
+src/pyacemaker/scenarios/fept_mgo.py           106     58    45%   30, 40, 57, 80-119, 122-148, 151-158
+src/pyacemaker/utils/delta.py                   17      2    88%   34-35
+src/pyacemaker/utils/elastic.py                 80     52    35%   34-35, 46-137, 146, 154
+src/pyacemaker/utils/embedding.py               36      6    83%   41-42, 49-50, 61-62
+src/pyacemaker/utils/extraction.py              31      0   100%
+src/pyacemaker/utils/io.py                      91      9    90%   126-129, 132-133, 155, 175-176
+src/pyacemaker/utils/misc.py                    11      2    82%   14-15
+src/pyacemaker/utils/path.py                    19      5    74%   30-32, 38-39
+src/pyacemaker/utils/perturbations.py           43      1    98%   77
+src/pyacemaker/utils/phonons.py                 51      2    96%   51, 69
+src/pyacemaker/utils/process.py                 25     21    16%   34-74
+src/pyacemaker/utils/structure.py                6      2    67%   19-20
+--------------------------------------------------------------------------
+TOTAL                                         2440    358    85%
+============================= 232 passed in 2.98s ==============================

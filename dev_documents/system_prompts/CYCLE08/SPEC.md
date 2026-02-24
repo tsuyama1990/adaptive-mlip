@@ -8,54 +8,74 @@ This final cycle extends the system capabilities to **Adaptive Kinetic Monte Car
 pyacemaker/
 ├── src/
 │   └── pyacemaker/
+│       ├── domain_models/
+│       │   ├── **eon.py**          # EON Config Model
+│       │   └── **scenario.py**     # Scenario Config Model
 │       ├── interfaces/
 │       │   └── **eon_driver.py**   # EON Interface
 │       └── scenarios/
 │           ├── **fept_mgo.py**     # Grand Challenge Logic
 │           └── **base_scenario.py** # (New)
 └── tests/
-    ├── **test_eon.py**
+    ├── **test_domain_models_eon.py**
+    ├── **test_domain_models_scenario.py**
+    ├── **test_eon_driver.py**
     └── **test_scenarios.py**
 ```
 
 ## 3. Design Architecture
 
-### 3.1 EON Wrapper (`interfaces/eon_driver.py`)
+### 3.1 Domain Models
+*   **EONConfig (`domain_models/eon.py`)**: Defines configuration for EON simulations (e.g., temperature, process search parameters).
+*   **ScenarioConfig (`domain_models/scenario.py`)**: Defines configuration for specific scenarios (e.g., selection of `fept_mgo`).
+
+### 3.2 EON Wrapper (`interfaces/eon_driver.py`)
 Manages the EON execution.
-*   **Input**: `ReactionConfig`, `PotentialPath`.
-*   **Output**: `ReactionEvent` (barrier, product state).
+*   **Input**: `EONConfig`, `PotentialPath`.
+*   **Output**: `ReactionEvent` (barrier, product state) or Process Table.
 *   **Logic**:
     *   Generates `config.ini` for EON.
+    *   Generates `pace_driver.py` script for EON to call.
     *   Launches `eonclient`.
     *   Parses `dynamics.txt` / `processtable.dat`.
 
-### 3.2 Scenario Logic (`scenarios/fept_mgo.py`)
+### 3.3 Scenario Logic (`scenarios/fept_mgo.py`)
 Encapsulates the complexity of the specific user story.
+*   **Input**: `PyAceConfig` (containing EON and Scenario settings).
 *   **Steps**:
     1.  Generate MgO (001) Surface.
-    2.  Deposit Fe/Pt atoms randomly (MD).
-    3.  Run aKMC to observe L10 ordering.
-    4.  Visualize.
+    2.  Deposit Fe/Pt atoms randomly (MD using `LammpsEngine`).
+    3.  Run aKMC to observe L10 ordering (using `EONWrapper`).
+    4.  Visualize/Report.
 
 ## 4. Implementation Approach
 
-### Step 1: EON Interface
-*   Implement `src/pyacemaker/interfaces/eon_driver.py`.
-*   Create a "PACE Driver" script that EON can call to evaluate energies (via stdin/stdout).
+### Step 1: Domain Models
+*   Implement `src/pyacemaker/domain_models/eon.py`.
+*   Implement `src/pyacemaker/domain_models/scenario.py`.
+*   Update `src/pyacemaker/domain_models/config.py`.
 
-### Step 2: Scenario Scripts
+### Step 2: EON Interface
+*   Implement `src/pyacemaker/interfaces/eon_driver.py`.
+*   Create a "PACE Driver" script generator that EON can call to evaluate energies (via stdin/stdout).
+
+### Step 3: Scenario Scripts
+*   Implement `src/pyacemaker/scenarios/base_scenario.py`.
 *   Implement `src/pyacemaker/scenarios/fept_mgo.py`.
 *   Use `ase` to build the initial slab.
-*   Use `MDEngine` for deposition.
+*   Use `LammpsEngine` for deposition.
 *   Use `EONWrapper` for ordering.
 
-### Step 3: Final Polish
+### Step 4: Main Integration
+*   Update `src/pyacemaker/main.py` to handle `--scenario` flag.
+
+### Step 5: Final Polish
 *   Update `README.md` with final instructions.
 *   Ensure all docstrings are complete.
 
 ## 5. Test Strategy
 
-### 5.1 Unit Testing (`test_eon.py`)
+### 5.1 Unit Testing (`test_eon_driver.py`)
 *   **Config Gen**: Verify `config.ini` is correctly formatted.
 *   **Driver Comm**: Test the stdin/stdout communication protocol for the PACE driver script.
 

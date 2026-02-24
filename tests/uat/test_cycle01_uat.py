@@ -56,7 +56,7 @@ workflow:
 
     with patch(
         "argparse.ArgumentParser.parse_args",
-        return_value=MagicMock(config=str(config_file), dry_run=True),
+        return_value=MagicMock(config=str(config_file), dry_run=True, scenario=None),
     ):
         with pytest.raises(SystemExit) as excinfo:
             main()
