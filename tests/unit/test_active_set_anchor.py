@@ -64,8 +64,10 @@ def test_select_with_anchor_only_one(tmp_path: Path) -> None:
 def test_validate_path_resolution_safety() -> None:
     """Test that paths are resolved to absolute, mitigating simple flag injection and traversal."""
     selector = ActiveSetSelector()
-    # These should NOT raise because they resolve to safe absolute paths
-    selector._validate_path_safe(Path("foo/../bar"))
+
+    # Explicit traversal attempts should now be rejected for security
+    with pytest.raises(ActiveSetError, match="Path traversal attempt"):
+        selector._validate_path_safe(Path("foo/../bar"))
 
     # -rf is now explicitly rejected even if resolved, as filenames cannot start with -
     with pytest.raises(ActiveSetError, match="Filename cannot start with '-'"):

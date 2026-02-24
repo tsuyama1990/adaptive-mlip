@@ -1,4 +1,5 @@
 
+from io import StringIO
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -6,6 +7,7 @@ from ase import Atoms
 
 from pyacemaker.domain_models import PyAceConfig
 from pyacemaker.orchestrator import Orchestrator
+from pyacemaker.utils.io import write_lammps_streaming
 
 
 @pytest.fixture
@@ -87,3 +89,48 @@ def test_stream_write_append_mode(orchestrator, tmp_path):
 
             # Verify write calls
             assert mock_write.call_count == 3
+
+def test_write_lammps_streaming_format() -> None:
+    """Verifies that write_lammps_streaming produces correct LAMMPS data format."""
+    buffer = StringIO()
+
+    # Create simple structure: 2 atoms, cubic box
+    structure = Atoms("LiH", positions=[[0, 0, 0], [0.5, 0.5, 0.5]], cell=[4.0, 4.0, 4.0], pbc=True)
+    elements = ["H", "Li"] # Sorted order: H (Z=1), Li (Z=3)
+
+    write_lammps_streaming(buffer, structure, elements)
+
+    content = buffer.getvalue()
+
+    # Check Header
+    assert "LAMMPS data file" in content
+    assert "2 atoms" in content
+    assert "2 atom types" in content
+    assert "0.000000 4.000000 xlo xhi" in content
+
+    # Check Masses
+    assert "Masses" in content
+    # H (1) -> 1.008, Li (3) -> 6.94
+    # element list order: H=1, Li=2 in LAMMPS types
+    # But usually type ID matches order in elements list
+    # H is first in 'elements' -> type 1
+    # Li is second -> type 2
+    assert "1 1.0080" in content # H
+    assert "2 6.94" in content # Li
+
+    # Check Atoms
+    assert "Atoms" in content
+    # Atom 1: Li. Li is type 2.
+    # Atom 2: H. H is type 1.
+    # Format: id type x y z
+    assert "1 2 0.000000 0.000000 0.000000" in content
+    assert "2 1 0.500000 0.500000 0.500000" in content
+
+def test_write_lammps_streaming_non_orthogonal() -> None:
+    """Verifies that non-orthogonal cells raise an error."""
+    buffer = StringIO()
+    structure = Atoms("H", cell=[[1, 0, 0], [0.5, 1, 0], [0, 0, 1]]) # Triclinic
+    elements = ["H"]
+
+    with pytest.raises(ValueError, match="Streaming writer only supports orthogonal cells"):
+        write_lammps_streaming(buffer, structure, elements)

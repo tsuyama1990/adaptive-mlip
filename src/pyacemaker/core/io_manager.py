@@ -51,6 +51,11 @@ class LammpsFileManager:
 
         elements = get_species_order(structure)
 
+        # Audit Fix: Explicit size check and streaming
+        # Warn if structure is very large
+        if len(structure) > 1000000:
+            logger.warning("Structure has %d atoms. Memory usage might be high.", len(structure))
+
         try:
             # Optimization: Use streaming writer for large structures to avoid OOM
             # Only supports 'atomic' style and orthogonal boxes for now.
