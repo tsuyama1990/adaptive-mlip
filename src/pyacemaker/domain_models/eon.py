@@ -15,6 +15,9 @@ class EONConfig(BaseModel):
 
     # EON execution parameters
     search_method: str = Field("akmc", description="Search method (e.g., akmc, min_mode)")
+    job_type: str = Field("akmc", description="Job type for config.ini")
+    potential_type: str = Field("ext", description="Potential type (e.g., ext, lammps)")
+    random_seed: int = Field(12345, description="Random seed for EON")
 
     # Optional override for potential path, otherwise uses the trained potential
     potential_path: Path | None = Field(None, description="Path to potential file (optional override)")

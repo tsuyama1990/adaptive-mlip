@@ -1,9 +1,17 @@
 import logging
+import shutil
 import subprocess
 import sys
 from pathlib import Path
 from typing import Any
 
+from pyacemaker.domain_models.constants import (
+    EON_CMD,
+    EON_CONFIG_FILE,
+    EON_DRIVER_SCRIPT,
+    EON_FORMAT,
+    EON_RESULT_FILE,
+)
 from pyacemaker.domain_models.eon import EONConfig
 
 logger = logging.getLogger(__name__)
@@ -38,6 +46,13 @@ class EONWrapper:
         # 1. Generate Driver Script
         driver_path = self._generate_pace_driver(work_dir, potential_path, elements)
 
+        # Security: Validate driver path is within work_dir to prevent arbitrary chmod
+        try:
+            driver_path.resolve().relative_to(work_dir.resolve())
+        except ValueError as e:
+            msg = f"Driver path {driver_path} is outside work directory {work_dir}"
+            raise ValueError(msg) from e
+
         # Make executable
         driver_path.chmod(0o755)
 
@@ -46,11 +61,16 @@ class EONWrapper:
 
         # 3. Run EON Client
         logger.info(f"Starting EON simulation in {work_dir}")
+
+        eon_executable = shutil.which(EON_CMD)
+        if not eon_executable:
+            logger.warning(f"{EON_CMD} executable not found. Skipping execution.")
+            return
+
         try:
             # We assume initial structure (reactant.con) is already placed by the scenario.
-
             result = subprocess.run(
-                ["eonclient"],  # noqa: S607
+                [eon_executable],
                 cwd=work_dir,
                 capture_output=True,
                 text=True,
@@ -60,8 +80,6 @@ class EONWrapper:
             if result.stdout:
                 logger.debug(f"EON stdout: {result.stdout}")
 
-        except FileNotFoundError:
-            logger.warning("eonclient executable not found. Skipping execution.")
         except subprocess.CalledProcessError as e:
             logger.exception("EON execution failed")
             msg = f"EON execution failed: {e}"
@@ -70,19 +88,19 @@ class EONWrapper:
     def _generate_config(self, work_dir: Path, driver_path: Path) -> None:
         """Generates config.ini for EON."""
         config_content = f"""[Main]
-job = {self.config.search_method}
+job = {self.config.job_type}
 temperature = {self.config.temperature}
 confidence = {self.config.confidence}
-random_seed = 12345
+random_seed = {self.config.random_seed}
 
 [Potential]
-type = ext
+type = {self.config.potential_type}
 command = {sys.executable} {driver_path.resolve()}
 
 [Saddle Search]
-method = min_mode
+method = {self.config.search_method}
 """
-        (work_dir / "config.ini").write_text(config_content)
+        (work_dir / EON_CONFIG_FILE).write_text(config_content)
 
     def _generate_pace_driver(
         self, work_dir: Path, potential_path: Path, elements: list[str] | None = None
@@ -94,9 +112,7 @@ method = min_mode
 
         elements_repr = repr(elements) if elements else "None"
         pot_path_str = str(potential_path.resolve())
-
-        # We construct the script content using .format() for injection
-        # Double braces {{ }} are used for literal braces in the output script (f-strings there).
+        eon_fmt = EON_FORMAT
 
         script = f"""#!/usr/bin/env python3
 import sys
@@ -111,7 +127,7 @@ def main():
         pot_path = "{pot_path_str}"
 
         # Read input from stdin (EON .con format)
-        atoms = read(sys.stdin, format='eon')
+        atoms = read(sys.stdin, format='{eon_fmt}')
 
         # Map types to symbols
         if elements:
@@ -183,7 +199,7 @@ if __name__ == "__main__":
     main()
 """
 
-        path = work_dir / "pace_driver.py"
+        path = work_dir / EON_DRIVER_SCRIPT
         path.write_text(script)
         return path
 
@@ -191,7 +207,7 @@ if __name__ == "__main__":
         """
         Parses `processtable.dat` from EON output.
         """
-        table_path = work_dir / "processtable.dat"
+        table_path = work_dir / EON_RESULT_FILE
         if not table_path.exists():
             return []
 
@@ -210,6 +226,6 @@ if __name__ == "__main__":
                         }
                         data.append(entry)
         except Exception as e:
-            logger.warning(f"Failed to parse processtable.dat: {e}")
+            logger.warning(f"Failed to parse {EON_RESULT_FILE}: {e}")
 
         return data

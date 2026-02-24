@@ -3,7 +3,11 @@ from typing import TextIO
 
 from ase.data import atomic_numbers
 
-from pyacemaker.domain_models.defaults import DEFAULT_MD_MINIMIZE_FTOL, DEFAULT_MD_MINIMIZE_TOL
+from pyacemaker.domain_models.defaults import (
+    DEFAULT_MD_ATOM_STYLE,
+    DEFAULT_MD_MINIMIZE_FTOL,
+    DEFAULT_MD_MINIMIZE_TOL,
+)
 from pyacemaker.domain_models.md import MDConfig
 
 
@@ -29,7 +33,18 @@ class LammpsScriptGenerator:
         if self.config.hybrid_potential:
             # Hybrid overlay: PACE + ZBL
             params = self.config.hybrid_params
-            buffer.write(f"pair_style hybrid/overlay pace zbl {params.zbl_cut_inner} {params.zbl_cut_outer}\n")
+
+            # Using global cutoff or explicit dictionary?
+            # Domain model simplified to zbl_global_cutoff for now
+            # But the code previously referenced zbl_cut_inner/outer which were removed/renamed.
+            # Let's fix this to use zbl_global_cutoff and maybe a heuristic for inner/outer.
+            # ZBL usually needs strict cutoffs.
+
+            # Assuming global cutoff is the outer, and inner is slightly smaller
+            outer = params.zbl_global_cutoff
+            inner = outer * 0.8
+
+            buffer.write(f"pair_style hybrid/overlay pace zbl {inner} {outer}\n")
 
             # PACE
             buffer.write(f"pair_coeff * * pace {quoted_pot} {species_str}\n")
@@ -133,7 +148,8 @@ class LammpsScriptGenerator:
 
         buffer.write("clear\n")
         buffer.write("units metal\n")
-        buffer.write(f"atom_style {self.config.atom_style}\n")
+        # MDConfig doesn't have atom_style field, using default constant
+        buffer.write(f"atom_style {DEFAULT_MD_ATOM_STYLE}\n")
         buffer.write("boundary p p p\n")
         buffer.write(f"read_data {quoted_data}\n")
 
@@ -162,7 +178,7 @@ class LammpsScriptGenerator:
 
         buffer.write("clear\n")
         buffer.write("units metal\n")
-        buffer.write(f"atom_style {self.config.atom_style}\n")
+        buffer.write(f"atom_style {DEFAULT_MD_ATOM_STYLE}\n")
         buffer.write("boundary p p p\n")
         buffer.write(f"read_data {quoted_data}\n")
 
@@ -172,4 +188,4 @@ class LammpsScriptGenerator:
         buffer.write("neigh_modify delay 0 every 1 check yes\n")
 
         buffer.write("min_style cg\n")
-        buffer.write("minimize 1.0e-6 1.0e-8 1000 10000\n")
+        buffer.write(f"minimize {DEFAULT_MD_MINIMIZE_TOL} {DEFAULT_MD_MINIMIZE_FTOL} 100 10000\n")

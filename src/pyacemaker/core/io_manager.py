@@ -7,6 +7,7 @@ from typing import Any
 from ase import Atoms
 from ase.io import write
 
+from pyacemaker.domain_models.defaults import DEFAULT_MD_ATOM_STYLE
 from pyacemaker.domain_models.md import MDConfig
 from pyacemaker.utils.io import write_lammps_streaming
 from pyacemaker.utils.structure import get_species_order
@@ -38,7 +39,8 @@ class LammpsFileManager:
             elements: List of element symbols in order.
         """
         # RAM disk usage optimization via config
-        temp_dir_ctx = tempfile.TemporaryDirectory(dir=self.config.temp_dir)
+        # MDConfig doesn't have temp_dir, using default temp dir (None)
+        temp_dir_ctx = tempfile.TemporaryDirectory()
         temp_dir = Path(temp_dir_ctx.name)
 
         run_id = uuid.uuid4().hex[:8]
@@ -51,10 +53,12 @@ class LammpsFileManager:
 
         elements = get_species_order(structure)
 
+        atom_style = DEFAULT_MD_ATOM_STYLE
+
         try:
             # Optimization: Use streaming writer for large structures to avoid OOM
             # Only supports 'atomic' style and orthogonal boxes for now.
-            if len(structure) > 10000 and self.config.atom_style == "atomic":
+            if len(structure) > 10000 and atom_style == "atomic":
                 logger.info("Streaming large structure (%d atoms) to disk.", len(structure))
                 try:
                     with data_file.open("w") as f:
@@ -62,9 +66,9 @@ class LammpsFileManager:
                 except ValueError:
                     # Fallback if non-orthogonal or other issue
                     logger.warning("Streaming failed (e.g. non-orthogonal). Falling back to ASE write.")
-                    write(str(data_file), structure, format="lammps-data", specorder=elements, atom_style=self.config.atom_style)
+                    write(str(data_file), structure, format="lammps-data", specorder=elements, atom_style=atom_style)
             else:
-                write(str(data_file), structure, format="lammps-data", specorder=elements, atom_style=self.config.atom_style)
+                write(str(data_file), structure, format="lammps-data", specorder=elements, atom_style=atom_style)
         except Exception as e:
             temp_dir_ctx.cleanup()
             msg = f"Failed to write LAMMPS data file: {e}"

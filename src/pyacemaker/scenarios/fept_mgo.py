@@ -10,6 +10,10 @@ from ase.visualize.plot import plot_atoms
 
 from pyacemaker.core.engine import LammpsEngine
 from pyacemaker.domain_models.config import PyAceConfig
+from pyacemaker.domain_models.constants import (
+    EON_FORMAT,
+    EON_RESULT_FILE,
+)
 from pyacemaker.interfaces.eon_driver import EONWrapper
 
 from .base_scenario import BaseScenario
@@ -34,10 +38,9 @@ class FePtMgoScenario(BaseScenario):
         self.engine = LammpsEngine(config.md)
 
         # Initialize EONWrapper
+        self.eon: EONWrapper | None = None
         if config.eon:
             self.eon = EONWrapper(config.eon)
-        else:
-            self.eon = None
 
     def run(self) -> None:
         self.work_dir.mkdir(parents=True, exist_ok=True)
@@ -51,7 +54,7 @@ class FePtMgoScenario(BaseScenario):
 
         # 3. Ordering (kMC)
         ordered = deposited
-        if self.eon and self.config.eon.enabled:
+        if self.eon and self.config.eon and self.config.eon.enabled:
             ordered = self.run_akmc(deposited)
         else:
             logger.info("EON disabled or not configured. Skipping kMC.")
@@ -64,29 +67,37 @@ class FePtMgoScenario(BaseScenario):
         mgo = bulk("MgO", "rocksalt", a=4.21)
 
         size = (2, 2, 1)
+        vacuum_size = 10.0
+
         if self.config.scenario:
             size = self.config.scenario.slab_size
+            vacuum_size = self.config.scenario.vacuum_size
 
-        slab = surface(mgo, (0, 0, 1), 2)
+        slab = surface(mgo, (0, 0, 1), 2)  # type: ignore[no-untyped-call]
         slab = slab.repeat(size)
-        slab.center(vacuum=10.0, axis=2)
+        slab.center(vacuum=vacuum_size, axis=2)
 
         output_path = self.work_dir / "mgo_slab.xyz"
         write(output_path, slab)
         logger.info(f"Surface generated: {output_path}")
-        return slab
+        return slab  # type: ignore[no-any-return]
 
     def deposit_atoms(self, slab: Atoms) -> Atoms:
         logger.info("Depositing Fe/Pt atoms...")
 
         count = 10
+        rng_seed = 12345
+        height_offset = 3.0
+
         if self.config.scenario:
             count = self.config.scenario.deposition_count
+            rng_seed = self.config.scenario.rng_seed
+            height_offset = self.config.scenario.deposition_height_offset
 
         deposited = slab.copy()  # type: ignore[no-untyped-call]
-        rng = np.random.default_rng(12345)
+        rng = np.random.default_rng(rng_seed)
 
-        z_height = slab.positions[:, 2].max() + 3.0
+        z_height = slab.positions[:, 2].max() + height_offset
 
         for i in range(count):
             species = "Fe" if i % 2 == 0 else "Pt"
@@ -103,6 +114,7 @@ class FePtMgoScenario(BaseScenario):
             logger.info("Mock mode: Skipping relaxation.")
         else:
             # We need a potential path
+            # potential_path is optional in MDConfig
             pot_path = self.config.md.potential_path
             if pot_path:
                 try:
@@ -116,7 +128,7 @@ class FePtMgoScenario(BaseScenario):
         output_path = self.work_dir / "deposited.xyz"
         write(output_path, deposited)
         logger.info(f"Deposited structure saved: {output_path}")
-        return deposited
+        return deposited  # type: ignore[no-any-return]
 
     def run_akmc(self, atoms: Atoms) -> Atoms:
         logger.info("Running aKMC with EON...")
@@ -125,32 +137,43 @@ class FePtMgoScenario(BaseScenario):
         pos_path = self.work_dir / "pos.con"
 
         # Write EON format
-        write(reactant_path, atoms, format="eon")
-        write(pos_path, atoms, format="eon")
+        write(reactant_path, atoms, format=EON_FORMAT)
+        write(pos_path, atoms, format=EON_FORMAT)
 
         is_mock = self.config.scenario and self.config.scenario.mock
 
         if is_mock:
             logger.info("Mock mode: EON run simulated.")
-            (self.work_dir / "processtable.dat").write_text("0 0.5 1.0\n1 0.6 1.0")
+            (self.work_dir / EON_RESULT_FILE).write_text("0 0.5 1.0\n1 0.6 1.0")
         else:
-            pot_path = self.config.eon.potential_path or self.config.md.potential_path
-            if not pot_path:
+            pot_path_str: str | None = None
+            if self.config.eon and self.config.eon.potential_path:
+                pot_path_str = str(self.config.eon.potential_path)
+            elif self.config.md.potential_path:
+                pot_path_str = self.config.md.potential_path
+
+            if not pot_path_str:
                 logger.error("No potential path found for EON.")
                 msg = "Potential path required for EON."
                 raise ValueError(msg)
 
+            pot_path = Path(pot_path_str)
+
             # Use self.eon which is verified to be not None in run() check
             if self.eon:
-                elements = sorted({*atoms.get_chemical_symbols()})
+                elements = sorted({*atoms.get_chemical_symbols()})  # type: ignore[no-untyped-call]
                 self.eon.run(pot_path, self.work_dir, elements=elements)
 
         return atoms
 
     def visualize(self, atoms: Atoms) -> None:
+        rotation = "10x,10y,0z"
+        if self.config.scenario:
+            rotation = self.config.scenario.visualization_rotation
+
         try:
             fig, ax = plt.subplots()
-            plot_atoms(atoms, ax, radii=0.5, rotation=("10x,10y,0z"))
+            plot_atoms(atoms, ax, radii=0.5, rotation=rotation)  # type: ignore[no-untyped-call]
             fig.savefig(self.work_dir / "final_structure.png")
             plt.close(fig)
             logger.info("Visualization saved.")

@@ -58,6 +58,13 @@ LMP_CMD_MINIMIZE: Final = "minimize 1.0e-6 1.0e-8 1000 10000"
 LMP_CMD_READ_DATA: Final = 'read_data "{data_file}"'
 LMP_CMD_ATOM_STYLE: Final = "atom_style {style}"
 
+# EON
+EON_CMD: Final = "eonclient"
+EON_CONFIG_FILE: Final = "config.ini"
+EON_DRIVER_SCRIPT: Final = "pace_driver.py"
+EON_RESULT_FILE: Final = "processtable.dat"
+EON_FORMAT: Final = "eon"
+
 # Error Messages
 ERR_SIM_SETUP_FAIL: Final = "Simulation setup failed: {error}"
 ERR_SIM_SECURITY_FAIL: Final = "Simulation security validation failed: {error}"

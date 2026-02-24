@@ -3,6 +3,15 @@ from pathlib import Path
 from pyacemaker.domain_models.constants import DANGEROUS_PATH_CHARS
 
 
+def resolve_path(path: str | Path) -> Path:
+    """
+    Resolves a path string or Path object to a resolved Path.
+    Provides basic safety checks.
+    """
+    p = Path(path)
+    return validate_path_safe(p)
+
+
 def validate_path_safe(path: Path) -> Path:
     """
     Ensures path is safe using strict resolution and character allowlisting.
@@ -15,15 +24,7 @@ def validate_path_safe(path: Path) -> Path:
         The resolved Path object.
 
     Raises:
-        ActiveSetError: If the path contains dangerous characters or traversal attempts.
-                        (Using ActiveSetError for consistency, or generic ValueError/RuntimeError could be used,
-                         but keeping existing exception type for now as it's used in ActiveSetSelector).
-                         Actually, let's use ValueError for a utility, but caller might expect specific error.
-                         Let's stick to the pattern used in ActiveSetSelector for now or introduce a generic PathError.
-                         For simplicity and audit compliance, raising ValueError/RuntimeError is standard for utils,
-                         but ActiveSetSelector catches ActiveSetError.
-                         I will raise ValueError, and ActiveSetSelector can wrap it or I import ActiveSetError.
-                         Given the plan imports ActiveSetError, I will use it or a base error.
+        ValueError: If the path contains dangerous characters or traversal attempts.
     """
     try:
         resolved = path.resolve()

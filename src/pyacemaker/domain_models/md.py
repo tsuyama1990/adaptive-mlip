@@ -1,122 +1,112 @@
-import os
-from pathlib import Path
+from typing import Any, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, PositiveFloat, PositiveInt
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from pyacemaker.domain_models.constants import DEFAULT_RAM_DISK_PATH
-from pyacemaker.domain_models.defaults import (
-    DEFAULT_MD_ATOM_STYLE,
-    DEFAULT_MD_BASE_ENERGY,
-    DEFAULT_MD_CHECK_INTERVAL,
-    DEFAULT_MD_DUMP_FREQ,
-    DEFAULT_MD_HYBRID_ZBL_INNER,
-    DEFAULT_MD_HYBRID_ZBL_OUTER,
-    DEFAULT_MD_NEIGHBOR_SKIN,
-    DEFAULT_MD_PDAMP_FACTOR,
-    DEFAULT_MD_TDAMP_FACTOR,
-    DEFAULT_MD_THERMO_FREQ,
-    DEFAULT_OTF_UNCERTAINTY_THRESHOLD,
+from pyacemaker.domain_models.constants import (
+    DEFAULT_BATCH_SIZE,
+    DEFAULT_CHECKPOINT_INTERVAL,
+    DEFAULT_N_CANDIDATES,
+    DEFAULT_RAM_DISK_PATH,
+    DEFAULT_STATE_FILE,
 )
-
-
-def _get_default_temp_dir() -> str | None:
-    """Returns RAM disk path if available and writable, else None."""
-    shm_path = Path(DEFAULT_RAM_DISK_PATH)
-    if shm_path.exists() and shm_path.is_dir() and os.access(shm_path, os.W_OK):
-        return str(shm_path)
-    return None
+from pyacemaker.domain_models.defaults import (
+    DEFAULT_MD_DUMP_FREQ,
+    DEFAULT_MD_N_STEPS,
+    DEFAULT_MD_NEIGHBOR_SKIN,
+    DEFAULT_MD_PDAMP,
+    DEFAULT_MD_TDAMP,
+    DEFAULT_MD_THERMO_FREQ,
+    DEFAULT_MD_TIMESTEP,
+)
+from pyacemaker.utils.path import resolve_path
 
 
 class HybridParams(BaseModel):
+    """
+    Parameters for the hybrid/overlay baseline potential (e.g., ZBL).
+    """
+
     model_config = ConfigDict(extra="forbid")
 
-    zbl_cut_inner: PositiveFloat = Field(
-        DEFAULT_MD_HYBRID_ZBL_INNER, description="Inner cutoff radius for ZBL potential (Angstrom)"
+    zbl_cutoffs: dict[tuple[str, str], float] = Field(
+        default_factory=dict,
+        description="Cutoff distances for ZBL (inner, outer) per element pair.",
     )
-    zbl_cut_outer: PositiveFloat = Field(
-        DEFAULT_MD_HYBRID_ZBL_OUTER, description="Outer cutoff radius for ZBL potential (Angstrom)"
+    # Example: {('Fe', 'Fe'): 0.5, ('Fe', 'Pt'): 0.6}
+    # For now, we simplify to a global ZBL cutoff or assume auto-generated.
+    zbl_global_cutoff: float = Field(
+        0.5, description="Global inner cutoff for ZBL (Angstroms) if not specified per pair"
     )
-
-
-class MDSimulationResult(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    energy: float = Field(..., description="Final potential energy of the system")
-    forces: list[list[float]] = Field(..., description="Forces on atoms in the final frame")
-    stress: list[float] = Field(
-        default_factory=lambda: [0.0] * 6,
-        description="Stress tensor (Voigt: xx, yy, zz, yz, xz, xy) in Bar"
-    )
-    halted: bool = Field(..., description="Whether the simulation was halted early")
-    max_gamma: float = Field(..., description="Maximum extrapolation grade observed")
-    n_steps: int = Field(..., description="Number of steps actually performed")
-    temperature: float = Field(..., description="Average or final temperature")
-    trajectory_path: str | None = Field(None, description="Path to the trajectory file")
-    log_path: str | None = Field(None, description="Path to the simulation log file")
-    halt_structure_path: str | None = Field(
-        None, description="Path to the structure where halt occurred"
-    )
-    halt_step: int | None = Field(None, description="The step at which the simulation was halted")
 
 
 class MDConfig(BaseModel):
+    """
+    Configuration for Molecular Dynamics simulations.
+    """
+
     model_config = ConfigDict(extra="forbid")
 
-    temperature: PositiveFloat = Field(..., description="Simulation temperature in Kelvin")
-    pressure: float = Field(..., ge=0.0, le=1.0e6, description="Simulation pressure in Bar (Max 1 MBar)")
-    timestep: PositiveFloat = Field(..., description="Timestep in ps")
-    n_steps: int = Field(..., gt=0, description="Number of MD steps")
-
-    # Output Control
-    thermo_freq: PositiveInt = Field(
-        DEFAULT_MD_THERMO_FREQ, description="Frequency of thermodynamic output (steps)"
+    temperature: float = Field(..., gt=0, description="Simulation temperature (K)")
+    pressure: float = Field(0.0, description="Simulation pressure (Bar)")
+    timestep: float = Field(DEFAULT_MD_TIMESTEP, gt=0, description="Timestep (ps)")
+    n_steps: int = Field(DEFAULT_MD_N_STEPS, gt=0, description="Number of MD steps")
+    thermo_freq: int = Field(
+        DEFAULT_MD_THERMO_FREQ, gt=0, description="Frequency of thermodynamic output"
     )
-    dump_freq: PositiveInt = Field(
-        DEFAULT_MD_DUMP_FREQ, description="Frequency of trajectory dump (steps)"
+    dump_freq: int = Field(
+        DEFAULT_MD_DUMP_FREQ, gt=0, description="Frequency of trajectory dump"
     )
-    minimize: bool = Field(False, description="Perform energy minimization before MD")
-    neighbor_skin: PositiveFloat = Field(
-        DEFAULT_MD_NEIGHBOR_SKIN, description="Neighbor list skin distance (Angstrom)"
+    uncertainty_threshold: float | None = Field(
+        None, gt=0, description="Max allowed extrapolation grade"
     )
-    atom_style: str = Field(
-        DEFAULT_MD_ATOM_STYLE, description="LAMMPS atom style (e.g. atomic, charge)"
+    check_interval: int | None = Field(
+        None, gt=0, description="Interval for uncertainty check"
     )
-
-    # Advanced Settings
-    temp_dir: str | None = Field(
-        default_factory=_get_default_temp_dir,
-        description="Directory for temporary files (e.g., /dev/shm for RAM disk)"
-    )
-    tdamp_factor: PositiveFloat = Field(
-        DEFAULT_MD_TDAMP_FACTOR, description="Temperature damping factor (multiplies timestep)"
-    )
-    pdamp_factor: PositiveFloat = Field(
-        DEFAULT_MD_PDAMP_FACTOR, description="Pressure damping factor (multiplies timestep)"
-    )
-
-    # Mocking Parameters (Audit Requirement)
-    base_energy: float = Field(
-        DEFAULT_MD_BASE_ENERGY, description="Baseline energy for mock simulation"
-    )
-    default_forces: list[list[float]] = Field(
-        default=[[0.0, 0.0, 0.0]], description="Default forces for mock simulation"
-    )
-
-    # Spec Section 3.4 (Hybrid Potential & OTF)
+    # Hybrid potential settings
     hybrid_potential: bool = Field(
-        False, description="Use hybrid potential (ACE + LJ/ZBL)"
+        False, description="Use hybrid/overlay potential (ACE + ZBL/LJ)"
     )
     hybrid_params: HybridParams = Field(
-        default_factory=HybridParams, description="Parameters for hybrid potential baseline"
+        default_factory=HybridParams, description="Parameters for hybrid potential"
     )
-
-    # Spec Section 3.4 (OTF)
+    neighbor_skin: float = Field(
+        DEFAULT_MD_NEIGHBOR_SKIN, gt=0, description="Neighbor list skin distance"
+    )
+    tdamp_factor: float = Field(
+        DEFAULT_MD_TDAMP, gt=0, description="Thermostat damping factor (x timestep)"
+    )
+    pdamp_factor: float = Field(
+        DEFAULT_MD_PDAMP, gt=0, description="Barostat damping factor (x timestep)"
+    )
     fix_halt: bool = Field(
-        False, description="Enable OTF halting based on uncertainty"
+        False, description="Enable fix halt for uncertainty-driven early termination"
     )
-    uncertainty_threshold: float = Field(
-        DEFAULT_OTF_UNCERTAINTY_THRESHOLD, gt=0.0, description="Gamma threshold for halting simulation"
-    )
-    check_interval: int = Field(
-        DEFAULT_MD_CHECK_INTERVAL, gt=0, description="Step interval for uncertainty check"
-    )
+    minimize: bool = Field(True, description="Perform minimization before MD run")
+    potential_path: Optional[str] = Field(None, description="Path to potential file")
+
+    @field_validator("potential_path", mode="before")
+    @classmethod
+    def validate_potential_path(cls, v: Any) -> Any:
+        if v is not None:
+            return str(resolve_path(v))
+        return v
+
+
+class MDSimulationResult(BaseModel):
+    """
+    Result of an MD simulation.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    energy: float
+    forces: list[list[float]]  # List of [fx, fy, fz]
+    stress: list[float]  # Voigt notation [pxx, pyy, pzz, pyz, pxz, pxy]
+    halted: bool
+    max_gamma: float
+    n_steps: int
+    temperature: float
+    trajectory_path: str
+    log_path: str
+    halt_structure_path: str | None = None
+    halt_step: int | None = None
