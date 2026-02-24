@@ -21,6 +21,7 @@ class ActiveSetSelector:
         candidates: Iterable[Atoms],
         potential_path: str | Path,
         n_select: int,
+        anchor: Atoms | None = None,
     ) -> Iterator[Atoms]:
         """
         Selects a subset of structures that maximize the information gain.
@@ -29,6 +30,7 @@ class ActiveSetSelector:
             candidates: Iterable of candidate structures. Can be a generator.
             potential_path: Path to the current potential (used for descriptors).
             n_select: Number of structures to select. Must be > 0.
+            anchor: Optional structure to always include in the selection (e.g., the halt structure).
 
         Returns:
             Iterator of selected Atoms objects.
@@ -39,6 +41,15 @@ class ActiveSetSelector:
         if n_select <= 0:
             msg = f"n_select must be positive, got {n_select}"
             raise ValueError(msg)
+
+        # Handle Anchor Logic
+        actual_n_select = n_select
+        if anchor is not None:
+            yield anchor
+            actual_n_select -= 1
+            if actual_n_select <= 0:
+                # If only requested 1 and anchor is provided, we are done.
+                return
 
         potential_path = Path(potential_path)
         if not potential_path.exists():
@@ -51,68 +62,59 @@ class ActiveSetSelector:
             candidates_file = tmp_path / "candidates.xyz"
             output_file = tmp_path / "selected.xyz"
 
-            # Stream write candidates to disk using buffering/chunking
-            # This avoids I/O bottleneck of writing 1-by-1 and Memory bottleneck of loading all.
-            # Using batched() from utils.misc
-            count = 0
-            try:
-                # Open file once and write in chunks
-                # We use append=True logic manually by keeping file open?
-                # ASE write supports writing a list of images.
-                # batched returns a tuple of items.
-                BATCH_SIZE = 1000
-                with candidates_file.open("w") as f:
-                    for batch in batched(candidates, BATCH_SIZE):
-                        # Convert tuple to list for ASE
-                        # write supports list of Atoms
-                        # We must specify format explicitly for streaming write usually
-                        write(f, list(batch), format="extxyz")
-                        count += len(batch)
-            except Exception as e:
-                msg = f"Failed to write candidates to temporary file: {e}"
-                raise ActiveSetError(msg) from e
-
-            # Verify candidates were written
+            count = self._write_candidates(candidates, candidates_file)
             if count == 0:
-                # If no candidates, return empty iterator
-                yield from []
                 return
 
-            # Construct command safely
-            self._validate_path_safe(candidates_file)
-            self._validate_path_safe(potential_path)
-            self._validate_path_safe(output_file)
+            self._execute_selection(candidates_file, potential_path, output_file, actual_n_select)
 
-            cmd = [
-                "pace_activeset",
-                "--dataset",
-                str(candidates_file),
-                "--potential",
-                str(potential_path),
-                "--select",
-                str(n_select),
-                "--output",
-                str(output_file),
-            ]
-
-            self._run_pace_activeset(cmd)
-
-            # Read selected structures
+            # Stream read selected structures to avoid memory spikes
             if not output_file.exists():
                 msg = "Active set selection failed: Output file not created."
                 raise ActiveSetError(msg)
 
-            # Check file integrity
             if output_file.stat().st_size == 0:
-                 msg = "Active set selection failed: Output file is empty."
-                 raise ActiveSetError(msg)
+                msg = "Active set selection failed: Output file is empty."
+                raise ActiveSetError(msg)
 
-            # Stream read selected structures to avoid memory spikes
             try:
                 yield from iread(output_file, index=":")
             except Exception as e:
                 msg = f"Failed to read selected structures: {e}"
                 raise ActiveSetError(msg) from e
+
+    def _write_candidates(self, candidates: Iterable[Atoms], file_path: Path) -> int:
+        """Writes candidates to disk, returning count."""
+        count = 0
+        try:
+            batch_size = 1000
+            with file_path.open("w") as f:
+                for batch in batched(candidates, batch_size):
+                    write(f, list(batch), format="extxyz")
+                    count += len(batch)
+        except Exception as e:
+            msg = f"Failed to write candidates to temporary file: {e}"
+            raise ActiveSetError(msg) from e
+        return count
+
+    def _execute_selection(self, candidates_file: Path, potential_path: Path, output_file: Path, n_select: int) -> None:
+        """Constructs and runs the selection command."""
+        self._validate_path_safe(candidates_file)
+        self._validate_path_safe(potential_path)
+        self._validate_path_safe(output_file)
+
+        cmd = [
+            "pace_activeset",
+            "--dataset",
+            str(candidates_file),
+            "--potential",
+            str(potential_path),
+            "--select",
+            str(n_select),
+            "--output",
+            str(output_file),
+        ]
+        self._run_pace_activeset(cmd)
 
     def _run_pace_activeset(self, cmd: list[str]) -> None:
         """Executes the pace_activeset command safely."""

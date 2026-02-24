@@ -101,5 +101,6 @@ class LammpsEngine(BaseEngine):
                 temperature=temperature,
                 trajectory_path=str(dump_file),
                 log_path=str(log_file),
-                halt_structure_path=str(dump_file) if halted else None
+                halt_structure_path=str(dump_file) if halted else None,
+                halt_step=step if halted else None
             )

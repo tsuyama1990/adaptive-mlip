@@ -48,6 +48,14 @@ class StructureConfig(BaseModel):
         default=1, ge=1, description="Number of structures to generate"
     )
 
+    # Local Active Learning Settings
+    local_extraction_radius: float = Field(
+        default=6.0, gt=0.0, description="Radius for extracting local clusters around high uncertainty atoms (Angstrom)"
+    )
+    local_buffer_radius: float = Field(
+        default=4.0, ge=0.0, description="Buffer radius added to extraction for force masking (Angstrom)"
+    )
+
     @field_validator("elements")
     @classmethod
     def validate_elements(cls, v: list[str]) -> list[str]:

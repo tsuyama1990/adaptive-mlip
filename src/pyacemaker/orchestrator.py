@@ -2,6 +2,7 @@ import os
 import shutil
 from pathlib import Path
 
+import numpy as np
 from ase import Atoms
 from ase.io import iread, read, write
 
@@ -37,6 +38,7 @@ from pyacemaker.domain_models.defaults import (
 from pyacemaker.domain_models.md import MDSimulationResult
 from pyacemaker.factory import ModuleFactory
 from pyacemaker.logger import setup_logger
+from pyacemaker.utils.extraction import extract_local_region
 from pyacemaker.utils.misc import batched
 
 
@@ -292,6 +294,15 @@ class Orchestrator:
              self.logger.warning("Failed to get initial structure.")
              return None
 
+    def _get_max_gamma_atom_index(self, structure: Atoms) -> int:
+        """Finds the index of the atom with the maximum gamma value."""
+        if "c_gamma" in structure.arrays:
+            gammas = structure.get_array("c_gamma")  # type: ignore[no-untyped-call]
+            return int(np.argmax(gammas))
+
+        self.logger.warning("c_gamma not found in structure arrays. Using atom 0 as center.")
+        return 0
+
     def _refine_potential(self, result: MDSimulationResult, potential_path: Path, paths: dict[str, Path]) -> Path | None:
         """Refines potential upon Halt."""
         if not result.halt_structure_path or not self.generator or not self.active_set_selector or not self.oracle or not self.trainer:
@@ -307,13 +318,26 @@ class Orchestrator:
             if isinstance(halt_structure, list):
                 halt_structure = halt_structure[-1]
 
-            # Generate local candidates
-            local_n = self.config.workflow.otf.local_n_candidates
-            candidates_gen = self.generator.generate_local(halt_structure, n_candidates=local_n)
+            # Find center atom (max gamma)
+            center_idx = self._get_max_gamma_atom_index(halt_structure)
 
-            # Select Active Set
+            # Extract local cluster (S0)
+            radius = self.config.structure.local_extraction_radius
+            buffer = self.config.structure.local_buffer_radius
+            s0_cluster = extract_local_region(halt_structure, center_idx, radius, buffer)
+
+            # Generate local candidates (perturbations of S0)
+            local_n = self.config.workflow.otf.local_n_candidates
+            candidates_gen = self.generator.generate_local(s0_cluster, n_candidates=local_n)
+
+            # Select Active Set (including S0 as anchor)
             n_select = self.config.workflow.otf.local_n_select
-            selected_gen = self.active_set_selector.select(candidates_gen, potential_path, n_select=n_select)
+            selected_gen = self.active_set_selector.select(
+                candidates_gen,
+                potential_path,
+                n_select=n_select,
+                anchor=s0_cluster
+            )
 
             # Label
             labelled_gen = self.oracle.compute(selected_gen)

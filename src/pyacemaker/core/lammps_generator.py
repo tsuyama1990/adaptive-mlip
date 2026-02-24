@@ -85,8 +85,8 @@ class LammpsScriptGenerator:
 
         buffer.write(f"run {self.config.n_steps}\n")
 
-    def _gen_output(self, buffer: StringIO, dump_file: Path) -> None:
-        """Generates output settings."""
+    def _gen_output_setup(self, buffer: StringIO, dump_file: Path) -> None:
+        """Generates output settings (thermo and dump)."""
         buffer.write(f"thermo {self.config.thermo_freq}\n")
 
         style = "step temp pe press"
@@ -100,10 +100,10 @@ class LammpsScriptGenerator:
         buffer.write(f"thermo_style custom {style}\n")
         buffer.write(f"dump traj all custom {self.config.dump_freq} {quoted_dump} {dump_cols}\n")
 
-        # Check if halted
-        if self.config.fix_halt:
-            buffer.write("variable halted equal f_halt_check\n")
-            buffer.write("print 'Halted: ${halted}'\n")
+    def _gen_post_run_diagnostics(self, buffer: StringIO) -> None:
+        """Generates post-run diagnostic prints."""
+        # Check if halted logic was intended here, but strictly relying on step count in Python is safer.
+        # Keeping this method for future extensibility or if explicit status print is needed.
 
     def generate(
         self,
@@ -128,7 +128,12 @@ class LammpsScriptGenerator:
         self._gen_potential(buffer, potential_path, elements)
         self._gen_settings(buffer)
         self._gen_watchdog(buffer, potential_path)
+
+        # Output setup MUST come before run
+        self._gen_output_setup(buffer, dump_file)
+
         self._gen_execution(buffer)
-        self._gen_output(buffer, dump_file)
+
+        self._gen_post_run_diagnostics(buffer)
 
         return buffer.getvalue()

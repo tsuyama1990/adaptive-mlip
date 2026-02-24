@@ -52,6 +52,7 @@ class MDSimulationResult(BaseModel):
     halt_structure_path: str | None = Field(
         None, description="Path to the structure where halt occurred"
     )
+    halt_step: int | None = Field(None, description="The step at which the simulation was halted")
 
 
 class MDConfig(BaseModel):
