@@ -20,13 +20,18 @@ def mock_config():
     return config
 
 def test_scenario_init(mock_config):
+    # Need to set md config attributes used in LammpsEngine
+    mock_config.md.neighbor_skin = 2.0
+    mock_config.md.timestep = 0.001
+    mock_config.md.hybrid_potential = False
+    mock_config.md.fix_halt = False
+
     scenario = FePtMgoScenario(mock_config)
     assert scenario.config == mock_config
     assert scenario.name == "fept_mgo"
 
 @patch("pyacemaker.scenarios.fept_mgo.LammpsEngine")
 @patch("pyacemaker.scenarios.fept_mgo.EONWrapper")
-# Removed StructureGenerator patch as it is not used directly
 def test_scenario_run(mock_eon, mock_engine, mock_config):
     scenario = FePtMgoScenario(mock_config)
 

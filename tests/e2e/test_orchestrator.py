@@ -77,6 +77,7 @@ class FakeEngine(BaseEngine):
         return MDSimulationResult(
              energy=-10.0,
              forces=[[0.0, 0.0, 0.0]],
+             stress=[0.0] * 6,
              halted=False,
              max_gamma=0.0,
              n_steps=100,

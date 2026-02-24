@@ -1,8 +1,8 @@
 import logging
 import tempfile
 import uuid
+from contextlib import AbstractContextManager
 from pathlib import Path
-from typing import ContextManager
 
 from ase import Atoms
 from ase.io import write
@@ -26,7 +26,7 @@ class LammpsFileManager:
 
     def prepare_workspace(
         self, structure: Atoms
-    ) -> tuple[ContextManager[str], Path, Path, Path, list[str]]:
+    ) -> tuple[AbstractContextManager[str], Path, Path, Path, list[str]]:
         """
         Creates temporary directory and writes structure file.
 

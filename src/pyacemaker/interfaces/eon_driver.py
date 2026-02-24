@@ -70,7 +70,7 @@ class EONWrapper:
         try:
             # We assume initial structure (reactant.con) is already placed by the scenario.
             # Security: Use list for subprocess args, no shell=True
-            result = subprocess.run(
+            result = subprocess.run(  # noqa: S603
                 [eon_executable],
                 cwd=work_dir,
                 capture_output=True,

@@ -1,6 +1,6 @@
 # PyAceMaker
 
-![Python](https://img.shields.io/badge/python-3.11+-blue.svg)
+![Python](https://img.shields.io/badge/python-3.12+-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 ![Status](https://img.shields.io/badge/status-Verified-brightgreen.svg)
 
@@ -32,7 +32,7 @@ Constructing MLIPs manually is tedious and error-prone. PyAceMaker automates the
     *   **Automated Configuration**: Generates optimal `input.yaml` for Pacemaker based on dataset composition.
 *   **Molecular Dynamics (MD) Engine**:
     *   Integrated LAMMPS driver for NPT/NVT simulations.
-    *   **Hybrid Potentials**: Overlays ACE with ZBL/LJ for safety during high-energy events.
+    *   **Hybrid Potentials**: Overlays ACE with ZBL/LJ for safety during high-energy events. Configurable global and per-pair cutoffs.
     *   **Uncertainty Watchdog**: Automatically halts simulations when the extrapolation grade ($\gamma$) exceeds a safe threshold.
 *   **Long-Timescale Simulation (aKMC)**:
     *   **EON Integration**: Seamlessly runs Adaptive Kinetic Monte Carlo simulations using the EON software stack.
@@ -40,12 +40,12 @@ Constructing MLIPs manually is tedious and error-prone. PyAceMaker automates the
 *   **Production Scenarios**:
     *   **Fe/Pt on MgO**: Pre-configured "Grand Challenge" scenario for simulating deposition and L10 ordering.
 *   **Scalability**:
-    *   **Streaming Data Processing**: Handles large datasets with O(1) memory usage.
+    *   **Streaming Data Processing**: Handles large datasets (>100k structures) with O(1) memory usage.
     *   **Resume Capability**: Checkpoints state to `state.json`, allowing workflows to pause and resume from the exact iteration and potential version.
 
 ## Requirements
 
-*   **Python**: >= 3.11
+*   **Python**: >= 3.12
 *   **DFT Code**: Quantum Espresso (`pw.x` executable in PATH)
 *   **MLIP Trainer**: Pacemaker (`pace_train`, `pace_activeset` executables in PATH)
 *   **MD Engine**: LAMMPS Python Interface (`lammps` package, with `USER-PACE` support)
@@ -74,7 +74,7 @@ Run the standard active learning loop to train a potential.
         elements: ["Fe", "Pt"]
         supercell_size: [2, 2, 2]
     dft:
-        code: "quantum_espresso"
+        code: "qe"
         functional: "PBE"
         pseudopotentials:
             Fe: "Fe.UPF"
@@ -85,6 +85,9 @@ Run the standard active learning loop to train a potential.
     md:
         temperature: 1000.0
         n_steps: 5000
+        hybrid_potential: true
+        hybrid_params:
+            zbl_global_cutoff: 2.0
     workflow:
         max_iterations: 10
     ```
@@ -104,7 +107,7 @@ Run the standard active learning loop to train a potential.
 Run pre-defined scenarios using a trained potential.
 
 1.  **Prepare Configuration**:
-    Add scenario settings to your `config.yaml` or use a dedicated one. Ensure `md.potential_path` points to your trained potential.
+    Add scenario settings to your `config.yaml`.
 
     ```yaml
     # ... standard config ...
@@ -112,7 +115,8 @@ Run pre-defined scenarios using a trained potential.
         name: "fept_mgo"
         output_dir: "grand_challenge_run"
     eon:
-        enabled: true
+        # Path to EON executable usually detected automatically
+        # eon_executable: "eonclient"
         temperature: 600.0
     ```
 

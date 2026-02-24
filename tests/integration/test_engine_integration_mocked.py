@@ -29,13 +29,19 @@ def test_engine_integration_mocked(mock_driver_cls: MagicMock, mock_md_config: M
 
     engine = LammpsEngine(mock_md_config)
 
+    # Create dummy potential
+    pot_path = tmp_path / "potential.yace"
+    pot_path.touch()
+
     # Mock file manager
     with patch.object(engine.file_manager, "prepare_workspace") as mock_prep:
         mock_ctx = MagicMock()
+        mock_ctx.name = str(tmp_path)
         mock_prep.return_value = (mock_ctx, tmp_path/"data.lmp", tmp_path/"dump.lammpstrj", tmp_path/"log.lammps", ["Fe"])
 
-        atoms = Atoms("Fe", positions=[[0,0,0]])
-        result = engine.run(atoms, None)
+        # Must have a cell to pass validation if we validate structure
+        atoms = Atoms("Fe", positions=[[0,0,0]], cell=[10,10,10], pbc=True)
+        result = engine.run(atoms, pot_path)
 
         assert result.energy == -100.0
         mock_driver.run_file.assert_called()

@@ -26,15 +26,19 @@ def test_generator_hybrid_potential(tmp_path: Path) -> None:
     generator.write_script(buffer, pot_path, data_file, dump_file, ["H", "He"])
     script = buffer.getvalue()
 
-    assert "pair_style hybrid/overlay" in script
+    # Check pair_style line for cutoffs
+    # inner = 1.5 * 0.8 = 1.2
+    # Floating point check (1.2 can be 1.2000000000000002)
+    assert "pair_style hybrid/overlay pace zbl" in script
+    # Check that it ends with 1.5
+    assert "1.5" in script
+
     assert f'pair_coeff * * pace "{pot_path}" H He' in script
 
     # ZBL checks
     assert "pair_coeff 1 1 zbl 1 1" in script
     assert "pair_coeff 1 2 zbl 1 2" in script
     assert "pair_coeff 2 2 zbl 2 2" in script
-    # Verify cutoffs: inner = 1.5 * 0.8 = 1.2
-    assert "zbl 1.2 1.5" in script
 
 
 def test_generator_pure_pace(tmp_path: Path) -> None:

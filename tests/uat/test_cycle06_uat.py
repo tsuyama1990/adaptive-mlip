@@ -95,13 +95,29 @@ def test_scenario_06_01_active_learning_campaign(uat_config: PyAceConfig, tmp_pa
         write(halt_path, Atoms("Fe"))
 
         res1 = MDSimulationResult(
-            energy=-10.0, temperature=300, forces=[[0.0, 0.0, 0.0]], n_steps=50, max_gamma=10.0, halted=True,
+            energy=-10.0,
+            temperature=300,
+            forces=[[0.0, 0.0, 0.0]],
+            stress=[0.0] * 6,
+            n_steps=50,
+            max_gamma=10.0,
+            halted=True,
+            trajectory_path=str(halt_path),
+            log_path=str(tmp_path / "log.lammps"),
             halt_structure_path=str(halt_path)
         )
 
         # Iteration 2: Converged (not halted)
         res2 = MDSimulationResult(
-            energy=-10.0, temperature=300, forces=[[0.0, 0.0, 0.0]], n_steps=1000, max_gamma=2.0, halted=False,
+            energy=-10.0,
+            temperature=300,
+            forces=[[0.0, 0.0, 0.0]],
+            stress=[0.0] * 6,
+            n_steps=1000,
+            max_gamma=2.0,
+            halted=False,
+            trajectory_path=str(tmp_path / "traj.lammpstrj"),
+            log_path=str(tmp_path / "log.lammps"),
             halt_structure_path=None
         )
 
@@ -151,7 +167,15 @@ def test_scenario_06_02_resume_capability(uat_config: PyAceConfig, tmp_path: Pat
 
         # Iteration 2: Run MD
         res2 = MDSimulationResult(
-            energy=-10.0, temperature=300, forces=[[0.0, 0.0, 0.0]], n_steps=1000, max_gamma=2.0, halted=False,
+            energy=-10.0,
+            temperature=300,
+            forces=[[0.0, 0.0, 0.0]],
+            stress=[0.0] * 6,
+            n_steps=1000,
+            max_gamma=2.0,
+            halted=False,
+            trajectory_path=str(tmp_path / "traj.lammpstrj"),
+            log_path=str(tmp_path / "log.lammps"),
             halt_structure_path=None
         )
         mock_engine.run.return_value = res2

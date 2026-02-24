@@ -13,7 +13,7 @@ def test_hybrid_params_valid() -> None:
 def test_hybrid_params_invalid() -> None:
     """Tests invalid HybridParams (extra fields)."""
     with pytest.raises(ValidationError):
-        HybridParams(zbl_cut_inner=1.0)
+        HybridParams(zbl_cut_inner=1.0)  # type: ignore[call-arg]
 
 
 def test_md_config_valid() -> None:

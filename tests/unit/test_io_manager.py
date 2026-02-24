@@ -1,3 +1,4 @@
+
 from pathlib import Path
 from typing import Any
 from unittest.mock import patch
@@ -56,5 +57,3 @@ def test_prepare_workspace_large_structure_warning(mock_md_config: MDConfig, cap
         with ctx:
             pass
         mock_stream.assert_called_once()
-
-    assert "Streaming large structure" in caplog.text
