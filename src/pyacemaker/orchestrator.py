@@ -2,6 +2,7 @@ import os
 import shutil
 from pathlib import Path
 
+import numpy as np
 from ase import Atoms
 from ase.io import iread, read, write
 
@@ -37,6 +38,7 @@ from pyacemaker.domain_models.defaults import (
 from pyacemaker.domain_models.md import MDSimulationResult
 from pyacemaker.factory import ModuleFactory
 from pyacemaker.logger import setup_logger
+from pyacemaker.utils.extraction import extract_local_region
 from pyacemaker.utils.misc import batched
 
 
@@ -182,23 +184,30 @@ class Orchestrator:
         return paths
 
     def _explore(self, paths: dict[str, Path]) -> None:
-        """Step 1: Exploration (Cold Start)"""
+        """
+        Step 1: Exploration (Cold Start).
+        Generates initial candidate structures and writes them to disk using efficient streaming.
+        """
         if not self.generator:
             return
 
         n_candidates = self.config.workflow.n_candidates
-        batch_size = self.config.workflow.batch_size
+        # We can use batched for chunking, but opening file once is key.
+        # ase.io.write can write a list of atoms.
         candidates_file = paths["candidates"] / FILENAME_CANDIDATES
 
         try:
             candidate_stream = self.generator.generate(n_candidates=n_candidates)
             total = 0
 
-            # ase.io.write handles open file objects efficiently for many formats
-            with candidates_file.open("a") as f:
-                for batch in batched(candidate_stream, n=batch_size):
-                    write(f, batch, format="extxyz")
-                    total += len(batch)
+            # Use ASE write in append mode with the generator directly.
+            # This avoids manual batching and list materialization completely.
+            # 'append=True' ensures we don't overwrite if file exists (from previous batches if any, though here it's one call).
+            # ASE iterates over candidate_stream.
+            write(candidates_file, candidate_stream, format="extxyz", append=True)  # type: ignore[arg-type]
+
+            # For now, we log "Written candidates" as total count is unknown due to streaming
+            total = -1
 
             self.logger.info(LOG_GENERATED_CANDIDATES.format(count=total))
         except Exception as e:
@@ -206,7 +215,10 @@ class Orchestrator:
             raise OrchestratorError(msg) from e
 
     def _label(self, paths: dict[str, Path]) -> None:
-        """Step 2: Labeling (Oracle)"""
+        """
+        Step 2: Labeling (Oracle).
+        Computes properties for candidates and writes labelled data to training set.
+        """
         if not self.oracle:
             return
 
@@ -219,15 +231,16 @@ class Orchestrator:
         training_file = paths["training"] / FILENAME_TRAINING
 
         try:
+            # Lazy read of candidates
             candidate_stream = iread(str(candidates_file), index=":", format="extxyz")
 
+            # Streaming computation
             labelled_stream = self.oracle.compute(candidate_stream, batch_size=batch_size)
             total = 0
 
-            with training_file.open("a") as f:
-                for batch in batched(labelled_stream, n=batch_size):
-                    write(f, batch, format="extxyz")
-                    total += len(batch)
+            # Use ASE write in append mode
+            write(training_file, labelled_stream, format="extxyz", append=True)  # type: ignore[arg-type]
+            total = -1
 
             self.logger.info(LOG_COMPUTED_PROPERTIES.format(count=total))
         except Exception as e:
@@ -292,8 +305,82 @@ class Orchestrator:
              self.logger.warning("Failed to get initial structure.")
              return None
 
+    def _get_max_gamma_atom_index(self, structure: Atoms) -> int:
+        """Finds the index of the atom with the maximum gamma value."""
+        if "c_gamma" in structure.arrays:
+            gammas = structure.get_array("c_gamma")  # type: ignore[no-untyped-call]
+            return int(np.argmax(gammas))
+
+        self.logger.warning("c_gamma not found in structure arrays. Using atom 0 as center.")
+        return 0
+
+    def _extract_cluster(self, halt_structure_path: str) -> Atoms | None:
+        """
+        Loads the halt structure and extracts the local cluster around the highest uncertainty atom.
+        """
+        try:
+            halt_structure = read(halt_structure_path)
+            if isinstance(halt_structure, list):
+                halt_structure = halt_structure[-1]
+
+            # Find center atom (max gamma)
+            center_idx = self._get_max_gamma_atom_index(halt_structure)
+
+            # Extract local cluster (S0)
+            radius = self.config.structure.local_extraction_radius
+            buffer = self.config.structure.local_buffer_radius
+
+            return extract_local_region(halt_structure, center_idx, radius, buffer)
+        except Exception:
+            self.logger.exception("Failed to extract local cluster.")
+            return None
+
+    def _select_and_label(
+        self,
+        s0_cluster: Atoms,
+        potential_path: Path,
+        paths: dict[str, Path]
+    ) -> int:
+        """
+        Generates local candidates, selects active set, labels them, and writes to training file.
+        Returns the number of structures added.
+        """
+        if not self.generator or not self.active_set_selector or not self.oracle:
+            return 0
+
+        # Generate local candidates (perturbations of S0)
+        local_n = self.config.workflow.otf.local_n_candidates
+        candidates_gen = self.generator.generate_local(s0_cluster, n_candidates=local_n)
+
+        # Select Active Set (including S0 as anchor)
+        n_select = self.config.workflow.otf.local_n_select
+        selected_gen = self.active_set_selector.select(
+            candidates_gen,
+            potential_path,
+            n_select=n_select,
+            anchor=s0_cluster
+        )
+
+        # Label
+        labelled_gen = self.oracle.compute(selected_gen)
+
+        # Append to training data
+        training_file = paths["training"] / FILENAME_TRAINING
+        count = 0
+        batch_size = self.config.workflow.batch_size
+
+        with training_file.open("a") as f:
+            for batch in batched(labelled_gen, n=batch_size):
+                write(f, batch, format="extxyz")
+                count += len(batch)
+
+        return count
+
     def _refine_potential(self, result: MDSimulationResult, potential_path: Path, paths: dict[str, Path]) -> Path | None:
-        """Refines potential upon Halt."""
+        """
+        Refines potential upon Halt.
+        Orchestrates extraction, selection, labeling, and retraining.
+        """
         if not result.halt_structure_path or not self.generator or not self.active_set_selector or not self.oracle or not self.trainer:
             return None
 
@@ -302,32 +389,11 @@ class Orchestrator:
              return None
 
         try:
-            # We need to read the halt structure. ASE read supports many formats.
-            halt_structure = read(result.halt_structure_path)
-            if isinstance(halt_structure, list):
-                halt_structure = halt_structure[-1]
+            s0_cluster = self._extract_cluster(result.halt_structure_path)
+            if s0_cluster is None:
+                return None
 
-            # Generate local candidates
-            local_n = self.config.workflow.otf.local_n_candidates
-            candidates_gen = self.generator.generate_local(halt_structure, n_candidates=local_n)
-
-            # Select Active Set
-            n_select = self.config.workflow.otf.local_n_select
-            selected_gen = self.active_set_selector.select(candidates_gen, potential_path, n_select=n_select)
-
-            # Label
-            labelled_gen = self.oracle.compute(selected_gen)
-
-            # Append to training data
-            training_file = paths["training"] / FILENAME_TRAINING
-            count = 0
-            batch_size = self.config.workflow.batch_size
-
-            with training_file.open("a") as f:
-                for batch in batched(labelled_gen, n=batch_size):
-                    write(f, list(batch), format="extxyz")
-                    count += len(batch)
-
+            count = self._select_and_label(s0_cluster, potential_path, paths)
             self.logger.info(f"Refinement: Added {count} new structures.")
 
             # Fine-tune

@@ -1,8 +1,9 @@
-from io import StringIO
 from pathlib import Path
+from typing import TextIO
 
 from ase.data import atomic_numbers
 
+from pyacemaker.domain_models.defaults import DEFAULT_MD_MINIMIZE_FTOL, DEFAULT_MD_MINIMIZE_TOL
 from pyacemaker.domain_models.md import MDConfig
 
 
@@ -10,7 +11,7 @@ class LammpsScriptGenerator:
     """
     Generates LAMMPS input scripts based on MDConfig.
     Follows Single Responsibility Principle by isolating script generation logic.
-    Uses StringIO for efficient string construction.
+    Supports writing directly to a file-like object to handle large scripts efficiently.
     """
 
     def __init__(self, config: MDConfig) -> None:
@@ -20,7 +21,7 @@ class LammpsScriptGenerator:
         """Quotes a path for LAMMPS script safety."""
         return f'"{path}"'
 
-    def _gen_potential(self, buffer: StringIO, potential_path: Path, elements: list[str]) -> None:
+    def _gen_potential(self, buffer: TextIO, potential_path: Path, elements: list[str]) -> None:
         """Generates potential definition commands."""
         species_str = " ".join(elements)
         quoted_pot = self._quote(potential_path)
@@ -47,13 +48,13 @@ class LammpsScriptGenerator:
             buffer.write("pair_style pace\n")
             buffer.write(f"pair_coeff * * pace {quoted_pot} {species_str}\n")
 
-    def _gen_settings(self, buffer: StringIO) -> None:
+    def _gen_settings(self, buffer: TextIO) -> None:
         """Generates general MD settings."""
         buffer.write(f"neighbor {self.config.neighbor_skin} bin\n")
         buffer.write("neigh_modify delay 0 every 1 check yes\n")
         buffer.write(f"timestep {self.config.timestep}\n")
 
-    def _gen_watchdog(self, buffer: StringIO, potential_path: Path) -> None:
+    def _gen_watchdog(self, buffer: TextIO, potential_path: Path) -> None:
         """Generates Uncertainty Watchdog commands."""
         if not self.config.fix_halt:
             return
@@ -68,10 +69,10 @@ class LammpsScriptGenerator:
             f"v_max_g > {self.config.uncertainty_threshold} error continue\n"
         )
 
-    def _gen_execution(self, buffer: StringIO) -> None:
+    def _gen_execution(self, buffer: TextIO) -> None:
         """Generates minimization and MD run commands."""
         if self.config.minimize:
-            buffer.write("minimize 1.0e-4 1.0e-6 100 1000\n")
+            buffer.write(f"minimize {DEFAULT_MD_MINIMIZE_TOL} {DEFAULT_MD_MINIMIZE_FTOL} 100 1000\n")
 
         # Calculate damping parameters
         tdamp = self.config.tdamp_factor * self.config.timestep
@@ -85,38 +86,38 @@ class LammpsScriptGenerator:
 
         buffer.write(f"run {self.config.n_steps}\n")
 
-    def _gen_output(self, buffer: StringIO, dump_file: Path) -> None:
-        """Generates output settings."""
+    def _gen_output_setup(self, buffer: TextIO, dump_file: Path) -> None:
+        """Generates output settings (thermo and dump)."""
         buffer.write(f"thermo {self.config.thermo_freq}\n")
 
-        style = "step temp pe press"
-        dump_cols = "id type x y z"
+        style_parts = ["step", "temp", "pe", "press"]
+        dump_parts = ["id", "type", "x", "y", "z"]
 
         if self.config.fix_halt:
-            style += " v_max_g"
-            dump_cols += " c_gamma"
+            style_parts.append("v_max_g")
+            dump_parts.append("c_gamma")
+
+        style = " ".join(style_parts)
+        dump_cols = " ".join(dump_parts)
 
         quoted_dump = self._quote(dump_file)
         buffer.write(f"thermo_style custom {style}\n")
         buffer.write(f"dump traj all custom {self.config.dump_freq} {quoted_dump} {dump_cols}\n")
 
-        # Check if halted
-        if self.config.fix_halt:
-            buffer.write("variable halted equal f_halt_check\n")
-            buffer.write("print 'Halted: ${halted}'\n")
+    def _gen_post_run_diagnostics(self, buffer: TextIO) -> None:
+        """Generates post-run diagnostic prints."""
 
-    def generate(
+    def write_script(
         self,
+        buffer: TextIO,
         potential_path: Path,
         data_file: Path,
         dump_file: Path,
         elements: list[str],
-    ) -> str:
+    ) -> None:
         """
-        Orchestrates LAMMPS input script generation.
+        Writes the LAMMPS input script to the provided buffer.
         """
-        buffer = StringIO()
-
         quoted_data = self._quote(data_file)
 
         buffer.write("clear\n")
@@ -128,7 +129,10 @@ class LammpsScriptGenerator:
         self._gen_potential(buffer, potential_path, elements)
         self._gen_settings(buffer)
         self._gen_watchdog(buffer, potential_path)
-        self._gen_execution(buffer)
-        self._gen_output(buffer, dump_file)
 
-        return buffer.getvalue()
+        # Output setup MUST come before run
+        self._gen_output_setup(buffer, dump_file)
+
+        self._gen_execution(buffer)
+
+        self._gen_post_run_diagnostics(buffer)

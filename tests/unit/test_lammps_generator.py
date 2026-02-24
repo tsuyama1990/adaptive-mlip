@@ -1,3 +1,4 @@
+from io import StringIO
 from pathlib import Path
 
 from pyacemaker.core.lammps_generator import LammpsScriptGenerator
@@ -20,7 +21,9 @@ def test_generator_hybrid_potential(tmp_path: Path) -> None:
     data_file = tmp_path / "data.lmp"
     dump_file = tmp_path / "dump.lammpstrj"
 
-    script = generator.generate(pot_path, data_file, dump_file, ["H", "He"])
+    buffer = StringIO()
+    generator.write_script(buffer, pot_path, data_file, dump_file, ["H", "He"])
+    script = buffer.getvalue()
 
     assert "pair_style hybrid/overlay" in script
     assert f'pair_coeff * * pace "{pot_path}" H He' in script
@@ -47,7 +50,9 @@ def test_generator_pure_pace(tmp_path: Path) -> None:
     data_file = tmp_path / "data.lmp"
     dump_file = tmp_path / "dump.lammpstrj"
 
-    script = generator.generate(pot_path, data_file, dump_file, ["Al"])
+    buffer = StringIO()
+    generator.write_script(buffer, pot_path, data_file, dump_file, ["Al"])
+    script = buffer.getvalue()
 
     assert "pair_style pace" in script
     assert "pair_style hybrid" not in script
@@ -66,7 +71,9 @@ def test_generator_damping(tmp_path: Path) -> None:
     )
     generator = LammpsScriptGenerator(config)
 
-    script = generator.generate(Path("pot"), Path("dat"), Path("dump"), ["H"])
+    buffer = StringIO()
+    generator.write_script(buffer, Path("pot"), Path("dat"), Path("dump"), ["H"])
+    script = buffer.getvalue()
 
     # tdamp = 50 * 0.002 = 0.1
     # pdamp = 500 * 0.002 = 1.0
@@ -81,5 +88,7 @@ def test_generator_atom_style() -> None:
         atom_style="charge"
     )
     generator = LammpsScriptGenerator(config)
-    script = generator.generate(Path("pot"), Path("dat"), Path("dump"), ["H"])
+    buffer = StringIO()
+    generator.write_script(buffer, Path("pot"), Path("dat"), Path("dump"), ["H"])
+    script = buffer.getvalue()
     assert "atom_style charge" in script

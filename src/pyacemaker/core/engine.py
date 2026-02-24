@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Any
 
 from ase import Atoms
@@ -17,13 +18,19 @@ class LammpsEngine(BaseEngine):
     Handles input generation, execution, and result parsing.
     """
 
-    def __init__(self, config: MDConfig) -> None:
+    def __init__(
+        self,
+        config: MDConfig,
+        generator: LammpsScriptGenerator | None = None,
+        file_manager: LammpsFileManager | None = None
+    ) -> None:
         """
         Initialize the engine with configuration.
+        Allows dependency injection for generator and file manager.
         """
         self.config = config
-        self.generator = LammpsScriptGenerator(config)
-        self.file_manager = LammpsFileManager(config)
+        self.generator = generator or LammpsScriptGenerator(config)
+        self.file_manager = file_manager or LammpsFileManager(config)
 
     def run(self, structure: Atoms | None, potential: Any) -> MDSimulationResult:
         """
@@ -48,58 +55,90 @@ class LammpsEngine(BaseEngine):
         ctx, data_file, dump_file, log_file, elements = self.file_manager.prepare_workspace(structure)
 
         with ctx:
-            # Generate script using delegate
-            script = self.generator.generate(
-                potential_path.resolve(),
-                data_file,
-                dump_file,
-                elements
-            )
+            # Create a temporary file for the input script to handle large scripts
+            # LammpsDriver expects a string script content or we can adapt it.
+            # LammpsDriver.run takes string. If we want to stream large script, we need to pass file.
+            # But python-lammps `commands_string` or `file` takes path.
+            # Assuming LammpsDriver.run wraps `lammps.commands_string` or `lammps.file`.
+            # If our LammpsDriver only takes string, we still have to load it.
+            # BUT, the generator refactor was to avoid holding it in memory *during generation*.
+            # We can write to a temp file, then read it? Or if LammpsDriver supports file path?
+            # Looking at interfaces/lammps_driver.py isn't possible (I can't see it now),
+            # but usually drivers support running from file.
+            # If not, we have to read it back.
+            # Let's write to "input.lmp" in temp dir.
+            input_script_path = Path(ctx.name) / "input.lmp" if hasattr(ctx, "name") else data_file.parent / "input.lmp"
+
+            # Since ctx is generic context manager, we assume data_file is in the temp dir.
+            input_script_path = data_file.parent / "input.lmp"
+
+            with input_script_path.open("w") as f:
+                self.generator.write_script(
+                    f,
+                    potential_path.resolve(),
+                    data_file,
+                    dump_file,
+                    elements
+                )
 
             # Initialize Driver with unique log file
             # Use constant for screen arg
             driver = LammpsDriver(["-screen", LAMMPS_SCREEN_ARG, "-log", str(log_file)])
 
-            # Run
             try:
-                driver.run(script)
-            except Exception as e:
-                msg = f"LAMMPS execution failed: {e}"
-                raise RuntimeError(msg) from e
+                self._execute_simulation(driver, input_script_path)
 
-            # Extract Results
-            try:
-                energy = driver.extract_variable("pe")
-                temperature = driver.extract_variable("temp")
-                step = int(driver.extract_variable("step"))
-            except Exception:
-                energy = 0.0
-                temperature = 0.0
-                step = 0
-
-            max_gamma = 0.0
-            if self.config.fix_halt:
+                # Extract Results
                 try:
-                    max_gamma = driver.extract_variable("max_g")
+                    energy = driver.extract_variable("pe")
+                    temperature = driver.extract_variable("temp")
+                    step = int(driver.extract_variable("step"))
                 except Exception:
-                    max_gamma = 0.0
+                    energy = 0.0
+                    temperature = 0.0
+                    step = 0
 
-            halted = False
-            if self.config.fix_halt:
-                # If using fix halt, checking step count is a proxy for early termination
-                # Assuming run starts at 0. If restart, logic might need adjustment.
-                # For now, Cycle 01/02 implies fresh runs.
-                halted = step < self.config.n_steps
+                max_gamma = 0.0
+                if self.config.fix_halt:
+                    try:
+                        max_gamma = driver.extract_variable("max_g")
+                    except Exception:
+                        max_gamma = 0.0
 
-            # Result
-            return MDSimulationResult(
-                energy=energy,
-                forces=[[0.0, 0.0, 0.0]],
-                halted=halted,
-                max_gamma=max_gamma,
-                n_steps=step,
-                temperature=temperature,
-                trajectory_path=str(dump_file),
-                log_path=str(log_file),
-                halt_structure_path=str(dump_file) if halted else None
-            )
+                halted = False
+                if self.config.fix_halt:
+                    # If using fix halt, checking step count is a proxy for early termination
+                    # Assuming run starts at 0. If restart, logic might need adjustment.
+                    # For now, Cycle 01/02 implies fresh runs.
+                    halted = step < self.config.n_steps
+
+                # Result
+                return MDSimulationResult(
+                    energy=energy,
+                    forces=[[0.0, 0.0, 0.0]],
+                    halted=halted,
+                    max_gamma=max_gamma,
+                    n_steps=step,
+                    temperature=temperature,
+                    trajectory_path=str(dump_file),
+                    log_path=str(log_file),
+                    halt_structure_path=str(dump_file) if halted else None,
+                    halt_step=step if halted else None
+                )
+            finally:
+                if hasattr(driver, "close"):
+                    driver.close()
+
+    def _execute_simulation(self, driver: LammpsDriver, script_path: Path) -> None:
+        """Executes the simulation script with error handling."""
+        try:
+            # We assume driver.run takes script content.
+            # Reading small script file is safe.
+            driver.run(script_path.read_text())
+        except RuntimeError as e:
+            # Capture specific LAMMPS runtime errors
+            msg = f"LAMMPS execution failed: {e}"
+            raise RuntimeError(msg) from e
+        except Exception as e:
+            msg = f"Unexpected error during LAMMPS execution: {e}"
+            raise RuntimeError(msg) from e

@@ -2,13 +2,18 @@
 # These are physical/mathematical constants, not configuration defaults.
 
 import math
+import os
 
 RECIPROCAL_FACTOR = 2 * math.pi
 QE_KPOINT_TOLERANCE = 1e-3
 DEFAULT_STRAIN_RANGE = 0.05
 KB_EV = 8.617333262e-5  # Boltzmann constant in eV/K
-DEFAULT_RAM_DISK_PATH = "/dev/shm"  # noqa: S108
+DEFAULT_RAM_DISK_PATH = os.getenv("PYACEMAKER_RAM_DISK", "/dev/shm")  # noqa: S108
 LAMMPS_SCREEN_ARG = "none"
+
+# Security Constants
+# Characters that are considered dangerous in file paths or shell commands
+DANGEROUS_PATH_CHARS = [";", "&", "|", "`", "$", "(", ")", "<", ">", "\n", "\r", "%"]
 
 # Embedding Constants
 EMBEDDING_TOLERANCE_CELL = 1e-6
