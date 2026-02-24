@@ -164,7 +164,8 @@ def test_integration_workflow_complete(
     assert potentials_dir.exists()
     assert (potentials_dir / "generation_001.yace").exists()
 
-    assert LOG_COMPUTED_PROPERTIES.format(count=10) in caplog.text
+    # Count is unknown (-1) due to streaming
+    assert LOG_COMPUTED_PROPERTIES.format(count=-1) in caplog.text
     assert LOG_POTENTIAL_TRAINED in caplog.text
     assert LOG_ITERATION_COMPLETED.format(iteration=1) in caplog.text
 

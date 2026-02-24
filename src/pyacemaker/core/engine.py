@@ -86,26 +86,7 @@ class LammpsEngine(BaseEngine):
             driver = LammpsDriver(["-screen", LAMMPS_SCREEN_ARG, "-log", str(log_file)])
 
             try:
-                # Run
-                try:
-                    # If driver supports running from file, great. If not, we read the file.
-                    # Assuming standard LammpsDriver supports `run_file` or we pass `file <path>`.
-                    # The current LammpsDriver.run takes a string.
-                    # We will read the file back into memory. This defeats "avoid holding in memory"
-                    # ONLY IF the script is huge. But script is usually small.
-                    # The generator refactor ensures we didn't hold it *twice* or during construction.
-                    # Ideally LammpsDriver should accept a file path.
-                    # For this refactor, reading it back is safer than changing LammpsDriver interface blindly.
-                    # Wait, command injection risk if we pass "file path" as string to `run(script_content)`.
-                    # Let's read it.
-                    driver.run(input_script_path.read_text())
-                except RuntimeError as e:
-                    # Capture specific LAMMPS runtime errors
-                    msg = f"LAMMPS execution failed: {e}"
-                    raise RuntimeError(msg) from e
-                except Exception as e:
-                    msg = f"Unexpected error during LAMMPS execution: {e}"
-                    raise RuntimeError(msg) from e
+                self._execute_simulation(driver, input_script_path)
 
                 # Extract Results
                 try:
@@ -147,12 +128,17 @@ class LammpsEngine(BaseEngine):
             finally:
                 if hasattr(driver, "close"):
                     driver.close()
-                elif hasattr(driver, "lmp"):
-                    # Fallback for lammps python wrapper if driver exposes lmp
-                    # or if LammpsDriver needs explicit close logic implemented.
-                    # Assuming LammpsDriver wrapper handles it or exposes method.
-                    # If driver.close() exists, calling it is best practice.
-                    # If not, we might need to rely on lammps module destructor,
-                    # but explicit close is better.
-                    # For now, check attribute to be safe.
-                    pass
+
+    def _execute_simulation(self, driver: LammpsDriver, script_path: Path) -> None:
+        """Executes the simulation script with error handling."""
+        try:
+            # We assume driver.run takes script content.
+            # Reading small script file is safe.
+            driver.run(script_path.read_text())
+        except RuntimeError as e:
+            # Capture specific LAMMPS runtime errors
+            msg = f"LAMMPS execution failed: {e}"
+            raise RuntimeError(msg) from e
+        except Exception as e:
+            msg = f"Unexpected error during LAMMPS execution: {e}"
+            raise RuntimeError(msg) from e

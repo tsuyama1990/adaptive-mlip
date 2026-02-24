@@ -7,7 +7,6 @@ from ase.io import iread, write
 
 from pyacemaker.core.exceptions import ActiveSetError
 from pyacemaker.domain_models.constants import DANGEROUS_PATH_CHARS
-from pyacemaker.utils.misc import batched
 from pyacemaker.utils.process import run_command
 
 
@@ -90,20 +89,22 @@ class ActiveSetSelector:
 
     def _write_candidates(self, candidates: Iterable[Atoms], file_path: Path) -> int:
         """
-        Writes candidates to disk using explicit batch streaming.
-        Iterates over the generator in chunks and writes each chunk immediately.
-        This ensures O(batch_size) memory usage.
+        Writes candidates to disk using pure streaming.
+        Passes the iterator directly to ASE write to avoid any intermediate batch materialization.
         """
         count = 0
-        batch_size = 1000
+
+        # Generator wrapper to count items while streaming
+        def counting_wrapper(iterable: Iterable[Atoms]) -> Iterator[Atoms]:
+            nonlocal count
+            for atoms in iterable:
+                count += 1
+                yield atoms
+
         try:
-            # Open the file once and append each batch
-            with file_path.open("w") as f:
-                # batched returns a tuple of Atoms. ASE write accepts Sequence[Atoms].
-                # We iterate the main generator and write small tuples.
-                for batch in batched(candidates, batch_size):
-                    write(f, batch, format="extxyz")
-                    count += len(batch)
+            # write() iterates over the generator and writes frame by frame.
+            # This is O(1) memory usage relative to dataset size.
+            write(file_path, counting_wrapper(candidates), format="extxyz")  # type: ignore[arg-type]
         except Exception as e:
             msg = f"Failed to write candidates to temporary file: {e}"
             raise ActiveSetError(msg) from e
@@ -139,17 +140,26 @@ class ActiveSetSelector:
 
     def _validate_path_safe(self, path: Path) -> None:
         """
-        Ensures path is safe using resolution and strict character checks.
+        Ensures path is safe using strict resolution and character allowlisting.
         """
         try:
-            # Resolve path to check for traversal
-            # We don't use strict=True because the file might not exist yet (output)
             resolved = path.resolve()
         except Exception as e:
              msg = f"Invalid path resolution: {path}"
              raise ActiveSetError(msg) from e
 
         s = str(resolved)
+
+        # Check for dangerous patterns first
+        if ".." in s:
+             msg = f"Path traversal attempt detected: {path}"
+             raise ActiveSetError(msg)
+
         if any(c in s for c in DANGEROUS_PATH_CHARS):
             msg = f"Path contains invalid characters: {path}"
+            raise ActiveSetError(msg)
+
+        # Ensure filename doesn't start with dash (flag injection)
+        if path.name.startswith("-"):
+            msg = f"Filename cannot start with '-': {path.name}"
             raise ActiveSetError(msg)

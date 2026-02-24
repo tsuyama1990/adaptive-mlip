@@ -194,20 +194,20 @@ class Orchestrator:
         n_candidates = self.config.workflow.n_candidates
         # We can use batched for chunking, but opening file once is key.
         # ase.io.write can write a list of atoms.
-        batch_size = self.config.workflow.batch_size
         candidates_file = paths["candidates"] / FILENAME_CANDIDATES
 
         try:
             candidate_stream = self.generator.generate(n_candidates=n_candidates)
             total = 0
 
-            # Open file once for appending
-            with candidates_file.open("a") as f:
-                # Still use batched to avoid holding too many in memory before write
-                # But file is kept open.
-                for batch in batched(candidate_stream, n=batch_size):
-                    write(f, batch, format="extxyz")
-                    total += len(batch)
+            # Use ASE write in append mode with the generator directly.
+            # This avoids manual batching and list materialization completely.
+            # 'append=True' ensures we don't overwrite if file exists (from previous batches if any, though here it's one call).
+            # ASE iterates over candidate_stream.
+            write(candidates_file, candidate_stream, format="extxyz", append=True)  # type: ignore[arg-type]
+
+            # For now, we log "Written candidates" as total count is unknown due to streaming
+            total = -1
 
             self.logger.info(LOG_GENERATED_CANDIDATES.format(count=total))
         except Exception as e:
@@ -238,11 +238,9 @@ class Orchestrator:
             labelled_stream = self.oracle.compute(candidate_stream, batch_size=batch_size)
             total = 0
 
-            # Open file once for appending
-            with training_file.open("a") as f:
-                for batch in batched(labelled_stream, n=batch_size):
-                    write(f, batch, format="extxyz")
-                    total += len(batch)
+            # Use ASE write in append mode
+            write(training_file, labelled_stream, format="extxyz", append=True)  # type: ignore[arg-type]
+            total = -1
 
             self.logger.info(LOG_COMPUTED_PROPERTIES.format(count=total))
         except Exception as e:

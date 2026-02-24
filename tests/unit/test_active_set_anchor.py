@@ -66,7 +66,10 @@ def test_validate_path_resolution_safety() -> None:
     selector = ActiveSetSelector()
     # These should NOT raise because they resolve to safe absolute paths
     selector._validate_path_safe(Path("foo/../bar"))
-    selector._validate_path_safe(Path("-rf"))
+
+    # -rf is now explicitly rejected even if resolved, as filenames cannot start with -
+    with pytest.raises(ActiveSetError, match="Filename cannot start with '-'"):
+        selector._validate_path_safe(Path("-rf"))
 
 def test_validate_path_invalid_chars() -> None:
     """Test that path validation rejects shell metacharacters."""

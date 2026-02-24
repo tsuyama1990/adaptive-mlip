@@ -3,6 +3,7 @@ from typing import TextIO
 
 from ase.data import atomic_numbers
 
+from pyacemaker.domain_models.defaults import DEFAULT_MD_MINIMIZE_FTOL, DEFAULT_MD_MINIMIZE_TOL
 from pyacemaker.domain_models.md import MDConfig
 
 
@@ -71,7 +72,7 @@ class LammpsScriptGenerator:
     def _gen_execution(self, buffer: TextIO) -> None:
         """Generates minimization and MD run commands."""
         if self.config.minimize:
-            buffer.write("minimize 1.0e-4 1.0e-6 100 1000\n")
+            buffer.write(f"minimize {DEFAULT_MD_MINIMIZE_TOL} {DEFAULT_MD_MINIMIZE_FTOL} 100 1000\n")
 
         # Calculate damping parameters
         tdamp = self.config.tdamp_factor * self.config.timestep
