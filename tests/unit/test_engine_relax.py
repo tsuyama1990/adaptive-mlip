@@ -59,7 +59,7 @@ def test_lammps_engine_relax(mock_md_config: MDConfig, mock_driver_relax: Any, t
 
 def test_lammps_engine_relax_missing_potential(mock_md_config: MDConfig, mock_driver_relax: Any) -> None:
     engine = LammpsEngine(mock_md_config)
-    atoms = Atoms("H")
+    atoms = Atoms("H", cell=[10,10,10], pbc=True) # Must be valid structure
 
     with pytest.raises(FileNotFoundError):
         engine.relax(atoms, "nonexistent.yace")

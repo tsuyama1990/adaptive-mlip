@@ -1,6 +1,7 @@
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 from ase import Atoms
 from ase.data import atomic_numbers
 
@@ -47,8 +48,25 @@ class LammpsInputValidator:
         if len(structure) == 0:
             raise ValueError(ERR_VAL_STRUCT_EMPTY)
 
+        # Validate structure physical properties
+        try:
+            vol = structure.get_volume()  # type: ignore[no-untyped-call]
+            if vol <= 1e-9:
+                msg = "Structure has near-zero or negative volume."
+                raise ValueError(msg)
+        except Exception as e:
+            # get_volume might fail if no cell is set
+            msg = f"Failed to compute structure volume: {e}"
+            raise ValueError(msg) from e
+
+        # Validate positions are numeric and finite
+        pos = structure.get_positions()  # type: ignore[no-untyped-call]
+        if not np.isfinite(pos).all():
+            msg = "Structure contains non-finite atomic positions."
+            raise ValueError(msg)
+
         # Validate elements against atomic_numbers
-        symbols = set(structure.get_chemical_symbols())
+        symbols = set(structure.get_chemical_symbols())  # type: ignore[no-untyped-call]
         for s in symbols:
             if s not in atomic_numbers:
                 msg = f"Structure contains unknown chemical symbol: {s}"

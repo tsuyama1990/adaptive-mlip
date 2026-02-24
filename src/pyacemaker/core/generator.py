@@ -88,7 +88,13 @@ class StructureGenerator(BaseGenerator):
             # While this object sits in memory, it is a single instance.
             # The streaming generator (yield) ensures we do not store n_candidates copies.
             # Thus, memory usage is O(Supercell_Size), not O(n_candidates * Supercell_Size).
-            base_supercell = base_structure.repeat(self.config.supercell_size)  # type: ignore[no-untyped-call]
+            # We ensure this materialization happens strictly inside the generator (lazy).
+
+            # Optimization: If supercell_size is (1,1,1), skip repeat to save a copy
+            if tuple(self.config.supercell_size) == (1, 1, 1):
+                base_supercell = base_structure
+            else:
+                base_supercell = base_structure.repeat(self.config.supercell_size)  # type: ignore[no-untyped-call]
 
             count = 0
             policy_iter = policy.generate(base_supercell, self.config, n_structures=n_candidates)

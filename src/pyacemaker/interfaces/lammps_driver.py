@@ -91,6 +91,9 @@ class LammpsDriver:
         # If we use lammps.file(), we bypass _validate_command unless we pre-scan.
         # Pre-scanning line by line is O(N) IO but O(1) memory.
 
+        # Security: Read, validate, and execute line-by-line.
+        # Do not use self.lmp.file(str(path)) to avoid TOCTOU and file content injection.
+        # This acts as a sandboxed execution by strictly controlling commands.
         with path.open("r", encoding="utf-8") as f:
             for line in f:
                 cmd = line.strip()
@@ -102,9 +105,7 @@ class LammpsDriver:
                     cmd = cmd.split("#")[0].strip()
                     if cmd:
                         self._validate_command(cmd)
-
-        # If validation passes, run file
-        self.lmp.file(str(path))
+                        self.lmp.command(cmd)
 
     def extract_variable(self, name: str) -> float:
         """

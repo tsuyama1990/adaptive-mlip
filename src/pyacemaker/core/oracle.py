@@ -1,6 +1,7 @@
 import contextlib
 import tempfile
 from collections.abc import Callable, Iterator
+from pathlib import Path
 
 from ase import Atoms
 from ase.calculators.calculator import PropertyNotImplementedError
@@ -77,20 +78,32 @@ class DFTManager(BaseOracle):
         # This avoids preemptively consuming the iterator with next(), which can be risky for some streams.
 
         count = 0
-        for atoms in structures:
-            count += 1
-            yield self._process_structure(atoms)
+        # Use a single root temporary directory for the entire batch stream
+        # This reduces inode thrashing compared to creating one per atom.
+        # We assume strict sequential processing for now.
+        with tempfile.TemporaryDirectory() as root_temp_dir:
+            root_path = Path(root_temp_dir)
+            for atoms in structures:
+                count += 1
+                # Create a unique subdirectory for this calculation within the root temp
+                # to ensure isolation even if artifacts persist briefly.
+                # Just using an incrementing counter or ID is safe here.
+                calc_dir = root_path / f"calc_{count}"
+                calc_dir.mkdir()
+
+                yield self._process_structure(atoms, str(calc_dir))
 
         if count == 0:
              import warnings
              warnings.warn("Oracle received empty iterator. No calculations performed.", UserWarning, stacklevel=2)
 
-    def _process_structure(self, atoms: Atoms) -> Atoms:
+    def _process_structure(self, atoms: Atoms, calc_dir: str) -> Atoms:
         """
         Applies embedding and computes properties for a single structure.
 
         Args:
             atoms: The input atomic structure.
+            calc_dir: Directory to run calculation in.
 
         Returns:
             Atoms: The structure with computed properties (energy, forces, stress).
@@ -102,7 +115,7 @@ class DFTManager(BaseOracle):
         else:
             structure_to_compute = atoms
 
-        return self._compute_single(structure_to_compute)
+        return self._compute_single(structure_to_compute, calc_dir)
 
     def _get_strategies(self) -> list[Callable[[DFTConfig], None] | None]:
         """
@@ -125,12 +138,13 @@ class DFTManager(BaseOracle):
     def _strategy_use_cg(self, c: DFTConfig) -> None:
         c.diagonalization = "cg"
 
-    def _compute_single(self, atoms: Atoms) -> Atoms:
+    def _compute_single(self, atoms: Atoms, calc_dir: str) -> Atoms:
         """
         Runs calculation for a single structure with retries and self-healing strategies.
 
         Args:
             atoms: The atomic structure to calculate.
+            calc_dir: Working directory for the calculation.
 
         Returns:
             Atoms object with calculated properties attached.
@@ -147,7 +161,7 @@ class DFTManager(BaseOracle):
                 strategy(current_config)
 
             try:
-                self._run_calculator(atoms, current_config)
+                self._run_calculator(atoms, current_config, calc_dir)
             except Exception as e:
                 # Catch all exceptions (RuntimeError, CalculatorSetupError, JobFailedException etc)
                 # to ensure self-healing strategies are attempted.
@@ -159,18 +173,17 @@ class DFTManager(BaseOracle):
 
         raise OracleError(ERR_ORACLE_FAILED.format(attempts=len(strategies))) from last_error
 
-    def _run_calculator(self, atoms: Atoms, config: DFTConfig) -> None:
+    def _run_calculator(self, atoms: Atoms, config: DFTConfig, calc_dir: str) -> None:
         """Helper to run a single calculation attempt."""
         # Create new calculator for clean state
-        # Use a temporary directory to prevent file collisions and race conditions
-        with tempfile.TemporaryDirectory() as temp_dir:
-            calc = self.driver.get_calculator(atoms, config.model_copy(), directory=temp_dir)
-            atoms.calc = calc
+        # Use provided temporary directory to prevent file collisions and race conditions
+        calc = self.driver.get_calculator(atoms, config.model_copy(), directory=calc_dir)
+        atoms.calc = calc
 
-            # Trigger actual calculation
-            atoms.get_potential_energy()  # type: ignore[no-untyped-call]
-            atoms.get_forces()  # type: ignore[no-untyped-call]
+        # Trigger actual calculation
+        atoms.get_potential_energy()  # type: ignore[no-untyped-call]
+        atoms.get_forces()  # type: ignore[no-untyped-call]
 
-            # Try to get stress (optional)
-            with contextlib.suppress(PropertyNotImplementedError, RuntimeError):
-                atoms.get_stress()  # type: ignore[no-untyped-call]
+        # Try to get stress (optional)
+        with contextlib.suppress(PropertyNotImplementedError, RuntimeError):
+            atoms.get_stress()  # type: ignore[no-untyped-call]

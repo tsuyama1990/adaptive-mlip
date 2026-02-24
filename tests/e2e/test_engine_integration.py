@@ -57,13 +57,17 @@ def test_engine_integration_workflow(tmp_path: Path, mock_md_config: MDConfig, m
     assert result.energy == -100.0
     assert result.n_steps == 1000
 
-    # Verify that run was called on the mock (run_file calls lmp.file)
-    mock_lammps_module.return_value.file.assert_called()
+    # Verify that run was called on the mock (run_file calls lmp.command now)
+    # mock_lammps_module.return_value.file.assert_called() is NO LONGER TRUE.
+    # We verify command was called instead.
+    mock_lammps_module.return_value.command.assert_called()
 
-    # Check if input script was "written" to file
-    # We can check the file argument passed to file()
-    file_call = mock_lammps_module.return_value.file.call_args
-    script_path = Path(file_call[0][0])
+    # We can verify the content by inspecting calls to command()
+    # It should have called command for each line in the generated script.
+    # Since we can't easily capture the temp file, we rely on the fact that command() was called with expected tokens.
+    calls = mock_lammps_module.return_value.command.call_args_list
+    assert any("units metal" in c[0][0] for c in calls)
+    assert any("pair_style hybrid/overlay" in c[0][0] for c in calls)
 
     # Read the script file (it should still exist or we mock reading it if we care,
     # but here we just check integration flow. The file writing logic is tested in unit tests)
@@ -85,8 +89,8 @@ def test_engine_integration_lammps_failure(tmp_path: Path, mock_md_config: MDCon
     potential_path.touch()
     atoms = Atoms("H", positions=[[0, 0, 0]], cell=[10, 10, 10], pbc=True)
 
-    # Simulate LAMMPS command failure
-    mock_lammps_module.return_value.file.side_effect = RuntimeError("LAMMPS Error")
+    # Simulate LAMMPS command failure (on command(), not file())
+    mock_lammps_module.return_value.command.side_effect = RuntimeError("LAMMPS Error")
 
     engine = LammpsEngine(mock_md_config)
 

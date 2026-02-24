@@ -155,53 +155,57 @@ class MDMicroBurstPolicy(BasePolicy):
         engine = kwargs.get("engine")
         potential = kwargs.get("potential")
 
-        if not engine:
-             # Fallback to rattle if no engine
-             for _ in range(n_structures):
-                yield rattle(base_structure, config.rattle_stdev, rng=self.rng)
+        # SRP: Delegate fallback
+        if not engine or not hasattr(engine, "config"):
+             yield from self._fallback(base_structure, config, n_structures)
              return
 
-        # Configure short MD
+        try:
+            yield from self._run_burst(engine, potential, base_structure, config, n_structures)
+        except Exception as e:
+            logger.warning(f"MD Micro Burst failed: {e}. Falling back to Rattle.")
+            yield from self._fallback(base_structure, config, n_structures)
+
+    def _fallback(self, base_structure: Atoms, config: StructureConfig, n_structures: int) -> Iterator[Atoms]:
+        """Fallback policy (Rattle) when MD is not available or fails."""
+        for _ in range(n_structures):
+            yield rattle(base_structure, config.rattle_stdev, rng=self.rng)
+
+    def _run_burst(
+        self,
+        engine: Any,
+        potential: Any,
+        base_structure: Atoms,
+        config: StructureConfig,
+        n_structures: int
+    ) -> Iterator[Atoms]:
+        """Executes the MD burst logic."""
         # Create a burst engine config
-        # Use configured parameters from StructureConfig
         burst_temp = config.local_md_temp
         burst_steps = config.local_md_steps
 
-        # Accessing engine.config might be engine-specific (LammpsEngine)
-        # Assuming LammpsEngine for now as it's the main implementation
-        if hasattr(engine, "config"):
-             # Create a burst engine
-             # Copy config and override
-             burst_config = engine.config.model_copy(update={
-                 "n_steps": burst_steps,
-                 "minimize": False,
-                 "temperature": burst_temp,
-                 "dump_freq": 0 # We only care about final structure, or manage manually
-             })
+        # Create a burst engine
+        burst_config = engine.config.model_copy(update={
+            "n_steps": burst_steps,
+            "minimize": False,
+            "temperature": burst_temp,
+            "dump_freq": 0
+        })
 
-             # Instantiate new engine of same type
-             BurstEngine = type(engine)
-             burst_engine = BurstEngine(burst_config)
+        # Instantiate new engine of same type
+        BurstEngine = type(engine)
+        burst_engine = BurstEngine(burst_config)
 
-             for _ in range(n_structures):
-                 try:
-                     result = burst_engine.run(base_structure, potential)
-                     if result.trajectory_path:
-                          # Read final frame
-                          final = read(result.trajectory_path, index=-1)
-                          if isinstance(final, list):
-                               yield final[-1]
-                          else:
-                               yield final
-                     else:
-                          # Fallback
-                          yield rattle(base_structure, config.rattle_stdev, rng=self.rng)
-                 except Exception as e:
-                     logger.warning(f"MD Micro Burst failed: {e}. Falling back to Rattle.")
-                     yield rattle(base_structure, config.rattle_stdev, rng=self.rng)
-        else:
-             # Fallback
-             for _ in range(n_structures):
+        for _ in range(n_structures):
+            result = burst_engine.run(base_structure, potential)
+            if result.trajectory_path:
+                final = read(result.trajectory_path, index=-1)
+                if isinstance(final, list):
+                    yield final[-1]
+                else:
+                    yield final
+            else:
+                # If run succeeds but no trajectory (unlikely if n_steps>0), fallback for this item
                 yield rattle(base_structure, config.rattle_stdev, rng=self.rng)
 
 

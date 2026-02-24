@@ -1,8 +1,9 @@
 from pathlib import Path
-from unittest.mock import patch
+
 import pytest
-import os
+
 from pyacemaker.core.validator import LammpsInputValidator
+
 
 class TestLammpsInputValidator:
     def test_validate_potential_valid_tmp(self, tmp_path):
@@ -55,7 +56,7 @@ class TestLammpsInputValidator:
 
         symlink = tmp_path / "link_to_ls"
         try:
-            os.symlink(target, symlink)
+            symlink.symlink_to(target)
         except OSError:
             pytest.skip("Failed to create symlink")
 

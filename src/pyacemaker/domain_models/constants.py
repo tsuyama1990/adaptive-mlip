@@ -20,7 +20,8 @@ DANGEROUS_PATH_CHARS: Final = frozenset([";", "&", "|", "`", "$", "(", ")", "<",
 
 # File names
 FILENAME_CANDIDATES: Final = "candidates.xyz"
-FILENAME_TRAINING: Final = "training.pckl"
+# Changed from .pckl to .xyz to support robust streaming append
+FILENAME_TRAINING: Final = "training.xyz"
 FILENAME_POTENTIAL: Final = "potential.yace"
 
 # LAMMPS

@@ -136,11 +136,11 @@ def test_qe_driver_parameters(mock_dft_config: DFTConfig) -> None:
         pseudos = kwargs.get("pseudopotentials")
         assert pseudos == {"H": "H.UPF"}
 
-def test_qe_driver_directory_argument(mock_dft_config: DFTConfig) -> None:
+def test_qe_driver_directory_argument(mock_dft_config: DFTConfig, tmp_path: Path) -> None:
     """Test that directory argument is passed to Espresso."""
     atoms = Atoms("H", cell=[10, 10, 10], pbc=True)
     driver = QEDriver()
-    test_dir = "/tmp/test_dir"
+    test_dir = str(tmp_path / "test_dir")
 
     with patch("pyacemaker.interfaces.qe_driver.Espresso") as MockEspresso:
         driver.get_calculator(atoms, mock_dft_config, directory=test_dir)
