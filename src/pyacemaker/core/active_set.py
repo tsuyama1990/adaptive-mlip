@@ -26,6 +26,10 @@ class ActiveSetSelector:
         """
         Selects a subset of structures that maximize the information gain.
 
+        This method uses a temporary directory to stream candidates to disk, ensuring
+        memory safety by processing in batches. It then runs the `pace_activeset`
+        command and streams the results back.
+
         Args:
             candidates: Iterable of candidate structures. Can be a generator.
             potential_path: Path to the current potential (used for descriptors).
@@ -144,4 +148,8 @@ class ActiveSetSelector:
 
         if ".." in s:
             msg = f"Path cannot contain '..': {path}"
+            raise ActiveSetError(msg)
+
+        if "%" in s:
+            msg = f"Path cannot contain '%': {path}"
             raise ActiveSetError(msg)

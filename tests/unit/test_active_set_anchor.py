@@ -72,3 +72,9 @@ def test_validate_path_flag_injection() -> None:
     selector = ActiveSetSelector()
     with pytest.raises(ActiveSetError, match="Path cannot start with '-'"):
         selector._validate_path_safe(Path("-rf"))
+
+def test_validate_path_url_encoding() -> None:
+    """Test URL encoded char validation."""
+    selector = ActiveSetSelector()
+    with pytest.raises(ActiveSetError, match="Path cannot contain '%'"):
+        selector._validate_path_safe(Path("foo%20bar"))

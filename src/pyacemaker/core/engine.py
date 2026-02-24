@@ -60,47 +60,60 @@ class LammpsEngine(BaseEngine):
             # Use constant for screen arg
             driver = LammpsDriver(["-screen", LAMMPS_SCREEN_ARG, "-log", str(log_file)])
 
-            # Run
             try:
-                driver.run(script)
-            except Exception as e:
-                msg = f"LAMMPS execution failed: {e}"
-                raise RuntimeError(msg) from e
-
-            # Extract Results
-            try:
-                energy = driver.extract_variable("pe")
-                temperature = driver.extract_variable("temp")
-                step = int(driver.extract_variable("step"))
-            except Exception:
-                energy = 0.0
-                temperature = 0.0
-                step = 0
-
-            max_gamma = 0.0
-            if self.config.fix_halt:
+                # Run
                 try:
-                    max_gamma = driver.extract_variable("max_g")
+                    driver.run(script)
+                except Exception as e:
+                    msg = f"LAMMPS execution failed: {e}"
+                    raise RuntimeError(msg) from e
+
+                # Extract Results
+                try:
+                    energy = driver.extract_variable("pe")
+                    temperature = driver.extract_variable("temp")
+                    step = int(driver.extract_variable("step"))
                 except Exception:
-                    max_gamma = 0.0
+                    energy = 0.0
+                    temperature = 0.0
+                    step = 0
 
-            halted = False
-            if self.config.fix_halt:
-                # If using fix halt, checking step count is a proxy for early termination
-                # Assuming run starts at 0. If restart, logic might need adjustment.
-                # For now, Cycle 01/02 implies fresh runs.
-                halted = step < self.config.n_steps
+                max_gamma = 0.0
+                if self.config.fix_halt:
+                    try:
+                        max_gamma = driver.extract_variable("max_g")
+                    except Exception:
+                        max_gamma = 0.0
 
-            # Result
-            return MDSimulationResult(
-                energy=energy,
-                forces=[[0.0, 0.0, 0.0]],
-                halted=halted,
-                max_gamma=max_gamma,
-                n_steps=step,
-                temperature=temperature,
-                trajectory_path=str(dump_file),
-                log_path=str(log_file),
-                halt_structure_path=str(dump_file) if halted else None,
-                halt_step=step if halted else None
-            )
+                halted = False
+                if self.config.fix_halt:
+                    # If using fix halt, checking step count is a proxy for early termination
+                    # Assuming run starts at 0. If restart, logic might need adjustment.
+                    # For now, Cycle 01/02 implies fresh runs.
+                    halted = step < self.config.n_steps
+
+                # Result
+                return MDSimulationResult(
+                    energy=energy,
+                    forces=[[0.0, 0.0, 0.0]],
+                    halted=halted,
+                    max_gamma=max_gamma,
+                    n_steps=step,
+                    temperature=temperature,
+                    trajectory_path=str(dump_file),
+                    log_path=str(log_file),
+                    halt_structure_path=str(dump_file) if halted else None,
+                    halt_step=step if halted else None
+                )
+            finally:
+                if hasattr(driver, "close"):
+                    driver.close()
+                elif hasattr(driver, "lmp"):
+                    # Fallback for lammps python wrapper if driver exposes lmp
+                    # or if LammpsDriver needs explicit close logic implemented.
+                    # Assuming LammpsDriver wrapper handles it or exposes method.
+                    # If driver.close() exists, calling it is best practice.
+                    # If not, we might need to rely on lammps module destructor,
+                    # but explicit close is better.
+                    # For now, check attribute to be safe.
+                    pass

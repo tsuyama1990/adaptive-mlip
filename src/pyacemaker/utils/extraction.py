@@ -33,6 +33,7 @@ def extract_local_region(
     total_cutoff = radius + buffer
 
     # Use ASE's neighbor_list to find neighbors respecting PBC
+    # neighbor_list uses cell lists internally for O(N) efficiency with valid cutoffs.
     # returns i (center indices), j (neighbor indices), D (distance vectors)
     # D is vector from atom i to atom j
     i_indices, j_indices, D_vectors = neighbor_list('ijD', structure, cutoff=total_cutoff)  # type: ignore[no-untyped-call]
@@ -57,20 +58,44 @@ def extract_local_region(
 
     # We need to map original indices to chemical symbols
     # Fetch symbols once (list)
-    all_symbols = structure.get_chemical_symbols()  # type: ignore[no-untyped-call]
+    all_symbols = np.array(structure.get_chemical_symbols())  # type: ignore[no-untyped-call]
 
-    for idx, vec in zip(neighbors_indices, vectors, strict=False):
-        dist = np.linalg.norm(vec)
+    # Calculate distances efficiently using numpy
+    distances = np.linalg.norm(vectors, axis=1)
 
-        # Determine weight
-        # Core: dist <= radius. Buffer: radius < dist <= total_cutoff
-        # We use strict inequality for buffer to avoid floating point issues at boundary.
-        # If dist is exactly radius, it's core.
-        weight = 1.0 if dist <= radius + 1e-6 else 0.0
+    # Determine weights using vectorized masking
+    # Core: dist <= radius. Buffer: radius < dist <= total_cutoff
+    core_mask = distances <= (radius + 1e-6)
+    weights = np.zeros_like(distances)
+    weights[core_mask] = 1.0
+    # Buffer is implicitly 0.0
 
-        cluster_positions.append(vec.tolist())
-        cluster_symbols.append(all_symbols[idx])
-        cluster_weights.append(weight)
+    # Convert to lists for ASE Atoms constructor (optional but safe)
+    # Append neighbors to cluster lists
+    # Note: vectors is (N, 3), cluster_positions expects list of lists or (M, 3) array.
+    # We can perform list extension or array concatenation.
+
+    # Using array concatenation for efficiency if N is large.
+    # We need to construct the final arrays including the center atom.
+
+    # Vectors for neighbors
+    neighbor_positions = vectors
+
+    # Symbols for neighbors
+    neighbor_symbols = all_symbols[neighbors_indices]
+
+    # Weights for neighbors
+    neighbor_weights = weights
+
+    # Combine with center atom
+    final_positions = np.vstack([np.array([0.0, 0.0, 0.0]), neighbor_positions])
+    final_symbols = np.concatenate([[center_symbol], neighbor_symbols])
+    final_weights = np.concatenate([[1.0], neighbor_weights])
+
+    # Assign back to cluster creation variables
+    cluster_positions = final_positions  # type: ignore[assignment]
+    cluster_symbols = final_symbols  # type: ignore[assignment]
+    cluster_weights = final_weights  # type: ignore[assignment]
 
     # Create Atoms object
     # pbc=False initially, embed_cluster will handle boxing
