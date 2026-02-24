@@ -4,9 +4,9 @@ from typing import Any
 from ase import Atoms
 
 from pyacemaker.core.base import BaseEngine
+from pyacemaker.core.input_validation import LammpsValidator
 from pyacemaker.core.io_manager import LammpsFileManager
 from pyacemaker.core.lammps_generator import LammpsScriptGenerator
-from pyacemaker.core.validator import LammpsValidator
 from pyacemaker.domain_models.constants import LAMMPS_SCREEN_ARG
 from pyacemaker.domain_models.md import MDConfig, MDSimulationResult
 from pyacemaker.interfaces.lammps_driver import LammpsDriver

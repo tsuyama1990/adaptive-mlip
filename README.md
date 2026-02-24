@@ -34,6 +34,10 @@ Constructing MLIPs manually is tedious and error-prone. PyAceMaker automates the
     *   Integrated LAMMPS driver for NPT/NVT simulations.
     *   **Hybrid Potentials**: Overlays ACE with ZBL/LJ for safety during high-energy events.
     *   **Uncertainty Watchdog**: Automatically halts simulations when the extrapolation grade ($\gamma$) exceeds a safe threshold.
+*   **Validation & QA (The Guardian)**:
+    *   **Phonon Stability**: Calculates phonon band structures using Phonopy to detect imaginary modes (dynamical instability).
+    *   **Elastic Stability**: Computes elastic constants ($C_{ij}$) and checks Born stability criteria (mechanical stability).
+    *   **Automated Reporting**: Generates HTML reports summarizing validation results.
 *   **Scalability**:
     *   **Streaming Data Processing**: Handles large datasets with O(1) memory usage.
     *   **Resume Capability**: Checkpoints state to `state.json`, allowing workflows to pause and resume from the exact iteration and potential version.
@@ -44,6 +48,7 @@ Constructing MLIPs manually is tedious and error-prone. PyAceMaker automates the
 *   **DFT Code**: Quantum Espresso (`pw.x` executable in PATH)
 *   **MLIP Trainer**: Pacemaker (`pace_train`, `pace_activeset` executables in PATH)
 *   **MD Engine**: LAMMPS Python Interface (`lammps` package, with `USER-PACE` support)
+*   **Validation**: Phonopy (installed automatically via `uv sync`)
 
 ## Installation
 
@@ -88,6 +93,13 @@ uv sync
     workflow:
         max_iterations: 10
         checkpoint_interval: 1
+    validation:
+        enabled: true
+        phonon:
+            supercell_size: [2, 2, 2]
+            displacement: 0.01
+        elastic:
+            strain_magnitude: 0.01
     ```
 
 2.  **Run PyAceMaker**:
@@ -104,10 +116,10 @@ uv sync
 
 ```
 src/pyacemaker/
-├── core/               # Core business logic (Generator, Oracle, Trainer)
+├── core/               # Core business logic (Generator, Oracle, Trainer, Validator)
 ├── domain_models/      # Pydantic data schemas and validation
-├── interfaces/         # External code drivers (Quantum Espresso)
-├── utils/              # Helper functions (I/O, perturbations)
+├── interfaces/         # External code drivers (Quantum Espresso, LAMMPS)
+├── utils/              # Helper functions (I/O, perturbations, phonons, elastic)
 ├── factory.py          # Dependency injection
 ├── orchestrator.py     # Workflow state machine
 └── main.py             # CLI entry point

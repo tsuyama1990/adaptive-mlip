@@ -129,13 +129,14 @@ def test_integration_workflow_complete(
     """Comprehensive integration test for the full active learning loop."""
     config = mock_config.model_copy()
 
-    def mock_create_modules(cfg: PyAceConfig) -> tuple[Any, Any, Any, Any, Any]:
+    def mock_create_modules(cfg: PyAceConfig) -> tuple[Any, Any, Any, Any, Any, Any]:
         return (
             FakeGenerator(elements=cfg.structure.elements),
             FakeOracle(),
             FakeTrainer(output_dir=tmp_path),
             FakeEngine(),
             MagicMock(),
+            MagicMock(), # Validator
         )
 
     monkeypatch.setattr(ModuleFactory, "create_modules", mock_create_modules)
@@ -200,8 +201,8 @@ def test_orchestrator_directory_creation_error(mock_config: PyAceConfig, monkeyp
     monkeypatch.setattr(Path, "mkdir", mock_mkdir)
 
     # We also need to mock module creation to pass init
-    def mock_create_modules(cfg: PyAceConfig) -> tuple[Any, Any, Any, Any, Any]:
-        return (FakeGenerator(), FakeOracle(), FakeTrainer(Path()), FakeEngine(), MagicMock())
+    def mock_create_modules(cfg: PyAceConfig) -> tuple[Any, Any, Any, Any, Any, Any]:
+        return (FakeGenerator(), FakeOracle(), FakeTrainer(Path()), FakeEngine(), MagicMock(), MagicMock())
     monkeypatch.setattr(ModuleFactory, "create_modules", mock_create_modules)
 
     orch = Orchestrator(mock_config)
@@ -217,8 +218,8 @@ def test_orchestrator_error_handling_generator(mock_config: PyAceConfig, monkeyp
     mock_gen = Mock(spec=BaseGenerator)
     mock_gen.generate.side_effect = RuntimeError("Generator failed")
 
-    def mock_create_modules(cfg: PyAceConfig) -> tuple[Any, Any, Any, Any, Any]:
-        return mock_gen, MagicMock(), MagicMock(), MagicMock(), MagicMock()
+    def mock_create_modules(cfg: PyAceConfig) -> tuple[Any, Any, Any, Any, Any, Any]:
+        return mock_gen, MagicMock(), MagicMock(), MagicMock(), MagicMock(), MagicMock()
 
     monkeypatch.setattr(ModuleFactory, "create_modules", mock_create_modules)
 
@@ -237,8 +238,8 @@ def test_orchestrator_error_handling_oracle_stream(
             msg = "Oracle computation failed"
             raise RuntimeError(msg)
 
-    def mock_create_modules(cfg: PyAceConfig) -> tuple[Any, Any, Any, Any, Any]:
-         return FakeGenerator(elements=cfg.structure.elements), FailingOracle(), MagicMock(), MagicMock(), MagicMock()
+    def mock_create_modules(cfg: PyAceConfig) -> tuple[Any, Any, Any, Any, Any, Any]:
+         return FakeGenerator(elements=cfg.structure.elements), FailingOracle(), MagicMock(), MagicMock(), MagicMock(), MagicMock()
 
     monkeypatch.setattr(ModuleFactory, "create_modules", mock_create_modules)
 

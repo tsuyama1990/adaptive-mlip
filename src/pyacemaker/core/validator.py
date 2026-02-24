@@ -1,61 +1,99 @@
+import logging
 from pathlib import Path
-from typing import Any
 
 from ase import Atoms
 
+from pyacemaker.core.report import ReportGenerator
+from pyacemaker.domain_models.config import PyAceConfig
+from pyacemaker.domain_models.defaults import DEFAULT_VALIDATION_REPORT_FILENAME
+from pyacemaker.domain_models.validation import (
+    ValidationReport,
+    ValidationStatus,
+)
+from pyacemaker.utils.elastic import ElasticCalculator
+from pyacemaker.utils.lammps import relax_structure
+from pyacemaker.utils.phonons import PhononCalculator
 
-class LammpsValidator:
-    """
-    Validates inputs for LAMMPS engine operations.
-    Follows SRP by separating validation logic from execution.
-    """
+logger = logging.getLogger(__name__)
 
-    @staticmethod
-    def validate_structure(structure: Any) -> None:
+
+class Validator:
+    """The Guardian: Validates potentials using physical checks."""
+
+    def __init__(self, config: PyAceConfig) -> None:
+        self.config = config.validation
+        self.md_config = config.md
+        self.report_generator = ReportGenerator()
+
+    def validate(
+        self, potential_path: Path, base_structure: Atoms, output_dir: Path
+    ) -> ValidationReport:
         """
-        Validates the atomic structure.
-
-        Args:
-            structure: Input structure object.
-
-        Raises:
-            ValueError: If structure is invalid or empty.
-            TypeError: If input is not an ASE Atoms object.
+        Runs validation suite.
+        1. Relax structure.
+        2. Phonons.
+        3. Elastic constants.
+        4. Report.
         """
-        if structure is None:
-            msg = "Structure must be provided."
-            raise ValueError(msg)
+        if not self.config.enabled:
+            return ValidationReport(overall_status=ValidationStatus.SKIPPED)
 
-        if not isinstance(structure, Atoms):
-            msg = f"Expected ASE Atoms object, got {type(structure)}."
-            raise TypeError(msg)
+        logger.info(f"Starting validation for potential: {potential_path}")
+        output_dir.mkdir(parents=True, exist_ok=True)
 
-        if len(structure) == 0:
-            msg = "Structure contains no atoms."
-            raise ValueError(msg)
+        # 1. Relax Structure
+        logger.info("Relaxing base structure...")
+        try:
+            relaxed_structure = relax_structure(
+                base_structure, potential_path, self.md_config
+            )
+        except Exception:
+            logger.exception("Structure relaxation failed")
+            return ValidationReport(overall_status=ValidationStatus.ERROR)
 
-    @staticmethod
-    def validate_potential(potential: Any) -> Path:
-        """
-        Validates the potential path.
+        # 2. Phonons
+        logger.info("Running Phonon calculation...")
+        phonon_calc = PhononCalculator(self.config.phonon, self.md_config)
+        try:
+            phonon_result = phonon_calc.calculate(
+                relaxed_structure, potential_path, output_dir
+            )
+        except Exception:
+            logger.exception("Phonon calculation failed")
+            phonon_result = None
 
-        Args:
-            potential: Path to potential file (str or Path).
+        # 3. Elastic
+        logger.info("Running Elastic calculation...")
+        elastic_calc = ElasticCalculator(self.config.elastic, self.md_config)
+        try:
+            elastic_result = elastic_calc.calculate(relaxed_structure, potential_path)
+        except Exception:
+            logger.exception("Elastic calculation failed")
+            elastic_result = None
 
-        Returns:
-            Validated Path object.
+        # Determine overall status
+        status = ValidationStatus.PASS
+        if phonon_result and phonon_result.status == ValidationStatus.FAIL:
+            status = ValidationStatus.FAIL
+        if elastic_result and elastic_result.status == ValidationStatus.FAIL:
+            status = ValidationStatus.FAIL
 
-        Raises:
-            FileNotFoundError: If file does not exist.
-            ValueError: If input is invalid.
-        """
-        if potential is None:
-            msg = "Potential path must be provided."
-            raise ValueError(msg)
+        if phonon_result is None or elastic_result is None:
+            status = ValidationStatus.ERROR
 
-        path = Path(potential)
-        if not path.exists():
-            msg = f"Potential file not found: {path}"
-            raise FileNotFoundError(msg)
+        report = ValidationReport(
+            phonon=phonon_result,
+            elastic=elastic_result,
+            overall_status=status,
+            report_path=output_dir / DEFAULT_VALIDATION_REPORT_FILENAME,
+        )
 
-        return path
+        # 4. Generate Report
+        try:
+            if report.report_path:
+                self.report_generator.generate(report, report.report_path)
+                logger.info(f"Validation report generated: {report.report_path}")
+        except Exception:
+            logger.exception("Failed to generate report")
+
+        return report
