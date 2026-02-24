@@ -235,7 +235,8 @@ class Orchestrator:
             candidate_stream = iread(str(candidates_file), index=":", format="extxyz")
 
             # Streaming computation
-            labelled_stream = self.oracle.compute(candidate_stream, batch_size=batch_size)
+            # batch_size removed from compute signature
+            labelled_stream = self.oracle.compute(candidate_stream)
             total = 0
 
             # Use ASE write in append mode

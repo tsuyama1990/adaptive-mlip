@@ -40,14 +40,12 @@ class DFTManager(BaseOracle):
             self._strategy_use_cg
         ]
 
-    def compute(self, structures: Iterator[Atoms], batch_size: int = 10) -> Iterator[Atoms]:
+    def compute(self, structures: Iterator[Atoms]) -> Iterator[Atoms]:
         """
         Computes DFT properties for stream of structures.
 
         Args:
             structures: Iterator of Atoms objects.
-            batch_size: Ignored in this implementation to ensure strict streaming (one-by-one).
-                        Kept for interface compatibility.
 
         Yields:
             Atoms objects with computed properties.
@@ -101,6 +99,14 @@ class DFTManager(BaseOracle):
             structure_to_compute = embed_cluster(atoms, buffer=self.config.embedding_buffer)
         else:
             structure_to_compute = atoms
+
+        # Safety check for OOM prevention
+        if len(structure_to_compute) > 2000:
+            msg = (
+                f"Structure too large for DFT ({len(structure_to_compute)} atoms). "
+                "Skipping to prevent OOM/Hang."
+            )
+            raise OracleError(msg)
 
         return self._compute_single(structure_to_compute)
 

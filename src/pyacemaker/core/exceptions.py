@@ -1,23 +1,34 @@
 class PyAceError(Exception):
-    """Base exception for PYACEMAKER."""
+    """Base exception for all PyAceMaker errors."""
 
-class ConfigError(PyAceError):
-    """Configuration related errors."""
-
-class OracleError(PyAceError):
-    """Oracle (DFT) related errors."""
-
-class GeneratorError(PyAceError):
-    """Structure generation errors."""
-
-class TrainerError(PyAceError):
-    """Training related errors."""
-
-class EngineError(PyAceError):
-    """MD Engine related errors."""
-
-class ActiveSetError(PyAceError):
-    """Active set selection errors."""
 
 class OrchestratorError(PyAceError):
-    """Orchestrator/Workflow related errors."""
+    """Raised when the workflow orchestration fails."""
+
+
+class GeneratorError(PyAceError):
+    """Raised when structure generation fails."""
+
+
+class OracleError(PyAceError):
+    """Raised when DFT calculation fails."""
+
+
+class TrainerError(PyAceError):
+    """Raised when potential training fails."""
+
+
+class ActiveSetError(PyAceError):
+    """Raised when active set selection fails."""
+
+
+class LammpsDriverError(PyAceError):
+    """Raised when LAMMPS execution fails."""
+
+
+class ConfigError(PyAceError):
+    """Raised when configuration is invalid."""
+
+
+class EngineError(PyAceError):
+    """Raised when MD engine execution fails."""

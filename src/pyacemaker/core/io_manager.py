@@ -59,12 +59,27 @@ class LammpsFileManager:
                 try:
                     with data_file.open("w") as f:
                         write_lammps_streaming(f, structure, elements)
-                except ValueError:
+                except ValueError as e:
                     # Fallback if non-orthogonal or other issue
-                    logger.warning("Streaming failed (e.g. non-orthogonal). Falling back to ASE write.")
-                    write(str(data_file), structure, format="lammps-data", specorder=elements, atom_style=self.config.atom_style)
+                    logger.warning(
+                        "Streaming failed for large structure (Error: %s). Falling back to standard ASE write (memory intensive).",
+                        e,
+                    )
+                    write(
+                        str(data_file),
+                        structure,
+                        format="lammps-data",
+                        specorder=elements,
+                        atom_style=self.config.atom_style,
+                    )
             else:
-                write(str(data_file), structure, format="lammps-data", specorder=elements, atom_style=self.config.atom_style)
+                write(
+                    str(data_file),
+                    structure,
+                    format="lammps-data",
+                    specorder=elements,
+                    atom_style=self.config.atom_style,
+                )
         except Exception as e:
             temp_dir_ctx.cleanup()
             msg = f"Failed to write LAMMPS data file: {e}"

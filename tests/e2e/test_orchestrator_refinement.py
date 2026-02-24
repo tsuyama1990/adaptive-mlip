@@ -36,7 +36,7 @@ class FakeGenerator(BaseGenerator):
             yield base_structure.copy()  # type: ignore[no-untyped-call]
 
 class FakeOracle(BaseOracle):
-    def compute(self, structures: Iterator[Atoms], batch_size: int = 10) -> Iterator[Atoms]:
+    def compute(self, structures: Iterator[Atoms]) -> Iterator[Atoms]:
         for atoms in structures:
             atoms.info["energy"] = -5.0
             yield atoms
@@ -73,7 +73,8 @@ def test_orchestrator_refinement_logic(tmp_path: Path) -> None:
             functional="PBE",
             pseudopotentials={"H": str(tmp_path / "H.UPF")},
             kpoints_density=0.04,
-            encut=400.0
+            encut=400.0,
+            allowlist_paths=[str(tmp_path)],
         ),
         training=TrainingConfig(potential_type="ace", cutoff_radius=4.0, max_basis_size=100),
         md=MDConfig(temperature=300.0, pressure=0.0, timestep=0.001, n_steps=100, fix_halt=True),
@@ -148,7 +149,14 @@ def test_orchestrator_refinement_extraction_failure(tmp_path: Path, caplog: Any)
     config = PyAceConfig(
         project_name="TestRefine",
         structure=StructureConfig(elements=["H"], supercell_size=[1, 1, 1]),
-        dft=DFTConfig(code="qe", functional="PBE", pseudopotentials={"H": str(tmp_path / "H.UPF")}, kpoints_density=0.04, encut=400.0),
+        dft=DFTConfig(
+            code="qe",
+            functional="PBE",
+            pseudopotentials={"H": str(tmp_path / "H.UPF")},
+            kpoints_density=0.04,
+            encut=400.0,
+            allowlist_paths=[str(tmp_path)],
+        ),
         training=TrainingConfig(potential_type="ace", cutoff_radius=4.0, max_basis_size=100),
         md=MDConfig(temperature=300.0, pressure=0.0, timestep=0.001, n_steps=100, fix_halt=True),
         workflow=WorkflowConfig(
