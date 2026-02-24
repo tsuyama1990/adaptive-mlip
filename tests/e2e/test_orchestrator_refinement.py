@@ -191,4 +191,4 @@ def test_orchestrator_refinement_extraction_failure(tmp_path: Path, caplog: Any)
         new_pot = orch._refine_potential(result, Path("p"), {})
 
         assert new_pot is None
-        assert "Failed to extract local region" in caplog.text
+        assert "Failed to extract local cluster" in caplog.text

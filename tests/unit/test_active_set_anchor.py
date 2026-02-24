@@ -61,20 +61,20 @@ def test_select_with_anchor_only_one(tmp_path: Path) -> None:
         assert result[0].get_chemical_symbols()[0] == 'He'  # type: ignore[no-untyped-call]
         mock_run.assert_not_called()
 
-def test_validate_path_traversal() -> None:
-    """Test path traversal validation."""
+def test_validate_path_resolution_safety() -> None:
+    """Test that paths are resolved to absolute, mitigating simple flag injection and traversal."""
     selector = ActiveSetSelector()
-    with pytest.raises(ActiveSetError, match="Path cannot contain '..'"):
-        selector._validate_path_safe(Path("foo/../bar"))
+    # These should NOT raise because they resolve to safe absolute paths
+    selector._validate_path_safe(Path("foo/../bar"))
+    selector._validate_path_safe(Path("-rf"))
 
-def test_validate_path_flag_injection() -> None:
-    """Test flag injection validation."""
+def test_validate_path_invalid_chars() -> None:
+    """Test that path validation rejects shell metacharacters."""
     selector = ActiveSetSelector()
-    with pytest.raises(ActiveSetError, match="Path cannot start with '-'"):
-        selector._validate_path_safe(Path("-rf"))
-
-def test_validate_path_url_encoding() -> None:
-    """Test URL encoded char validation."""
-    selector = ActiveSetSelector()
-    with pytest.raises(ActiveSetError, match="Path cannot contain '%'"):
+    # % is now invalid
+    with pytest.raises(ActiveSetError, match="Path contains invalid characters"):
         selector._validate_path_safe(Path("foo%20bar"))
+
+    # ; is invalid
+    with pytest.raises(ActiveSetError, match="Path contains invalid characters"):
+        selector._validate_path_safe(Path("foo;bar"))

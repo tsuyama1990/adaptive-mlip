@@ -1,5 +1,5 @@
-from io import StringIO
 from pathlib import Path
+from typing import TextIO
 
 from ase.data import atomic_numbers
 
@@ -10,7 +10,7 @@ class LammpsScriptGenerator:
     """
     Generates LAMMPS input scripts based on MDConfig.
     Follows Single Responsibility Principle by isolating script generation logic.
-    Uses StringIO for efficient string construction.
+    Supports writing directly to a file-like object to handle large scripts efficiently.
     """
 
     def __init__(self, config: MDConfig) -> None:
@@ -20,7 +20,7 @@ class LammpsScriptGenerator:
         """Quotes a path for LAMMPS script safety."""
         return f'"{path}"'
 
-    def _gen_potential(self, buffer: StringIO, potential_path: Path, elements: list[str]) -> None:
+    def _gen_potential(self, buffer: TextIO, potential_path: Path, elements: list[str]) -> None:
         """Generates potential definition commands."""
         species_str = " ".join(elements)
         quoted_pot = self._quote(potential_path)
@@ -47,13 +47,13 @@ class LammpsScriptGenerator:
             buffer.write("pair_style pace\n")
             buffer.write(f"pair_coeff * * pace {quoted_pot} {species_str}\n")
 
-    def _gen_settings(self, buffer: StringIO) -> None:
+    def _gen_settings(self, buffer: TextIO) -> None:
         """Generates general MD settings."""
         buffer.write(f"neighbor {self.config.neighbor_skin} bin\n")
         buffer.write("neigh_modify delay 0 every 1 check yes\n")
         buffer.write(f"timestep {self.config.timestep}\n")
 
-    def _gen_watchdog(self, buffer: StringIO, potential_path: Path) -> None:
+    def _gen_watchdog(self, buffer: TextIO, potential_path: Path) -> None:
         """Generates Uncertainty Watchdog commands."""
         if not self.config.fix_halt:
             return
@@ -68,7 +68,7 @@ class LammpsScriptGenerator:
             f"v_max_g > {self.config.uncertainty_threshold} error continue\n"
         )
 
-    def _gen_execution(self, buffer: StringIO) -> None:
+    def _gen_execution(self, buffer: TextIO) -> None:
         """Generates minimization and MD run commands."""
         if self.config.minimize:
             buffer.write("minimize 1.0e-4 1.0e-6 100 1000\n")
@@ -85,7 +85,7 @@ class LammpsScriptGenerator:
 
         buffer.write(f"run {self.config.n_steps}\n")
 
-    def _gen_output_setup(self, buffer: StringIO, dump_file: Path) -> None:
+    def _gen_output_setup(self, buffer: TextIO, dump_file: Path) -> None:
         """Generates output settings (thermo and dump)."""
         buffer.write(f"thermo {self.config.thermo_freq}\n")
 
@@ -103,23 +103,20 @@ class LammpsScriptGenerator:
         buffer.write(f"thermo_style custom {style}\n")
         buffer.write(f"dump traj all custom {self.config.dump_freq} {quoted_dump} {dump_cols}\n")
 
-    def _gen_post_run_diagnostics(self, buffer: StringIO) -> None:
+    def _gen_post_run_diagnostics(self, buffer: TextIO) -> None:
         """Generates post-run diagnostic prints."""
-        # Check if halted logic was intended here, but strictly relying on step count in Python is safer.
-        # Keeping this method for future extensibility or if explicit status print is needed.
 
-    def generate(
+    def write_script(
         self,
+        buffer: TextIO,
         potential_path: Path,
         data_file: Path,
         dump_file: Path,
         elements: list[str],
-    ) -> str:
+    ) -> None:
         """
-        Orchestrates LAMMPS input script generation.
+        Writes the LAMMPS input script to the provided buffer.
         """
-        buffer = StringIO()
-
         quoted_data = self._quote(data_file)
 
         buffer.write("clear\n")
@@ -138,5 +135,3 @@ class LammpsScriptGenerator:
         self._gen_execution(buffer)
 
         self._gen_post_run_diagnostics(buffer)
-
-        return buffer.getvalue()

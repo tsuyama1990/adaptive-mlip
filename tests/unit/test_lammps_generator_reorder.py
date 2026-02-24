@@ -1,3 +1,4 @@
+from io import StringIO
 from pathlib import Path
 
 from pyacemaker.core.lammps_generator import LammpsScriptGenerator
@@ -13,12 +14,18 @@ def test_lammps_generator_order() -> None:
         fix_halt=True,
     )
     generator = LammpsScriptGenerator(config)
-    script = generator.generate(
+
+    # Use StringIO as buffer
+    buffer = StringIO()
+    generator.write_script(
+        buffer,
         potential_path=Path("pot.yace"),
         data_file=Path("data.lmp"),
         dump_file=Path("dump.lammps"),
         elements=["Fe"]
     )
+
+    script = buffer.getvalue()
 
     lines = script.splitlines()
     run_idx = -1
@@ -50,12 +57,16 @@ def test_lammps_generator_gamma_column() -> None:
         fix_halt=True,
     )
     generator = LammpsScriptGenerator(config)
-    script = generator.generate(
+
+    buffer = StringIO()
+    generator.write_script(
+        buffer,
         potential_path=Path("pot.yace"),
         data_file=Path("data.lmp"),
         dump_file=Path("dump.lammps"),
         elements=["Fe"]
     )
+    script = buffer.getvalue()
 
     dump_line = next(line for line in script.splitlines() if line.startswith("dump"))
     assert "c_gamma" in dump_line, "c_gamma not found in dump command"
