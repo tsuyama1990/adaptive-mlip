@@ -21,7 +21,7 @@ def test_structure_config_valid() -> None:
     assert config.elements == ["Fe", "Pt"]
     assert config.supercell_size == [2, 2, 2]
     # Default policy
-    assert config.policy_name == ExplorationPolicy.COLD_START
+    assert config.active_policies == [ExplorationPolicy.COLD_START]
 
 
 def test_structure_config_invalid_element() -> None:
@@ -43,10 +43,10 @@ def test_structure_config_policy() -> None:
     config = StructureConfig(
         elements=["Fe"],
         supercell_size=[1,1,1],
-        policy_name="random_rattle",
+        active_policies=["random_rattle"],
         rattle_stdev=0.2
     )
-    assert config.policy_name == ExplorationPolicy.RANDOM_RATTLE
+    assert config.active_policies == [ExplorationPolicy.RANDOM_RATTLE]
     assert config.rattle_stdev == 0.2
 
 

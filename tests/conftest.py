@@ -49,7 +49,7 @@ def mock_structure_config() -> StructureConfig:
     return StructureConfig(
         elements=["Fe"],
         supercell_size=[2, 2, 2],
-        policy_name=ExplorationPolicy.COLD_START,
+        active_policies=[ExplorationPolicy.COLD_START],
     )
 
 @pytest.fixture
@@ -128,7 +128,7 @@ def create_test_config_dict(**overrides: Any) -> dict[str, Any]:
         "structure": {
             "elements": ["Fe"],
             "supercell_size": [1, 1, 1],
-            "policy_name": ExplorationPolicy.COLD_START,
+            "active_policies": [ExplorationPolicy.COLD_START],
         },
         "dft": {
             "code": "qe",

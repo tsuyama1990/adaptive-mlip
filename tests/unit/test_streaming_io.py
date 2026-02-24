@@ -1,5 +1,5 @@
 
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from ase import Atoms
@@ -49,24 +49,21 @@ def test_stream_write_chunking(orchestrator, tmp_path):
         assert mock_write.call_count == 3
 
         # Check call args
-        # 1st call: 10 items, append=False (since file doesn't exist/append=False initially)
-        # But wait, logic: `current_append = append or (count > 0)`
-        # default append=False.
-        # 1st batch: count=0. current_append=False.
-        # 2nd batch: count=10. current_append=True.
-        # 3rd batch: count=20. current_append=True.
+        # Should call write(f, batch, format="extxyz") 3 times.
+        # Since we pass file handle, append kwarg is NOT used.
+        # Mode is controlled by filepath.open() which we didn't mock here, so it opened real file.
 
         args1, kwargs1 = mock_write.call_args_list[0]
+        # args1[0] is file handle (not easily checked), args1[1] is batch
         assert len(args1[1]) == 10
-        assert kwargs1["append"] is False
+        assert kwargs1.get("format") == "extxyz"
+        assert "append" not in kwargs1
 
         args2, kwargs2 = mock_write.call_args_list[1]
         assert len(args2[1]) == 10
-        assert kwargs2["append"] is True
 
         args3, kwargs3 = mock_write.call_args_list[2]
         assert len(args3[1]) == 5
-        assert kwargs3["append"] is True
 
 def test_stream_write_append_mode(orchestrator, tmp_path):
     """Verifies behavior when append=True is passed."""
@@ -76,10 +73,17 @@ def test_stream_write_append_mode(orchestrator, tmp_path):
     atoms_list = [Atoms("H") for _ in range(5)]
     atoms_gen = (a for a in atoms_list)
 
-    with patch("pyacemaker.orchestrator.write") as mock_write:
-        orchestrator._stream_write(atoms_gen, output_file, batch_size=2, append=True)
+    # Mock open to verify mode
+    with patch("pathlib.Path.open") as mock_open:
+        # We need mock_open to return context manager
+        mock_file = MagicMock()
+        mock_open.return_value.__enter__.return_value = mock_file
 
-        # Calls: 2, 2, 1
-        # All should have append=True
-        for call_args in mock_write.call_args_list:
-            assert call_args[1]["append"] is True
+        with patch("pyacemaker.orchestrator.write") as mock_write:
+            orchestrator._stream_write(atoms_gen, output_file, batch_size=2, append=True)
+
+            # Verify mode='a'
+            mock_open.assert_called_with("a")
+
+            # Verify write calls
+            assert mock_write.call_count == 3

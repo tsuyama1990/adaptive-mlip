@@ -41,7 +41,7 @@ class FakeGenerator(BaseGenerator):
             symbol = self.elements[0]
             yield Atoms(f"{symbol}2", positions=[[0, 0, 0], [0, 0, 0.74]])
 
-    def generate_local(self, base_structure: Atoms, n_candidates: int) -> Iterator[Atoms]:
+    def generate_local(self, base_structure: Atoms, n_candidates: int, **kwargs: Any) -> Iterator[Atoms]:
         for _ in range(n_candidates):
             yield base_structure.copy()  # type: ignore[no-untyped-call]
 
@@ -86,6 +86,12 @@ class FakeEngine(BaseEngine):
              halt_structure_path=None
         )
 
+    def compute_static_properties(self, structure: Atoms, potential: Any) -> MDSimulationResult:
+        return self.run(structure, potential)
+
+    def relax(self, structure: Atoms, potential: Any) -> Atoms:
+        return structure
+
 
 @pytest.fixture
 def mock_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> PyAceConfig:
@@ -94,7 +100,7 @@ def mock_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> PyAceConfig:
 
     return PyAceConfig(
         project_name="TestProject",
-        structure=StructureConfig(elements=["H"], supercell_size=[1, 1, 1], policy_name="cold_start"),
+        structure=StructureConfig(elements=["H"], supercell_size=[1, 1, 1], active_policies=["cold_start"]),
         dft=DFTConfig(
             code="qe",
             functional="PBE",
@@ -120,7 +126,7 @@ def mock_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> PyAceConfig:
 def test_orchestrator_initialization(mock_config: PyAceConfig) -> None:
     orch = Orchestrator(mock_config)
     assert orch.loop_state.iteration == 0
-    assert orch.state_file.name == "test_state.json"
+    assert orch.state_manager.state_file.name == "test_state.json"
 
 
 def test_integration_workflow_complete(
@@ -129,12 +135,13 @@ def test_integration_workflow_complete(
     """Comprehensive integration test for the full active learning loop."""
     config = mock_config.model_copy()
 
-    def mock_create_modules(cfg: PyAceConfig) -> tuple[Any, Any, Any, Any, Any]:
+    def mock_create_modules(cfg: PyAceConfig) -> tuple[Any, Any, Any, Any, Any, Any]:
         return (
             FakeGenerator(elements=cfg.structure.elements),
             FakeOracle(),
             FakeTrainer(output_dir=tmp_path),
             FakeEngine(),
+            MagicMock(),
             MagicMock(),
         )
 
@@ -144,8 +151,8 @@ def test_integration_workflow_complete(
     orch.run()
 
     assert orch.loop_state.iteration == 2
-    assert orch.state_file.exists()
-    assert "iteration" in orch.state_file.read_text()
+    assert orch.state_manager.state_file.exists()
+    assert "iteration" in orch.state_manager.state_file.read_text()
 
     active_learning_dir = Path(config.workflow.active_learning_dir)
     assert active_learning_dir.exists()
@@ -164,8 +171,7 @@ def test_integration_workflow_complete(
     assert potentials_dir.exists()
     assert (potentials_dir / "generation_001.yace").exists()
 
-    # Count is unknown (-1) due to streaming
-    assert LOG_COMPUTED_PROPERTIES.format(count=-1) in caplog.text
+    assert LOG_COMPUTED_PROPERTIES.format(count=10) in caplog.text
     assert LOG_POTENTIAL_TRAINED in caplog.text
     assert LOG_ITERATION_COMPLETED.format(iteration=1) in caplog.text
 
@@ -173,7 +179,7 @@ def test_integration_workflow_complete(
 def test_orchestrator_checkpointing(mock_config: PyAceConfig) -> None:
     orch1 = Orchestrator(mock_config)
     orch1.loop_state.iteration = 5
-    orch1.save_state()
+    orch1.state_manager.save()
 
     orch2 = Orchestrator(mock_config)
     assert orch2.loop_state.iteration == 5
@@ -200,8 +206,8 @@ def test_orchestrator_directory_creation_error(mock_config: PyAceConfig, monkeyp
     monkeypatch.setattr(Path, "mkdir", mock_mkdir)
 
     # We also need to mock module creation to pass init
-    def mock_create_modules(cfg: PyAceConfig) -> tuple[Any, Any, Any, Any, Any]:
-        return (FakeGenerator(), FakeOracle(), FakeTrainer(Path()), FakeEngine(), MagicMock())
+    def mock_create_modules(cfg: PyAceConfig) -> tuple[Any, Any, Any, Any, Any, Any]:
+        return (FakeGenerator(), FakeOracle(), FakeTrainer(Path()), FakeEngine(), MagicMock(), MagicMock())
     monkeypatch.setattr(ModuleFactory, "create_modules", mock_create_modules)
 
     orch = Orchestrator(mock_config)
@@ -217,8 +223,8 @@ def test_orchestrator_error_handling_generator(mock_config: PyAceConfig, monkeyp
     mock_gen = Mock(spec=BaseGenerator)
     mock_gen.generate.side_effect = RuntimeError("Generator failed")
 
-    def mock_create_modules(cfg: PyAceConfig) -> tuple[Any, Any, Any, Any, Any]:
-        return mock_gen, MagicMock(), MagicMock(), MagicMock(), MagicMock()
+    def mock_create_modules(cfg: PyAceConfig) -> tuple[Any, Any, Any, Any, Any, Any]:
+        return mock_gen, MagicMock(), MagicMock(), MagicMock(), MagicMock(), MagicMock()
 
     monkeypatch.setattr(ModuleFactory, "create_modules", mock_create_modules)
 
@@ -237,8 +243,8 @@ def test_orchestrator_error_handling_oracle_stream(
             msg = "Oracle computation failed"
             raise RuntimeError(msg)
 
-    def mock_create_modules(cfg: PyAceConfig) -> tuple[Any, Any, Any, Any, Any]:
-         return FakeGenerator(elements=cfg.structure.elements), FailingOracle(), MagicMock(), MagicMock(), MagicMock()
+    def mock_create_modules(cfg: PyAceConfig) -> tuple[Any, Any, Any, Any, Any, Any]:
+         return FakeGenerator(elements=cfg.structure.elements), FailingOracle(), MagicMock(), MagicMock(), MagicMock(), MagicMock()
 
     monkeypatch.setattr(ModuleFactory, "create_modules", mock_create_modules)
 

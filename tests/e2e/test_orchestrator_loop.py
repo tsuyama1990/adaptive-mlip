@@ -26,7 +26,7 @@ class FakeGenerator(BaseGenerator):
             symbol = self.elements[0]
             yield Atoms(f"{symbol}2", positions=[[0, 0, 0], [0, 0, 0.74]])
 
-    def generate_local(self, base_structure: Atoms, n_candidates: int) -> Iterator[Atoms]:
+    def generate_local(self, base_structure: Atoms, n_candidates: int, **kwargs: Any) -> Iterator[Atoms]:
         for _ in range(n_candidates):
             yield base_structure.copy()  # type: ignore[no-untyped-call]
 
@@ -39,7 +39,7 @@ def mock_config(tmp_path: Path) -> PyAceConfig:
         "structure": {
             "elements": ["Fe"],
             "supercell_size": [1, 1, 1],
-            "policy_name": "cold_start",
+            "active_policies": ["cold_start"],
         },
         "dft": {
             "code": "qe",

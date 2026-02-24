@@ -16,7 +16,7 @@ def test_uat_03_01_generate_candidates() -> None:
     config = StructureConfig(
         elements=["Fe", "Pt"],  # Composition FePt
         supercell_size=[2, 2, 2],
-        policy_name=ExplorationPolicy.RANDOM_RATTLE,
+        active_policies=[ExplorationPolicy.RANDOM_RATTLE],
         rattle_stdev=0.1,
         num_structures=10,
     )
@@ -59,7 +59,7 @@ def test_uat_03_02_defect_generation() -> None:
     config = StructureConfig(
         elements=["Fe"],
         supercell_size=[4, 4, 4],
-        policy_name=ExplorationPolicy.DEFECTS,
+        active_policies=[ExplorationPolicy.DEFECTS],
         vacancy_rate=0.05,
     )
     generator = StructureGenerator(config)
@@ -71,7 +71,10 @@ def test_uat_03_02_defect_generation() -> None:
 
     # 3. Expectation
     # Get pristine count
-    pristine_config = config.model_copy(update={"policy_name": ExplorationPolicy.COLD_START})
+    pristine_config = config.model_copy(update={
+        "active_policies": [ExplorationPolicy.COLD_START],
+        "vacancy_rate": 0.0
+    })
     pristine_gen = StructureGenerator(pristine_config)
     pristine_atoms = next(pristine_gen.generate(1))
 

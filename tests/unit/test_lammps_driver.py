@@ -1,5 +1,6 @@
 
 import sys
+from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -52,10 +53,35 @@ def test_lammps_driver_run_unsafe(mock_lammps: Any) -> None:
 def test_lammps_driver_run_forbidden_chars(mock_lammps: Any) -> None:
     """Tests rejection of scripts with forbidden characters."""
     driver = LammpsDriver()
-    # Semicolon is forbidden
-    script = "print 'Hello'; shell rm -rf /"
+    # Pipe is forbidden
+    script = "print 'Hello' | grep World"
     with pytest.raises(ValueError, match="forbidden characters"):
         driver.run(script)
+
+
+def test_lammps_driver_run_forbidden_command(mock_lammps: Any) -> None:
+    """Tests rejection of scripts with forbidden commands."""
+    driver = LammpsDriver()
+    # shell command is forbidden
+    script = "shell rm -rf /"
+    with pytest.raises(ValueError, match="forbidden command 'shell'"):
+        driver.run(script)
+
+def test_lammps_driver_run_file_calls_command(mock_lammps: Any, tmp_path: Path) -> None:
+    """Test run_file executes line-by-line via lmp.command() instead of lmp.file()."""
+    driver = LammpsDriver()
+    script_content = "clear\nunits metal\n"
+    script_path = tmp_path / "test.lmp"
+    script_path.write_text(script_content)
+
+    driver.run_file(script_path)
+
+    # Verify command was called for each line
+    driver.lmp.command.assert_any_call("clear")
+    driver.lmp.command.assert_any_call("units metal")
+
+    # Verify lmp.file was NOT called
+    driver.lmp.file.assert_not_called()
 
 
 def test_lammps_driver_run_shell(mock_lammps: Any) -> None:

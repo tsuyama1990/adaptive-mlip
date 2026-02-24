@@ -19,7 +19,7 @@ def uat_config(tmp_path: Path) -> PyAceConfig:
         "structure": {
             "elements": ["Fe"],
             "supercell_size": [1, 1, 1],
-            "policy_name": "cold_start",
+            "active_policies": ["cold_start"],
         },
         "dft": {
             "code": "qe",
@@ -72,8 +72,9 @@ def test_scenario_06_01_active_learning_campaign(uat_config: PyAceConfig, tmp_pa
         mock_trainer = MagicMock()
         mock_engine = MagicMock()
         mock_selector = MagicMock()
+        mock_validator = MagicMock()
 
-        mock_factory.return_value = (mock_gen, mock_oracle, mock_trainer, mock_engine, mock_selector)
+        mock_factory.return_value = (mock_gen, mock_oracle, mock_trainer, mock_engine, mock_selector, mock_validator)
 
         # Pre-create potential files
         pot1 = tmp_path / "pot_v1.yace"
@@ -85,7 +86,8 @@ def test_scenario_06_01_active_learning_campaign(uat_config: PyAceConfig, tmp_pa
 
         # Setup behaviors
         mock_gen.generate.return_value = iter([Atoms("Fe")])
-        mock_oracle.compute.return_value = iter([Atoms("Fe")])
+        # Use lambda to return fresh iterator each time
+        mock_oracle.compute.side_effect = lambda *args, **kwargs: iter([Atoms("Fe")])
         mock_trainer.train.side_effect = [pot1, pot2, pot3]
 
         # Iteration 1: Halt
@@ -143,7 +145,9 @@ def test_scenario_06_02_resume_capability(uat_config: PyAceConfig, tmp_path: Pat
         mock_trainer = MagicMock()
         mock_engine = MagicMock()
         mock_selector = MagicMock()
-        mock_factory.return_value = (mock_gen, mock_oracle, mock_trainer, mock_engine, mock_selector)
+        mock_validator = MagicMock()
+        mock_validator = MagicMock()
+        mock_factory.return_value = (mock_gen, mock_oracle, mock_trainer, mock_engine, mock_selector, mock_validator)
 
         # Iteration 2: Run MD
         res2 = MDSimulationResult(

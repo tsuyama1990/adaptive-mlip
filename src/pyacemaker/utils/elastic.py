@@ -35,22 +35,25 @@ class ElasticCalculator:
         return np.array(result.stress)
 
     def calculate_properties(
-        self, structure: Atoms, potential_path: Path
+        self, structure: Atoms, potential_path: Path, symmetry: str = "cubic"
     ) -> tuple[bool, dict[str, float], float, str]:
         """
         Calculates C_ij and B, checks stability.
         Returns (is_stable, c_ij, bulk_modulus, plot_base64).
         """
+        if symmetry != "cubic":
+            raise NotImplementedError(f"Symmetry {symmetry} not supported yet.")
+
         # 1. Strain Sweep for C11, C12
         # Apply strain e_xx from -strain to +strain
         strains = np.linspace(-self.strain, self.strain, self.steps)
         stress_xx = []
         stress_yy = []
 
-        base_cell = structure.get_cell()
+        base_cell = structure.get_cell()  # type: ignore[no-untyped-call]
 
         for eps in strains:
-            atoms = structure.copy() # type: ignore[no-untyped-call]
+            atoms = structure.copy()  # type: ignore[no-untyped-call]
             cell = base_cell.copy()
             cell[0, 0] *= (1 + eps)
             atoms.set_cell(cell, scale_atoms=True)
@@ -68,7 +71,7 @@ class ElasticCalculator:
         # Voigt notation: sigma_xy = C44 * gamma_xy
         stress_xy = []
         for eps in strains:
-            atoms = structure.copy() # type: ignore[no-untyped-call]
+            atoms = structure.copy()  # type: ignore[no-untyped-call]
             cell = base_cell.copy()
             # Shear in xy
             # cell[0, 1] += eps * cell[1, 1] ? No, simpler for cubic
@@ -111,7 +114,7 @@ class ElasticCalculator:
         B = (c11 + 2 * c12) / 3.0
 
         # Stability
-        is_stable = self.check_stability_criteria(c_ij, "cubic")
+        is_stable = self.check_stability_criteria(c_ij, symmetry)
 
         # Plot
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4))

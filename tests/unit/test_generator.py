@@ -11,7 +11,7 @@ def test_cold_start_policy() -> None:
     config = StructureConfig(
         elements=["Fe"],
         supercell_size=[2, 2, 2],
-        policy_name=ExplorationPolicy.COLD_START,
+        active_policies=[ExplorationPolicy.COLD_START],
     )
     generator = StructureGenerator(config)
     structures = list(generator.generate(n_candidates=10))
@@ -26,13 +26,13 @@ def test_rattle_policy() -> None:
     config = StructureConfig(
         elements=["Fe"],
         supercell_size=[2, 2, 2],
-        policy_name=ExplorationPolicy.RANDOM_RATTLE,
+        active_policies=[ExplorationPolicy.RANDOM_RATTLE],
         rattle_stdev=0.1,
     )
     generator = StructureGenerator(config)
 
     # Check base structure first
-    base_gen = StructureGenerator(config.model_copy(update={"policy_name": ExplorationPolicy.COLD_START}))
+    base_gen = StructureGenerator(config.model_copy(update={"policy_name": ExplorationPolicy.COLD_START, "active_policies": [ExplorationPolicy.COLD_START]}))
     base = next(base_gen.generate(1))
 
     structures = list(generator.generate(n_candidates=5))
@@ -57,7 +57,7 @@ def test_defect_policy() -> None:
     config = StructureConfig(
         elements=["Fe"],
         supercell_size=[3, 3, 3],
-        policy_name=ExplorationPolicy.DEFECTS,
+        active_policies=[ExplorationPolicy.DEFECTS],
         vacancy_rate=0.1,
     )
     generator = StructureGenerator(config)
@@ -65,7 +65,7 @@ def test_defect_policy() -> None:
 
     assert len(structures) == 5
 
-    base_config = config.model_copy(update={"policy_name": ExplorationPolicy.COLD_START})
+    base_config = config.model_copy(update={"policy_name": ExplorationPolicy.COLD_START, "active_policies": [ExplorationPolicy.COLD_START]})
     base_gen = StructureGenerator(base_config)
     base_atoms = next(base_gen.generate(1))
 
@@ -76,7 +76,7 @@ def test_strain_policy() -> None:
     config = StructureConfig(
         elements=["Fe"],
         supercell_size=[2, 2, 2],
-        policy_name=ExplorationPolicy.STRAIN,
+        active_policies=[ExplorationPolicy.STRAIN],
         strain_mode="volume",
     )
     generator = StructureGenerator(config)
@@ -84,7 +84,7 @@ def test_strain_policy() -> None:
 
     assert len(structures) == 5
 
-    base_config = config.model_copy(update={"policy_name": ExplorationPolicy.COLD_START})
+    base_config = config.model_copy(update={"policy_name": ExplorationPolicy.COLD_START, "active_policies": [ExplorationPolicy.COLD_START]})
     base_gen = StructureGenerator(base_config)
     base_atoms = next(base_gen.generate(1))
 
@@ -97,7 +97,7 @@ def test_generator_invalid_composition() -> None:
     config = StructureConfig(
         elements=["Fe"],
         supercell_size=[1, 1, 1],
-        policy_name=ExplorationPolicy.COLD_START,
+        active_policies=[ExplorationPolicy.COLD_START],
     )
     generator = StructureGenerator(config)
 
@@ -115,7 +115,7 @@ def test_generate_local() -> None:
     config = StructureConfig(
         elements=["Fe"],
         supercell_size=[2, 2, 2],
-        policy_name=ExplorationPolicy.COLD_START,
+        active_policies=[ExplorationPolicy.COLD_START],
         rattle_stdev=0.1
     )
     generator = StructureGenerator(config)

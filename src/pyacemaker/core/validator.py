@@ -1,16 +1,28 @@
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 from ase import Atoms
-from ase.io import read
+from ase.data import atomic_numbers
 
 from pyacemaker.core.report import ReportGenerator
+from pyacemaker.domain_models.constants import (
+    ALLOWED_TEMP_DIRS,
+    ERR_POTENTIAL_NOT_FOUND,
+    ERR_VAL_POT_NONE,
+    ERR_VAL_POT_NOT_FILE,
+    ERR_VAL_POT_OUTSIDE,
+    ERR_VAL_REQ_STRUCT,
+    ERR_VAL_STRUCT_EMPTY,
+    ERR_VAL_STRUCT_NONE,
+    ERR_VAL_STRUCT_TYPE,
+)
 from pyacemaker.domain_models.validation import ValidationConfig, ValidationResult
 from pyacemaker.utils.elastic import ElasticCalculator
 from pyacemaker.utils.phonons import PhononCalculator
 
 
-class LammpsValidator:
+class LammpsInputValidator:
     """
     Validates inputs for LAMMPS engine operations.
     Follows SRP by separating validation logic from execution.
@@ -25,25 +37,50 @@ class LammpsValidator:
             structure: Input structure object.
 
         Raises:
-            ValueError: If structure is invalid or empty.
+            ValueError: If structure is invalid, empty, or contains unknown elements.
             TypeError: If input is not an ASE Atoms object.
         """
         if structure is None:
-            msg = "Structure must be provided."
-            raise ValueError(msg)
+            raise ValueError(ERR_VAL_STRUCT_NONE)
 
         if not isinstance(structure, Atoms):
-            msg = f"Expected ASE Atoms object, got {type(structure)}."
-            raise TypeError(msg)
+            raise TypeError(ERR_VAL_STRUCT_TYPE.format(type=type(structure)))
 
         if len(structure) == 0:
-            msg = "Structure contains no atoms."
+            raise ValueError(ERR_VAL_STRUCT_EMPTY)
+
+        # Validate structure physical properties
+        try:
+            vol = structure.get_volume()  # type: ignore[no-untyped-call]
+            if vol <= 1e-9:
+                msg = "Structure has near-zero or negative volume."
+                raise ValueError(msg)
+        except Exception as e:
+            # get_volume might fail if no cell is set
+            msg = f"Failed to compute structure volume: {e}"
+            raise ValueError(msg) from e
+
+        # Validate positions are numeric and finite
+        pos = structure.get_positions()  # type: ignore[no-untyped-call]
+        if not np.isfinite(pos).all():
+            msg = "Structure contains non-finite atomic positions."
             raise ValueError(msg)
+
+        # Validate elements against atomic_numbers
+        symbols = set(structure.get_chemical_symbols())  # type: ignore[no-untyped-call]
+        for s in symbols:
+            if s not in atomic_numbers:
+                msg = f"Structure contains unknown chemical symbol: {s}"
+                raise ValueError(msg)
+            if atomic_numbers[s] == 0:
+                msg = f"Structure contains dummy element: {s} (Z=0)"
+                raise ValueError(msg)
 
     @staticmethod
     def validate_potential(potential: Any) -> Path:
         """
         Validates the potential path.
+        Ensures path exists, is a file, and is within allowed directories.
 
         Args:
             potential: Path to potential file (str or Path).
@@ -53,16 +90,30 @@ class LammpsValidator:
 
         Raises:
             FileNotFoundError: If file does not exist.
-            ValueError: If input is invalid.
+            ValueError: If input is invalid or path is insecure.
         """
         if potential is None:
-            msg = "Potential path must be provided."
-            raise ValueError(msg)
+            raise ValueError(ERR_VAL_POT_NONE)
 
-        path = Path(potential)
+        path = Path(potential).resolve()
+
         if not path.exists():
-            msg = f"Potential file not found: {path}"
-            raise FileNotFoundError(msg)
+            raise FileNotFoundError(ERR_POTENTIAL_NOT_FOUND.format(path=path))
+
+        if not path.is_file():
+            raise ValueError(ERR_VAL_POT_NOT_FILE.format(path=path))
+
+        # Security: Restrict access to project directory or temp dirs
+        allowed_prefixes = [Path.cwd().resolve()]
+        # Add system temp directories from config
+        for temp_dir in ALLOWED_TEMP_DIRS:
+            try:
+                allowed_prefixes.append(Path(temp_dir).resolve())
+            except OSError:
+                pass  # Ignore invalid paths
+
+        if not any(str(path).startswith(str(prefix)) for prefix in allowed_prefixes):
+            raise ValueError(ERR_VAL_POT_OUTSIDE.format(path=path))
 
         return path
 
@@ -91,41 +142,7 @@ class Validator:
         """
         # Use engine from elastic_calc (arbitrary choice, they should share engine)
         engine = self.elastic_calc.engine
-
-        # Create a config for minimization
-        # We need to access engine.config to copy/modify it.
-        # But BaseEngine interface doesn't expose config.
-        # However, we know it's LammpsEngine in this context.
-        # If we cannot access config, we can rely on default behavior of 'run' if configured?
-        # No, 'run' runs MD by default.
-        # We need a dedicated relax method on Engine or hack config.
-        # Since I am the implementer, I can assume LammpsEngine has 'config'.
-        # Or better, I added `compute_static_properties` which does static.
-        # I need `relax_structure` on Engine.
-        # But adding another method to BaseEngine...
-        # Let's check `LammpsEngine.run`. If `minimize=True` in config, it minimizes.
-        # I can create a temporary engine with minimize=True.
-
-        if hasattr(engine, "config"):
-             relax_config = engine.config.model_copy(update={
-                 "minimize": True,
-                 "n_steps": 0, # Just minimization
-                 "thermo_freq": 10
-             })
-             # Create new engine of same type
-             RelaxEngine = type(engine)
-             relax_engine = RelaxEngine(relax_config)
-
-             result = relax_engine.run(structure, potential_path)
-             if result.trajectory_path:
-                 # Read last frame
-                 # ase.io.read returns Atoms or list of Atoms
-                 relaxed = read(result.trajectory_path, index=-1)
-                 if isinstance(relaxed, list):
-                     return relaxed[-1]
-                 return relaxed # type: ignore
-
-        return structure
+        return engine.relax(structure, potential_path)
 
     def validate(
         self, potential_path: Path, output_path: Path, structure: Atoms | None = None
@@ -138,8 +155,7 @@ class Validator:
             # For now, require it.
             # But Orchestrator might call it without structure if we didn't update it.
             # I'll raise error.
-            msg = "Validation requires a structure."
-            raise ValueError(msg)
+            raise ValueError(ERR_VAL_REQ_STRUCT)
 
         # Relax structure
         relaxed_structure = self._relax_structure(structure, potential_path)

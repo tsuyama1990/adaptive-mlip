@@ -11,6 +11,12 @@ class ExplorationPolicy(StrEnum):
     DEFECTS = "defects"
 
 
+class LocalGenerationStrategy(StrEnum):
+    RANDOM_DISPLACEMENT = "random_displacement"
+    NORMAL_MODE = "normal_mode"
+    MD_MICRO_BURST = "md_micro_burst"
+
+
 class StrainMode(StrEnum):
     VOLUME = "volume"
     SHEAR = "shear"
@@ -28,10 +34,12 @@ class StructureConfig(BaseModel):
     )
 
     # Exploration Policy Configuration
-    policy_name: ExplorationPolicy = Field(
-        default=ExplorationPolicy.COLD_START,
-        description="Exploration policy to use"
+    # Refactored to support multiple policies (Composite Policy)
+    active_policies: list[ExplorationPolicy] = Field(
+        default=[ExplorationPolicy.COLD_START],
+        description="List of exploration policies to apply sequentially"
     )
+
     rattle_stdev: float = Field(
         default=0.1, ge=0.0, description="Standard deviation for random rattle (Angstrom)"
     )
@@ -45,15 +53,25 @@ class StructureConfig(BaseModel):
         default=0.0, ge=0.0, le=1.0, description="Rate of vacancies to introduce"
     )
     num_structures: int = Field(
-        default=1, ge=1, description="Number of structures to generate"
+        default=1, ge=1, description="Number of structures to generate per policy"
     )
 
     # Local Active Learning Settings
+    local_generation_strategy: LocalGenerationStrategy = Field(
+        default=LocalGenerationStrategy.RANDOM_DISPLACEMENT,
+        description="Strategy for generating local candidates around halt structures"
+    )
     local_extraction_radius: float = Field(
         default=6.0, gt=0.0, description="Radius for extracting local clusters around high uncertainty atoms (Angstrom)"
     )
     local_buffer_radius: float = Field(
         default=4.0, ge=0.0, description="Buffer radius added to extraction for force masking (Angstrom)"
+    )
+    local_md_steps: int = Field(
+        default=50, gt=0, description="Number of MD steps for local micro-burst generation"
+    )
+    local_md_temp: float = Field(
+        default=2000.0, gt=0.0, description="Temperature for local micro-burst MD (K)"
     )
 
     @field_validator("elements")

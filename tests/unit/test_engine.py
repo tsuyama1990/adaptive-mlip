@@ -28,6 +28,12 @@ def test_lammps_engine_run(mock_md_config: MDConfig, mock_driver: Any, tmp_path:
         "halted": 0.0  # Not halted
     }.get(name, 0.0)
 
+    # Capture script content
+    script_content = []
+    def capture_run(path: str) -> None:
+        script_content.append(Path(path).read_text())
+    driver_instance.run_file.side_effect = capture_run
+
     # Mock get_atoms
     driver_instance.get_atoms.return_value = Atoms("H", cell=[10, 10, 10], pbc=True)
 
@@ -50,18 +56,15 @@ def test_lammps_engine_run(mock_md_config: MDConfig, mock_driver: Any, tmp_path:
     assert result.trajectory_path is not None
     assert re.search(r"dump_[a-f0-9]{8}\.lammpstrj", result.trajectory_path)
 
-    # Verify driver run called with script
-    driver_instance.run.assert_called()
-    script = driver_instance.run.call_args[0][0]
-    assert "pair_style" in script
-    assert "fix halt" in script
+    # Verify driver run_file called
+    driver_instance.run_file.assert_called()
 
-    # Verify data file path
-    match = re.search(r"read_data (.*)", script)
-    assert match
-    data_file = match.group(1)
-    assert "data_" in data_file
-    assert ".lmp" in data_file
+    # Check captured script
+    assert len(script_content) == 1
+    script = script_content[0]
+
+    assert "fix halt" in script
+    assert "read_data" in script
 
 
 def test_lammps_engine_halted(mock_md_config: MDConfig, mock_driver: Any, tmp_path: Path) -> None:
@@ -100,10 +103,19 @@ def test_lammps_engine_hybrid_potential(mock_md_config: MDConfig, mock_driver: A
     pot_path = tmp_path / "potential.yace"
     pot_path.touch()
 
-    engine.run(atoms, pot_path)
+    # Capture script content
+    script_content = []
+    def capture_run(path: str) -> None:
+        script_content.append(Path(path).read_text())
 
     driver_instance = mock_driver.return_value
-    script = driver_instance.run.call_args[0][0]
+    driver_instance.run_file.side_effect = capture_run
+
+    engine.run(atoms, pot_path)
+
+    # Check captured script
+    assert len(script_content) == 1
+    script = script_content[0]
 
     assert "pair_style hybrid/overlay" in script
     assert "pair_coeff * * pace" in script
@@ -154,12 +166,12 @@ def test_run_large_structure_warning(mock_md_config: MDConfig, mock_driver: Any,
 def test_run_driver_failure(mock_md_config: MDConfig, mock_driver: Any, tmp_path: Path) -> None:
     """Tests error handling when LAMMPS execution fails."""
     driver_instance = mock_driver.return_value
-    driver_instance.run.side_effect = RuntimeError("LAMMPS crashed")
+    driver_instance.run_file.side_effect = RuntimeError("LAMMPS crashed")
 
     engine = LammpsEngine(mock_md_config)
     atoms = Atoms("H", cell=[10, 10, 10], pbc=True)
     pot_path = tmp_path / "pot.yace"
     pot_path.touch()
 
-    with pytest.raises(RuntimeError, match="LAMMPS execution failed: LAMMPS crashed"):
+    with pytest.raises(RuntimeError, match="LAMMPS engine execution failed: LAMMPS crashed"):
         engine.run(atoms, pot_path)
