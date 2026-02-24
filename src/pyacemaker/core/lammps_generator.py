@@ -147,3 +147,29 @@ class LammpsScriptGenerator:
         self._gen_execution(buffer)
 
         self._gen_post_run_diagnostics(buffer)
+
+    def write_minimization_script(
+        self,
+        buffer: TextIO,
+        potential_path: Path,
+        data_file: Path,
+        elements: list[str],
+    ) -> None:
+        """
+        Writes a minimization-only script for relaxation.
+        """
+        quoted_data = self._quote(data_file)
+
+        buffer.write("clear\n")
+        buffer.write("units metal\n")
+        buffer.write(f"atom_style {self.config.atom_style}\n")
+        buffer.write("boundary p p p\n")
+        buffer.write(f"read_data {quoted_data}\n")
+
+        self._gen_potential(buffer, potential_path, elements)
+
+        buffer.write(f"neighbor {self.config.neighbor_skin} bin\n")
+        buffer.write("neigh_modify delay 0 every 1 check yes\n")
+
+        buffer.write("min_style cg\n")
+        buffer.write("minimize 1.0e-6 1.0e-8 1000 10000\n")

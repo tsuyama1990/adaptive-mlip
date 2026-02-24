@@ -25,10 +25,11 @@ FILENAME_POTENTIAL: Final = "potential.yace"
 
 # LAMMPS
 LAMMPS_SCREEN_ARG: Final = "none"
-LAMMPS_SAFE_CMD_PATTERN: Final = r"^[a-zA-Z0-9_\-\.\/\s\*\+\=\<\>\!\@\#\$\%\^\&\(\)\{\}\[\]\:\;\'\"]*$"
+# Removed & and ; and | from safe pattern to prevent command injection
+LAMMPS_SAFE_CMD_PATTERN: Final = r"^[a-zA-Z0-9_\-\.\/\s\*\+\=\<\>\!\@\#\$\%\^\(\)\{\}\[\]\:\'\"]*$"
 
 # Defaults
-DEFAULT_RAM_DISK_PATH: Final = "/dev/shm"
+DEFAULT_RAM_DISK_PATH: Final = "/dev/shm"  # noqa: S108
 DEFAULT_N_CANDIDATES: Final = 100
 DEFAULT_BATCH_SIZE: Final = 50
 DEFAULT_CHECKPOINT_INTERVAL: Final = 10
@@ -55,3 +56,33 @@ LMP_CMD_MIN_STYLE: Final = "min_style cg"
 LMP_CMD_MINIMIZE: Final = "minimize 1.0e-6 1.0e-8 1000 10000"
 LMP_CMD_READ_DATA: Final = 'read_data "{data_file}"'
 LMP_CMD_ATOM_STYLE: Final = "atom_style {style}"
+
+# Error Messages
+ERR_SIM_SETUP_FAIL: Final = "Simulation setup failed: {error}"
+ERR_SIM_SECURITY_FAIL: Final = "Simulation security validation failed: {error}"
+ERR_SIM_EXEC_FAIL: Final = "LAMMPS engine execution failed: {error}"
+ERR_SIM_UNEXPECTED: Final = "Unexpected error during simulation execution: {error}"
+ERR_POTENTIAL_NOT_FOUND: Final = "Potential file not found: {path}"
+ERR_STRUCTURE_NONE: Final = "Structure cannot be None after validation."
+
+# Validation
+ERR_VAL_STRUCT_NONE: Final = "Structure must be provided."
+ERR_VAL_STRUCT_TYPE: Final = "Expected ASE Atoms object, got {type}."
+ERR_VAL_STRUCT_EMPTY: Final = "Structure contains no atoms."
+ERR_VAL_POT_NONE: Final = "Potential path must be provided."
+ERR_VAL_POT_NOT_FILE: Final = "Potential path is not a file: {path}"
+ERR_VAL_POT_OUTSIDE: Final = "Potential path {path} is outside allowed directories (CWD, /tmp, /dev/shm)."
+
+# Oracle
+ERR_ORACLE_ITERATOR: Final = "Input 'structures' must be an Iterator (got {type}). Use iter() to create one."
+ERR_ORACLE_FAILED: Final = "DFT calculation failed after {attempts} attempts."
+
+# M3GNet
+ERR_M3GNET_PRED_FAIL: Final = "M3GNet prediction failed for {composition}"
+
+# Generator
+ERR_GEN_NCAND_NEG: Final = "n_candidates must be non-negative, got {n}"
+ERR_GEN_BASE_FAIL: Final = "Failed to generate base structure for {composition}: {error}"
+
+# Validator
+ERR_VAL_REQ_STRUCT: Final = "Validation requires a structure."

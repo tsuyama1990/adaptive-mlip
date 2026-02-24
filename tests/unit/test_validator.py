@@ -2,8 +2,9 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+from ase import Atoms
 
-from pyacemaker.core.validator import Validator
+from pyacemaker.core.validator import LammpsInputValidator, Validator
 from pyacemaker.domain_models.validation import ValidationConfig, ValidationResult
 
 
@@ -83,3 +84,10 @@ class TestValidator:
 
         assert relaxed == "relaxed_structure"
         mock_engine.relax.assert_called_once_with(structure, pot_path)
+
+    def test_validate_structure_invalid_element(self):
+        """Test rejection of structure with invalid chemical symbol (dummy X)."""
+        # 'X' is in atomic_numbers but Z=0
+        structure = Atoms("X", positions=[[0,0,0]])
+        with pytest.raises(ValueError, match="dummy element"):
+            LammpsInputValidator.validate_structure(structure)

@@ -15,13 +15,14 @@ class QEDriver:
     Interface for Quantum Espresso calculations using ASE.
     """
 
-    def get_calculator(self, atoms: Atoms, config: DFTConfig) -> Espresso:
+    def get_calculator(self, atoms: Atoms, config: DFTConfig, directory: str | None = None) -> Espresso:
         """
         Creates an ASE Espresso calculator configured based on DFTConfig.
 
         Args:
             atoms: The atoms object to calculate (used for k-point generation).
             config: The DFT configuration.
+            directory: The directory to run the calculation in.
 
         Returns:
             Configured Espresso calculator.
@@ -80,6 +81,7 @@ class QEDriver:
             input_data=input_data,
             pseudopotentials=config.pseudopotentials,
             kpts=kpts,
+            directory=directory or ".",
         )
 
     @staticmethod

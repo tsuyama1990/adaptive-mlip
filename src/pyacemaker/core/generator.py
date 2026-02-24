@@ -7,6 +7,7 @@ from pyacemaker.core.base import BaseGenerator
 from pyacemaker.core.exceptions import GeneratorError
 from pyacemaker.core.m3gnet_wrapper import M3GNetWrapper
 from pyacemaker.core.policy_factory import PolicyFactory
+from pyacemaker.domain_models.constants import ERR_GEN_BASE_FAIL, ERR_GEN_NCAND_NEG
 from pyacemaker.domain_models.structure import StructureConfig
 
 
@@ -55,8 +56,7 @@ class StructureGenerator(BaseGenerator):
             ValueError: If n_candidates is negative or policy is invalid.
         """
         if n_candidates < 0:
-            msg = f"n_candidates must be non-negative, got {n_candidates}"
-            raise ValueError(msg)
+            raise ValueError(ERR_GEN_NCAND_NEG.format(n=n_candidates))
 
         if n_candidates == 0:
             return
@@ -81,8 +81,7 @@ class StructureGenerator(BaseGenerator):
             try:
                 base_structure = self.m3gnet.predict_structure(composition)
             except Exception as e:
-                msg = f"Failed to generate base structure for {composition}: {e}"
-                raise GeneratorError(msg) from e
+                raise GeneratorError(ERR_GEN_BASE_FAIL.format(composition=composition, error=e)) from e
 
             # Generate the base supercell template once.
             # We must materialize the base supercell to apply perturbations (rattle/strain).

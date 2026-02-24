@@ -30,6 +30,14 @@ def test_lammps_engine_relax(mock_md_config: MDConfig, mock_driver_relax: Any, t
     pot_path = tmp_path / "potential.yace"
     pot_path.touch()
 
+    # Capture script content during execution
+    script_content = []
+
+    def capture_script(path: str) -> None:
+        script_content.append(Path(path).read_text())
+
+    driver_instance.run_file.side_effect = capture_script
+
     # Call relax
     result_atoms = engine.relax(initial_atoms, pot_path)
 
@@ -38,9 +46,8 @@ def test_lammps_engine_relax(mock_md_config: MDConfig, mock_driver_relax: Any, t
     assert result_atoms.get_chemical_symbols() == ["He"]
 
     # Verify script content
-    driver_instance.run_file.assert_called_once()
-    script_path = Path(driver_instance.run_file.call_args[0][0])
-    script = script_path.read_text()
+    assert len(script_content) == 1
+    script = script_content[0]
 
     assert "minimize" in script
     assert "min_style cg" in script

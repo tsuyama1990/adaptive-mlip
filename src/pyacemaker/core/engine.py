@@ -1,4 +1,3 @@
-import io
 from pathlib import Path
 from typing import Any
 
@@ -9,16 +8,12 @@ from pyacemaker.core.io_manager import LammpsFileManager
 from pyacemaker.core.lammps_generator import LammpsScriptGenerator
 from pyacemaker.core.validator import LammpsInputValidator
 from pyacemaker.domain_models.constants import (
+    ERR_SIM_EXEC_FAIL,
+    ERR_SIM_SECURITY_FAIL,
+    ERR_SIM_SETUP_FAIL,
+    ERR_SIM_UNEXPECTED,
+    ERR_STRUCTURE_NONE,
     LAMMPS_SCREEN_ARG,
-    LMP_CMD_ATOM_STYLE,
-    LMP_CMD_BOUNDARY,
-    LMP_CMD_CLEAR,
-    LMP_CMD_MIN_STYLE,
-    LMP_CMD_MINIMIZE,
-    LMP_CMD_NEIGH_MODIFY,
-    LMP_CMD_NEIGHBOR,
-    LMP_CMD_READ_DATA,
-    LMP_CMD_UNITS,
 )
 from pyacemaker.domain_models.md import MDConfig, MDSimulationResult
 from pyacemaker.interfaces.lammps_driver import LammpsDriver
@@ -44,36 +39,62 @@ class LammpsEngine(BaseEngine):
         self.generator = generator or LammpsScriptGenerator(config)
         self.file_manager = file_manager or LammpsFileManager(config)
 
+    def _prepare_simulation_env(
+        self, structure: Atoms | None, potential: Any
+    ) -> tuple[Any, Path, Path, Path, list[str], Path]:
+        """
+        Prepares the simulation environment: validation, paths, and files.
+        Returns: (ctx, data_file, dump_file, log_file, elements, potential_path)
+        """
+        if structure is None:
+             raise ValueError(ERR_STRUCTURE_NONE)
+
+        LammpsInputValidator.validate_structure(structure)
+        potential_path = LammpsInputValidator.validate_potential(potential)
+        potential_path = potential_path.resolve(strict=True)
+
+        ctx, data_file, dump_file, log_file, elements = self.file_manager.prepare_workspace(structure)
+        return ctx, data_file, dump_file, log_file, elements, potential_path
+
+    def _ensure_script_readable(self, script_path: Path) -> None:
+        """Helper to ensure script path exists."""
+        if not script_path.exists():
+            msg = f"Input script not found: {script_path}"
+            raise FileNotFoundError(msg)
+
+    def _execute_simulation(self, driver: LammpsDriver, script_path: Path) -> None:
+        """
+        Executes the simulation script with standardized error handling.
+        """
+        try:
+            self._ensure_script_readable(script_path)
+            # Scalability: Use run_file to stream script execution
+            driver.run_file(str(script_path))
+
+        except FileNotFoundError as e:
+            raise RuntimeError(ERR_SIM_SETUP_FAIL.format(error=e)) from e
+        except ValueError as e:
+            raise RuntimeError(ERR_SIM_SECURITY_FAIL.format(error=e)) from e
+        except RuntimeError as e:
+            raise RuntimeError(ERR_SIM_EXEC_FAIL.format(error=e)) from e
+        except Exception as e:
+            raise RuntimeError(ERR_SIM_UNEXPECTED.format(error=e)) from e
+
     def run(self, structure: Atoms | None, potential: Any) -> MDSimulationResult:
         """
         Runs the MD simulation.
         """
-        # Input Validation (SRP via Validator)
-        LammpsInputValidator.validate_structure(structure)
-        potential_path = LammpsInputValidator.validate_potential(potential)
-
-        # Ensure potential path is resolved and exists (double check for race conditions/symlinks)
-        potential_path = potential_path.resolve(strict=True)
-
-        # Prepare workspace (temp dir, file writing)
-        if structure is None:
-             msg = "Structure cannot be None after validation."
-             raise ValueError(msg)
-
-        ctx, data_file, dump_file, log_file, elements = self.file_manager.prepare_workspace(structure)
+        ctx, data_file, dump_file, log_file, elements, potential_path = self._prepare_simulation_env(structure, potential)
 
         with ctx:
             # Generate input script to file
-            # Assuming ctx has .name as temp dir path (if it's TemporaryDirectory)
-            # Or data_file.parent if managed by file_manager.
-            # file_manager.prepare_workspace returns ctx which is temp_dir_ctx.
             temp_dir = Path(ctx.name) if hasattr(ctx, "name") else data_file.parent
             input_script_path = temp_dir / "input.lmp"
 
             with input_script_path.open("w") as f:
                 self.generator.write_script(
                     f,
-                    potential_path.resolve(),
+                    potential_path,
                     data_file,
                     dump_file,
                     elements
@@ -148,77 +169,26 @@ class LammpsEngine(BaseEngine):
         """
         Relaxes the structure to a local minimum using LAMMPS minimize.
         """
-        # Input Validation
-        LammpsInputValidator.validate_structure(structure)
-        potential_path = LammpsInputValidator.validate_potential(potential)
-        potential_path = potential_path.resolve(strict=True)
-
-        # Prepare workspace
-        ctx, data_file, dump_file, log_file, elements = self.file_manager.prepare_workspace(structure)
+        ctx, data_file, dump_file, log_file, elements, potential_path = self._prepare_simulation_env(structure, potential)
 
         with ctx:
-            # Build script
-            script_lines = []
-            script_lines.append(LMP_CMD_CLEAR)
-            script_lines.append(LMP_CMD_UNITS)
-            script_lines.append(LMP_CMD_ATOM_STYLE.format(style=self.config.atom_style))
-            script_lines.append(LMP_CMD_BOUNDARY)
-            script_lines.append(LMP_CMD_READ_DATA.format(data_file=data_file))
-
-            # Reuse generator for potential
-            pot_buffer = io.StringIO()
-            self.generator._gen_potential(pot_buffer, potential_path, elements)
-            script_lines.append(pot_buffer.getvalue())
-
-            script_lines.append(LMP_CMD_NEIGHBOR.format(skin=self.config.neighbor_skin))
-            script_lines.append(LMP_CMD_NEIGH_MODIFY)
-
-            # Minimization settings
-            script_lines.append(LMP_CMD_MIN_STYLE)
-            script_lines.append(LMP_CMD_MINIMIZE)
-
-            full_script = "\n".join(script_lines)
-
-            # Write to file for execution
+            # Generate minimization script
             temp_dir = Path(ctx.name) if hasattr(ctx, "name") else data_file.parent
             script_path = temp_dir / "relax.lmp"
-            script_path.write_text(full_script, encoding="utf-8")
+
+            with script_path.open("w") as f:
+                self.generator.write_minimization_script(
+                    f,
+                    potential_path,
+                    data_file,
+                    elements
+                )
 
             # Execute
-            driver = LammpsDriver(["-screen", "none", "-log", str(log_file)])
+            driver = LammpsDriver(["-screen", LAMMPS_SCREEN_ARG, "-log", str(log_file)])
             try:
-                # Use execute_simulation helper or direct driver run_file
-                # Direct file run
-                driver.run_file(str(script_path))
+                self._execute_simulation(driver, script_path)
                 return driver.get_atoms(elements)
             finally:
                  if hasattr(driver, "close"):
                      driver.close()
-
-    def _ensure_script_readable(self, script_path: Path) -> None:
-        """Helper to ensure script path exists."""
-        if not script_path.exists():
-            msg = f"Input script not found: {script_path}"
-            raise FileNotFoundError(msg)
-
-    def _execute_simulation(self, driver: LammpsDriver, script_path: Path) -> None:
-        """
-        Executes the simulation script with standardized error handling.
-        """
-        try:
-            self._ensure_script_readable(script_path)
-            # Scalability: Use run_file to stream script execution
-            driver.run_file(str(script_path))
-
-        except FileNotFoundError as e:
-            msg = f"Simulation setup failed: {e}"
-            raise RuntimeError(msg) from e
-        except ValueError as e:
-            msg = f"Simulation security validation failed: {e}"
-            raise RuntimeError(msg) from e
-        except RuntimeError as e:
-            msg = f"LAMMPS engine execution failed: {e}"
-            raise RuntimeError(msg) from e
-        except Exception as e:
-            msg = f"Unexpected error during simulation execution: {e}"
-            raise RuntimeError(msg) from e

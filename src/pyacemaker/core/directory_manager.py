@@ -1,4 +1,3 @@
-import os
 from logging import Logger
 from pathlib import Path
 
@@ -15,22 +14,6 @@ class DirectoryManager:
         self.base_dir = base_dir
         self.logger = logger
 
-    def _ensure_directory(self, path: Path) -> None:
-        """
-        Creates a directory and verifies write permissions.
-        """
-        try:
-            path.mkdir(parents=True, exist_ok=True)
-            if not path.is_dir():
-                msg = f"Path {path} exists but is not a directory."
-                raise RuntimeError(msg)
-            if not os.access(path, os.W_OK):
-                msg = f"Directory {path} is not writable."
-                raise PermissionError(msg)
-        except OSError as e:
-            self.logger.critical(f"Failed to create directory {path}: {e}")
-            raise
-
     def setup_iteration(self, iteration: int) -> dict[str, Path]:
         """
         Creates the directory structure for the current iteration.
@@ -46,25 +29,16 @@ class DirectoryManager:
             "md_run": iter_dir / "md_run",
         }
 
-        created_paths: list[Path] = []
         try:
+            # Batch creation: Iterate and create.
+            # Use exist_ok=True to handle re-runs and parallelism safely.
+            # Implicitly checks permissions via OS exceptions.
             for p in paths.values():
-                if not p.exists():
-                    self._ensure_directory(p)
-                    created_paths.append(p)
-                else:
-                    self._ensure_directory(p)
-        except Exception as e:
-            self.logger.exception("Failed to create iteration directories")
-            # Attempt rollback
-            for p in reversed(created_paths):
-                try:
-                    if p.is_dir() and not any(p.iterdir()):
-                        p.rmdir()
-                except OSError:
-                    self.logger.warning(f"Failed to rollback directory creation for {p}")
+                p.mkdir(parents=True, exist_ok=True)
 
-            msg = f"Failed to setup directory: {e}"
+        except OSError as e:
+            msg = f"Failed to setup directory structure for iteration {iteration}: {e}"
+            self.logger.critical(msg)
             raise OrchestratorError(msg) from e
 
         return paths

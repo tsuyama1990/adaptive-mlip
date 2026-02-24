@@ -1,6 +1,7 @@
 import shutil
 from collections.abc import Iterable
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 from ase import Atoms
@@ -77,7 +78,7 @@ class Orchestrator:
         self.logger.info(LOG_PROJECT_INIT.format(project_name=config.project_name))
 
     @property
-    def loop_state(self):
+    def loop_state(self) -> Any:
         # Expose loop_state for tests
         return self.state_manager.state
 

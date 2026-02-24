@@ -2,8 +2,19 @@ from pathlib import Path
 from typing import Any
 
 from ase import Atoms
+from ase.data import atomic_numbers
 
 from pyacemaker.core.report import ReportGenerator
+from pyacemaker.domain_models.constants import (
+    ERR_POTENTIAL_NOT_FOUND,
+    ERR_VAL_POT_NONE,
+    ERR_VAL_POT_NOT_FILE,
+    ERR_VAL_POT_OUTSIDE,
+    ERR_VAL_REQ_STRUCT,
+    ERR_VAL_STRUCT_EMPTY,
+    ERR_VAL_STRUCT_NONE,
+    ERR_VAL_STRUCT_TYPE,
+)
 from pyacemaker.domain_models.validation import ValidationConfig, ValidationResult
 from pyacemaker.utils.elastic import ElasticCalculator
 from pyacemaker.utils.phonons import PhononCalculator
@@ -24,26 +35,33 @@ class LammpsInputValidator:
             structure: Input structure object.
 
         Raises:
-            ValueError: If structure is invalid or empty.
+            ValueError: If structure is invalid, empty, or contains unknown elements.
             TypeError: If input is not an ASE Atoms object.
         """
         if structure is None:
-            msg = "Structure must be provided."
-            raise ValueError(msg)
+            raise ValueError(ERR_VAL_STRUCT_NONE)
 
         if not isinstance(structure, Atoms):
-            msg = f"Expected ASE Atoms object, got {type(structure)}."
-            raise TypeError(msg)
+            raise TypeError(ERR_VAL_STRUCT_TYPE.format(type=type(structure)))
 
         if len(structure) == 0:
-            msg = "Structure contains no atoms."
-            raise ValueError(msg)
+            raise ValueError(ERR_VAL_STRUCT_EMPTY)
+
+        # Validate elements against atomic_numbers
+        symbols = set(structure.get_chemical_symbols())
+        for s in symbols:
+            if s not in atomic_numbers:
+                msg = f"Structure contains unknown chemical symbol: {s}"
+                raise ValueError(msg)
+            if atomic_numbers[s] == 0:
+                msg = f"Structure contains dummy element: {s} (Z=0)"
+                raise ValueError(msg)
 
     @staticmethod
     def validate_potential(potential: Any) -> Path:
         """
         Validates the potential path.
-        Ensures path exists and is secure (no traversal outside safe directories).
+        Ensures path exists, is a file, and is within allowed directories.
 
         Args:
             potential: Path to potential file (str or Path).
@@ -56,44 +74,27 @@ class LammpsInputValidator:
             ValueError: If input is invalid or path is insecure.
         """
         if potential is None:
-            msg = "Potential path must be provided."
-            raise ValueError(msg)
+            raise ValueError(ERR_VAL_POT_NONE)
 
-        path = Path(potential)
-        try:
-            resolved_path = path.resolve(strict=True)
-        except FileNotFoundError as e:
-            msg = f"Potential file not found: {path}"
-            raise FileNotFoundError(msg) from e
+        path = Path(potential).resolve()
 
-        # Security Check: Prevent Path Traversal
-        # We enforce that the potential is within the current working directory tree
-        # or in specific allowed system paths (if we had a whitelist).
-        # For this context, we assume the user operates within the project root.
-        cwd = Path.cwd().resolve()
+        if not path.exists():
+            raise FileNotFoundError(ERR_POTENTIAL_NOT_FOUND.format(path=path))
 
-        # Simple check: resolved path must start with CWD
-        # However, for testing or system-wide potentials, this might be too strict.
-        # But per "Security (NO injections)" requirement, we should be strict.
-        # A compromise: check for '..' components in original path is tricky.
-        # resolve() handles symlinks and '..'.
-        # If we trust CWD, then:
-        if not str(resolved_path).startswith(str(cwd)) and not str(resolved_path).startswith("/tmp"):
-             # Allow /tmp for tests
-             # In production, we might want an allowlist config.
-             # For now, we'll log a warning but allow if it exists, relies on OS permissions?
-             # Audit feedback said "Add path sanitization and validation to prevent directory traversal attacks."
-             # Traversal attack usually means accessing /etc/passwd via ../../../
-             # resolve() gives the absolute path.
-             # If we don't restrict the ROOT, we can't prevent reading arbitrary files if the user provides the path.
-             # But here the user provides the path in config.
-             # If config is trusted, path is trusted.
-             # If input comes from web/external, then we must restrict.
-             # Assuming config is trusted, we just ensure it exists.
-             # But to satisfy "Security", let's ensure it's not a system file?
-             pass
+        if not path.is_file():
+            raise ValueError(ERR_VAL_POT_NOT_FILE.format(path=path))
 
-        return resolved_path
+        # Security: Restrict access to project directory or temp dirs
+        allowed_prefixes = [
+            Path.cwd().resolve(),
+            Path("/tmp").resolve(),  # noqa: S108
+            Path("/dev/shm").resolve()  # noqa: S108
+        ]
+
+        if not any(str(path).startswith(str(prefix)) for prefix in allowed_prefixes):
+            raise ValueError(ERR_VAL_POT_OUTSIDE.format(path=path))
+
+        return path
 
 
 class Validator:
@@ -133,8 +134,7 @@ class Validator:
             # For now, require it.
             # But Orchestrator might call it without structure if we didn't update it.
             # I'll raise error.
-            msg = "Validation requires a structure."
-            raise ValueError(msg)
+            raise ValueError(ERR_VAL_REQ_STRUCT)
 
         # Relax structure
         relaxed_structure = self._relax_structure(structure, potential_path)

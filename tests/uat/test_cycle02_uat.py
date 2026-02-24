@@ -47,7 +47,8 @@ def test_uat_02_01_single_point_calculation(uat_dft_config: DFTConfig, monkeypat
     with patch("pyacemaker.core.oracle.QEDriver") as MockDriverClass:
         mock_driver_instance = MockDriverClass.return_value
         # Mock get_calculator to return a MockCalculator instance with H2O energy
-        mock_driver_instance.get_calculator.side_effect = lambda atoms, config: MockCalculator(
+        # Accept **kwargs to handle 'directory' argument
+        mock_driver_instance.get_calculator.side_effect = lambda atoms, config, **kwargs: MockCalculator(
             fail_count=0, test_energy=TEST_ENERGY_H2O
         )
 

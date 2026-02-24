@@ -28,6 +28,12 @@ def test_lammps_engine_run(mock_md_config: MDConfig, mock_driver: Any, tmp_path:
         "halted": 0.0  # Not halted
     }.get(name, 0.0)
 
+    # Capture script content
+    script_content = []
+    def capture_run(path: str) -> None:
+        script_content.append(Path(path).read_text())
+    driver_instance.run_file.side_effect = capture_run
+
     # Mock get_atoms
     driver_instance.get_atoms.return_value = Atoms("H", cell=[10, 10, 10], pbc=True)
 
@@ -52,18 +58,12 @@ def test_lammps_engine_run(mock_md_config: MDConfig, mock_driver: Any, tmp_path:
 
     # Verify driver run_file called
     driver_instance.run_file.assert_called()
-    script_path = Path(driver_instance.run_file.call_args[0][0])
 
-    # Read script content from file to verify
-    script = script_path.read_text()
-    assert "pair_style" in script
+    # Check captured script
+    assert len(script_content) == 1
+    script = script_content[0]
+
     assert "fix halt" in script
-
-    # Verify data file path in script
-    # Note: Using Path instead of regex for robustness if possible, but script content is string.
-    # We moved to constants, so format might be cleaner.
-    # LMP_CMD_READ_DATA uses quoted path.
-    # Let's check "read_data"
     assert "read_data" in script
 
 
@@ -103,11 +103,19 @@ def test_lammps_engine_hybrid_potential(mock_md_config: MDConfig, mock_driver: A
     pot_path = tmp_path / "potential.yace"
     pot_path.touch()
 
-    engine.run(atoms, pot_path)
+    # Capture script content
+    script_content = []
+    def capture_run(path: str) -> None:
+        script_content.append(Path(path).read_text())
 
     driver_instance = mock_driver.return_value
-    script_path = Path(driver_instance.run_file.call_args[0][0])
-    script = script_path.read_text()
+    driver_instance.run_file.side_effect = capture_run
+
+    engine.run(atoms, pot_path)
+
+    # Check captured script
+    assert len(script_content) == 1
+    script = script_content[0]
 
     assert "pair_style hybrid/overlay" in script
     assert "pair_coeff * * pace" in script

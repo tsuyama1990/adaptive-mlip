@@ -1,5 +1,7 @@
 from ase import Atoms
 
+from pyacemaker.domain_models.constants import ERR_M3GNET_PRED_FAIL
+
 
 class M3GNetWrapper:
     """
@@ -23,8 +25,7 @@ class M3GNetWrapper:
             return self._mock_predict(composition)
         except Exception as e:
             # In real impl, we would retry
-            msg = f"M3GNet prediction failed for {composition}"
-            raise RuntimeError(msg) from e
+            raise RuntimeError(ERR_M3GNET_PRED_FAIL.format(composition=composition)) from e
 
     def _mock_predict(self, composition: str) -> Atoms:
         from ase.build import bulk

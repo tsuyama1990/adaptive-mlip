@@ -91,7 +91,7 @@ class PhononCalculator:
 
         # Calculate Band Structure along a simple path (Gamma -> X -> M -> Gamma)
         # This is arbitrary but sufficient for visualization.
-        path = [[0, 0, 0], [0.5, 0, 0], [0.5, 0.5, 0], [0, 0, 0]]
+        path = [[0.0, 0.0, 0.0], [0.5, 0.0, 0.0], [0.5, 0.5, 0.0], [0.0, 0.0, 0.0]]
         labels = ["G", "X", "M", "G"]
 
         phonon.run_band_structure(

@@ -52,9 +52,18 @@ def test_lammps_driver_run_unsafe(mock_lammps: Any) -> None:
 def test_lammps_driver_run_forbidden_chars(mock_lammps: Any) -> None:
     """Tests rejection of scripts with forbidden characters."""
     driver = LammpsDriver()
-    # Semicolon is forbidden
-    script = "print 'Hello'; shell rm -rf /"
+    # Pipe is forbidden
+    script = "print 'Hello' | grep World"
     with pytest.raises(ValueError, match="forbidden characters"):
+        driver.run(script)
+
+
+def test_lammps_driver_run_forbidden_command(mock_lammps: Any) -> None:
+    """Tests rejection of scripts with forbidden commands."""
+    driver = LammpsDriver()
+    # shell command is forbidden
+    script = "shell rm -rf /"
+    with pytest.raises(ValueError, match="forbidden command 'shell'"):
         driver.run(script)
 
 

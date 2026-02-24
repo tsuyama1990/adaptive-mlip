@@ -1,4 +1,5 @@
 import contextlib
+import tempfile
 from collections.abc import Callable, Iterator
 
 from ase import Atoms
@@ -7,6 +8,7 @@ from ase.calculators.calculator import PropertyNotImplementedError
 from pyacemaker.core.base import BaseOracle
 from pyacemaker.core.exceptions import OracleError
 from pyacemaker.domain_models import DFTConfig
+from pyacemaker.domain_models.constants import ERR_ORACLE_FAILED, ERR_ORACLE_ITERATOR
 from pyacemaker.interfaces.qe_driver import QEDriver
 from pyacemaker.utils.embedding import embed_cluster
 
@@ -62,12 +64,10 @@ class DFTManager(BaseOracle):
         # However, a list is Iterable but NOT Iterator.
         # Let's ensure we import Iterator from collections.abc correctly.
         if isinstance(structures, (list, tuple)):
-            msg = "Input 'structures' must be an Iterator, not a list/tuple. Use iter() to avoid memory issues."
-            raise TypeError(msg)
+            raise TypeError(ERR_ORACLE_ITERATOR.format(type=type(structures)))
 
         if not isinstance(structures, Iterator):
-            msg = f"Input 'structures' must be an Iterator (got {type(structures)}). Use iter() to create one."
-            raise TypeError(msg)
+            raise TypeError(ERR_ORACLE_ITERATOR.format(type=type(structures)))
 
         # Strict streaming: Process one by one.
         # We do NOT use batched() here to avoid even small batch materialization in memory
@@ -157,19 +157,20 @@ class DFTManager(BaseOracle):
             else:
                 return atoms
 
-        msg = f"DFT calculation failed after {len(strategies)} attempts."
-        raise OracleError(msg) from last_error
+        raise OracleError(ERR_ORACLE_FAILED.format(attempts=len(strategies))) from last_error
 
     def _run_calculator(self, atoms: Atoms, config: DFTConfig) -> None:
         """Helper to run a single calculation attempt."""
         # Create new calculator for clean state
-        calc = self.driver.get_calculator(atoms, config.model_copy())
-        atoms.calc = calc
+        # Use a temporary directory to prevent file collisions and race conditions
+        with tempfile.TemporaryDirectory() as temp_dir:
+            calc = self.driver.get_calculator(atoms, config.model_copy(), directory=temp_dir)
+            atoms.calc = calc
 
-        # Trigger actual calculation
-        atoms.get_potential_energy()  # type: ignore[no-untyped-call]
-        atoms.get_forces()  # type: ignore[no-untyped-call]
+            # Trigger actual calculation
+            atoms.get_potential_energy()  # type: ignore[no-untyped-call]
+            atoms.get_forces()  # type: ignore[no-untyped-call]
 
-        # Try to get stress (optional)
-        with contextlib.suppress(PropertyNotImplementedError, RuntimeError):
-            atoms.get_stress()  # type: ignore[no-untyped-call]
+            # Try to get stress (optional)
+            with contextlib.suppress(PropertyNotImplementedError, RuntimeError):
+                atoms.get_stress()  # type: ignore[no-untyped-call]
