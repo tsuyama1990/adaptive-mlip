@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 from types import TracebackType
 from typing import Self
@@ -30,23 +31,28 @@ class DirectoryTransaction:
                         path.rmdir()
                 except OSError:
                     # Log or ignore if we can't cleanup (e.g. permission lost)
-                    # We can't log here easily without injecting logger,
-                    # but typically we suppress rollback errors to propagate original error.
                     pass
 
     def create_directory(self, path: Path) -> None:
         """
         Creates a directory if it doesn't exist and tracks it for rollback.
+        Also validates permissions.
 
         Args:
             path: Directory path to create.
 
         Raises:
             OSError: If directory creation fails.
+            PermissionError: If directory is not writable.
         """
         if not path.exists():
             path.mkdir(parents=True, exist_ok=True)
             self.created_dirs.append(path)
-        elif not path.is_dir():
+
+        if not path.is_dir():
             msg = f"Path exists but is not a directory: {path}"
             raise FileExistsError(msg)
+
+        if not os.access(path, os.W_OK):
+            msg = f"Directory {path} is not writable."
+            raise PermissionError(msg)

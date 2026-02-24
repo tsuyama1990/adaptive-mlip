@@ -67,8 +67,12 @@ def test_loop_state_validation_path_traversal(tmp_path: Path) -> None:
     cwd = Path.cwd()
     os.chdir(project_dir)
     try:
-        # Mock tempfile.gettempdir to force the check to fail even if in /tmp
+        # LoopState resolves path.
+        # We need to force a path that is NOT in /tmp (if possible)
+        # or rely on the mock if we are in /tmp.
+
         with pytest.MonkeyPatch.context() as mp:
+            # Mock gettempdir to fail the whitelist check
             mp.setattr(tempfile, "gettempdir", lambda: "/nonexistent_temp")
 
             with pytest.raises(ValueError, match="outside the project directory"):
