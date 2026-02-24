@@ -3,7 +3,14 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field, PositiveFloat, PositiveInt
 
-from pyacemaker.domain_models.constants import DEFAULT_RAM_DISK_PATH
+from pyacemaker.domain_models.constants import (
+    DEFAULT_MD_MINIMIZE_FTOL,
+    DEFAULT_MD_MINIMIZE_TOL,
+    DEFAULT_RAM_DISK_PATH,
+    LAMMPS_MINIMIZE_MAX_ITER,
+    LAMMPS_MINIMIZE_STEPS,
+    LAMMPS_VELOCITY_SEED,
+)
 from pyacemaker.domain_models.defaults import (
     DEFAULT_MD_ATOM_STYLE,
     DEFAULT_MD_BASE_ENERGY,
@@ -80,6 +87,23 @@ class MDConfig(BaseModel):
     )
     atom_style: str = Field(
         DEFAULT_MD_ATOM_STYLE, description="LAMMPS atom style (e.g. atomic, charge)"
+    )
+
+    # Configurable LAMMPS Parameters (No Hardcoding)
+    velocity_seed: int = Field(
+        LAMMPS_VELOCITY_SEED, description="Random seed for velocity initialization"
+    )
+    minimize_steps: int = Field(
+        LAMMPS_MINIMIZE_STEPS, description="Max iterations for minimization (steps)"
+    )
+    minimize_max_iter: int = Field(
+        LAMMPS_MINIMIZE_MAX_ITER, description="Max force evaluations for minimization"
+    )
+    minimize_tol: float = Field(
+        DEFAULT_MD_MINIMIZE_TOL, description="Energy tolerance for minimization"
+    )
+    minimize_ftol: float = Field(
+        DEFAULT_MD_MINIMIZE_FTOL, description="Force tolerance for minimization"
     )
 
     # Advanced Settings

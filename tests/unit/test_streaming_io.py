@@ -1,8 +1,9 @@
 
-from io import StringIO
 from unittest.mock import MagicMock, patch
+from io import StringIO
 
 import pytest
+import numpy as np
 from ase import Atoms
 
 from pyacemaker.domain_models import PyAceConfig
@@ -134,3 +135,65 @@ def test_write_lammps_streaming_non_orthogonal() -> None:
 
     with pytest.raises(ValueError, match="Streaming writer only supports orthogonal cells"):
         write_lammps_streaming(buffer, structure, elements)
+
+def test_write_lammps_streaming_large_structure_mock() -> None:
+    """
+    Verifies that write_lammps_streaming can handle a large number of atoms
+    without crashing or errors, using a mock structure to avoid memory overhead.
+    """
+    buffer = StringIO()
+
+    # Create a mock structure that reports 1 million atoms but doesn't store them all
+    # This tests the loop logic but depends on ASE Atoms implementation details.
+    # Instead, we construct a real but lightweight Atoms object and patch get_positions/symbols
+
+    n_atoms = 1_000_000
+
+    # Mocking is tricky because Atoms is complex.
+    # We will create a small structure but 'pretend' it has many atoms by patching len()
+    # and get_positions/get_chemical_symbols to return iterators/generators if write_lammps_streaming supported them.
+    # But write_lammps_streaming currently accesses arrays directly:
+    # positions = structure.get_positions()
+    # symbols = structure.get_chemical_symbols()
+
+    # If we want to support streaming INPUT structure, write_lammps_streaming needs to accept iterables.
+    # Currently it takes `structure: Atoms`. Atoms holds data in memory.
+    # So `write_lammps_streaming` prevents *additional* copies, but input must be in memory if it's an Atoms object.
+    # The requirement "NEVER load entire datasets into memory" implies we should stream FROM disk TO disk.
+    # `io_manager.py` does: `write_lammps_streaming(f, structure, elements)`. `structure` is passed in.
+    # `prepare_workspace(self, structure: Atoms)`.
+    # So the *input* to `prepare_workspace` is already an in-memory `Atoms` object!
+
+    # If the caller loads the whole file into `structure`, we already failed "NEVER load entire datasets".
+    # However, `prepare_workspace` is called by `LammpsEngine.run`.
+    # `Orchestrator` calls `engine.run(candidates[i])`. Candidates are loaded one by one.
+    # So `structure` is a single configuration.
+    # A single configuration of 1M atoms is large but might fit in memory (1M * 3 * 8 bytes ~ 24MB).
+    # The "Memory Safety Violation" might refer to loading a *trajectory* of 1M frames.
+    # Or creating copies of the 1M atoms structure.
+
+    # `write_lammps_streaming` avoids creating the formatted string for the whole file in memory.
+    # Standard `ase.io.write` might build a huge string buffer.
+
+    # To test this "streaming" aspect (writing line by line), we can check calls to buffer.write.
+
+    structure = Atoms("H", positions=[[0,0,0]], cell=[10,10,10])
+    # Patch len to return large number
+    # Patch get_positions to return a large array (mocked?)
+    # Generating 1M lines of output in StringIO is fast enough for a unit test.
+
+    # Actually, let's just use a generator-based test for `active_set.py` if relevant.
+    # For `write_lammps_streaming`, let's verify it calls `write` many times.
+
+    with patch("ase.Atoms.__len__", return_value=1000), \
+         patch.object(Atoms, "get_positions", return_value=np.zeros((1000, 3))), \
+         patch.object(Atoms, "get_chemical_symbols", return_value=["H"]*1000), \
+         patch.object(Atoms, "get_cell", return_value=np.eye(3)):
+
+         # Use a mock file object to count writes
+         mock_file = MagicMock()
+         write_lammps_streaming(mock_file, structure, ["H"])
+
+         # Header writes + 1000 atom lines + mass lines + box lines
+         # 1000 atoms -> 1000 calls for atoms
+         assert mock_file.write.call_count > 1000

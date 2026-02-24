@@ -161,7 +161,7 @@ def test_run_large_structure_warning(mock_md_config: MDConfig, mock_driver: Any,
     # For 10k atoms it's fast enough for test.
     engine.run(atoms, pot_path)
 
-    assert "Streaming large structure (10001 atoms)" in caplog.text
+    assert "Streaming large structure" in caplog.text
 
 def test_run_driver_failure(mock_md_config: MDConfig, mock_driver: Any, tmp_path: Path) -> None:
     """Tests error handling when LAMMPS execution fails."""

@@ -3,14 +3,7 @@ from typing import TextIO
 
 from ase.data import atomic_numbers
 
-from pyacemaker.domain_models.constants import (
-    DEFAULT_MD_MINIMIZE_FTOL,
-    DEFAULT_MD_MINIMIZE_TOL,
-    LAMMPS_MIN_STYLE_CG,
-    LAMMPS_MINIMIZE_MAX_ITER,
-    LAMMPS_MINIMIZE_STEPS,
-    LAMMPS_VELOCITY_SEED,
-)
+from pyacemaker.domain_models.constants import LAMMPS_MIN_STYLE_CG
 from pyacemaker.domain_models.md import MDConfig
 
 
@@ -88,15 +81,16 @@ class LammpsScriptGenerator:
         lines = []
         if self.config.minimize:
             lines.append(
-                f"minimize {DEFAULT_MD_MINIMIZE_TOL} {DEFAULT_MD_MINIMIZE_FTOL} "
-                f"{LAMMPS_MINIMIZE_STEPS} {LAMMPS_MINIMIZE_MAX_ITER}\n"
+                f"minimize {self.config.minimize_tol} {self.config.minimize_ftol} "
+                f"{self.config.minimize_steps} {self.config.minimize_max_iter}\n"
             )
 
         # Calculate damping parameters
         tdamp = self.config.tdamp_factor * self.config.timestep
         pdamp = self.config.pdamp_factor * self.config.timestep
 
-        lines.append(f"velocity all create {self.config.temperature} {LAMMPS_VELOCITY_SEED}\n")
+        # Use configurable velocity seed
+        lines.append(f"velocity all create {self.config.temperature} {self.config.velocity_seed}\n")
         lines.append(
             f"fix npt all npt temp {self.config.temperature} {self.config.temperature} {tdamp} "
             f"iso {self.config.pressure} {self.config.pressure} {pdamp}\n"
@@ -193,7 +187,7 @@ class LammpsScriptGenerator:
             f"neighbor {self.config.neighbor_skin} bin\n",
             "neigh_modify delay 0 every 1 check yes\n",
             f"min_style {LAMMPS_MIN_STYLE_CG}\n",
-            f"minimize {DEFAULT_MD_MINIMIZE_TOL} {DEFAULT_MD_MINIMIZE_FTOL} "
-            f"{LAMMPS_MINIMIZE_STEPS} {LAMMPS_MINIMIZE_MAX_ITER}\n",
+            f"minimize {self.config.minimize_tol} {self.config.minimize_ftol} "
+            f"{self.config.minimize_steps} {self.config.minimize_max_iter}\n",
         ]
         buffer.writelines(settings_lines)

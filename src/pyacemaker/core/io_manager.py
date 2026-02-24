@@ -51,25 +51,36 @@ class LammpsFileManager:
 
         elements = get_species_order(structure)
 
-        # Audit Fix: Explicit size check and streaming
-        # Warn if structure is very large
-        if len(structure) > 1000000:
-            logger.warning("Structure has %d atoms. Memory usage might be high.", len(structure))
+        if len(structure) > 10000:
+            logger.info("Streaming large structure (%d atoms) to disk.", len(structure))
 
         try:
-            # Optimization: Use streaming writer for large structures to avoid OOM
-            # Only supports 'atomic' style and orthogonal boxes for now.
-            if len(structure) > 10000 and self.config.atom_style == "atomic":
-                logger.info("Streaming large structure (%d atoms) to disk.", len(structure))
+            # Memory Safety Fix: Always attempt streaming first if atom_style allows
+            # This avoids loading large structures into memory via ASE's default writer
+            streaming_success = False
+            if self.config.atom_style == "atomic":
                 try:
                     with data_file.open("w") as f:
                         write_lammps_streaming(f, structure, elements)
-                except ValueError:
-                    # Fallback if non-orthogonal or other issue
-                    logger.warning("Streaming failed (e.g. non-orthogonal). Falling back to ASE write.")
-                    write(str(data_file), structure, format="lammps-data", specorder=elements, atom_style=self.config.atom_style)
-            else:
+                    streaming_success = True
+                    logger.debug("Successfully wrote LAMMPS data file using streaming.")
+                except ValueError as e:
+                    # Likely non-orthogonal box or unsupported feature
+                    logger.debug("Streaming write skipped (e.g. non-orthogonal): %s. Falling back to ASE.", e)
+
+            if not streaming_success:
+                # Fallback: Use ASE write.
+                # Note: This might not be memory safe for massive structures >10M atoms,
+                # but covers cases like triclinic cells where simple streaming is complex.
+                # If memory safety is strictly paramount, we should raise error or implement complex streaming.
+                # Given current scope, this is acceptable fallback for non-orthogonal cells.
+                if len(structure) > 10000:
+                    logger.info("Streaming large structure (%d atoms) to disk.", len(structure))
+                if len(structure) > 1000000:
+                    logger.warning("Falling back to ASE write for large structure (%d atoms). Memory usage may be high.", len(structure))
+
                 write(str(data_file), structure, format="lammps-data", specorder=elements, atom_style=self.config.atom_style)
+
         except Exception as e:
             temp_dir_ctx.cleanup()
             msg = f"Failed to write LAMMPS data file: {e}"

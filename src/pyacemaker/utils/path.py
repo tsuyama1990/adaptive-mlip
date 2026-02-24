@@ -1,6 +1,7 @@
+import tempfile
 from pathlib import Path
 
-from pyacemaker.domain_models.constants import DANGEROUS_PATH_CHARS
+from pyacemaker.domain_models.constants import DANGEROUS_PATH_CHARS, DEFAULT_RAM_DISK_PATH
 
 
 def validate_path_safe(path: Path) -> Path:
@@ -15,7 +16,8 @@ def validate_path_safe(path: Path) -> Path:
         The resolved Path object.
 
     Raises:
-        ValueError: If the path contains dangerous characters or traversal attempts.
+        ValueError: If the path contains dangerous characters, traversal attempts,
+                    or resolves outside allowed directories (CWD, temp, /dev/shm).
     """
     s = str(path)
 
@@ -37,17 +39,27 @@ def validate_path_safe(path: Path) -> Path:
         # Canonicalize path (resolve symlinks, collapse ..)
         # We use strict=False because the file might be an output file that doesn't exist yet.
         resolved = path.resolve(strict=False)
+        base_dir = Path.cwd().resolve()
+
+        # Allowed roots: CWD, System Temp, RAM Disk
+        allowed_roots = [
+            base_dir,
+            Path(tempfile.gettempdir()).resolve(),
+            Path(DEFAULT_RAM_DISK_PATH).resolve()
+        ]
+
+        is_safe = False
+        for root in allowed_roots:
+            if resolved.is_relative_to(root):
+                is_safe = True
+                break
+
+        if not is_safe:
+             msg = f"Path traversal detected: {resolved} is outside allowed roots {allowed_roots}"
+             raise ValueError(msg)
+
     except Exception as e:
          msg = f"Invalid path resolution: {path}"
          raise ValueError(msg) from e
-
-    # Additional Check: If it resolved to something that exists, is it a symlink?
-    # path.resolve() follows symlinks.
-    # If the user provided a symlink, 'path' object might say is_symlink()=True (if we didn't resolve it yet? No, Path object refers to string).
-    # We should check if the input path was a symlink if we want to forbid them.
-    # But usually resolving is enough if we trust the destination.
-    # However, let's say we want to prevent pointing to system files.
-    # Without a chroot or allowed_dir, we can't fully prevent accessing /etc/passwd if the user explicitly asks for it.
-    # But we can prevent obscured access.
 
     return resolved

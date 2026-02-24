@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from pyacemaker.domain_models.eon import EONConfig
+from pyacemaker.interfaces.process import ProcessRunner, SubprocessRunner
 from pyacemaker.utils.path import validate_path_safe
 
 logger = logging.getLogger(__name__)
@@ -16,8 +17,9 @@ class EONWrapper:
     Manages configuration generation and process execution.
     """
 
-    def __init__(self, config: EONConfig) -> None:
+    def __init__(self, config: EONConfig, runner: ProcessRunner | None = None) -> None:
         self.config = config
+        self.runner = runner or SubprocessRunner()
 
     def generate_config(self, output_path: Path) -> None:
         """
@@ -84,14 +86,8 @@ class EONWrapper:
             cmd_str = ' '.join(cmd)
             logger.info("Starting EON simulation in %s with command: %s", working_dir, cmd_str)
 
-            # Execute
-            result = subprocess.run(  # noqa: S603
-                cmd,
-                cwd=working_dir,
-                capture_output=True,
-                text=True,
-                check=True
-            )
+            # Execute using abstracted runner
+            result = self.runner.run(cmd, cwd=working_dir)
 
             logger.info("EON simulation completed successfully.")
             logger.debug("EON stdout: %s", result.stdout)

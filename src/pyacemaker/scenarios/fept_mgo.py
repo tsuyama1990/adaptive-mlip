@@ -64,6 +64,7 @@ class FePtMgoScenario(BaseScenario):
         params = self.config.scenario.parameters if self.config.scenario else {}
         num_depositions = params.get("num_depositions", 10)
         ratio = params.get("fe_pt_ratio", 0.5)
+        max_retries = 3
 
         structure = slab.copy()  # type: ignore[no-untyped-call]
 
@@ -98,12 +99,22 @@ class FePtMgoScenario(BaseScenario):
             structure.append(element)
             structure.positions[-1] = [x, y, z]
 
-            # Relax structure using MD Engine
-            try:
-                relaxed_structure = engine.relax(structure, potential)
+            # Relax structure using MD Engine with retries
+            relaxed_structure = None
+            for attempt in range(max_retries):
+                try:
+                    relaxed_structure = engine.relax(structure, potential)
+                    break # Success
+                except Exception as e:
+                    logger.warning("Deposition %d relaxation failed (attempt %d/%d): %s", i, attempt + 1, max_retries, e)
+
+            if relaxed_structure is not None:
                 structure = relaxed_structure
-            except Exception as e:
-                logger.warning("Failed to relax after deposition %d: %s. Continuing with unrelaxed structure.", i, e)
+            else:
+                logger.error("Failed to relax structure after deposition %d. Aborting deposition loop.", i)
+                # Should we raise or continue? raising seems safer for "Robust error handling"
+                msg = f"Deposition failed at step {i} after {max_retries} attempts."
+                raise RuntimeError(msg)
 
         return structure
 
