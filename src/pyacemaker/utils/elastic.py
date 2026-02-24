@@ -47,10 +47,10 @@ class ElasticCalculator:
         stress_xx = []
         stress_yy = []
 
-        base_cell = structure.get_cell()
+        base_cell = structure.get_cell()  # type: ignore[no-untyped-call]
 
         for eps in strains:
-            atoms = structure.copy() # type: ignore[no-untyped-call]
+            atoms = structure.copy()
             cell = base_cell.copy()
             cell[0, 0] *= (1 + eps)
             atoms.set_cell(cell, scale_atoms=True)
@@ -68,7 +68,7 @@ class ElasticCalculator:
         # Voigt notation: sigma_xy = C44 * gamma_xy
         stress_xy = []
         for eps in strains:
-            atoms = structure.copy() # type: ignore[no-untyped-call]
+            atoms = structure.copy()
             cell = base_cell.copy()
             # Shear in xy
             # cell[0, 1] += eps * cell[1, 1] ? No, simpler for cubic

@@ -52,7 +52,7 @@ class BaseGenerator(ABC):
         """
 
     @abstractmethod
-    def generate_local(self, base_structure: Atoms, n_candidates: int) -> Iterator[Atoms]:
+    def generate_local(self, base_structure: Atoms, n_candidates: int, **kwargs: Any) -> Iterator[Atoms]:
         """
         Generates candidate structures by perturbing a base structure.
         Used in OTF loops to explore the local neighborhood of a high-uncertainty configuration.
@@ -60,6 +60,7 @@ class BaseGenerator(ABC):
         Args:
             base_structure: The reference structure to perturb.
             n_candidates: Number of structures to generate.
+            **kwargs: Additional arguments (e.g., engine).
 
         Returns:
             Iterator yielding ASE Atoms objects.
@@ -180,4 +181,20 @@ class BaseEngine(ABC):
 
         Returns:
             MDSimulationResult containing energy, forces, etc.
+        """
+
+    @abstractmethod
+    def relax(self, structure: Atoms, potential: Any) -> Atoms:
+        """
+        Relaxes the structure to a local minimum.
+
+        Args:
+            structure: Structure to relax.
+            potential: Potential to use.
+
+        Returns:
+            Relaxed structure as an ASE Atoms object.
+
+        Raises:
+            RuntimeError: If relaxation fails.
         """

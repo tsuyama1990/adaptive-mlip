@@ -26,7 +26,7 @@ class FakeGenerator(BaseGenerator):
             symbol = self.elements[0]
             yield Atoms(f"{symbol}2", positions=[[0, 0, 0], [0, 0, 0.74]])
 
-    def generate_local(self, base_structure: Atoms, n_candidates: int) -> Iterator[Atoms]:
+    def generate_local(self, base_structure: Atoms, n_candidates: int, **kwargs: Any) -> Iterator[Atoms]:
         for _ in range(n_candidates):
             yield base_structure.copy()  # type: ignore[no-untyped-call]
 

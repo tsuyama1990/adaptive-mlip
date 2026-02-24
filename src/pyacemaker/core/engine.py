@@ -1,3 +1,4 @@
+import io
 from pathlib import Path
 from typing import Any
 
@@ -6,7 +7,7 @@ from ase import Atoms
 from pyacemaker.core.base import BaseEngine
 from pyacemaker.core.io_manager import LammpsFileManager
 from pyacemaker.core.lammps_generator import LammpsScriptGenerator
-from pyacemaker.core.validator import LammpsValidator
+from pyacemaker.core.validator import LammpsInputValidator
 from pyacemaker.domain_models.constants import LAMMPS_SCREEN_ARG
 from pyacemaker.domain_models.md import MDConfig, MDSimulationResult
 from pyacemaker.interfaces.lammps_driver import LammpsDriver
@@ -37,8 +38,8 @@ class LammpsEngine(BaseEngine):
         Runs the MD simulation.
         """
         # Input Validation (SRP via Validator)
-        LammpsValidator.validate_structure(structure)
-        potential_path = LammpsValidator.validate_potential(potential)
+        LammpsInputValidator.validate_structure(structure)
+        potential_path = LammpsInputValidator.validate_potential(potential)
 
         # Ensure potential path is resolved and exists (double check for race conditions/symlinks)
         potential_path = potential_path.resolve(strict=True)
@@ -148,6 +149,51 @@ class LammpsEngine(BaseEngine):
 
         engine = LammpsEngine(static_config)
         return engine.run(structure, potential)
+
+    def relax(self, structure: Atoms, potential: Any) -> Atoms:
+        """
+        Relaxes the structure to a local minimum using LAMMPS minimize.
+        """
+        # Input Validation
+        LammpsInputValidator.validate_structure(structure)
+        potential_path = LammpsInputValidator.validate_potential(potential)
+        potential_path = potential_path.resolve(strict=True)
+
+        # Prepare workspace
+        ctx, data_file, dump_file, log_file, elements = self.file_manager.prepare_workspace(structure)
+
+        with ctx:
+            # Build script
+            script_lines = []
+            script_lines.append("clear")
+            script_lines.append("units metal")
+            script_lines.append(f"atom_style {self.config.atom_style}")
+            script_lines.append("boundary p p p")
+            script_lines.append(f"read_data \"{data_file}\"")
+
+            # Reuse generator for potential
+            pot_buffer = io.StringIO()
+            self.generator._gen_potential(pot_buffer, potential_path, elements)
+            script_lines.append(pot_buffer.getvalue())
+
+            script_lines.append(f"neighbor {self.config.neighbor_skin} bin")
+            script_lines.append("neigh_modify delay 0 every 1 check yes")
+
+            # Minimization settings
+            # strict tolerance for relaxation
+            script_lines.append("min_style cg")
+            script_lines.append("minimize 1.0e-6 1.0e-8 1000 10000")
+
+            full_script = "\n".join(script_lines)
+
+            # Execute
+            driver = LammpsDriver(["-screen", "none", "-log", str(log_file)])
+            try:
+                driver.run(full_script)
+                return driver.get_atoms(elements)
+            finally:
+                 if hasattr(driver, "close"):
+                     driver.close()
 
     def _ensure_script_readable(self, script_path: Path) -> None:
         """Helper to ensure script path exists."""

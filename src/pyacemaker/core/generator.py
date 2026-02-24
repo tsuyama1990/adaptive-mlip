@@ -7,8 +7,7 @@ from pyacemaker.core.base import BaseGenerator
 from pyacemaker.core.exceptions import GeneratorError
 from pyacemaker.core.m3gnet_wrapper import M3GNetWrapper
 from pyacemaker.core.policy_factory import PolicyFactory
-from pyacemaker.domain_models.structure import ExplorationPolicy, StructureConfig
-from pyacemaker.utils.perturbations import rattle
+from pyacemaker.domain_models.structure import StructureConfig
 
 
 class StructureGenerator(BaseGenerator):
@@ -63,16 +62,12 @@ class StructureGenerator(BaseGenerator):
             return
 
         # Policy Selection
+        # Uses active_policies via PolicyFactory
         policy = PolicyFactory.get_policy(self.config)
 
         # Step 1: Base Structure Generation (Lazy)
         # We define composition here but don't call prediction yet
         composition = "".join(self.config.elements)
-
-        # Validate policy configuration first
-        if not isinstance(self.config.policy_name, ExplorationPolicy):
-             msg = f"Invalid policy name: {self.config.policy_name}"
-             raise TypeError(msg)
 
         # Step 2: Apply Policy (Streaming)
         # Create the supercell template lazily inside the generator.
@@ -116,14 +111,16 @@ class StructureGenerator(BaseGenerator):
 
         yield from lazy_policy_stream()
 
-    def generate_local(self, base_structure: Atoms, n_candidates: int) -> Iterator[Atoms]:
+    def generate_local(self, base_structure: Atoms, n_candidates: int, **kwargs: Any) -> Iterator[Atoms]:
         """
         Generates candidate structures by perturbing a base structure.
         Used in OTF loops to explore the local neighborhood of a high-uncertainty configuration.
+        Uses the configured local_generation_strategy.
 
         Args:
             base_structure: The reference structure to perturb.
             n_candidates: Number of structures to generate.
+            **kwargs: Additional arguments (e.g., engine).
 
         Returns:
             Iterator yielding ASE Atoms objects.
@@ -131,17 +128,10 @@ class StructureGenerator(BaseGenerator):
         if n_candidates <= 0:
             return
 
-        # Use configured rattle_stdev, or default if not set (though Config enforces it)
-        stdev = self.config.rattle_stdev
+        # Use PolicyFactory to get local policy
+        strategy = self.config.local_generation_strategy
+        policy = PolicyFactory.get_local_policy(strategy)
 
-        # Always include the base structure itself as an anchor (spec says so)
-        # But wait, BaseGenerator.generate_local contract?
-        # The spec says "Select ... This sets S0 is always included (Anchor)".
-        # ActiveSetSelector selects. Generator just generates candidates.
-        # But for robustness, let's generate n_candidates.
-        # If we want S0 in candidate pool, we can yield it first.
-        # Spec says: "Generate Local Candidates ... (A) Normal Mode ... (C) Random Displacement".
-
-        # We will yield perturbed structures.
-        for _ in range(n_candidates):
-            yield rattle(base_structure, stdev=stdev)
+        # Generate using policy
+        # Pass kwargs (e.g. engine) to allow advanced policies like MD Micro Burst
+        yield from policy.generate(base_structure, self.config, n_structures=n_candidates, **kwargs)

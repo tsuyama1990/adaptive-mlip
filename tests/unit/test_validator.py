@@ -39,6 +39,7 @@ class TestValidator:
         output_path = Path("report.html")
         structure = MagicMock()
 
+        # Mock _relax_structure to isolate
         with patch.object(validator, "_relax_structure") as mock_relax:
             mock_relax.return_value = structure
             result = validator.validate(potential_path, output_path, structure=structure)
@@ -68,3 +69,17 @@ class TestValidator:
 
         assert result.phonon_stable is False
         assert result.elastic_stable is True
+
+    def test_relax_structure(self, validator, mock_elastic_calc):
+        structure = MagicMock()
+        pot_path = Path("pot.yace")
+
+        # mock_elastic_calc.engine is accessed in _relax_structure
+        mock_engine = MagicMock()
+        mock_elastic_calc.engine = mock_engine
+        mock_engine.relax.return_value = "relaxed_structure"
+
+        relaxed = validator._relax_structure(structure, pot_path)
+
+        assert relaxed == "relaxed_structure"
+        mock_engine.relax.assert_called_once_with(structure, pot_path)

@@ -161,5 +161,5 @@ def test_run_driver_failure(mock_md_config: MDConfig, mock_driver: Any, tmp_path
     pot_path = tmp_path / "pot.yace"
     pot_path.touch()
 
-    with pytest.raises(RuntimeError, match="LAMMPS execution failed: LAMMPS crashed"):
+    with pytest.raises(RuntimeError, match="LAMMPS engine execution failed: LAMMPS crashed"):
         engine.run(atoms, pot_path)

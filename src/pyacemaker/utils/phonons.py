@@ -31,9 +31,9 @@ class PhononCalculator:
 
     def _ase_to_phonopy(self, atoms: Atoms) -> PhonopyAtoms:
         return PhonopyAtoms(
-            symbols=atoms.get_chemical_symbols(),
-            cell=atoms.get_cell(),
-            scaled_positions=atoms.get_scaled_positions(),
+            symbols=atoms.get_chemical_symbols(),  # type: ignore[no-untyped-call]
+            cell=atoms.get_cell(),  # type: ignore[no-untyped-call]
+            scaled_positions=atoms.get_scaled_positions(),  # type: ignore[no-untyped-call]
         )
 
     def _phonopy_to_ase(self, phonon_atoms: PhonopyAtoms) -> Atoms:
@@ -71,10 +71,10 @@ class PhononCalculator:
         phonon = Phonopy(unitcell, supercell_matrix=s_mat)
         phonon.generate_displacements(distance=self.displacement)
 
-        supercells = phonon.get_supercells_with_displacements()
+        supercells = phonon.get_supercells_with_displacements()  # type: ignore[attr-defined]
 
         # Calculate forces for each displaced supercell
-        forces_set = []
+        forces_set: list[np.ndarray] = []
         for sc in supercells:
             # Convert to ASE for engine
             ase_sc = self._phonopy_to_ase(sc)
@@ -109,7 +109,7 @@ class PhononCalculator:
         is_stable = min_freq > self.imaginary_tol
 
         # Plot
-        phonon.plot_band_structure()
+        phonon.plot_band_structure()  # type: ignore[no-untyped-call]
         buf = io.BytesIO()
         plt.savefig(buf, format="png")
         plt.close()

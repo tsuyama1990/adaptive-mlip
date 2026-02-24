@@ -83,5 +83,5 @@ def test_engine_integration_lammps_failure(tmp_path: Path, mock_md_config: MDCon
 
     engine = LammpsEngine(mock_md_config)
 
-    with pytest.raises(RuntimeError, match="LAMMPS execution failed"):
+    with pytest.raises(RuntimeError, match="LAMMPS engine execution failed"):
         engine.run(atoms, potential_path)

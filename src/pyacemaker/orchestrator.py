@@ -396,7 +396,14 @@ class Orchestrator:
 
         # Generate local candidates (perturbations of S0)
         local_n = self.config.workflow.otf.local_n_candidates
-        candidates_gen = self.generator.generate_local(s0_cluster, n_candidates=local_n)
+
+        # Pass engine and potential for advanced local generation strategies (e.g. MD Micro Burst)
+        candidates_gen = self.generator.generate_local(
+            s0_cluster,
+            n_candidates=local_n,
+            engine=self.engine,
+            potential=potential_path
+        )
 
         # Select Active Set (including S0 as anchor)
         n_select = self.config.workflow.otf.local_n_select
@@ -487,6 +494,12 @@ class Orchestrator:
         else:
              self.logger.info(LOG_ITERATION_COMPLETED.format(iteration=self.loop_state.iteration + 1))
 
+    def _adapt_strategy(self, result: MDSimulationResult) -> None:
+        """
+        Placeholder for adaptive policy logic.
+        Future implementation: Update self.generator.config based on result metrics.
+        """
+
     def _run_loop_iteration(self) -> None:
         """Executes one iteration of the active learning loop."""
         iteration = self.loop_state.iteration + 1
@@ -498,6 +511,7 @@ class Orchestrator:
             result = self._run_md_simulation(iteration, deployed_potential)
 
             if result:
+                self._adapt_strategy(result)
                 self._handle_md_halt(result, deployed_potential, paths)
 
             self.loop_state.iteration = iteration
