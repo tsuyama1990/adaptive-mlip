@@ -3,6 +3,8 @@ from typing import Any
 
 from ase import Atoms
 
+from pyacemaker.utils.path import validate_path_safe
+
 
 class LammpsValidator:
     """
@@ -57,13 +59,14 @@ class LammpsValidator:
 
         # Security: Check for path traversal or restricted directories
         try:
-            resolved_path = path.resolve()
-            # Basic check: Ensure path is absolute after resolution
-            if not resolved_path.is_absolute():
-                msg = f"Potential path must be resolvable to absolute path: {path}"
-                raise ValueError(msg)
+            # Delegate to centralized safe path validation
+            validate_path_safe(path)
 
-            # Additional checks could be added here (e.g. whitelist of directories)
+            # Additional check: Ensure path is absolute (validate_path_safe allows relative if safe)
+            # But here we prefer absolute for LAMMPS safety.
+            if not path.resolve().is_absolute():
+                 msg = f"Potential path must be resolvable to absolute path: {path}"
+                 raise ValueError(msg)
 
         except Exception as e:
             msg = f"Invalid potential path: {e}"

@@ -3,7 +3,13 @@ from typing import TextIO
 
 from ase.data import atomic_numbers
 
-from pyacemaker.domain_models.defaults import DEFAULT_MD_MINIMIZE_FTOL, DEFAULT_MD_MINIMIZE_TOL
+from pyacemaker.domain_models.defaults import (
+    DEFAULT_LAMMPS_ATOM_MODIFY,
+    DEFAULT_LAMMPS_BOUNDARY,
+    DEFAULT_LAMMPS_UNITS,
+    DEFAULT_MD_MINIMIZE_FTOL,
+    DEFAULT_MD_MINIMIZE_TOL,
+)
 from pyacemaker.domain_models.md import MDConfig
 
 
@@ -125,9 +131,11 @@ class LammpsScriptGenerator:
         quoted_data = self._quote(data_file)
 
         buffer.write("clear\n")
-        buffer.write("units metal\n")
+        buffer.write(f"units {DEFAULT_LAMMPS_UNITS}\n")
         buffer.write(f"atom_style {self.config.atom_style}\n")
-        buffer.write("boundary p p p\n")
+        if self.config.atom_style == "atomic":
+            buffer.write(f"atom_modify {DEFAULT_LAMMPS_ATOM_MODIFY}\n")
+        buffer.write(f"boundary {DEFAULT_LAMMPS_BOUNDARY}\n")
         buffer.write(f"read_data {quoted_data}\n")
 
         self._gen_potential(buffer, potential_path, elements)

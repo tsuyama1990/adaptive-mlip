@@ -1,3 +1,5 @@
+import re
+
 from ase import Atoms
 
 
@@ -15,8 +17,14 @@ class M3GNetWrapper:
         Returns:
             Atoms object.
         Raises:
+            ValueError: If composition string contains invalid characters.
             RuntimeError: If prediction fails after retries.
         """
+        # Input Validation
+        if not re.fullmatch(r"[A-Za-z0-9]+", composition):
+            msg = f"Invalid composition string: {composition}"
+            raise ValueError(msg)
+
         # Simulated retry logic with exponential backoff could go here
         # For now, we mock the call.
         try:

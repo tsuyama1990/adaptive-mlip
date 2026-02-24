@@ -41,7 +41,7 @@ class ElasticCalculator:
 
         # Apply deformation to cell
         new_cell = np.dot(cell, deformation)
-        strained.set_cell(new_cell, scale_atoms=True)  # type: ignore[no-untyped-call]
+        strained.set_cell(new_cell, scale_atoms=True)
         return strained  # type: ignore[no-any-return]
 
     def calculate(self, structure: Atoms, potential_path: Path) -> ElasticResult:

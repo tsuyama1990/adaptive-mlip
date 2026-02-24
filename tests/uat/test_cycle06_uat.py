@@ -95,7 +95,7 @@ def test_scenario_06_01_active_learning_campaign(uat_config: PyAceConfig, tmp_pa
         # Setup behaviors
         # Use side_effect to return a new iterator each time
         mock_gen.generate.side_effect = lambda n_candidates: iter([Atoms("Fe")] * max(1, n_candidates))
-        mock_oracle.compute.side_effect = lambda structures, batch_size=10: iter([s for s in structures])
+        mock_oracle.compute.side_effect = lambda structures, batch_size=10: iter(list(structures))
         mock_trainer.train.side_effect = [pot1, pot2, pot3]
 
         # Iteration 1: Halt

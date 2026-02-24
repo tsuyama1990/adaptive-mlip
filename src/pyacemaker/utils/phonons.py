@@ -8,6 +8,7 @@ from phonopy import Phonopy
 from phonopy.structure.atoms import PhonopyAtoms
 from phonopy.units import VaspToTHz
 
+from pyacemaker.domain_models.defaults import DEFAULT_VALIDATION_PHONON_IMAGINARY_TOL
 from pyacemaker.domain_models.md import MDConfig
 from pyacemaker.domain_models.validation import (
     PhononConfig,
@@ -89,7 +90,8 @@ class PhononCalculator:
 
         # Imaginary frequencies are negative in phonopy
         min_freq = np.min(frequencies)
-        has_imaginary = min_freq < -0.05  # Tolerance for numerical noise (0.05 THz)
+        # Use configurable tolerance
+        has_imaginary = min_freq < -DEFAULT_VALIDATION_PHONON_IMAGINARY_TOL
 
         # Generate Band Structure Plot
         path_bands = output_dir / "phonon_bands.png"

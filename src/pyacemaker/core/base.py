@@ -10,15 +10,14 @@ from pyacemaker.domain_models.md import MDSimulationResult
 
 class BaseGenerator(ABC):
     """
-    Abstract base class for structure generation.
-    Implementations should explore chemical space to create candidate structures.
+    Abstract base class for structure generation strategies.
+    Implementations explore chemical space to create candidate structures.
     """
 
     @abstractmethod
     def update_config(self, config: Any) -> None:
         """
-        Updates the generator configuration.
-        This allows adaptive policies to modify generation parameters at runtime.
+        Updates the generator configuration at runtime.
 
         Args:
             config: New configuration object (e.g. StructureConfig).
@@ -29,7 +28,7 @@ class BaseGenerator(ABC):
         """
         Generates candidate structures.
 
-        This method should return an iterator to allow streaming of large datasets
+        This method MUST return an iterator to allow streaming of large datasets
         without loading everything into memory.
 
         Args:
@@ -37,25 +36,16 @@ class BaseGenerator(ABC):
 
         Returns:
             Iterator yielding ASE Atoms objects.
-            If generation cannot produce any structures, the iterator should be empty
-            (or raise an error if 0 is invalid for the context).
 
         Raises:
-            RuntimeError: If generation fails due to internal errors or configuration issues.
+            GeneratorError: If generation fails due to internal errors.
             ValueError: If input parameters are invalid.
-
-        Example:
-            class RandomGenerator(BaseGenerator):
-                def generate(self, n):
-                    for _ in range(n):
-                        yield create_random_structure()
         """
 
     @abstractmethod
     def generate_local(self, base_structure: Atoms, n_candidates: int) -> Iterator[Atoms]:
         """
-        Generates candidate structures by perturbing a base structure.
-        Used in OTF loops to explore the local neighborhood of a high-uncertainty configuration.
+        Generates candidate structures by perturbing a base structure (local exploration).
 
         Args:
             base_structure: The reference structure to perturb.
@@ -69,7 +59,7 @@ class BaseGenerator(ABC):
 class BaseOracle(ABC):
     """
     Abstract base class for property calculation (Oracle).
-    Implementations typically wrap DFT codes like Quantum Espresso or VASP.
+    Implementations typically wrap DFT codes (QE, VASP) or high-fidelity potentials.
     """
 
     @abstractmethod
@@ -79,23 +69,13 @@ class BaseOracle(ABC):
 
         Args:
             structures: Iterator of ASE Atoms objects.
-            batch_size: Number of structures to compute in a single batch (if supported).
+            batch_size: Number of structures to compute in a single batch.
 
         Returns:
-            Iterator of ASE Atoms objects with computed properties attached (e.g. in atoms.info).
-            If the input iterator is empty, the returned iterator should also be empty.
+            Iterator of ASE Atoms objects with computed properties attached.
 
         Raises:
-            RuntimeError: If calculation fails (e.g., DFT convergence error, connection error).
-            ValueError: If input structures are invalid.
-
-        Example:
-            class DFTOracle(BaseOracle):
-                def compute(self, structures, batch_size=10):
-                    for batch in batched(structures, batch_size):
-                        results = run_dft(batch)
-                        for res in results:
-                            yield res
+            OracleError: If calculation fails.
         """
 
 
@@ -112,28 +92,16 @@ class BaseTrainer(ABC):
         """
         Trains a potential using the provided training data file.
 
-        To ensure scalability, training data should be passed as a file path
-        rather than an in-memory list.
-
         Args:
-            training_data_path: Path to the file containing labelled structures (e.g., .xyz, .pckl).
+            training_data_path: Path to the file containing labelled structures.
             initial_potential: Optional path to an existing potential to fine-tune from.
 
         Returns:
             Trained potential object or path to potential file.
 
         Raises:
-            RuntimeError: If training fails (e.g., MLIP code crash, insufficient data).
+            TrainerError: If training fails.
             FileNotFoundError: If training data file does not exist.
-
-        Example:
-            class PacemakerTrainer(BaseTrainer):
-                def train(self, path, initial_potential=None):
-                    cmd = ["pace_train", "--dataset", str(path)]
-                    if initial_potential:
-                        cmd.extend(["--initial_potential", str(initial_potential)])
-                    subprocess.run(cmd)
-                    return "potential.yace"
         """
 
 
@@ -149,19 +117,12 @@ class BaseEngine(ABC):
         Runs a simulation using the given structure and potential.
 
         Args:
-            structure: Initial structure. May be None if engine loads from file/config.
-            potential: Trained potential. May be None if engine loads from file/config.
+            structure: Initial structure.
+            potential: Trained potential.
 
         Returns:
             MDSimulationResult containing trajectory path, halt status, etc.
 
         Raises:
-            RuntimeError: If simulation fails (e.g., segmentation fault, physics explosion).
-
-        Example:
-            class LAMMPSEngine(BaseEngine):
-                def run(self, structure, potential):
-                    write_lammps_input(structure, potential)
-                    subprocess.run(["lmp", ...])
-                    return MDSimulationResult(...)
+            EngineError: If simulation fails.
         """

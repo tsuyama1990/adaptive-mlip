@@ -25,6 +25,11 @@ class PolicyFactory:
         Raises:
             ValueError: If the policy name is unknown.
         """
+        # Security: Strict validation of policy name type
+        if not isinstance(config.policy_name, ExplorationPolicy):
+            msg = f"Invalid policy type: {type(config.policy_name)}"
+            raise TypeError(msg)
+
         policies: dict[ExplorationPolicy, type[BasePolicy]] = {
             ExplorationPolicy.COLD_START: ColdStartPolicy,
             ExplorationPolicy.RANDOM_RATTLE: RattlePolicy,
