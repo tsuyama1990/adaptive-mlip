@@ -6,7 +6,7 @@ from ase import Atoms
 from ase.io import iread, write
 
 from pyacemaker.core.exceptions import ActiveSetError
-from pyacemaker.domain_models.constants import DANGEROUS_PATH_CHARS
+from pyacemaker.utils.path import validate_path_safe
 from pyacemaker.utils.process import run_command
 
 
@@ -141,25 +141,9 @@ class ActiveSetSelector:
     def _validate_path_safe(self, path: Path) -> None:
         """
         Ensures path is safe using strict resolution and character allowlisting.
+        Delegates to centralized utility.
         """
         try:
-            resolved = path.resolve()
-        except Exception as e:
-             msg = f"Invalid path resolution: {path}"
-             raise ActiveSetError(msg) from e
-
-        s = str(resolved)
-
-        # Check for dangerous patterns first
-        if ".." in s:
-             msg = f"Path traversal attempt detected: {path}"
-             raise ActiveSetError(msg)
-
-        if any(c in s for c in DANGEROUS_PATH_CHARS):
-            msg = f"Path contains invalid characters: {path}"
-            raise ActiveSetError(msg)
-
-        # Ensure filename doesn't start with dash (flag injection)
-        if path.name.startswith("-"):
-            msg = f"Filename cannot start with '-': {path.name}"
-            raise ActiveSetError(msg)
+            validate_path_safe(path)
+        except ValueError as e:
+            raise ActiveSetError(str(e)) from e
