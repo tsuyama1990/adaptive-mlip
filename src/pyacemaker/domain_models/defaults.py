@@ -1,3 +1,5 @@
+from typing import Final
+
 # Configuration Defaults
 DEFAULT_STATE_FILE = "state.json"
 DEFAULT_DATA_DIR = "data"
@@ -97,3 +99,58 @@ DEFAULT_VALIDATION_PHONON_DISPLACEMENT = 0.01
 DEFAULT_VALIDATION_PHONON_IMAGINARY_TOL = -0.05
 DEFAULT_VALIDATION_ELASTIC_STRAIN = 0.01
 DEFAULT_VALIDATION_ELASTIC_STEPS = 5
+
+# Security constants (previously in constants.py but seemingly missing/moved)
+DANGEROUS_PATH_CHARS: Final[set[str]] = {";", "&", "|", "`", "$", "(", ")", "<", ">", "\n", "\r", "\t", "*", "?"}
+DEFAULT_RAM_DISK_PATH = "/dev/shm"  # noqa: S108
+
+# MD Minimize defaults
+DEFAULT_MD_MINIMIZE_FTOL = 1e-6
+DEFAULT_MD_MINIMIZE_TOL = 1e-4
+LAMMPS_MINIMIZE_MAX_ITER = 10000
+LAMMPS_MINIMIZE_STEPS = 10000
+LAMMPS_VELOCITY_SEED = 12345
+LAMMPS_SAFE_CMD_PATTERN = r"^[a-zA-Z0-9\s_\-\.\/=]+$" # Whitelist alphanumeric, space, underscore, dash, dot, slash, equals
+LAMMPS_SCREEN_ARG = "-screen"
+LAMMPS_MIN_STYLE_CG = "cg"
+
+# Delta Learning
+DEFAULT_LJ_PARAMS: Final[dict[str, float]] = {
+    "sigma": 2.5,
+    "epsilon": 1.0,
+    "cutoff": 5.0
+}
+FALLBACK_LJ_PARAMS: Final[dict[str, float]] = {
+    "sigma": 2.0,
+    "epsilon": 0.5,
+    "cutoff": 4.0
+}
+
+# Embedding
+EMBEDDING_TOLERANCE_CELL = 0.1
+
+# Errors
+ERR_M3GNET_PRED_FAIL = "M3GNet prediction failed: {error}"
+ERR_GEN_BASE_FAIL = "Base generator failed: {error}"
+ERR_GEN_NCAND_NEG = "Number of candidates must be positive."
+ERR_ORACLE_FAILED = "Oracle calculation failed: {error}"
+ERR_ORACLE_ITERATOR = "Oracle failed to create iterator."
+ERR_SIM_EXEC_FAIL = "Simulation execution failed: {error}"
+ERR_SIM_SECURITY_FAIL = "Simulation security check failed: {error}"
+ERR_SIM_SETUP_FAIL = "Simulation setup failed: {error}"
+ERR_SIM_UNEXPECTED = "Unexpected simulation error: {error}"
+ERR_STRUCTURE_NONE = "Structure cannot be None."
+ERR_POTENTIAL_NOT_FOUND = "Potential file not found."
+ERR_VAL_POT_NONE = "Validator requires a potential."
+ERR_VAL_POT_NOT_FILE = "Potential path is not a file."
+ERR_VAL_POT_OUTSIDE = "Potential path is outside allowed directory."
+ERR_VAL_REQ_STRUCT = "Validator requires a structure."
+ERR_VAL_STRUCT_EMPTY = "Structure is empty."
+ERR_VAL_STRUCT_NONE = "Structure is None."
+ERR_VAL_STRUCT_TYPE = "Invalid structure type."
+
+# DFT
+RECIPROCAL_FACTOR = 2.0 * 3.141592653589793 # 2*PI approx
+
+# Policy
+DEFAULT_STRAIN_RANGE: Final[tuple[float, float]] = (-0.05, 0.05)

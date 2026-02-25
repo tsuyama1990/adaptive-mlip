@@ -3,6 +3,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from pyacemaker.domain_models.constants import DEFAULT_EON_EXECUTABLE, DEFAULT_EON_SEED
 from pyacemaker.utils.path import validate_path_safe
 
 
@@ -13,7 +14,7 @@ class EONConfig(BaseModel):
 
     enabled: bool = Field(False, description="Whether to enable EON")
     eon_executable: str = Field(
-        default_factory=lambda: os.getenv("EON_EXECUTABLE", "eonclient"),
+        default_factory=lambda: os.getenv("EON_EXECUTABLE", DEFAULT_EON_EXECUTABLE),
         description="Path to EON executable",
     )
     potential_path: Path = Field(..., description="Path to the potential file")
@@ -27,7 +28,7 @@ class EONConfig(BaseModel):
     )
     mpi_command: str | None = Field(None, description="MPI command prefix (e.g., 'mpirun -np 4')")
     random_seed: int = Field(
-        default_factory=lambda: int(os.getenv("EON_SEED", "12345")),
+        default_factory=lambda: int(os.getenv("EON_SEED", str(DEFAULT_EON_SEED))),
         description="Random seed for EON",
     )
     otf_threshold: float = Field(0.05, ge=0.0, description="On-The-Fly extrapolation grade threshold")
@@ -35,22 +36,18 @@ class EONConfig(BaseModel):
     @field_validator("potential_path")
     @classmethod
     def validate_potential_path(cls, v: Path) -> Path:
-        # Validate existence using safe path validator
-        # This checks for traversal and existence (if exists)
+        """Validates the potential path using secure path validation."""
         try:
-            # We validate it strictly if we can resolve it,
-            # but usually it should exist before config load for strictness.
-            # However, validate_path_safe raises if outside allowed root.
-            # Here we just check existence primarily.
+            # First, standard path safety check
+            validate_path_safe(v)
+
+            # Second, existence check (EON requires it to run)
             if not v.exists():
                 msg = f"Potential file does not exist: {v}"
                 raise ValueError(msg)
 
-            # Additional safety check
-            validate_path_safe(v)
-
         except ValueError as e:
-            # Re-raise as ValueError for Pydantic
+            # Re-raise as ValueError for Pydantic to catch
             raise ValueError(str(e)) from e
 
         return v

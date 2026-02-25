@@ -1,8 +1,8 @@
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import tempfile
 import pytest
+import tempfile
 from ase import Atoms
 
 from pyacemaker.domain_models.config import PyAceConfig
@@ -86,3 +86,17 @@ def test_fept_run_flow(mock_config):
     assert mock_write.call_count >= 3 # surface, deposited, eon structure
     assert mock_eon.generate_config.called
     assert mock_eon.run.called
+
+
+def test_fept_relaxation_failure(mock_config):
+    # Test relaxation failure handling
+    mock_engine = MagicMock()
+    mock_engine.relax.side_effect = Exception("Relaxation failed")
+
+    scenario = FePtMgoScenario(mock_config, engine=mock_engine)
+    slab = scenario._generate_surface()
+
+    with pytest.raises(RuntimeError) as excinfo:
+        scenario._deposit_atoms(slab)
+
+    assert "Deposition failed" in str(excinfo.value)
