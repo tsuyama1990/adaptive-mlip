@@ -86,8 +86,8 @@ class EONWrapper:
             cmd_str = ' '.join(cmd)
             logger.info("Starting EON simulation in %s with command: %s", working_dir, cmd_str)
 
-            # Execute using abstracted runner
-            result = self.runner.run(cmd, cwd=working_dir)
+            # Execute using abstracted runner with explicit check=True
+            result = self.runner.run(cmd, cwd=working_dir, check=True)
 
             logger.info("EON simulation completed successfully.")
             logger.debug("EON stdout: %s", result.stdout)

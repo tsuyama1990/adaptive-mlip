@@ -68,6 +68,9 @@ def test_fept_mgo_run(
 def test_fept_mgo_run_missing_config() -> None:
     config = MagicMock(spec=PyAceConfig)
     config.scenario = None  # No scenario config provided
+    # Also need to mock md config as it's used in __init__
+    config.md = MagicMock(spec=MDConfig)
+    config.md.potential_path = Path("pot.yace")
 
     scenario = FePtMgoScenario(config)
     with pytest.raises(ValueError, match="Scenario configuration is missing"):

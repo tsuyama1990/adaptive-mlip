@@ -1,7 +1,8 @@
-from abc import ABC, abstractmethod
 import subprocess
+from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any
+
 
 class ProcessRunner(ABC):
     """Abstract interface for running external processes."""

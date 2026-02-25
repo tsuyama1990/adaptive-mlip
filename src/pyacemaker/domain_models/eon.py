@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class EONConfig(BaseModel):
@@ -19,5 +19,21 @@ class EONConfig(BaseModel):
         max_length=3,
         description="Supercell dimensions",
     )
-    # Additional EON parameters could go here
     mpi_command: str | None = Field(None, description="MPI command prefix (e.g., 'mpirun -np 4')")
+
+    @field_validator("potential_path")
+    @classmethod
+    def validate_potential_path(cls, v: Path) -> Path:
+        # Only validate existence if we are actually running (enabled logic checked elsewhere,
+        # but pure schema validation runs on load).
+        # We should check if it exists if it's provided.
+        # But during dry-run, file might not exist yet?
+        # Specification says "validate that potential_path exists or is accessible".
+        # We'll rely on resolve checking existence for strictness, but allows non-strict for future artifacts?
+        # Let's enforce existence unless it's a dry run context (which Pydantic doesn't know).
+        # However, potential usually exists BEFORE EON runs.
+        # We will assume it must exist at config load time for safety.
+        if not v.exists():
+             msg = f"Potential file does not exist: {v}"
+             raise ValueError(msg)
+        return v

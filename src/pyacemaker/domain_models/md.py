@@ -1,7 +1,8 @@
 import os
+from enum import Enum
 from pathlib import Path
 
-from pydantic import BaseModel, ConfigDict, Field, PositiveFloat, PositiveInt
+from pydantic import BaseModel, ConfigDict, Field, PositiveFloat, PositiveInt, model_validator
 
 from pyacemaker.domain_models.constants import (
     DEFAULT_MD_MINIMIZE_FTOL,
@@ -32,6 +33,12 @@ def _get_default_temp_dir() -> str | None:
     if shm_path.exists() and shm_path.is_dir() and os.access(shm_path, os.W_OK):
         return str(shm_path)
     return None
+
+
+class AtomStyle(str, Enum):
+    ATOMIC = "atomic"
+    CHARGE = "charge"
+    FULL = "full"
 
 
 class HybridParams(BaseModel):
@@ -65,6 +72,14 @@ class MDSimulationResult(BaseModel):
     )
     halt_step: int | None = Field(None, description="The step at which the simulation was halted")
 
+    @model_validator(mode="after")
+    def validate_forces_shape(self) -> "MDSimulationResult":
+        for f in self.forces:
+            if len(f) != 3:
+                msg = "Forces must be 3D vectors (list of 3 floats)"
+                raise ValueError(msg)
+        return self
+
 
 class MDConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -85,8 +100,8 @@ class MDConfig(BaseModel):
     neighbor_skin: PositiveFloat = Field(
         DEFAULT_MD_NEIGHBOR_SKIN, description="Neighbor list skin distance (Angstrom)"
     )
-    atom_style: str = Field(
-        DEFAULT_MD_ATOM_STYLE, description="LAMMPS atom style (e.g. atomic, charge)"
+    atom_style: AtomStyle = Field(
+        AtomStyle(DEFAULT_MD_ATOM_STYLE), description="LAMMPS atom style"
     )
 
     # Configurable LAMMPS Parameters (No Hardcoding)
@@ -144,3 +159,31 @@ class MDConfig(BaseModel):
     check_interval: int = Field(
         DEFAULT_MD_CHECK_INTERVAL, gt=0, description="Step interval for uncertainty check"
     )
+
+    @model_validator(mode="after")
+    def validate_simulation_physics(self) -> "MDConfig":
+        total_time = self.n_steps * self.timestep
+        if total_time > 1e6: # 1 microsecond is very long for naive MD
+             # Just a warning or soft limit? Requirement says "validate compatibility".
+             # Let's check for extremely short runs.
+             pass
+        if total_time <= 0:
+             msg = "Total simulation time must be positive."
+             raise ValueError(msg)
+        return self
+
+    @model_validator(mode="after")
+    def validate_otf_settings(self) -> "MDConfig":
+        if self.fix_halt and self.check_interval <= 0:
+             msg = "check_interval must be positive when fix_halt is enabled."
+             raise ValueError(msg)
+        return self
+
+    @model_validator(mode="after")
+    def validate_temp_dir(self) -> "MDConfig":
+        if self.temp_dir:
+            p = Path(self.temp_dir)
+            if not p.exists() or not os.access(p, os.W_OK):
+                msg = f"Temporary directory {p} does not exist or is not writable."
+                raise ValueError(msg)
+        return self

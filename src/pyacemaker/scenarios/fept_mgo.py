@@ -1,6 +1,7 @@
 import logging
 import random
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from ase import Atoms
 from ase.build import bulk, surface
@@ -10,6 +11,9 @@ from pyacemaker.core.engine import LammpsEngine
 from pyacemaker.interfaces.eon_driver import EONWrapper
 from pyacemaker.scenarios.base_scenario import BaseScenario
 
+if TYPE_CHECKING:
+    from pyacemaker.domain_models.config import PyAceConfig
+
 logger = logging.getLogger(__name__)
 
 
@@ -18,6 +22,18 @@ class FePtMgoScenario(BaseScenario):
     Implements the 'Grand Challenge': Fe/Pt deposition on MgO (001) surface
     followed by aKMC simulation for L10 ordering.
     """
+
+    def __init__(
+        self,
+        config: "PyAceConfig",
+        engine: LammpsEngine | None = None,
+        eon_wrapper: EONWrapper | None = None,
+    ) -> None:
+        super().__init__(config)
+        self.engine = engine or LammpsEngine(self.config.md)
+        # EON wrapper is instantiated in run if needed, or we can pre-instantiate if config allows.
+        # But EONConfig might be None.
+        self.eon_wrapper = eon_wrapper
 
     def run(self) -> None:
         """Executes the full FePt/MgO workflow."""
@@ -68,9 +84,6 @@ class FePtMgoScenario(BaseScenario):
 
         structure = slab.copy()  # type: ignore[no-untyped-call]
 
-        # Initialize MD Engine
-        engine = LammpsEngine(self.config.md)
-
         # Determine potential path
         potential = None
         if self.config.eon and self.config.eon.potential_path:
@@ -103,7 +116,7 @@ class FePtMgoScenario(BaseScenario):
             relaxed_structure = None
             for attempt in range(max_retries):
                 try:
-                    relaxed_structure = engine.relax(structure, potential)
+                    relaxed_structure = self.engine.relax(structure, potential)
                     break # Success
                 except Exception as e:
                     logger.warning("Deposition %d relaxation failed (attempt %d/%d): %s", i, attempt + 1, max_retries, e)
@@ -112,7 +125,6 @@ class FePtMgoScenario(BaseScenario):
                 structure = relaxed_structure
             else:
                 logger.error("Failed to relax structure after deposition %d. Aborting deposition loop.", i)
-                # Should we raise or continue? raising seems safer for "Robust error handling"
                 msg = f"Deposition failed at step {i} after {max_retries} attempts."
                 raise RuntimeError(msg)
 
@@ -123,7 +135,8 @@ class FePtMgoScenario(BaseScenario):
         if not self.config.eon:
             return
 
-        wrapper = EONWrapper(self.config.eon)
+        # Use injected wrapper or create new one
+        wrapper = self.eon_wrapper or EONWrapper(self.config.eon)
 
         work_dir = Path("eon_work")
         work_dir.mkdir(exist_ok=True)
@@ -142,7 +155,7 @@ class FePtMgoScenario(BaseScenario):
         try:
             wrapper.run(work_dir)
         except RuntimeError:
-            logger.exception("EON run failed: %s")
+            # Already logged in wrapper
             return
 
         # Parse results
