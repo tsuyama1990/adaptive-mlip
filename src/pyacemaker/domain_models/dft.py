@@ -40,8 +40,6 @@ class DFTConfig(BaseModel):
     )
 
     # Strategy Multipliers
-    # Note: mixing_beta_factor is used to REDUCE mixing_beta (new_beta = beta * factor)
-    #       smearing_width_factor is used to INCREASE smearing_width (new_width = width * factor)
     mixing_beta_factor: float = Field(
         DEFAULT_DFT_MIXING_BETA_FACTOR,
         gt=0.0,
@@ -52,6 +50,11 @@ class DFTConfig(BaseModel):
         DEFAULT_DFT_SMEARING_WIDTH_FACTOR,
         gt=1.0,
         description="Multiplier for smearing_width increase strategy",
+    )
+
+    # Parallelism
+    n_workers: int = Field(
+        1, ge=1, description="Number of parallel workers for DFT calculations"
     )
 
     # Pseudopotentials

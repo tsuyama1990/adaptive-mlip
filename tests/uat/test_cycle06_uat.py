@@ -64,9 +64,10 @@ def test_scenario_06_01_active_learning_campaign(uat_config: PyAceConfig, tmp_pa
     Scenario 06-01: Verify that the system can run a complete active learning loop from start to finish (mocked).
     """
     with patch("pyacemaker.orchestrator.setup_logger"), \
-         patch("pyacemaker.factory.ModuleFactory.create_modules") as mock_factory:
+         patch("pyacemaker.factory.ModuleFactory.create_container") as mock_factory:
 
-        # Mock modules
+        # Mock modules within a Mock Container
+        mock_container = MagicMock()
         mock_gen = MagicMock()
         mock_oracle = MagicMock()
         mock_trainer = MagicMock()
@@ -74,7 +75,14 @@ def test_scenario_06_01_active_learning_campaign(uat_config: PyAceConfig, tmp_pa
         mock_selector = MagicMock()
         mock_validator = MagicMock()
 
-        mock_factory.return_value = (mock_gen, mock_oracle, mock_trainer, mock_engine, mock_selector, mock_validator)
+        mock_container.generator = mock_gen
+        mock_container.oracle = mock_oracle
+        mock_container.trainer = mock_trainer
+        mock_container.engine = mock_engine
+        mock_container.active_set_selector = mock_selector
+        mock_container.validator = mock_validator
+
+        mock_factory.return_value = mock_container
 
         # Pre-create potential files
         pot1 = tmp_path / "pot_v1.yace"
@@ -95,13 +103,13 @@ def test_scenario_06_01_active_learning_campaign(uat_config: PyAceConfig, tmp_pa
         write(halt_path, Atoms("Fe"))
 
         res1 = MDSimulationResult(
-            energy=-10.0, temperature=300, forces=[[0.0, 0.0, 0.0]], n_steps=50, max_gamma=10.0, halted=True,
+            energy=-10.0, temperature=300, forces=[[0.0, 0.0, 0.0]], stress=[0.0]*6, n_steps=50, max_gamma=10.0, halted=True,
             halt_structure_path=str(halt_path)
         )
 
         # Iteration 2: Converged (not halted)
         res2 = MDSimulationResult(
-            energy=-10.0, temperature=300, forces=[[0.0, 0.0, 0.0]], n_steps=1000, max_gamma=2.0, halted=False,
+            energy=-10.0, temperature=300, forces=[[0.0, 0.0, 0.0]], stress=[0.0]*6, n_steps=1000, max_gamma=2.0, halted=False,
             halt_structure_path=None
         )
 
@@ -113,6 +121,7 @@ def test_scenario_06_01_active_learning_campaign(uat_config: PyAceConfig, tmp_pa
         # Run Orchestrator
         orch = Orchestrator(uat_config)
         orch.run()
+        orch.state_manager.shutdown()
 
         # Expectations
         # 1. Loop runs for exactly 2 iterations (max_iterations=2)
@@ -138,20 +147,28 @@ def test_scenario_06_02_resume_capability(uat_config: PyAceConfig, tmp_path: Pat
     state.save(state_file)
 
     with patch("pyacemaker.orchestrator.setup_logger"), \
-         patch("pyacemaker.factory.ModuleFactory.create_modules") as mock_factory:
+         patch("pyacemaker.factory.ModuleFactory.create_container") as mock_factory:
 
+        mock_container = MagicMock()
         mock_gen = MagicMock()
         mock_oracle = MagicMock()
         mock_trainer = MagicMock()
         mock_engine = MagicMock()
         mock_selector = MagicMock()
         mock_validator = MagicMock()
-        mock_validator = MagicMock()
-        mock_factory.return_value = (mock_gen, mock_oracle, mock_trainer, mock_engine, mock_selector, mock_validator)
+
+        mock_container.generator = mock_gen
+        mock_container.oracle = mock_oracle
+        mock_container.trainer = mock_trainer
+        mock_container.engine = mock_engine
+        mock_container.active_set_selector = mock_selector
+        mock_container.validator = mock_validator
+
+        mock_factory.return_value = mock_container
 
         # Iteration 2: Run MD
         res2 = MDSimulationResult(
-            energy=-10.0, temperature=300, forces=[[0.0, 0.0, 0.0]], n_steps=1000, max_gamma=2.0, halted=False,
+            energy=-10.0, temperature=300, forces=[[0.0, 0.0, 0.0]], stress=[0.0]*6, n_steps=1000, max_gamma=2.0, halted=False,
             halt_structure_path=None
         )
         mock_engine.run.return_value = res2
@@ -159,6 +176,7 @@ def test_scenario_06_02_resume_capability(uat_config: PyAceConfig, tmp_path: Pat
         # Run
         orch = Orchestrator(uat_config)
         orch.run()
+        orch.state_manager.shutdown()
 
         # Expectations
         assert orch.loop_state.iteration == 2

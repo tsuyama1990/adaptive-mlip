@@ -15,7 +15,7 @@ def mock_config() -> MagicMock:
     config = MagicMock(spec=PyAceConfig)
     config.scenario = ScenarioConfig(
         name="fept_mgo",
-        parameters={"num_depositions": 10, "temperature": 600.0},
+        parameters={"num_depositions": 10, "fe_pt_ratio": 0.5},
         enabled=True
     )
     config.md = MagicMock(spec=MDConfig)
@@ -71,6 +71,11 @@ def test_fept_mgo_run_missing_config() -> None:
     # Also need to mock md config as it's used in __init__
     config.md = MagicMock(spec=MDConfig)
     config.md.potential_path = Path("pot.yace")
+
+    # In strict mode, init might fail if params are missing?
+    # But init handles missing scenario by using defaults.
+    # Except if config.scenario is None, it defaults to empty params.
+    # The run method checks if scenario is enabled.
 
     scenario = FePtMgoScenario(config)
     with pytest.raises(ValueError, match="Scenario configuration is missing"):

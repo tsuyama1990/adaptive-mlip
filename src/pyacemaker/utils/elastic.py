@@ -41,6 +41,10 @@ class ElasticCalculator:
         Calculates C_ij and B, checks stability.
         Returns (is_stable, c_ij, bulk_modulus, plot_base64).
         """
+        # Type Validation
+        if not isinstance(structure, Atoms):
+            raise TypeError(f"structure must be an ASE Atoms object, got {type(structure)}")
+
         # 1. Strain Sweep for C11, C12
         # Apply strain e_xx from -strain to +strain
         strains = np.linspace(-self.strain, self.strain, self.steps)
@@ -65,41 +69,20 @@ class ElasticCalculator:
 
         # 2. Strain Sweep for C44
         # Apply shear e_xy (engineering strain gamma_xy = 2*e_xy)
-        # Voigt notation: sigma_xy = C44 * gamma_xy
         stress_xy = []
         for eps in strains:
             atoms = structure.copy()  # type: ignore[no-untyped-call]
             cell = base_cell.copy()
-            # Shear in xy
-            # cell[0, 1] += eps * cell[1, 1] ? No, simpler for cubic
-            # A simple shear matrix: [[1, eps, 0], [0, 1, 0], [0, 0, 1]] applied to cell
-            # But ASE set_cell with scale_atoms=True works on basis vectors.
-            # Shear strain gamma: x -> x + gamma*y
-            # cell vector a1 = (a, 0, 0), a2 = (0, a, 0)
-            # New a2 = (gamma*a, a, 0)
-            cell[1, 0] += eps * base_cell[0, 0] # Simple shear
+            # Simple shear
+            cell[1, 0] += eps * base_cell[0, 0]
             atoms.set_cell(cell, scale_atoms=True)
 
             stress = self._get_stress(atoms, potential_path)
             stress_xy.append(stress[5]) # xy component (Voigt index 5)
 
-        # Fit sigma_xy vs gamma (gamma = eps if defined as such)
-        # Actually standard definition: e_xy = 0.5 * gamma.
-        # But Voigt stress-strain relation uses gamma.
-        # If I applied strain such that new_x = x + eps*y, then gamma = eps.
         c44 = np.polyfit(strains, stress_xy, 1)[0]
 
-        # Convert units if needed (Bar -> GPa).
-        # LAMMPS 'metal' units: pressure in bars.
-        # 1 Bar = 0.0001 GPa.
-        # 1 GPa = 10000 Bar.
-        # If _get_stress returns Bar, we multiply by 1e-4.
-        # But wait, fitting slope of Stress(Bar) vs Strain(unitless) gives C_ij in Bar.
-        # Convert to GPa: C_GPa = C_Bar * 1e-4.
-
-        # But _get_stress in LammpsDriver returns what?
-        # extract_variable returns float. pxx is in pressure units (bars for metal).
-        # So I will convert.
+        # Convert units (Bar -> GPa). 1 Bar = 1e-4 GPa
         CONV = 1e-4
         c11 *= CONV
         c12 *= CONV

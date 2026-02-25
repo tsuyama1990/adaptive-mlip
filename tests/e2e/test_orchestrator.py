@@ -7,6 +7,7 @@ import pytest
 from ase import Atoms
 
 from pyacemaker.core.base import BaseEngine, BaseGenerator, BaseOracle, BaseTrainer
+from pyacemaker.core.container import Container
 from pyacemaker.core.exceptions import OrchestratorError
 from pyacemaker.domain_models import (
     DFTConfig,
@@ -77,6 +78,7 @@ class FakeEngine(BaseEngine):
         return MDSimulationResult(
              energy=-10.0,
              forces=[[0.0, 0.0, 0.0]],
+             stress=[0.0]*6,
              halted=False,
              max_gamma=0.0,
              n_steps=100,
@@ -135,20 +137,23 @@ def test_integration_workflow_complete(
     """Comprehensive integration test for the full active learning loop."""
     config = mock_config.model_copy()
 
-    def mock_create_modules(cfg: PyAceConfig) -> tuple[Any, Any, Any, Any, Any, Any]:
-        return (
-            FakeGenerator(elements=cfg.structure.elements),
-            FakeOracle(),
-            FakeTrainer(output_dir=tmp_path),
-            FakeEngine(),
-            MagicMock(),
-            MagicMock(),
+    def mock_create_container(cfg: PyAceConfig) -> Container:
+        return Mock(
+            generator=FakeGenerator(elements=cfg.structure.elements),
+            oracle=FakeOracle(),
+            trainer=FakeTrainer(output_dir=tmp_path),
+            engine=FakeEngine(),
+            active_set_selector=MagicMock(),
+            validator=MagicMock(),
         )
 
-    monkeypatch.setattr(ModuleFactory, "create_modules", mock_create_modules)
+    monkeypatch.setattr(ModuleFactory, "create_container", mock_create_container)
 
     orch = Orchestrator(config)
     orch.run()
+
+    # Ensure any async state saving is done
+    orch.state_manager.shutdown()
 
     assert orch.loop_state.iteration == 2
     assert orch.state_manager.state_file.exists()
@@ -180,6 +185,7 @@ def test_orchestrator_checkpointing(mock_config: PyAceConfig) -> None:
     orch1 = Orchestrator(mock_config)
     orch1.loop_state.iteration = 5
     orch1.state_manager.save()
+    orch1.state_manager.shutdown() # Wait for async save
 
     orch2 = Orchestrator(mock_config)
     assert orch2.loop_state.iteration == 5
@@ -205,16 +211,20 @@ def test_orchestrator_directory_creation_error(mock_config: PyAceConfig, monkeyp
 
     monkeypatch.setattr(Path, "mkdir", mock_mkdir)
 
-    # We also need to mock module creation to pass init
-    def mock_create_modules(cfg: PyAceConfig) -> tuple[Any, Any, Any, Any, Any, Any]:
-        return (FakeGenerator(), FakeOracle(), FakeTrainer(Path()), FakeEngine(), MagicMock(), MagicMock())
-    monkeypatch.setattr(ModuleFactory, "create_modules", mock_create_modules)
+    # Mock container creation
+    def mock_create_container(cfg: PyAceConfig) -> Container:
+        return Mock(
+            generator=FakeGenerator(),
+            oracle=FakeOracle(),
+            trainer=FakeTrainer(Path()),
+            engine=FakeEngine(),
+            active_set_selector=MagicMock(),
+            validator=MagicMock(),
+        )
+    monkeypatch.setattr(ModuleFactory, "create_container", mock_create_container)
 
     orch = Orchestrator(mock_config)
 
-    # run() -> _check_initial_potential() -> _setup_iteration_directory(0) -> _ensure_directory -> mkdir
-    # The transaction should catch the PermissionError, log, and re-raise as OrchestratorError (wrapping) or propagate?
-    # _setup_iteration_directory raises OrchestratorError from Exception
     with pytest.raises(OrchestratorError, match="Failed to setup directory"):
         orch.run()
 
@@ -223,10 +233,17 @@ def test_orchestrator_error_handling_generator(mock_config: PyAceConfig, monkeyp
     mock_gen = Mock(spec=BaseGenerator)
     mock_gen.generate.side_effect = RuntimeError("Generator failed")
 
-    def mock_create_modules(cfg: PyAceConfig) -> tuple[Any, Any, Any, Any, Any, Any]:
-        return mock_gen, MagicMock(), MagicMock(), MagicMock(), MagicMock(), MagicMock()
+    def mock_create_container(cfg: PyAceConfig) -> Container:
+        return Mock(
+            generator=mock_gen,
+            oracle=MagicMock(),
+            trainer=MagicMock(),
+            engine=MagicMock(),
+            active_set_selector=MagicMock(),
+            validator=MagicMock(),
+        )
 
-    monkeypatch.setattr(ModuleFactory, "create_modules", mock_create_modules)
+    monkeypatch.setattr(ModuleFactory, "create_container", mock_create_container)
 
     orch = Orchestrator(mock_config)
     with pytest.raises(OrchestratorError, match="Exploration failed"):
@@ -243,10 +260,17 @@ def test_orchestrator_error_handling_oracle_stream(
             msg = "Oracle computation failed"
             raise RuntimeError(msg)
 
-    def mock_create_modules(cfg: PyAceConfig) -> tuple[Any, Any, Any, Any, Any, Any]:
-         return FakeGenerator(elements=cfg.structure.elements), FailingOracle(), MagicMock(), MagicMock(), MagicMock(), MagicMock()
+    def mock_create_container(cfg: PyAceConfig) -> Container:
+         return Mock(
+             generator=FakeGenerator(elements=cfg.structure.elements),
+             oracle=FailingOracle(),
+             trainer=MagicMock(),
+             engine=MagicMock(),
+             active_set_selector=MagicMock(),
+             validator=MagicMock(),
+         )
 
-    monkeypatch.setattr(ModuleFactory, "create_modules", mock_create_modules)
+    monkeypatch.setattr(ModuleFactory, "create_container", mock_create_container)
 
     orch = Orchestrator(mock_config)
     with pytest.raises(OrchestratorError, match="Labeling failed"):

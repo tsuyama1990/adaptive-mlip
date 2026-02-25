@@ -94,10 +94,12 @@ class LammpsInputValidator:
         if potential is None:
             raise ValueError(ERR_VAL_POT_NONE)
 
-        path = Path(potential).resolve()
-
-        if not path.exists():
-            raise FileNotFoundError(ERR_POTENTIAL_NOT_FOUND.format(path=path))
+        try:
+            # strict=True raises FileNotFoundError if path doesn't exist
+            path = Path(potential).resolve(strict=True)
+        except FileNotFoundError as e:
+            # Re-raise with our custom message template
+            raise FileNotFoundError(ERR_POTENTIAL_NOT_FOUND.format(path=potential)) from e
 
         if not path.is_file():
             raise ValueError(ERR_VAL_POT_NOT_FILE.format(path=path))

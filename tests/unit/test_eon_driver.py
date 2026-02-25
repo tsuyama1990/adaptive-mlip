@@ -2,6 +2,7 @@ from pathlib import Path
 
 import pytest
 
+from pyacemaker.core.exceptions import EONError
 from pyacemaker.domain_models.eon import EONConfig
 from pyacemaker.interfaces.eon_driver import EONWrapper
 from tests.unit.mock_process import MockProcessRunner
@@ -27,16 +28,28 @@ def test_generate_config(valid_eon_config: EONConfig, tmp_path: Path) -> None:
     assert config_path.exists()
     content = config_path.read_text()
     assert "temperature = 500.0" in content
-    assert f"potentials_path = {valid_eon_config.potential_path}" in content
+    # Updated to expect script interface per spec
+    assert "potential = script" in content
+    assert "script_path = ./pace_driver.py" in content
+
+
+def test_generate_driver_script(valid_eon_config: EONConfig, tmp_path: Path) -> None:
+    driver = EONWrapper(valid_eon_config)
+    script_path = tmp_path / "pace_driver.py"
+
+    driver.generate_driver_script(script_path)
+
+    assert script_path.exists()
+    content = script_path.read_text()
+    assert "#!/usr/bin/env python3" in content
+    assert "run_driver()" in content
+    # Ensure no secrets (potential path) are hardcoded in the script content
+    assert str(valid_eon_config.potential_path) not in content
 
 
 def test_run_success(valid_eon_config: EONConfig, tmp_path: Path) -> None:
     runner = MockProcessRunner()
     driver = EONWrapper(valid_eon_config, runner=runner)
-
-    # Mock existence of required files (validate_path checks paths)
-    # validate_path checks if executable path is safe. eonclient is just a string here.
-    # If eon_executable was a path, we'd need to mock it.
 
     driver.run(working_dir=tmp_path)
 
@@ -50,50 +63,7 @@ def test_run_failure(valid_eon_config: EONConfig, tmp_path: Path) -> None:
     runner = MockProcessRunner(returncode=1, stderr="Error occurred")
     driver = EONWrapper(valid_eon_config, runner=runner)
 
-    # MockProcessRunner assumes kwargs['check'] = True if returncode != 0
-    # But EONWrapper uses runner.run(..., check=True) implicitly or explicitly.
-    # The MockProcessRunner logic I wrote in mock_process.py raises CalledProcessError
-    # ONLY IF check=True is passed.
-    # EONWrapper calls: self.runner.run(cmd, cwd=working_dir)
-    # The SubprocessRunner adds defaults. But MockProcessRunner doesn't unless I add them.
-    # So EONWrapper calls run(cmd, cwd).
-    # MockProcessRunner.run needs to check 'check' kwarg or raise if we want.
-    # The real SubprocessRunner sets defaults.
-    # Let's fix EONWrapper to explicitly pass check=True to be clear,
-    # OR fix MockProcessRunner to default check=True like SubprocessRunner.
-    # But wait, EONWrapper just calls runner.run().
-    # SubprocessRunner implementation:
-    # def run(..., **kwargs):
-    #    kwargs.setdefault("check", True) ...
-    # MockProcessRunner implementation:
-    # def run(..., **kwargs):
-    #    if kwargs.get("check", False) ...
-
-    # So if EONWrapper doesn't pass check=True, MockProcessRunner defaults to False.
-    # But SubprocessRunner defaults to True.
-    # EONWrapper relies on SubprocessRunner's default.
-    # Since MockProcessRunner is a test double, it should mimic the behavior we expect *or*
-    # we should make EONWrapper explicitly pass check=True to allow strict mocking.
-
-    # Let's update EONWrapper to explicitly pass check=True for clarity and testability.
-    # OR update MockProcessRunner.
-    # Updating EONWrapper is better design (explicit > implicit).
-
-    # For now, I'll update the test to use a properly configured MockProcessRunner
-    # or patch EONWrapper to pass check=True.
-    # Actually, EONWrapper logic:
-    # result = self.runner.run(cmd, cwd=working_dir)
-
-    # I will modify EONWrapper to pass check=True explicitly in next step.
-    # For this test file, I will expect it to fail unless I fix EONWrapper or Mock.
-    # I'll fix the expectation here assuming I will fix EONWrapper.
-
-    # Wait, the failure is "Failed: DID NOT RAISE".
-    # This means EONWrapper called run(), MockRunner returned mock_res (returncode=1),
-    # but NO exception was raised because check=True wasn't passed to MockRunner.
-    # EONWrapper didn't check returncode itself because it relies on check=True behavior.
-
-    with pytest.raises(RuntimeError, match="EON execution failed"):
+    with pytest.raises(EONError, match="EON execution failed"):
         driver.run(working_dir=tmp_path)
 
 

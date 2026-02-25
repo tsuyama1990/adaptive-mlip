@@ -40,13 +40,10 @@ def mock_config(
 
 
 def test_module_factory_create_modules(mock_config: PyAceConfig) -> None:
-    """Test that factory creates correct module instances."""
+    """Test that factory creates correct module instances via Container."""
 
-    # We patch DFTManager to avoid QEDriver init (which checks pseudo existence)
-    # Actually mock_config fixture creates the pseudo file, so DFTManager init is safe.
-    # But QEDriver might check other things.
-    # Let's patch DFTManager anyway to isolate Factory test.
-    with patch("pyacemaker.factory.DFTManager") as MockDFTManager:
+    # Patch DFTManager in core.container where it is instantiated
+    with patch("pyacemaker.core.container.DFTManager") as MockDFTManager:
         gen, oracle, trainer, engine, active_set, validator = ModuleFactory.create_modules(mock_config)
 
         assert isinstance(gen, StructureGenerator)
