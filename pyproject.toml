@@ -20,6 +20,9 @@ authors = [
     { name = "Tomoyuki Tsuyama", email = "tomoyuki.tsuyaman@gmail.com" }
 ]
 
+[project.scripts]
+pyacemaker = "pyacemaker.main:main"
+
 [dependency-groups]
 dev = [
     "ruff",

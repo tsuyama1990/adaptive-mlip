@@ -1,11 +1,12 @@
 import logging
 import random
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-from ase import Atoms
+from ase import Atom, Atoms
 from ase.build import bulk, surface
 from ase.io import write
+from pydantic import BaseModel, Field, ValidationError
 
 from pyacemaker.core.engine import LammpsEngine
 from pyacemaker.interfaces.eon_driver import EONWrapper
@@ -15,6 +16,14 @@ if TYPE_CHECKING:
     from pyacemaker.domain_models.config import PyAceConfig
 
 logger = logging.getLogger(__name__)
+
+
+class FePtMgoParameters(BaseModel):
+    """Parameters for FePt on MgO scenario."""
+    num_depositions: int = Field(10, ge=1, description="Number of atoms to deposit")
+    fe_pt_ratio: float = Field(0.5, ge=0.0, le=1.0, description="Ratio of Fe atoms (0.0 to 1.0)")
+    potential_path: Path | None = Field(None, description="Path to potential file (overrides EON config)")
+    mgo_lattice_constant: float = Field(4.212, gt=0.0, description="Lattice constant of MgO")
 
 
 class FePtMgoScenario(BaseScenario):
@@ -31,9 +40,16 @@ class FePtMgoScenario(BaseScenario):
     ) -> None:
         super().__init__(config)
         self.engine = engine or LammpsEngine(self.config.md)
-        # EON wrapper is instantiated in run if needed, or we can pre-instantiate if config allows.
-        # But EONConfig might be None.
         self.eon_wrapper = eon_wrapper
+
+        # Validate parameters
+        try:
+            raw_params = self.config.scenario.parameters if self.config.scenario else {}
+            self.params = FePtMgoParameters(**raw_params)
+        except ValidationError as e:
+            msg = f"Invalid parameters for FePtMgoScenario: {e}"
+            logger.error(msg)
+            raise ValueError(msg) from e
 
     def run(self) -> None:
         """Executes the full FePt/MgO workflow."""
@@ -68,7 +84,7 @@ class FePtMgoScenario(BaseScenario):
 
     def _generate_surface(self) -> Atoms:
         """Generates MgO (001) surface."""
-        a = 4.212
+        a = self.params.mgo_lattice_constant
         mgo = bulk("MgO", "rocksalt", a=a)
         return surface(mgo, (0, 0, 1), layers=4, vacuum=10.0)
 
@@ -77,22 +93,26 @@ class FePtMgoScenario(BaseScenario):
         Deposits Fe and Pt atoms onto the surface.
         Uses MD Engine for relaxation after placement.
         """
-        params = self.config.scenario.parameters if self.config.scenario else {}
-        num_depositions = params.get("num_depositions", 10)
-        ratio = params.get("fe_pt_ratio", 0.5)
+        num_depositions = self.params.num_depositions
+        ratio = self.params.fe_pt_ratio
         max_retries = 3
 
         structure = slab.copy()  # type: ignore[no-untyped-call]
 
         # Determine potential path
         potential = None
-        if self.config.eon and self.config.eon.potential_path:
+        # Prioritize params over EON config as per docstring
+        if self.params.potential_path:
+            potential = self.params.potential_path
+        elif self.config.eon and self.config.eon.potential_path:
             potential = self.config.eon.potential_path
-        elif params.get("potential_path"):
-            potential = Path(params["potential_path"])
 
         if not potential:
             msg = "Potential path not found in EON config or scenario parameters."
+            raise ValueError(msg)
+
+        if not potential.exists():
+            msg = f"Potential file not found: {potential}"
             raise ValueError(msg)
 
         for i in range(num_depositions):
@@ -100,22 +120,30 @@ class FePtMgoScenario(BaseScenario):
             element = "Fe" if random.random() < ratio else "Pt"  # noqa: S311
 
             # Random position above surface
-            max_z = structure.positions[:, 2].max() if len(structure) > 0 else 0.0
+            # Find max z of surface atoms
+            if len(structure) > 0:
+                # Use get_positions() to be safe across ASE versions
+                positions = structure.get_positions()
+                max_z = positions[:, 2].max()
+            else:
+                max_z = 0.0
 
             # Random x, y within cell
             lx = structure.cell[0, 0]
             ly = structure.cell[1, 1]
             x = random.uniform(0, lx)  # noqa: S311
             y = random.uniform(0, ly)  # noqa: S311
-            z = max_z + 2.5
+            z = max_z + 2.5 # Place 2.5 Angstrom above
 
-            structure.append(element)
-            structure.positions[-1] = [x, y, z]
+            # Use Atom object to ensure position is set correctly
+            atom = Atom(element, position=(x, y, z))
+            structure.append(atom)
 
             # Relax structure using MD Engine with retries
             relaxed_structure = None
             for attempt in range(max_retries):
                 try:
+                    # Relax returns a new Atoms object
                     relaxed_structure = self.engine.relax(structure, potential)
                     break # Success
                 except Exception as e:
@@ -142,13 +170,19 @@ class FePtMgoScenario(BaseScenario):
         work_dir.mkdir(exist_ok=True)
 
         try:
+            # EON requires pos.con. ASE format 'eon' writes .con files.
             write(work_dir / "pos.con", structure, format="eon")
         except Exception as e:
             msg = f"Failed to write EON structure: {e}"
-            logger.warning("Failed to write pos.con using 'eon' format: %s. Trying 'con' format if available or fallback.", e)
+            logger.warning("Failed to write pos.con using 'eon' format: %s. Trying fallback if possible.", e)
+            # Try plain extended xyz as fallback or just fail
+            try:
+                write(work_dir / "pos.con", structure, format="extxyz") # Might not work for EON
+            except Exception:
+                pass
             raise RuntimeError(msg) from e
 
-        # Write config
+        # Generate config
         wrapper.generate_config(work_dir / "config.ini")
 
         # Run EON
