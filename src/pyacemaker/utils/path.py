@@ -1,6 +1,7 @@
+import tempfile
 from pathlib import Path
 
-from pyacemaker.domain_models.constants import DANGEROUS_PATH_CHARS
+from pyacemaker.domain_models.constants import DANGEROUS_PATH_CHARS, DEFAULT_RAM_DISK_PATH
 
 
 def validate_path_safe(path: Path) -> Path:
@@ -15,27 +16,14 @@ def validate_path_safe(path: Path) -> Path:
         The resolved Path object.
 
     Raises:
-        ActiveSetError: If the path contains dangerous characters or traversal attempts.
-                        (Using ActiveSetError for consistency, or generic ValueError/RuntimeError could be used,
-                         but keeping existing exception type for now as it's used in ActiveSetSelector).
-                         Actually, let's use ValueError for a utility, but caller might expect specific error.
-                         Let's stick to the pattern used in ActiveSetSelector for now or introduce a generic PathError.
-                         For simplicity and audit compliance, raising ValueError/RuntimeError is standard for utils,
-                         but ActiveSetSelector catches ActiveSetError.
-                         I will raise ValueError, and ActiveSetSelector can wrap it or I import ActiveSetError.
-                         Given the plan imports ActiveSetError, I will use it or a base error.
+        ValueError: If the path contains dangerous characters, traversal attempts,
+                    or resolves outside allowed directories (CWD, temp, /dev/shm).
     """
-    try:
-        resolved = path.resolve()
-    except Exception as e:
-         msg = f"Invalid path resolution: {path}"
-         raise ValueError(msg) from e
+    s = str(path)
 
-    s = str(resolved)
-
-    # Check for dangerous patterns first
+    # Check for dangerous patterns in string representation BEFORE resolve
     if ".." in s:
-         msg = f"Path traversal attempt detected: {path}"
+         msg = f"Path traversal attempt detected (parent directory reference): {path}"
          raise ValueError(msg)
 
     if any(c in s for c in DANGEROUS_PATH_CHARS):
@@ -46,5 +34,32 @@ def validate_path_safe(path: Path) -> Path:
     if path.name.startswith("-"):
         msg = f"Filename cannot start with '-': {path.name}"
         raise ValueError(msg)
+
+    try:
+        # Canonicalize path (resolve symlinks, collapse ..)
+        # We use strict=False because the file might be an output file that doesn't exist yet.
+        resolved = path.resolve(strict=False)
+        base_dir = Path.cwd().resolve()
+
+        # Allowed roots: CWD, System Temp, RAM Disk
+        allowed_roots = [
+            base_dir,
+            Path(tempfile.gettempdir()).resolve(),
+            Path(DEFAULT_RAM_DISK_PATH).resolve()
+        ]
+
+        is_safe = False
+        for root in allowed_roots:
+            if resolved.is_relative_to(root):
+                is_safe = True
+                break
+
+        if not is_safe:
+             msg = f"Path traversal detected: {resolved} is outside allowed roots {allowed_roots}"
+             raise ValueError(msg)
+
+    except Exception as e:
+         msg = f"Invalid path resolution: {path}"
+         raise ValueError(msg) from e
 
     return resolved

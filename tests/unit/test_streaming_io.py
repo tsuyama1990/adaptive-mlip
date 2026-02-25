@@ -1,89 +1,71 @@
 
+from io import StringIO
 from unittest.mock import MagicMock, patch
 
-import pytest
+import numpy as np
 from ase import Atoms
 
-from pyacemaker.domain_models import PyAceConfig
-from pyacemaker.orchestrator import Orchestrator
+from pyacemaker.utils.io import write_lammps_streaming
 
 
-@pytest.fixture
-def mock_config(tmp_path):
-    # Helper to create a minimal config
-    # Need to create dummy pseudopotential for strict validation
-    pp_path = tmp_path / "Fe.UPF"
-    pp_path.write_text("<UPF version='2.0.1'>")
+def test_write_lammps_streaming_format() -> None:
+    """Verifies that write_lammps_streaming produces correct LAMMPS data format."""
+    buffer = StringIO()
 
-    from tests.conftest import create_test_config_dict
-    config_dict = create_test_config_dict(
-        dft={"pseudopotentials": {"Fe": str(pp_path)}}
-    )
-    return PyAceConfig(**config_dict)
+    # Create simple structure: 2 atoms, cubic box
+    structure = Atoms("LiH", positions=[[0, 0, 0], [0.5, 0.5, 0.5]], cell=[4.0, 4.0, 4.0], pbc=True)
+    elements = ["H", "Li"] # Sorted order: H (Z=1), Li (Z=3)
 
-@pytest.fixture
-def orchestrator(mock_config, tmp_path):
-    # Update config paths to tmp_path
-    mock_config.workflow.state_file_path = str(tmp_path / "state.json")
-    mock_config.workflow.data_dir = str(tmp_path / "data")
-    mock_config.workflow.active_learning_dir = str(tmp_path / "active_learning")
-    mock_config.workflow.potentials_dir = str(tmp_path / "potentials")
-    return Orchestrator(mock_config)
+    write_lammps_streaming(buffer, structure, elements)
 
-def test_stream_write_chunking(orchestrator, tmp_path):
-    """Verifies that _stream_write processes items in chunks."""
-    output_file = tmp_path / "stream_output.xyz"
+    content = buffer.getvalue()
+    lines = content.splitlines()
 
-    # Create a generator of 25 items
-    atoms_list = [Atoms("H") for _ in range(25)]
-    atoms_gen = (a for a in atoms_list)
+    # Verify exact format
+    assert lines[0] == "LAMMPS data file written by pyacemaker (streaming)"
+    assert lines[1] == ""
+    assert lines[2] == "2 atoms"
+    assert lines[3] == "2 atom types"
+    assert lines[4] == ""
+    assert lines[5] == "0.000000 4.000000 xlo xhi"
+    assert lines[6] == "0.000000 4.000000 ylo yhi"
+    assert lines[7] == "0.000000 4.000000 zlo zhi"
+    assert lines[8] == ""
+    assert lines[9] == "Masses"
+    assert lines[10] == ""
+    # H is type 1
+    assert "1 1.0080 # H" in content
+    # Li is type 2
+    assert "2 6.9400 # Li" in content
 
-    # Batch size 10 -> Should call write 3 times (10, 10, 5)
-    batch_size = 10
+    assert "Atoms" in content
 
-    # Mock ase.io.write
-    with patch("pyacemaker.orchestrator.write") as mock_write:
-        count = orchestrator._stream_write(atoms_gen, output_file, batch_size=batch_size)
+    # Atom lines: id type x y z
+    # Li (index 0 in atoms) -> type 2. pos 0 0 0
+    # H (index 1 in atoms) -> type 1. pos 0.5 0.5 0.5
 
-        assert count == 25
-        assert mock_write.call_count == 3
+    # Since dict iteration order is insertion order in modern python, and we iterate atoms...
+    # Atom 1 is Li -> 1 2 ...
+    assert "1 2 0.000000 0.000000 0.000000" in content
+    assert "2 1 0.500000 0.500000 0.500000" in content
 
-        # Check call args
-        # Should call write(f, batch, format="extxyz") 3 times.
-        # Since we pass file handle, append kwarg is NOT used.
-        # Mode is controlled by filepath.open() which we didn't mock here, so it opened real file.
+def test_write_lammps_streaming_large_structure_mock() -> None:
+    """
+    Verifies that write_lammps_streaming can handle a large number of atoms
+    without crashing or errors, using a mock structure to avoid memory overhead.
+    """
+    buffer = StringIO()
 
-        args1, kwargs1 = mock_write.call_args_list[0]
-        # args1[0] is file handle (not easily checked), args1[1] is batch
-        assert len(args1[1]) == 10
-        assert kwargs1.get("format") == "extxyz"
-        assert "append" not in kwargs1
+    with patch("ase.Atoms.__len__", return_value=1000), \
+         patch.object(Atoms, "get_positions", return_value=np.zeros((1000, 3))), \
+         patch.object(Atoms, "get_chemical_symbols", return_value=["H"]*1000), \
+         patch.object(Atoms, "get_cell", return_value=np.eye(3)):
 
-        args2, kwargs2 = mock_write.call_args_list[1]
-        assert len(args2[1]) == 10
+         structure = Atoms("H", positions=[[0,0,0]], cell=[10,10,10])
+         # Use a mock file object to count writes
+         mock_file = MagicMock()
+         write_lammps_streaming(mock_file, structure, ["H"])
 
-        args3, kwargs3 = mock_write.call_args_list[2]
-        assert len(args3[1]) == 5
-
-def test_stream_write_append_mode(orchestrator, tmp_path):
-    """Verifies behavior when append=True is passed."""
-    output_file = tmp_path / "append_output.xyz"
-    output_file.touch() # Exists
-
-    atoms_list = [Atoms("H") for _ in range(5)]
-    atoms_gen = (a for a in atoms_list)
-
-    # Mock open to verify mode
-    with patch("pathlib.Path.open") as mock_open:
-        # We need mock_open to return context manager
-        mock_file = MagicMock()
-        mock_open.return_value.__enter__.return_value = mock_file
-
-        with patch("pyacemaker.orchestrator.write") as mock_write:
-            orchestrator._stream_write(atoms_gen, output_file, batch_size=2, append=True)
-
-            # Verify mode='a'
-            mock_open.assert_called_with("a")
-
-            # Verify write calls
-            assert mock_write.call_count == 3
+         # Header writes + 1000 atom lines + mass lines + box lines
+         # 1000 atoms -> 1000 calls for atoms
+         assert mock_file.write.call_count > 1000

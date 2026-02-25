@@ -58,6 +58,13 @@ LMP_CMD_MINIMIZE: Final = "minimize 1.0e-6 1.0e-8 1000 10000"
 LMP_CMD_READ_DATA: Final = 'read_data "{data_file}"'
 LMP_CMD_ATOM_STYLE: Final = "atom_style {style}"
 
+LAMMPS_VELOCITY_SEED: Final = 12345
+LAMMPS_MINIMIZE_STEPS: Final = 100
+LAMMPS_MINIMIZE_MAX_ITER: Final = 1000
+LAMMPS_MIN_STYLE_CG: Final = "cg"
+DEFAULT_MD_MINIMIZE_TOL: Final = 1.0e-4
+DEFAULT_MD_MINIMIZE_FTOL: Final = 1.0e-6
+
 # Error Messages
 ERR_SIM_SETUP_FAIL: Final = "Simulation setup failed: {error}"
 ERR_SIM_SECURITY_FAIL: Final = "Simulation security validation failed: {error}"

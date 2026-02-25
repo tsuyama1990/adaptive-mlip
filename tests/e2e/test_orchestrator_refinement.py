@@ -174,8 +174,9 @@ def test_orchestrator_refinement_extraction_failure(tmp_path: Path, caplog: Any)
     atoms.new_array("c_gamma", np.array([10.0])) # type: ignore[no-untyped-call]
     write(halt_path, atoms, format="extxyz")
 
+    # Mock result must respect strict validation (forces length)
     result = MDSimulationResult(
-        energy=0, forces=[[]], halted=True, max_gamma=10.0, n_steps=10, temperature=300,
+        energy=0, forces=[[0.0, 0.0, 0.0]], halted=True, max_gamma=10.0, n_steps=10, temperature=300,
         halt_structure_path=str(halt_path)
     )
 

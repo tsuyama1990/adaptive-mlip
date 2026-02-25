@@ -46,7 +46,7 @@ workflow:
 
     with patch(
         "argparse.ArgumentParser.parse_args",
-        return_value=MagicMock(config=str(p), dry_run=True),
+        return_value=MagicMock(config=str(p), dry_run=True, scenario=None),
     ):
         with pytest.raises(SystemExit) as excinfo:
             main()
@@ -61,7 +61,7 @@ def test_main_file_not_found(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) ->
     monkeypatch.chdir(tmp_path)
     with patch(
         "argparse.ArgumentParser.parse_args",
-        return_value=MagicMock(config="non_existent.yaml", dry_run=False),
+        return_value=MagicMock(config="non_existent.yaml", dry_run=False, scenario=None),
     ):
         with pytest.raises(SystemExit) as excinfo:
             main()
@@ -102,7 +102,7 @@ workflow:
     with (
         patch(
             "argparse.ArgumentParser.parse_args",
-            return_value=MagicMock(config=str(p), dry_run=False),
+            return_value=MagicMock(config=str(p), dry_run=False, scenario=None),
         ),
         patch("pyacemaker.orchestrator.Orchestrator.run") as mock_run,
     ):
