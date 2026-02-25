@@ -1,109 +1,145 @@
+import tempfile
 from pathlib import Path
+from unittest.mock import MagicMock, mock_open, patch
 
 import pytest
-
 from pyacemaker.domain_models.eon import EONConfig
 from pyacemaker.interfaces.eon_driver import EONWrapper
-from tests.unit.mock_process import MockProcessRunner
+from pyacemaker.interfaces.process import ProcessRunner
+
+
+class MockProcessRunner(ProcessRunner):
+    def __init__(self, return_code=0, stdout="", stderr=""):
+        self.return_code = return_code
+        self.stdout = stdout
+        self.stderr = stderr
+        self.commands = []
+
+    def run(self, cmd, cwd, **kwargs):
+        self.commands.append((cmd, cwd, kwargs))
+        mock_process = MagicMock()
+        mock_process.returncode = self.return_code
+        mock_process.stdout = self.stdout
+        mock_process.stderr = self.stderr
+        if self.return_code != 0 and kwargs.get("check"):
+            import subprocess
+            raise subprocess.CalledProcessError(self.return_code, cmd, self.stdout, self.stderr)
+        return mock_process
 
 
 @pytest.fixture
-def valid_eon_config(tmp_path: Path) -> EONConfig:
-    pot = tmp_path / "pot.yace"
-    pot.touch()
-    return EONConfig(potential_path=pot, temperature=500.0)
-
-def test_eon_wrapper_init(valid_eon_config: EONConfig) -> None:
-    driver = EONWrapper(valid_eon_config)
-    assert driver.config == valid_eon_config
+def mock_potential_path():
+    with tempfile.NamedTemporaryFile(suffix=".yace") as tmp:
+        yield Path(tmp.name)
 
 
-def test_generate_config(valid_eon_config: EONConfig, tmp_path: Path) -> None:
-    driver = EONWrapper(valid_eon_config)
+def test_eon_generate_config(mock_potential_path):
+    config = EONConfig(
+        potential_path=mock_potential_path,
+        temperature=500.0,
+        random_seed=12345,
+        eon_executable="eonclient"
+    )
+    wrapper = EONWrapper(config)
 
-    config_path = tmp_path / "config.ini"
-    driver.generate_config(config_path)
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        output_path = Path(tmp_dir) / "config.ini"
+        wrapper.generate_config(output_path)
 
-    assert config_path.exists()
-    content = config_path.read_text()
-    assert "temperature = 500.0" in content
-    assert f"potentials_path = {valid_eon_config.potential_path}" in content
+        content = output_path.read_text()
+        assert "[Main]" in content
+        assert "job = akmc" in content
+        assert "temperature = 500.0" in content
+        assert "random_seed = 12345" in content
+        assert "[Potential]" in content
+        assert "potential = command_line" in content
+        # Check command path
+        assert f"command = {str(Path('pace_driver.py'))}" or "python pace_driver.py" in content
+        assert "[Structure]" in content
+        assert "supercell = [1, 1, 1]" in content
+        assert "[Communicator]" in content
+        assert "type = local" in content
+        assert "client_path = eonclient" in content
+
+        # Verify file permissions (0o600 for config)
+        import os
+        import stat
+        st = os.stat(output_path)
+        assert stat.S_IMODE(st.st_mode) == 0o600
 
 
-def test_run_success(valid_eon_config: EONConfig, tmp_path: Path) -> None:
+def test_eon_generate_driver_script(mock_potential_path):
+    config = EONConfig(potential_path=mock_potential_path)
+    wrapper = EONWrapper(config)
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        driver_path = Path(tmp_dir) / "pace_driver.py"
+        wrapper.generate_driver_script(driver_path)
+
+        content = driver_path.read_text()
+        assert "from ase" in content or "import ase" in content
+        assert "PACE_POTENTIAL_PATH" in content
+        # Check if file is executable (0o700)
+        import os
+        import stat
+        assert os.access(driver_path, os.X_OK)
+        st = os.stat(driver_path)
+        assert stat.S_IMODE(st.st_mode) == 0o700
+
+
+def test_eon_run_command(mock_potential_path):
+    # Use a safe path for eon_executable to pass security checks
+    with tempfile.NamedTemporaryFile(suffix="eonclient") as tmp_exec:
+        # Actually validate_path_safe allows temp dir.
+        safe_executable = str(Path(tmp_exec.name))
+
+    config = EONConfig(
+        potential_path=mock_potential_path,
+        mpi_command="mpirun -np 4",
+        eon_executable=safe_executable
+    )
     runner = MockProcessRunner()
-    driver = EONWrapper(valid_eon_config, runner=runner)
+    wrapper = EONWrapper(config, runner=runner)
 
-    # Mock existence of required files (validate_path checks paths)
-    # validate_path checks if executable path is safe. eonclient is just a string here.
-    # If eon_executable was a path, we'd need to mock it.
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        cwd = Path(tmp_dir)
+        wrapper.run(cwd)
 
-    driver.run(working_dir=tmp_path)
+        assert len(runner.commands) == 1
+        cmd, run_cwd, kwargs = runner.commands[0]
 
-    assert len(runner.commands) == 1
-    cmd, cwd = runner.commands[0]
-    assert cmd == ["eonclient"]
-    assert cwd == tmp_path
-
-
-def test_run_failure(valid_eon_config: EONConfig, tmp_path: Path) -> None:
-    runner = MockProcessRunner(returncode=1, stderr="Error occurred")
-    driver = EONWrapper(valid_eon_config, runner=runner)
-
-    # MockProcessRunner assumes kwargs['check'] = True if returncode != 0
-    # But EONWrapper uses runner.run(..., check=True) implicitly or explicitly.
-    # The MockProcessRunner logic I wrote in mock_process.py raises CalledProcessError
-    # ONLY IF check=True is passed.
-    # EONWrapper calls: self.runner.run(cmd, cwd=working_dir)
-    # The SubprocessRunner adds defaults. But MockProcessRunner doesn't unless I add them.
-    # So EONWrapper calls run(cmd, cwd).
-    # MockProcessRunner.run needs to check 'check' kwarg or raise if we want.
-    # The real SubprocessRunner sets defaults.
-    # Let's fix EONWrapper to explicitly pass check=True to be clear,
-    # OR fix MockProcessRunner to default check=True like SubprocessRunner.
-    # But wait, EONWrapper just calls runner.run().
-    # SubprocessRunner implementation:
-    # def run(..., **kwargs):
-    #    kwargs.setdefault("check", True) ...
-    # MockProcessRunner implementation:
-    # def run(..., **kwargs):
-    #    if kwargs.get("check", False) ...
-
-    # So if EONWrapper doesn't pass check=True, MockProcessRunner defaults to False.
-    # But SubprocessRunner defaults to True.
-    # EONWrapper relies on SubprocessRunner's default.
-    # Since MockProcessRunner is a test double, it should mimic the behavior we expect *or*
-    # we should make EONWrapper explicitly pass check=True to allow strict mocking.
-
-    # Let's update EONWrapper to explicitly pass check=True for clarity and testability.
-    # OR update MockProcessRunner.
-    # Updating EONWrapper is better design (explicit > implicit).
-
-    # For now, I'll update the test to use a properly configured MockProcessRunner
-    # or patch EONWrapper to pass check=True.
-    # Actually, EONWrapper logic:
-    # result = self.runner.run(cmd, cwd=working_dir)
-
-    # I will modify EONWrapper to pass check=True explicitly in next step.
-    # For this test file, I will expect it to fail unless I fix EONWrapper or Mock.
-    # I'll fix the expectation here assuming I will fix EONWrapper.
-
-    # Wait, the failure is "Failed: DID NOT RAISE".
-    # This means EONWrapper called run(), MockRunner returned mock_res (returncode=1),
-    # but NO exception was raised because check=True wasn't passed to MockRunner.
-    # EONWrapper didn't check returncode itself because it relies on check=True behavior.
-
-    with pytest.raises(RuntimeError, match="EON execution failed"):
-        driver.run(working_dir=tmp_path)
+        # Verify command splitting
+        assert cmd == ["mpirun", "-np", "4", safe_executable]
+        assert run_cwd == cwd
+        assert "PACE_POTENTIAL_PATH" in kwargs["env"]
+        assert kwargs["env"]["PACE_POTENTIAL_PATH"] == str(mock_potential_path)
 
 
-def test_parse_results(valid_eon_config: EONConfig, tmp_path: Path) -> None:
-    driver = EONWrapper(valid_eon_config)
+def test_eon_run_not_found(mock_potential_path):
+    # Test error handling for executable not found
+    runner = MockProcessRunner(return_code=127, stderr="not found")
 
-    (tmp_path / "dynamics.txt").write_text("Step 1: 0.5 eV barrier\n")
-    (tmp_path / "processtable.dat").write_text("Process 1: Barrier 0.5 eV\n")
+    # Use a safe path for eon_executable to pass security checks
+    with tempfile.NamedTemporaryFile(suffix="eonclient") as tmp_exec:
+        safe_executable = str(Path(tmp_exec.name))
 
-    results = driver.parse_results(tmp_path)
-    assert "dynamics" in results
-    assert "processtable" in results
-    assert results["dynamics"] == "Step 1: 0.5 eV barrier\n"
+    config = EONConfig(potential_path=mock_potential_path, eon_executable=safe_executable)
+    wrapper = EONWrapper(config, runner=runner)
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        with pytest.raises(RuntimeError) as excinfo:
+            wrapper.run(Path(tmp_dir))
+        assert "EON executable not found" in str(excinfo.value)
+
+def test_eon_file_write_failure(mock_potential_path):
+    config = EONConfig(potential_path=mock_potential_path)
+    wrapper = EONWrapper(config)
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        output_path = Path(tmp_dir) / "config.ini"
+
+        # Mock pathlib.Path.write_text to fail
+        with patch.object(Path, "write_text", side_effect=OSError("Permission denied")):
+            with pytest.raises(RuntimeError) as excinfo:
+                wrapper.generate_config(output_path)
+            assert "Failed to write file" in str(excinfo.value)

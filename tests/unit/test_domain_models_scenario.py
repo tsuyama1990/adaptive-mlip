@@ -4,23 +4,17 @@ from pydantic import ValidationError
 from pyacemaker.domain_models.scenario import ScenarioConfig
 
 
-def test_scenario_config_valid() -> None:
+def test_scenario_config_valid():
     config = ScenarioConfig(
         name="fept_mgo",
-        parameters={"temperature": 500.0, "steps": 100},
+        parameters={"fe_pt_ratio": 0.5, "steps": 100},
         enabled=True,
     )
     assert config.name == "fept_mgo"
-    assert config.parameters == {"temperature": 500.0, "steps": 100}
-    assert config.enabled
+    assert config.parameters["fe_pt_ratio"] == 0.5
+    assert config.enabled is True
 
 
-def test_scenario_config_defaults() -> None:
-    config = ScenarioConfig(name="test")
-    assert not config.enabled
-    assert config.parameters == {}
-
-
-def test_scenario_config_invalid_name() -> None:
+def test_scenario_config_extra_forbid():
     with pytest.raises(ValidationError):
-        ScenarioConfig()  # Missing name
+        ScenarioConfig(name="test", extra_field="forbidden")

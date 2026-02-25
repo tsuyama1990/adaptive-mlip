@@ -1,82 +1,89 @@
+import os
+import tempfile
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
-import yaml
+from ase import Atoms
 
-from pyacemaker.main import main
+from pyacemaker.domain_models.config import PyAceConfig
+from pyacemaker.domain_models.eon import EONConfig
+from pyacemaker.domain_models.md import MDConfig
+from pyacemaker.domain_models.scenario import ScenarioConfig
+from pyacemaker.scenarios.fept_mgo import FePtMgoScenario
+from pyacemaker.interfaces.eon_driver import EONWrapper
 
 
 @pytest.fixture
-def scenario_config(tmp_path: Path) -> Path:
-    config_data = {
-        "project_name": "test_scenario",
-        "structure": {
-            "elements": ["Fe", "Pt", "Mg", "O"],
-            "supercell_size": [1, 1, 1],
-        },
-        "dft": {
-            "code": "qe",
-            "functional": "PBE",
-            "kpoints_density": 0.04,
-            "encut": 400,
-            "pseudopotentials": {"Fe": "Fe.pbe-n-kjpaw_psl.1.0.0.UPF"},
-        },
-        "training": {
-            "potential_type": "ace",
-            "cutoff_radius": 4.0,
-            "max_basis_size": 500,
-        },
-        "md": {
-            "temperature": 300.0,
-            "pressure": 1.0,
-            "n_steps": 1000,
-            "timestep": 0.001,
-            "thermo_freq": 100,
-            "dump_freq": 100,
-        },
-        "workflow": {"max_iterations": 1},
-        "scenario": {
-            "name": "fept_mgo",
-            "enabled": True,
-            "parameters": {"steps": 10, "potential_path": str(tmp_path / "pot.yace")},
-        },
-        "eon": {
-            "enabled": True,
-            "potential_path": str(tmp_path / "pot.yace"),
-            "akmc_steps": 5,
-        },
-    }
-    config_path = tmp_path / "config.yaml"
-    with config_path.open("w") as f:
-        yaml.dump(config_data, f)
+def integration_config():
+    with tempfile.NamedTemporaryFile(suffix=".yace") as tmp:
+        path = Path(tmp.name)
+        mock_conf = MagicMock(spec=PyAceConfig)
+        mock_conf.scenario = ScenarioConfig(
+            name="fept_mgo",
+            enabled=True,
+            parameters={"num_depositions": 2, "fe_pt_ratio": 0.5, "write_intermediate_files": True}
+        )
+        mock_conf.eon = EONConfig(potential_path=path, enabled=True)
+        # We need a valid MDConfig mostly for instantiation if not mocked
+        mock_conf.md = MagicMock()
+        yield mock_conf
 
-    # Create dummy potential file
-    (tmp_path / "pot.yace").touch()
-    (tmp_path / "structure.xyz").touch()
-    (tmp_path / "pseudos").mkdir()
-    (tmp_path / "Fe.pbe-n-kjpaw_psl.1.0.0.UPF").touch()  # Create at root because config says: {"Fe": "..."}
-    # Wait, config says pseudopotentials: {"Fe": "Fe.pbe-n-kjpaw_psl.1.0.0.UPF"}
-    # But dft schema might prepend pseudopotentials_dir if present?
-    # No, I removed pseudopotentials_dir from config above because it was forbidden extra.
-    # So path is relative to CWD.
+def test_fept_mgo_integration(integration_config):
+    # Setup mocks for heavy lifting
+    mock_engine = MagicMock()
+    # relax returns a copy
+    mock_engine.relax.side_effect = lambda atoms, pot: atoms.copy()
 
-    return config_path
+    # We use real EONWrapper but mock the runner to avoid executing eonclient
+    mock_runner = MagicMock()
+    mock_runner.run.return_value.stdout = "EON simulation mocked output"
 
+    wrapper = EONWrapper(integration_config.eon, runner=mock_runner)
 
-def test_main_runs_scenario(scenario_config: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    # Ensure CWD matches config location to satisfy load_yaml security check
-    monkeypatch.chdir(scenario_config.parent)
+    scenario = FePtMgoScenario(integration_config, engine=mock_engine, eon_wrapper=wrapper)
 
-    # We patch the specific scenario class to verify it's called
-    with patch("pyacemaker.main.get_scenario_runner") as mock_runner_factory:
-        mock_runner = MagicMock()
-        mock_runner_factory.return_value = mock_runner
+    # Run in temp dir
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        cwd = os.getcwd()
+        os.chdir(tmp_dir)
+        try:
+            scenario.run()
 
-        # Simulate CLI arguments
-        # Note: We must use the filename only since we chdir'd
-        with patch("sys.argv", ["main.py", "--config", scenario_config.name, "--scenario", "fept_mgo"]):
-            main()
+            # Verify files
+            assert Path("mgo_surface.xyz").exists()
+            assert Path("deposited.xyz").exists()
 
-        mock_runner_factory.assert_called_once()
-        mock_runner.run.assert_called_once()
+            eon_work = Path("eon_work")
+            assert eon_work.exists()
+            assert (eon_work / "config.ini").exists()
+            assert (eon_work / "pace_driver.py").exists()
+            assert (eon_work / "pos.con").exists()
+
+            # Verify config content thoroughly
+            config_content = (eon_work / "config.ini").read_text()
+            assert "[Main]" in config_content
+            assert "job = akmc" in config_content
+            assert "potential = command_line" in config_content
+            assert "pace_driver.py" in config_content
+            assert "supercell = [1, 1, 1]" in config_content
+
+            # Verify driver script content
+            driver_content = (eon_work / "pace_driver.py").read_text()
+            assert "PACE_POTENTIAL_PATH" in driver_content
+            assert "from ase.calculators.lammpsrun import LAMMPS" in driver_content
+            assert "os.environ.get" in driver_content
+
+            # Verify runner call
+            assert mock_runner.run.called
+            # Check command and environment
+            args, kwargs = mock_runner.run.call_args
+            cmd = args[0]
+            assert cmd[0] == "eonclient"
+            env = kwargs.get("env")
+            assert env is not None
+            assert "PACE_POTENTIAL_PATH" in env
+            assert env["PACE_POTENTIAL_PATH"] == str(integration_config.eon.potential_path)
+
+        finally:
+            os.chdir(cwd)
