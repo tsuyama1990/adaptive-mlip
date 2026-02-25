@@ -8,6 +8,7 @@ from ase import Atoms
 from ase.io import write
 
 from pyacemaker.core.base import BaseGenerator
+from pyacemaker.core.container import Container
 from pyacemaker.core.loop import LoopState
 from pyacemaker.domain_models import PyAceConfig
 from pyacemaker.domain_models.md import MDSimulationResult
@@ -89,12 +90,15 @@ def orchestrator(mock_config: PyAceConfig, tmp_path: Path) -> Orchestrator:
         mp.setattr("pyacemaker.orchestrator.setup_logger", lambda **kwargs: MagicMock())
         orch = Orchestrator(mock_config)
 
+        # Initialize container manually for injection
+        orch.container = MagicMock(spec=Container)
+
         # Use FakeGenerator
-        orch.generator = FakeGenerator(elements=["Fe"])
-        orch.oracle = MagicMock()
-        orch.trainer = MagicMock()
-        orch.engine = MagicMock()
-        orch.active_set_selector = MagicMock()
+        orch.container.generator = FakeGenerator(elements=["Fe"])
+        orch.container.oracle = MagicMock()
+        orch.container.trainer = MagicMock()
+        orch.container.engine = MagicMock()
+        orch.container.active_set_selector = MagicMock()
 
         return orch
 
@@ -104,28 +108,18 @@ def test_cold_start(orchestrator: Orchestrator, tmp_path: Path) -> None:
     if not hasattr(orchestrator, "loop_state"):
         orchestrator.loop_state = LoopState()
 
-    # Setup mocks
-    assert orchestrator.oracle is not None
-    assert orchestrator.trainer is not None
-
-    # Cast to Any to allow setting return_value on MagicMock masked by type hint
-    # or assert it is MagicMock
-    assert isinstance(orchestrator.oracle, MagicMock)
-    assert isinstance(orchestrator.trainer, MagicMock)
-
-    orchestrator.oracle.compute.return_value = iter([Atoms("Fe")])
+    orchestrator.container.oracle.compute.return_value = iter([Atoms("Fe")])
     initial_pot = tmp_path / "initial.yace"
     initial_pot.touch()
-    orchestrator.trainer.train.return_value = initial_pot
+    orchestrator.container.trainer.train.return_value = initial_pot
 
     # Execute
     orchestrator._check_initial_potential()
 
     # Verify
     assert orchestrator.loop_state.current_potential == initial_pot
-    # generator.generate called internally
-    orchestrator.oracle.compute.assert_called_once()
-    orchestrator.trainer.train.assert_called_once()
+    orchestrator.container.oracle.compute.assert_called_once()
+    orchestrator.container.trainer.train.assert_called_once()
 
 
 def test_resume_capability(mock_config: PyAceConfig, tmp_path: Path) -> None:
@@ -133,7 +127,6 @@ def test_resume_capability(mock_config: PyAceConfig, tmp_path: Path) -> None:
     state_file = Path(mock_config.workflow.state_file_path)
     state_file.parent.mkdir(parents=True, exist_ok=True)
     pot_path = tmp_path / "pot.yace"
-    # Ensure pot file exists for validation
     pot_path.touch()
     state_file.write_text(f'{{"iteration": 1, "status": "RUNNING", "current_potential": "{pot_path}"}}')
 
@@ -165,31 +158,21 @@ def test_run_loop_iteration_halt(orchestrator: Orchestrator, tmp_path: Path) -> 
         energy=-100.0,
         temperature=300.0,
         forces=[[0.0, 0.0, 0.0]],
+        stress=[0.0]*6,
         n_steps=50,
         max_gamma=10.0,
         halted=True,
         halt_structure_path=str(halt_path)
     )
 
-    assert orchestrator.engine is not None
-    assert orchestrator.active_set_selector is not None
-    assert orchestrator.oracle is not None
-    assert orchestrator.trainer is not None
-
-    # Type assertions for mypy
-    assert isinstance(orchestrator.engine, MagicMock)
-    assert isinstance(orchestrator.active_set_selector, MagicMock)
-    assert isinstance(orchestrator.oracle, MagicMock)
-    assert isinstance(orchestrator.trainer, MagicMock)
-
-    orchestrator.engine.run.return_value = result
+    orchestrator.container.engine.run.return_value = result
 
     # Mock refinement
-    orchestrator.active_set_selector.select.return_value = iter([Atoms("Fe")])
-    orchestrator.oracle.compute.return_value = iter([Atoms("Fe")])
+    orchestrator.container.active_set_selector.select.return_value = iter([Atoms("Fe")])
+    orchestrator.container.oracle.compute.return_value = iter([Atoms("Fe")])
     refined_pot = tmp_path / "refined.yace"
     refined_pot.touch()
-    orchestrator.trainer.train.return_value = refined_pot
+    orchestrator.container.trainer.train.return_value = refined_pot
 
     # Execute
     orchestrator._run_loop_iteration()
@@ -197,5 +180,5 @@ def test_run_loop_iteration_halt(orchestrator: Orchestrator, tmp_path: Path) -> 
     # Verify
     assert orchestrator.loop_state.iteration == 1
     assert orchestrator.loop_state.current_potential == refined_pot
-    orchestrator.engine.run.assert_called()
-    orchestrator.trainer.train.assert_called()
+    orchestrator.container.engine.run.assert_called()
+    orchestrator.container.trainer.train.assert_called()

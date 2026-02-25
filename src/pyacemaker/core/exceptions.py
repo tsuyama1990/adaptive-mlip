@@ -21,3 +21,6 @@ class ActiveSetError(PyAceError):
 
 class OrchestratorError(PyAceError):
     """Orchestrator/Workflow related errors."""
+
+class EONError(PyAceError):
+    """EON (aKMC) related errors."""

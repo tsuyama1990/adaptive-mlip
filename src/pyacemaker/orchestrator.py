@@ -9,6 +9,7 @@ from ase.io import iread, read, write
 
 from pyacemaker.core.active_set import ActiveSetSelector
 from pyacemaker.core.base import BaseEngine, BaseGenerator, BaseOracle, BaseTrainer
+from pyacemaker.core.container import Container
 from pyacemaker.core.directory_manager import DirectoryManager
 from pyacemaker.core.exceptions import OrchestratorError
 from pyacemaker.core.state_manager import StateManager
@@ -65,13 +66,8 @@ class Orchestrator:
         self.potentials_dir = Path(config.workflow.potentials_dir)
         self.potentials_dir.mkdir(exist_ok=True)
 
-        # Core modules (placeholders)
-        self.generator: BaseGenerator | None = None
-        self.oracle: BaseOracle | None = None
-        self.trainer: BaseTrainer | None = None
-        self.engine: BaseEngine | None = None
-        self.active_set_selector: ActiveSetSelector | None = None
-        self.validator: Validator | None = None
+        # Container for core modules
+        self.container: Container | None = None
 
         # Initialize State
         self.state_manager.load()
@@ -82,6 +78,31 @@ class Orchestrator:
         # Expose loop_state for tests
         return self.state_manager.state
 
+    # Properties for backward compatibility and convenience access to container modules
+    @property
+    def generator(self) -> BaseGenerator | None:
+        return self.container.generator if self.container else None
+
+    @property
+    def oracle(self) -> BaseOracle | None:
+        return self.container.oracle if self.container else None
+
+    @property
+    def trainer(self) -> BaseTrainer | None:
+        return self.container.trainer if self.container else None
+
+    @property
+    def engine(self) -> BaseEngine | None:
+        return self.container.engine if self.container else None
+
+    @property
+    def active_set_selector(self) -> ActiveSetSelector | None:
+        return self.container.active_set_selector if self.container else None
+
+    @property
+    def validator(self) -> Validator | None:
+        return self.container.validator if self.container else None
+
     def initialize_modules(self) -> None:
         """
         Initializes the core modules (Generator, Oracle, Trainer, Engine).
@@ -91,15 +112,8 @@ class Orchestrator:
         """
         self.logger.info(LOG_INIT_MODULES)
         try:
-            # Create modules using factory
-            (
-                self.generator,
-                self.oracle,
-                self.trainer,
-                self.engine,
-                self.active_set_selector,
-                self.validator,
-            ) = ModuleFactory.create_modules(self.config)
+            # Create modules using factory (container)
+            self.container = ModuleFactory.create_container(self.config)
 
         except Exception as e:
             self.logger.exception("Failed to initialize modules")

@@ -140,10 +140,9 @@ class BaseTrainer(ABC):
         """
 
 
-class BaseEngine(ABC):
+class SimulationEngine(ABC):
     """
-    Abstract base class for simulation engine (MD/MC).
-    Implementations wrap codes like LAMMPS or EON.
+    Abstract base class for running dynamic simulations (MD).
     """
 
     @abstractmethod
@@ -160,14 +159,13 @@ class BaseEngine(ABC):
 
         Raises:
             RuntimeError: If simulation fails (e.g., segmentation fault, physics explosion).
-
-        Example:
-            class LAMMPSEngine(BaseEngine):
-                def run(self, structure, potential):
-                    write_lammps_input(structure, potential)
-                    subprocess.run(["lmp", ...])
-                    return MDSimulationResult(...)
         """
+
+
+class PropertyCalculator(ABC):
+    """
+    Abstract base class for calculating static properties.
+    """
 
     @abstractmethod
     def compute_static_properties(self, structure: Atoms, potential: Any) -> MDSimulationResult:
@@ -182,6 +180,12 @@ class BaseEngine(ABC):
         Returns:
             MDSimulationResult containing energy, forces, etc.
         """
+
+
+class RelaxationEngine(ABC):
+    """
+    Abstract base class for structure relaxation.
+    """
 
     @abstractmethod
     def relax(self, structure: Atoms, potential: Any) -> Atoms:
@@ -198,3 +202,10 @@ class BaseEngine(ABC):
         Raises:
             RuntimeError: If relaxation fails.
         """
+
+
+class BaseEngine(SimulationEngine, PropertyCalculator, RelaxationEngine):
+    """
+    Composite interface for backward compatibility and engines that support all operations.
+    """
+    pass

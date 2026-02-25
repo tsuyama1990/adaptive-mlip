@@ -1,6 +1,7 @@
 import contextlib
 import tempfile
 from collections.abc import Callable, Iterator
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from ase import Atoms
@@ -12,15 +13,16 @@ from pyacemaker.domain_models import DFTConfig
 from pyacemaker.domain_models.constants import ERR_ORACLE_FAILED, ERR_ORACLE_ITERATOR
 from pyacemaker.interfaces.qe_driver import QEDriver
 from pyacemaker.utils.embedding import embed_cluster
+from pyacemaker.utils.misc import batched
 
 
 class DFTManager(BaseOracle):
     """
-    Manages DFT calculations with self-healing capabilities.
+    Manages DFT calculations with self-healing capabilities and parallel execution.
 
     Memory Usage:
-        This class processes structures one-by-one (streaming) to ensure O(1) memory usage
-        relative to the dataset size. It does not materialize the input iterator into a list.
+        This class processes structures in batches (streaming) to ensure constrained memory usage.
+        It uses a ThreadPoolExecutor to run calculations in parallel.
     """
 
     def __init__(self, config: DFTConfig, driver: QEDriver | None = None) -> None:
@@ -45,53 +47,53 @@ class DFTManager(BaseOracle):
 
     def compute(self, structures: Iterator[Atoms], batch_size: int = 10) -> Iterator[Atoms]:
         """
-        Computes DFT properties for stream of structures.
+        Computes DFT properties for stream of structures using parallel workers.
 
         Args:
             structures: Iterator of Atoms objects.
-            batch_size: Ignored in this implementation to ensure strict streaming (one-by-one).
-                        Kept for interface compatibility.
+            batch_size: Number of structures to queue at once.
 
         Yields:
             Atoms objects with computed properties.
 
         Raises:
             OracleError: If a calculation fails fatally.
-            TypeError: If structures is not an iterator (to prevent memory leaks from huge lists).
+            TypeError: If structures is not an iterator.
         """
-        # Validate that structures is an iterator to enforce O(1) memory usage contract
-        # isinstance check against Iterator (from collections.abc) might be tricky with some generators?
-        # But iter(list) returns 'list_iterator' which inherits from Iterator.
-        # However, a list is Iterable but NOT Iterator.
-        # Let's ensure we import Iterator from collections.abc correctly.
         if isinstance(structures, (list, tuple)):
             raise TypeError(ERR_ORACLE_ITERATOR.format(type=type(structures)))
 
         if not isinstance(structures, Iterator):
             raise TypeError(ERR_ORACLE_ITERATOR.format(type=type(structures)))
 
-        # Strict streaming: Process one by one.
-        # We do NOT use batched() here to avoid even small batch materialization in memory
-        # as per strict audit requirements.
+        # Use ThreadPoolExecutor for parallelism
+        # Max workers from config. If batch_size is small, we queue minimal tasks.
+        n_workers = self.config.n_workers
 
-        # We process items as they come. We track if we processed any to warn if empty.
-        # This avoids preemptively consuming the iterator with next(), which can be risky for some streams.
+        # We process in chunks to control memory and queue size.
+        # Queue size roughly batch_size (or we can scale it).
+        chunk_size = max(batch_size, n_workers * 2)
 
         count = 0
-        # Use a single root temporary directory for the entire batch stream
-        # This reduces inode thrashing compared to creating one per atom.
-        # We assume strict sequential processing for now.
-        with tempfile.TemporaryDirectory() as root_temp_dir:
-            root_path = Path(root_temp_dir)
-            for atoms in structures:
-                count += 1
-                # Create a unique subdirectory for this calculation within the root temp
-                # to ensure isolation even if artifacts persist briefly.
-                # Just using an incrementing counter or ID is safe here.
-                calc_dir = root_path / f"calc_{count}"
-                calc_dir.mkdir()
+        with ThreadPoolExecutor(max_workers=n_workers) as executor:
+            with tempfile.TemporaryDirectory() as root_temp_dir:
+                root_path = Path(root_temp_dir)
 
-                yield self._process_structure(atoms, str(calc_dir))
+                # Iterate over chunks of input
+                for chunk in batched(enumerate(structures), chunk_size):
+                    futures = []
+                    for i, atoms in chunk:
+                        count += 1
+                        calc_dir = root_path / f"calc_{i}"
+                        calc_dir.mkdir(exist_ok=True)
+
+                        # Submit task
+                        future = executor.submit(self._process_structure, atoms, str(calc_dir))
+                        futures.append(future)
+
+                    # Yield results from futures (preserving order)
+                    for future in futures:
+                        yield future.result()
 
         if count == 0:
              import warnings
@@ -120,12 +122,6 @@ class DFTManager(BaseOracle):
     def _get_strategies(self) -> list[Callable[[DFTConfig], None] | None]:
         """
         Returns a list of self-healing strategies.
-
-        These strategies are applied sequentially if the initial calculation fails.
-        Each strategy modifies the configuration in place to attempt recovery (e.g., reducing mixing beta).
-
-        Returns:
-            List of callable strategies (or None for the initial attempt).
         """
         return self.strategies
 
@@ -152,6 +148,8 @@ class DFTManager(BaseOracle):
         Raises:
             OracleError: If calculation fails after all retries and strategies.
         """
+        # Deep copy config for thread safety if it wasn't already (model_copy helps)
+        # Note: self.config is shared, but we copy it in loop.
         current_config = self.config.model_copy()
         strategies = self._get_strategies()
         last_error: Exception | None = None
@@ -164,7 +162,6 @@ class DFTManager(BaseOracle):
                 self._run_calculator(atoms, current_config, calc_dir)
             except Exception as e:
                 # Catch all exceptions (RuntimeError, CalculatorSetupError, JobFailedException etc)
-                # to ensure self-healing strategies are attempted.
                 last_error = e
                 atoms.calc = None  # Clean up failed calculator
                 continue
@@ -176,11 +173,11 @@ class DFTManager(BaseOracle):
     def _run_calculator(self, atoms: Atoms, config: DFTConfig, calc_dir: str) -> None:
         """Helper to run a single calculation attempt."""
         # Create new calculator for clean state
-        # Use provided temporary directory to prevent file collisions and race conditions
+        # QEDriver.get_calculator should be thread-safe (it creates a new object).
         calc = self.driver.get_calculator(atoms, config.model_copy(), directory=calc_dir)
         atoms.calc = calc
 
-        # Trigger actual calculation
+        # Trigger actual calculation (ASE methods are blocking, but we are in a thread)
         atoms.get_potential_energy()  # type: ignore[no-untyped-call]
         atoms.get_forces()  # type: ignore[no-untyped-call]
 

@@ -37,17 +37,9 @@ class PhononCalculator:
         )
 
     def _phonopy_to_ase(self, phonon_atoms: PhonopyAtoms) -> Atoms:
-        # PhonopyAtoms has get_scaled_positions() method, but 'scaled_positions' might be property depending on version.
-        # But wait, unit test mock returns Atoms object from ase, NOT PhonopyAtoms.
-        # In actual code, Phonopy.get_supercells_with_displacements returns list of PhonopyAtoms.
-        # In test, I mocked it to return [structure.copy()], which is ASE Atoms.
-        # ASE Atoms does NOT have scaled_positions attribute (it has get_scaled_positions()).
-
-        # If phonon_atoms is ASE Atoms (in test):
         if isinstance(phonon_atoms, Atoms):
              return phonon_atoms
 
-        # Real PhonopyAtoms (in production)
         return Atoms(
             symbols=phonon_atoms.symbols,
             cell=phonon_atoms.cell,
@@ -61,9 +53,7 @@ class PhononCalculator:
         Returns stability status and base64 encoded band structure plot.
         """
         unitcell = self._ase_to_phonopy(structure)
-        # Ensure supercell_matrix is 3x3 or list of 3 ints (diagonal)
         if len(self.supercell_matrix) == 3 and isinstance(self.supercell_matrix[0], int):
-             # Convert [2, 2, 2] to diag matrix
              s_mat = np.diag(self.supercell_matrix)
         else:
              s_mat = np.array(self.supercell_matrix)
@@ -71,26 +61,30 @@ class PhononCalculator:
         phonon = Phonopy(unitcell, supercell_matrix=s_mat)
         phonon.generate_displacements(distance=self.displacement)
 
+        # Optimization:
+        # Although phonopy.get_supercells_with_displacements() returns a list,
+        # we process and discard ASE objects immediately to minimize overhead.
         supercells = phonon.get_supercells_with_displacements()  # type: ignore[attr-defined]
 
-        # Calculate forces for each displaced supercell
         forces_set: list[np.ndarray] = []
-        for sc in supercells:
-            # Convert to ASE for engine
+
+        # Iterate and process
+        for i, sc in enumerate(supercells):
+            # Convert to ASE
             ase_sc = self._phonopy_to_ase(sc)
 
-            # Compute forces using engine
+            # Compute forces
             result = self.engine.compute_static_properties(ase_sc, potential_path)
 
-            # Ensure forces are correct shape (N, 3)
-            # engine.run returns MDSimulationResult.forces which is list of lists
+            # Store only forces, discard ase_sc
             forces = np.array(result.forces)
             forces_set.append(forces)
 
+            # Explicitly delete ASE object to help GC in tight loops
+            del ase_sc
+
         phonon.produce_force_constants(forces=forces_set)
 
-        # Calculate Band Structure along a simple path (Gamma -> X -> M -> Gamma)
-        # This is arbitrary but sufficient for visualization.
         path = [[0.0, 0.0, 0.0], [0.5, 0.0, 0.0], [0.5, 0.5, 0.0], [0.0, 0.0, 0.0]]
         labels = ["G", "X", "M", "G"]
 
@@ -100,15 +94,12 @@ class PhononCalculator:
             labels=labels
         )
         bs = phonon.get_band_structure_dict()
-        frequencies = bs["frequencies"] # list of arrays (n_qpoints, n_bands)
+        frequencies = bs["frequencies"]
 
-        # Check for imaginary modes
-        # Phonopy returns negative frequencies for imaginary modes
         all_freqs = np.concatenate(frequencies)
         min_freq = np.min(all_freqs)
         is_stable = min_freq > self.imaginary_tol
 
-        # Plot
         phonon.plot_band_structure()  # type: ignore[no-untyped-call]
         buf = io.BytesIO()
         plt.savefig(buf, format="png")

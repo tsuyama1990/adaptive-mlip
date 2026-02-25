@@ -1,11 +1,12 @@
 import logging
 import random
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from ase import Atoms
 from ase.build import bulk, surface
 from ase.io import write
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from pyacemaker.core.engine import LammpsEngine
 from pyacemaker.interfaces.eon_driver import EONWrapper
@@ -15,6 +16,23 @@ if TYPE_CHECKING:
     from pyacemaker.domain_models.config import PyAceConfig
 
 logger = logging.getLogger(__name__)
+
+
+class FePtMgoParameters(BaseModel):
+    """Configuration for FePt/MgO scenario."""
+    model_config = ConfigDict(extra="forbid")
+
+    num_depositions: int = Field(10, ge=1, le=1000, description="Number of atoms to deposit")
+    fe_pt_ratio: float = Field(0.5, ge=0.0, le=1.0, description="Ratio of Fe atoms")
+    potential_path: Path | None = Field(None, description="Path to potential file (optional override)")
+
+    @field_validator("potential_path")
+    @classmethod
+    def validate_potential(cls, v: Path | None) -> Path | None:
+        if v and not v.exists():
+            msg = f"Potential path does not exist: {v}"
+            raise ValueError(msg)
+        return v
 
 
 class FePtMgoScenario(BaseScenario):
@@ -31,9 +49,18 @@ class FePtMgoScenario(BaseScenario):
     ) -> None:
         super().__init__(config)
         self.engine = engine or LammpsEngine(self.config.md)
-        # EON wrapper is instantiated in run if needed, or we can pre-instantiate if config allows.
-        # But EONConfig might be None.
         self.eon_wrapper = eon_wrapper
+
+        # Validate scenario parameters
+        if self.config.scenario:
+            try:
+                self.params = FePtMgoParameters(**self.config.scenario.parameters)
+            except Exception as e:
+                msg = f"Invalid parameters for FePtMgoScenario: {e}"
+                logger.error(msg)
+                raise ValueError(msg) from e
+        else:
+            self.params = FePtMgoParameters()
 
     def run(self) -> None:
         """Executes the full FePt/MgO workflow."""
@@ -77,9 +104,8 @@ class FePtMgoScenario(BaseScenario):
         Deposits Fe and Pt atoms onto the surface.
         Uses MD Engine for relaxation after placement.
         """
-        params = self.config.scenario.parameters if self.config.scenario else {}
-        num_depositions = params.get("num_depositions", 10)
-        ratio = params.get("fe_pt_ratio", 0.5)
+        num_depositions = self.params.num_depositions
+        ratio = self.params.fe_pt_ratio
         max_retries = 3
 
         structure = slab.copy()  # type: ignore[no-untyped-call]
@@ -88,8 +114,8 @@ class FePtMgoScenario(BaseScenario):
         potential = None
         if self.config.eon and self.config.eon.potential_path:
             potential = self.config.eon.potential_path
-        elif params.get("potential_path"):
-            potential = Path(params["potential_path"])
+        elif self.params.potential_path:
+            potential = self.params.potential_path
 
         if not potential:
             msg = "Potential path not found in EON config or scenario parameters."
@@ -150,11 +176,12 @@ class FePtMgoScenario(BaseScenario):
 
         # Write config
         wrapper.generate_config(work_dir / "config.ini")
+        wrapper.generate_driver_script(work_dir / "pace_driver.py")
 
         # Run EON
         try:
             wrapper.run(work_dir)
-        except RuntimeError:
+        except Exception:
             # Already logged in wrapper
             return
 
