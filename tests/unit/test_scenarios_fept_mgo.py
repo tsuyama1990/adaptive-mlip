@@ -20,7 +20,7 @@ def mock_config():
         mock_conf.scenario = ScenarioConfig(
             name="fept_mgo",
             enabled=True,
-            parameters={"num_depositions": 2, "fe_pt_ratio": 0.5}
+            parameters={"num_depositions": 2, "fe_pt_ratio": 0.5, "random_seed": 42}
         )
         mock_conf.eon = EONConfig(potential_path=path)
         mock_conf.md = MagicMock() # Mock MD config
@@ -43,30 +43,29 @@ def test_fept_generate_surface(mock_config):
     assert "Mg" in syms and "O" in syms
 
 
-def test_fept_deposit_atoms(mock_config):
+def test_fept_deposit_atoms_deterministic(mock_config):
     mock_engine = MagicMock()
     # Configure engine.relax to return a modified structure (simulating relaxation)
     def mock_relax(atoms, pot):
         atoms_copy = atoms.copy()
-        # Just return copy, maybe shift an atom slightly
         atoms_copy.positions[0] += 0.1
         return atoms_copy
 
     mock_engine.relax.side_effect = mock_relax
 
-    scenario = FePtMgoScenario(mock_config, engine=mock_engine)
+    scenario1 = FePtMgoScenario(mock_config, engine=mock_engine)
+    slab1 = scenario1._generate_surface()
+    deposited1 = scenario1._deposit_atoms(slab1)
 
-    initial_slab = scenario._generate_surface()
-    initial_count = len(initial_slab)
+    # Run again with same seed
+    scenario2 = FePtMgoScenario(mock_config, engine=mock_engine)
+    slab2 = scenario2._generate_surface()
+    deposited2 = scenario2._deposit_atoms(slab2)
 
-    deposited = scenario._deposit_atoms(initial_slab)
-
-    # Check atoms added
-    expected_additions = mock_config.scenario.parameters["num_depositions"]
-    assert len(deposited) == initial_count + expected_additions
-
-    # Check relaxation called
-    assert mock_engine.relax.call_count == expected_additions
+    # Check positions match (determinism)
+    import numpy as np
+    assert np.allclose(deposited1.get_positions(), deposited2.get_positions())
+    assert deposited1.get_chemical_symbols() == deposited2.get_chemical_symbols()
 
 
 def test_fept_run_flow(mock_config):

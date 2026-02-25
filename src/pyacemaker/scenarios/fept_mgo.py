@@ -2,7 +2,7 @@ import contextlib
 import logging
 import random
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Tuple
 
 from ase import Atom, Atoms
 from ase.build import bulk, surface
@@ -38,6 +38,86 @@ class FePtMgoParameters(BaseModel):
         3, ge=1, description="Maximum retries for relaxation during deposition"
     )
     random_seed: int | None = Field(None, description="Random seed for reproducibility")
+
+
+class DepositionManager:
+    """Manages the deposition of atoms onto a surface."""
+
+    def __init__(self, engine: LammpsEngine, params: FePtMgoParameters, potential: Path) -> None:
+        self.engine = engine
+        self.params = params
+        self.potential = potential
+
+    def _select_element(self) -> str:
+        """Selects element (Fe or Pt) based on ratio."""
+        return "Fe" if random.random() < self.params.fe_pt_ratio else "Pt"  # noqa: S311
+
+    def _calculate_deposition_position(self, structure: Atoms) -> Tuple[float, float, float]:
+        """Calculates random x, y and max_z + height for deposition."""
+        # Find max z of surface atoms
+        if len(structure) > 0:
+            # Use get_positions() to be safe across ASE versions
+            positions = structure.get_positions()  # type: ignore[no-untyped-call]
+            max_z = positions[:, 2].max()
+        else:
+            max_z = 0.0
+
+        # Random x, y within cell
+        lx = structure.cell[0, 0]
+        ly = structure.cell[1, 1]
+        x = random.uniform(0, lx)  # noqa: S311
+        y = random.uniform(0, ly)  # noqa: S311
+        z = max_z + self.params.deposition_height
+
+        return x, y, z
+
+    def _relax_structure_with_retries(self, structure: Atoms, step_index: int) -> Atoms | None:
+        """Attempts to relax the structure with retries."""
+        max_retries = self.params.max_retries
+
+        for attempt in range(max_retries):
+            try:
+                # Relax returns a new Atoms object
+                return self.engine.relax(structure, self.potential)
+            except Exception as e:
+                logger.warning(
+                    "Deposition %d relaxation failed (attempt %d/%d): %s",
+                    step_index,
+                    attempt + 1,
+                    max_retries,
+                    e,
+                )
+
+        logger.error(
+            "Failed to relax structure after deposition %d. Aborting deposition loop.", step_index
+        )
+        return None
+
+    def deposit(self, slab: Atoms) -> Atoms:
+        """Deposits atoms onto the slab."""
+        num_depositions = self.params.num_depositions
+
+        # Work on a copy initially
+        structure = slab.copy()  # type: ignore[no-untyped-call]
+
+        for i in range(num_depositions):
+            element = self._select_element()
+            x, y, z = self._calculate_deposition_position(structure)
+
+            # Use Atom object to ensure position is set correctly
+            atom = Atom(element, position=(x, y, z))  # type: ignore[no-untyped-call]
+            structure.append(atom)
+
+            # Relax structure using MD Engine with retries
+            relaxed_structure = self._relax_structure_with_retries(structure, i)
+
+            if relaxed_structure is not None:
+                structure = relaxed_structure
+            else:
+                msg = f"Deposition failed at step {i} after {self.params.max_retries} attempts."
+                raise RuntimeError(msg)
+
+        return structure  # type: ignore[no-any-return]
 
 
 class FePtMgoScenario(BaseScenario):
@@ -87,10 +167,12 @@ class FePtMgoScenario(BaseScenario):
                 logger.warning("Failed to write mgo_surface.xyz: %s", e)
         logger.info("Generated MgO surface with %d atoms.", len(mgo_surface))
 
-        # 2. Deposit Fe/Pt Atoms using MD Engine
-        # We work on the existing structure object to minimize copies,
-        # but deposit_atoms returns the final structure.
-        deposited_structure = self._deposit_atoms(mgo_surface)
+        # 2. Deposit Fe/Pt Atoms using DepositionManager
+        potential = self._get_potential_path()
+        deposition_manager = DepositionManager(self.engine, self.params, potential)
+
+        deposited_structure = deposition_manager.deposit(mgo_surface)
+
         if self.params.write_intermediate_files:
             try:
                 write("deposited.xyz", deposited_structure)
@@ -110,29 +192,6 @@ class FePtMgoScenario(BaseScenario):
         mgo = bulk("MgO", "rocksalt", a=a)
         return surface(mgo, (0, 0, 1), layers=4, vacuum=10.0)  # type: ignore[no-untyped-call, no-any-return]
 
-    def _select_element(self) -> str:
-        """Selects element (Fe or Pt) based on ratio."""
-        return "Fe" if random.random() < self.params.fe_pt_ratio else "Pt"  # noqa: S311
-
-    def _calculate_deposition_position(self, structure: Atoms) -> tuple[float, float, float]:
-        """Calculates random x, y and max_z + height for deposition."""
-        # Find max z of surface atoms
-        if len(structure) > 0:
-            # Use get_positions() to be safe across ASE versions
-            positions = structure.get_positions()  # type: ignore[no-untyped-call]
-            max_z = positions[:, 2].max()
-        else:
-            max_z = 0.0
-
-        # Random x, y within cell
-        lx = structure.cell[0, 0]
-        ly = structure.cell[1, 1]
-        x = random.uniform(0, lx)  # noqa: S311
-        y = random.uniform(0, ly)  # noqa: S311
-        z = max_z + self.params.deposition_height
-
-        return x, y, z
-
     def _get_potential_path(self) -> Path:
         """Resolves potential path from params or config."""
         potential = None
@@ -151,63 +210,6 @@ class FePtMgoScenario(BaseScenario):
             raise ValueError(msg)
 
         return potential
-
-    def _deposit_atoms(self, slab: Atoms) -> Atoms:
-        """
-        Deposits Fe and Pt atoms onto the surface.
-        Uses MD Engine for relaxation after placement.
-        """
-        num_depositions = self.params.num_depositions
-
-        # Work on a copy initially, then reuse
-        structure = slab.copy()  # type: ignore[no-untyped-call]
-
-        potential = self._get_potential_path()
-
-        for i in range(num_depositions):
-            element = self._select_element()
-            x, y, z = self._calculate_deposition_position(structure)
-
-            # Use Atom object to ensure position is set correctly
-            atom = Atom(element, position=(x, y, z))  # type: ignore[no-untyped-call]
-            structure.append(atom)
-
-            # Relax structure using MD Engine with retries
-            relaxed_structure = self._relax_structure_with_retries(structure, potential, i)
-
-            if relaxed_structure is not None:
-                structure = relaxed_structure
-            else:
-                msg = f"Deposition failed at step {i} after {self.params.max_retries} attempts."
-                raise RuntimeError(msg)
-
-        return structure
-
-    def _relax_structure_with_retries(
-        self, structure: Atoms, potential: Path, step_index: int
-    ) -> Atoms | None:
-        """Attempts to relax the structure with retries."""
-        max_retries = self.params.max_retries
-
-        for attempt in range(max_retries):
-            try:
-                # Relax returns a new Atoms object usually (depending on engine impl)
-                # Ideally engine.relax modifies in place or returns efficient copy.
-                # LammpsEngine.relax returns a result structure.
-                return self.engine.relax(structure, potential)
-            except Exception as e:
-                logger.warning(
-                    "Deposition %d relaxation failed (attempt %d/%d): %s",
-                    step_index,
-                    attempt + 1,
-                    max_retries,
-                    e,
-                )
-
-        logger.error(
-            "Failed to relax structure after deposition %d. Aborting deposition loop.", step_index
-        )
-        return None
 
     def _run_akmc(self, structure: Atoms) -> None:
         """Runs adaptive KMC using EON."""

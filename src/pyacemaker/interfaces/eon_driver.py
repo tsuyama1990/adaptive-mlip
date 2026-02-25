@@ -1,13 +1,13 @@
 import logging
-import os
 import shlex
 import subprocess
 import sys
+import os
 from pathlib import Path
 from typing import Any
 
-from pyacemaker.domain_models.constants import PACE_DRIVER_TEMPLATE
 from pyacemaker.domain_models.eon import EONConfig
+from pyacemaker.domain_models.constants import PACE_DRIVER_TEMPLATE
 from pyacemaker.interfaces.process import ProcessRunner, SubprocessRunner
 from pyacemaker.utils.path import validate_path_safe
 
@@ -83,7 +83,7 @@ class EONWrapper:
         ]
 
         if self.config.mpi_command:
-            pass
+             pass
 
         self._write_file_safe(output_path, "\n".join(config_content))
 
@@ -108,7 +108,7 @@ class EONWrapper:
                 # Split carefully, treating it as a command prefix
                 cmd = shlex.split(self.config.mpi_command) + cmd
 
-            cmd_str = " ".join(cmd)
+            cmd_str = ' '.join(cmd)
             logger.info("Starting EON simulation in %s with command: %s", working_dir, cmd_str)
 
             # Pass environment variable for potential path
@@ -131,8 +131,13 @@ class EONWrapper:
                 not_found_msg = f"EON executable not found: {executable}"
                 raise RuntimeError(not_found_msg) from e
             raise RuntimeError(msg) from e
+        except OSError as e:
+            # Handle system errors (e.g. file not found, permission denied)
+            msg = f"System error executing EON: {e}"
+            logger.exception(msg)
+            raise RuntimeError(msg) from e
         except Exception as e:
-            msg = f"An error occurred during EON execution: {e}"
+            msg = f"An unexpected error occurred during EON execution: {e}"
             logger.exception(msg)
             raise RuntimeError(msg) from e
 

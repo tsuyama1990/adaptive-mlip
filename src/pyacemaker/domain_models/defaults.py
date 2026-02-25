@@ -12,6 +12,11 @@ DEFAULT_BATCH_SIZE = 5
 DEFAULT_N_CANDIDATES = 10
 DEFAULT_CHECKPOINT_INTERVAL = 1
 
+# EON Defaults
+DEFAULT_EON_EXECUTABLE = "eonclient"
+# Use environment variable for seed if available, otherwise None (to let random module decide or user override)
+DEFAULT_EON_SEED = 12345
+
 # File names
 FILENAME_CANDIDATES = "candidates.xyz"
 FILENAME_TRAINING = "training_data.xyz"
@@ -103,13 +108,28 @@ DEFAULT_VALIDATION_ELASTIC_STRAIN = 0.01
 DEFAULT_VALIDATION_ELASTIC_STEPS = 5
 
 # Security constants
-DANGEROUS_PATH_CHARS: Final[set[str]] = {";", "&", "|", "`", "$", "(", ")", "<", ">", "\n", "\r", "\t", "*", "?"}
+DANGEROUS_PATH_CHARS: Final[set[str]] = {
+    ";",
+    "&",
+    "|",
+    "`",
+    "$",
+    "(",
+    ")",
+    "<",
+    ">",
+    "\n",
+    "\r",
+    "\t",
+    "*",
+    "?",
+}
 
 # RAM Disk logic
 _ram_disk_candidate = "/dev/shm"  # noqa: S108
-# Path imported inside function or check to avoid E402 if strict, but let's fix import order.
-# Actually I will move the import to top level but I must respect 'from typing import Final' existing block.
-DEFAULT_RAM_DISK_PATH = _ram_disk_candidate if Path(_ram_disk_candidate).exists() else tempfile.gettempdir()
+DEFAULT_RAM_DISK_PATH = (
+    _ram_disk_candidate if Path(_ram_disk_candidate).exists() else tempfile.gettempdir()
+)
 
 # MD Minimize defaults
 DEFAULT_MD_MINIMIZE_FTOL = 1e-6
@@ -117,21 +137,13 @@ DEFAULT_MD_MINIMIZE_TOL = 1e-4
 LAMMPS_MINIMIZE_MAX_ITER = 10000
 LAMMPS_MINIMIZE_STEPS = 10000
 LAMMPS_VELOCITY_SEED = 12345
-LAMMPS_SAFE_CMD_PATTERN = r"^[a-zA-Z0-9\s_\-\.\/=]+$" # Whitelist alphanumeric, space, underscore, dash, dot, slash, equals
+LAMMPS_SAFE_CMD_PATTERN = r"^[a-zA-Z0-9\s_\-\.\/=]+$"  # Whitelist alphanumeric, space, underscore, dash, dot, slash, equals
 LAMMPS_SCREEN_ARG = "-screen"
 LAMMPS_MIN_STYLE_CG = "cg"
 
 # Delta Learning
-DEFAULT_LJ_PARAMS: Final[dict[str, float]] = {
-    "sigma": 2.5,
-    "epsilon": 1.0,
-    "cutoff": 5.0
-}
-FALLBACK_LJ_PARAMS: Final[dict[str, float]] = {
-    "sigma": 2.0,
-    "epsilon": 0.5,
-    "cutoff": 4.0
-}
+DEFAULT_LJ_PARAMS: Final[dict[str, float]] = {"sigma": 2.5, "epsilon": 1.0, "cutoff": 5.0}
+FALLBACK_LJ_PARAMS: Final[dict[str, float]] = {"sigma": 2.0, "epsilon": 0.5, "cutoff": 4.0}
 
 # Embedding
 EMBEDDING_TOLERANCE_CELL = 0.1
@@ -157,7 +169,123 @@ ERR_VAL_STRUCT_NONE = "Structure is None."
 ERR_VAL_STRUCT_TYPE = "Invalid structure type."
 
 # DFT
-RECIPROCAL_FACTOR = 2.0 * 3.141592653589793 # 2*PI approx
+RECIPROCAL_FACTOR = 2.0 * 3.141592653589793  # 2*PI approx
 
 # Policy
 DEFAULT_STRAIN_RANGE: Final[tuple[float, float]] = (-0.05, 0.05)
+
+# PACE Driver script template (uses environment variables for security)
+PACE_DRIVER_TEMPLATE = """
+import sys
+import os
+import numpy as np
+from ase.io import read
+from ase.calculators.lammpsrun import LAMMPS
+
+# Read potential path from environment for security
+POTENTIAL_PATH = os.environ.get("PACE_POTENTIAL_PATH")
+if not POTENTIAL_PATH:
+    sys.stderr.write("Error: PACE_POTENTIAL_PATH not set\\n")
+    sys.exit(1)
+
+if not os.path.exists(POTENTIAL_PATH):
+    sys.stderr.write(f"Error: Potential file not found at {POTENTIAL_PATH}\\n")
+    sys.exit(1)
+
+def read_input():
+    try:
+        lines = sys.stdin.readlines()
+        if not lines:
+            return None, None, None
+
+        # Parse EON format (assumed based on standard command line potentials)
+        # 1. Number of atoms
+        num_atoms = int(lines[0].strip())
+
+        # 2. Box (3 lines)
+        cell = np.zeros((3, 3))
+        cell[0] = [float(x) for x in lines[1].split()]
+        cell[1] = [float(x) for x in lines[2].split()]
+        cell[2] = [float(x) for x in lines[3].split()]
+
+        # 3. Coordinates (N lines)
+        # EON usually sends only coordinates x y z, not species.
+        # We need to map them to species from a template.
+        coords = []
+        for i in range(num_atoms):
+            coords.append([float(x) for x in lines[4+i].split()])
+
+        return num_atoms, cell, np.array(coords)
+    except Exception as e:
+        sys.stderr.write(f"Error reading input: {e}\\n")
+        sys.exit(1)
+
+def main():
+    try:
+        # 1. Load template structure (pos.con) to get species
+        if not os.path.exists("pos.con"):
+            sys.stderr.write("Error: pos.con not found\\n")
+            sys.exit(1)
+
+        try:
+            # EON uses .con format, ASE supports it
+            template = read("pos.con", format="eon")
+        except Exception:
+            # Fallback if ASE cannot read eon format directly or extension issue
+            # Try reading as 'con' or just assume it works if supported
+            template = read("pos.con")
+
+        # 2. Read current configuration from stdin
+        n, cell, coords = read_input()
+        if n is None:
+            sys.exit(0)
+
+        if n != len(template):
+            sys.stderr.write(f"Error: Atom count mismatch ({n} vs {len(template)})\\n")
+            sys.exit(1)
+
+        # 3. Update structure
+        template.set_cell(cell)
+        template.set_positions(coords)
+
+        # 4. Setup Calculator
+        # Using LAMMPS via ASE is robust.
+        # For speed, one might use lammps python module directly,
+        # but constructing the input script for PACE is complex.
+        # We rely on ASE's LAMMPS calculator or similar.
+        # We need to specify the potential file.
+
+        # We construct a pair_style command for PACE.
+        # Assuming 'pace' pair style is available in the LAMMPS binary.
+        # pair_style pace
+        # pair_coeff * * potential.yace Element1 Element2 ...
+
+        species = sorted(list(set(template.get_chemical_symbols())))
+        species_str = " ".join(species)
+
+        parameters = {
+            "pair_style": "pace",
+            "pair_coeff": [f"* * {POTENTIAL_PATH} {species_str}"]
+        }
+
+        calc = LAMMPS(parameters=parameters, files=[POTENTIAL_PATH])
+        template.calc = calc
+
+        # 5. Compute
+        energy = template.get_potential_energy()
+        forces = template.get_forces()
+
+        # 6. Output results
+        # Format: Energy (1 line)
+        # Forces (N lines, x y z)
+        print(f"{energy:.16f}")
+        for f in forces:
+            print(f"{f[0]:.16f} {f[1]:.16f} {f[2]:.16f}")
+
+    except Exception as e:
+        sys.stderr.write(f"Unexpected error: {e}\\n")
+        sys.exit(1)
+
+if __name__ == "__main__":
+    main()
+"""
