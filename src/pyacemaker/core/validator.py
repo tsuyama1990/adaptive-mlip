@@ -102,14 +102,10 @@ class LammpsInputValidator:
         if not path.is_file():
             raise ValueError(ERR_VAL_POT_NOT_FILE.format(path=path))
 
-        # Security: Restrict access to project directory or temp dirs
-        allowed_prefixes = [
-            Path.cwd().resolve(),
-            Path("/tmp").resolve(),  # noqa: S108
-            Path("/dev/shm").resolve()  # noqa: S108
-        ]
+        # Security: Restrict access to project directory only
+        project_root = Path.cwd().resolve()
 
-        if not any(str(path).startswith(str(prefix)) for prefix in allowed_prefixes):
+        if not str(path).startswith(str(project_root)):
             raise ValueError(ERR_VAL_POT_OUTSIDE.format(path=path))
 
         return path

@@ -74,7 +74,16 @@ class PhononCalculator:
         supercells = phonon.get_supercells_with_displacements()  # type: ignore[attr-defined]
 
         # Calculate forces for each displaced supercell
+        # We iterate and convert one by one, keeping only forces in memory (numpy arrays),
+        # not the full ASE objects. Phonopy still returns a list of supercells,
+        # but we process them immediately.
         forces_set: list[np.ndarray] = []
+
+        # Batch processing not trivially possible with Phonopy API which expects full list of forces later,
+        # but we minimize memory by not storing ASE atoms.
+        # If supercells list is huge, we can't avoid it without Phonopy changes,
+        # but we can ensure we don't duplicate it.
+
         for sc in supercells:
             # Convert to ASE for engine
             ase_sc = self._phonopy_to_ase(sc)
@@ -86,6 +95,9 @@ class PhononCalculator:
             # engine.run returns MDSimulationResult.forces which is list of lists
             forces = np.array(result.forces)
             forces_set.append(forces)
+
+            # Explicitly clear ase_sc to help GC if loop is tight?
+            del ase_sc
 
         phonon.produce_force_constants(forces=forces_set)
 

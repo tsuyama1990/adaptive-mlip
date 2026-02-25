@@ -141,9 +141,9 @@ class Orchestrator:
 
         # Open file once
         with filepath.open(mode) as f:
+            # Iterate through batches
             for batch in batched(generator, batch_size):
-                # Write chunk
-                # ase.io.write handles list of atoms and can write to file handle.
+                # Write chunk to the open file handle
                 # format="extxyz" is standard for streaming.
                 write(f, batch, format="extxyz")
                 count += len(batch)

@@ -17,7 +17,8 @@ def mock_driver() -> Any:
         yield mock
 
 
-def test_lammps_engine_run(mock_md_config: MDConfig, mock_driver: Any, tmp_path: Path) -> None:
+def test_lammps_engine_run(mock_md_config: MDConfig, mock_driver: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.chdir(tmp_path)
     # Set up mock driver
     driver_instance = mock_driver.return_value
     driver_instance.extract_variable.side_effect = lambda name: {
@@ -67,7 +68,8 @@ def test_lammps_engine_run(mock_md_config: MDConfig, mock_driver: Any, tmp_path:
     assert "read_data" in script
 
 
-def test_lammps_engine_halted(mock_md_config: MDConfig, mock_driver: Any, tmp_path: Path) -> None:
+def test_lammps_engine_halted(mock_md_config: MDConfig, mock_driver: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.chdir(tmp_path)
     driver_instance = mock_driver.return_value
     driver_instance.extract_variable.side_effect = lambda name: {
         "pe": -90.0,
@@ -94,7 +96,8 @@ def test_lammps_engine_halted(mock_md_config: MDConfig, mock_driver: Any, tmp_pa
     assert result.halt_structure_path == result.trajectory_path
 
 
-def test_lammps_engine_hybrid_potential(mock_md_config: MDConfig, mock_driver: Any, tmp_path: Path) -> None:
+def test_lammps_engine_hybrid_potential(mock_md_config: MDConfig, mock_driver: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.chdir(tmp_path)
     hybrid_params = HybridParams(zbl_cut_inner=1.0, zbl_cut_outer=1.5)
     config = mock_md_config.model_copy(update={"hybrid_potential": True, "hybrid_params": hybrid_params})
 
@@ -145,8 +148,9 @@ def test_run_missing_potential_error(mock_md_config: MDConfig) -> None:
         engine.run(atoms, "nonexistent.yace")
 
 
-def test_run_large_structure_warning(mock_md_config: MDConfig, mock_driver: Any, caplog: Any, tmp_path: Path) -> None:
+def test_run_large_structure_warning(mock_md_config: MDConfig, mock_driver: Any, caplog: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Tests info log for large structures (streaming)."""
+    monkeypatch.chdir(tmp_path)
     import logging
     caplog.set_level(logging.INFO)
     engine = LammpsEngine(mock_md_config)
@@ -259,8 +263,9 @@ def test_run_large_structure_warning(mock_md_config: MDConfig, mock_driver: Any,
          # If no logs captured, rely on mock assertion
          pass
 
-def test_run_driver_failure(mock_md_config: MDConfig, mock_driver: Any, tmp_path: Path) -> None:
+def test_run_driver_failure(mock_md_config: MDConfig, mock_driver: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Tests error handling when LAMMPS execution fails."""
+    monkeypatch.chdir(tmp_path)
     driver_instance = mock_driver.return_value
     driver_instance.run_file.side_effect = RuntimeError("LAMMPS crashed")
 

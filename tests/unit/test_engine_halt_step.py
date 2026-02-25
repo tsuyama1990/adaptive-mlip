@@ -1,13 +1,15 @@
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
 from ase import Atoms
 
 from pyacemaker.core.engine import LammpsEngine
 from pyacemaker.domain_models.md import MDConfig
 
 
-def test_lammps_engine_halt_step_populated(tmp_path: Path) -> None:
+def test_lammps_engine_halt_step_populated(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.chdir(tmp_path)
     # Mock config
     config = MDConfig(
         temperature=300,
@@ -38,7 +40,8 @@ def test_lammps_engine_halt_step_populated(tmp_path: Path) -> None:
         assert result.halted is True
         assert result.halt_step == 500
 
-def test_lammps_engine_halt_step_none_if_not_halted(tmp_path: Path) -> None:
+def test_lammps_engine_halt_step_none_if_not_halted(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.chdir(tmp_path)
     # Mock config
     config = MDConfig(
         temperature=300,

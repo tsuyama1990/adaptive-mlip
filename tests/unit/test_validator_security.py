@@ -7,12 +7,16 @@ from pyacemaker.core.validator import LammpsInputValidator
 
 class TestLammpsInputValidator:
     def test_validate_potential_valid_tmp(self, tmp_path):
-        """Test that a file in tmp_path (usually /tmp/...) is allowed."""
+        """Test that a file in tmp_path is disallowed if outside project root."""
+        # tmp_path is usually outside CWD (e.g. /tmp/pytest-...).
+        # We expect failure unless we change CWD to tmp_path.
         pot_file = tmp_path / "pot.yace"
         pot_file.touch()
 
-        validated = LammpsInputValidator.validate_potential(pot_file)
-        assert validated == pot_file.resolve()
+        # Assuming default CWD is project root (/app) and tmp_path is /tmp/...
+        # This should now fail.
+        with pytest.raises(ValueError, match="outside allowed directories"):
+            LammpsInputValidator.validate_potential(pot_file)
 
     def test_validate_potential_valid_cwd(self):
         """Test that a file in CWD is allowed."""
@@ -49,23 +53,27 @@ class TestLammpsInputValidator:
 
     def test_validate_potential_symlink_traversal(self, tmp_path):
         """Test symlink resolving to outside (should fail)."""
-        # Create a symlink in tmp_path (allowed location) pointing to /bin/ls (forbidden location)
+        # Even if we create a symlink in CWD, resolving to /bin/ls should fail.
         target = Path("/bin/ls")
         if not target.exists():
             pytest.skip("/bin/ls not found")
 
-        symlink = tmp_path / "link_to_ls"
+        symlink = Path("link_to_ls")
         try:
+            if symlink.exists():
+                symlink.unlink()
             symlink.symlink_to(target)
         except OSError:
             pytest.skip("Failed to create symlink")
 
-        # Resolving symlink -> /bin/ls.
-        # /bin/ls is not in /tmp, not in CWD.
-        # So it should raise ValueError.
-
-        with pytest.raises(ValueError, match="outside allowed directories"):
-            LammpsInputValidator.validate_potential(symlink)
+        try:
+            # Resolving symlink -> /bin/ls.
+            # /bin/ls is outside CWD.
+            with pytest.raises(ValueError, match="outside allowed directories"):
+                LammpsInputValidator.validate_potential(symlink)
+        finally:
+            if symlink.exists():
+                symlink.unlink()
 
     def test_validate_potential_relative_traversal(self):
         """Test relative path traversal resolving to outside."""
