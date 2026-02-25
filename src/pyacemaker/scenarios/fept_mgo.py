@@ -1,8 +1,9 @@
 import contextlib
 import logging
 import random
+import secrets
 from pathlib import Path
-from typing import TYPE_CHECKING, Tuple
+from typing import TYPE_CHECKING
 
 from ase import Atom, Atoms
 from ase.build import bulk, surface
@@ -10,6 +11,13 @@ from ase.io import write
 from pydantic import BaseModel, Field, ValidationError
 
 from pyacemaker.core.engine import LammpsEngine
+from pyacemaker.domain_models.constants import (
+    FILE_EXT_EON_POS,
+    FILE_EXT_EXTXYZ,
+    FILE_NAME_DEPOSITED,
+    FILE_NAME_EON_POS,
+    FILE_NAME_MGO_SURFACE,
+)
 from pyacemaker.interfaces.eon_driver import EONWrapper
 from pyacemaker.scenarios.base_scenario import BaseScenario
 
@@ -48,11 +56,20 @@ class DepositionManager:
         self.params = params
         self.potential = potential
 
+        # Initialize seed
+        seed = self.params.random_seed
+        if seed is None:
+            # Use secrets to generate a secure seed if none provided
+            seed = secrets.randbits(32)
+            logger.info("Generated secure random seed: %s", seed)
+        random.seed(seed)
+
     def _select_element(self) -> str:
         """Selects element (Fe or Pt) based on ratio."""
+        # Use random.random() which is now seeded
         return "Fe" if random.random() < self.params.fe_pt_ratio else "Pt"  # noqa: S311
 
-    def _calculate_deposition_position(self, structure: Atoms) -> Tuple[float, float, float]:
+    def _calculate_deposition_position(self, structure: Atoms) -> tuple[float, float, float]:
         """Calculates random x, y and max_z + height for deposition."""
         # Find max z of surface atoms
         if len(structure) > 0:
@@ -131,10 +148,12 @@ class FePtMgoScenario(BaseScenario):
         config: "PyAceConfig",
         engine: LammpsEngine | None = None,
         eon_wrapper: EONWrapper | None = None,
+        deposition_manager: DepositionManager | None = None,
     ) -> None:
         super().__init__(config)
         self.engine = engine or LammpsEngine(self.config.md)
         self.eon_wrapper = eon_wrapper
+        self.deposition_manager = deposition_manager
 
         # Validate parameters
         try:
@@ -144,10 +163,6 @@ class FePtMgoScenario(BaseScenario):
             msg = f"Invalid parameters for FePtMgoScenario: {e}"
             logger.exception(msg)
             raise ValueError(msg) from e
-
-        # Initialize random seed if provided
-        if self.params.random_seed is not None:
-            random.seed(self.params.random_seed)
 
     def run(self) -> None:
         """Executes the full FePt/MgO workflow."""
@@ -162,22 +177,23 @@ class FePtMgoScenario(BaseScenario):
         mgo_surface = self._generate_surface()
         if self.params.write_intermediate_files:
             try:
-                write("mgo_surface.xyz", mgo_surface)
+                write(FILE_NAME_MGO_SURFACE, mgo_surface)
             except Exception as e:
-                logger.warning("Failed to write mgo_surface.xyz: %s", e)
+                logger.warning("Failed to write %s: %s", FILE_NAME_MGO_SURFACE, e)
         logger.info("Generated MgO surface with %d atoms.", len(mgo_surface))
 
         # 2. Deposit Fe/Pt Atoms using DepositionManager
-        potential = self._get_potential_path()
-        deposition_manager = DepositionManager(self.engine, self.params, potential)
+        if not self.deposition_manager:
+            potential = self._get_potential_path()
+            self.deposition_manager = DepositionManager(self.engine, self.params, potential)
 
-        deposited_structure = deposition_manager.deposit(mgo_surface)
+        deposited_structure = self.deposition_manager.deposit(mgo_surface)
 
         if self.params.write_intermediate_files:
             try:
-                write("deposited.xyz", deposited_structure)
+                write(FILE_NAME_DEPOSITED, deposited_structure)
             except Exception as e:
-                logger.warning("Failed to write deposited.xyz: %s", e)
+                logger.warning("Failed to write %s: %s", FILE_NAME_DEPOSITED, e)
         logger.info("Deposition complete. Total atoms: %d", len(deposited_structure))
 
         # 3. Run aKMC using EON
@@ -225,15 +241,20 @@ class FePtMgoScenario(BaseScenario):
 
         try:
             # EON requires pos.con. ASE format 'eon' writes .con files.
-            write(work_dir / "pos.con", structure, format="eon")
+            write(work_dir / FILE_NAME_EON_POS, structure, format=FILE_EXT_EON_POS)
         except Exception as e:
             msg = f"Failed to write EON structure: {e}"
             logger.warning(
-                "Failed to write pos.con using 'eon' format: %s. Trying fallback if possible.", e
+                "Failed to write %s using '%s' format: %s. Trying fallback if possible.",
+                FILE_NAME_EON_POS,
+                FILE_EXT_EON_POS,
+                e,
             )
             # Try plain extended xyz as fallback or just fail
             with contextlib.suppress(Exception):
-                write(work_dir / "pos.con", structure, format="extxyz")  # Might not work for EON
+                write(
+                    work_dir / FILE_NAME_EON_POS, structure, format=FILE_EXT_EXTXYZ
+                )  # Might not work for EON
             raise RuntimeError(msg) from e
 
         # Generate config

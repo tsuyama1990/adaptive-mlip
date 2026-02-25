@@ -8,7 +8,7 @@ from ase import Atoms
 from pyacemaker.domain_models.config import PyAceConfig
 from pyacemaker.domain_models.eon import EONConfig
 from pyacemaker.domain_models.scenario import ScenarioConfig
-from pyacemaker.scenarios.fept_mgo import FePtMgoScenario
+from pyacemaker.scenarios.fept_mgo import FePtMgoScenario, DepositionManager
 
 
 @pytest.fixture
@@ -55,12 +55,17 @@ def test_fept_deposit_atoms_deterministic(mock_config):
 
     scenario1 = FePtMgoScenario(mock_config, engine=mock_engine)
     slab1 = scenario1._generate_surface()
-    deposited1 = scenario1._deposit_atoms(slab1)
+    # Manually instantiate DepositionManager as it's now decoupled
+    pot_path1 = scenario1._get_potential_path()
+    dm1 = DepositionManager(mock_engine, scenario1.params, pot_path1)
+    deposited1 = dm1.deposit(slab1)
 
     # Run again with same seed
     scenario2 = FePtMgoScenario(mock_config, engine=mock_engine)
     slab2 = scenario2._generate_surface()
-    deposited2 = scenario2._deposit_atoms(slab2)
+    pot_path2 = scenario2._get_potential_path()
+    dm2 = DepositionManager(mock_engine, scenario2.params, pot_path2)
+    deposited2 = dm2.deposit(slab2)
 
     # Check positions match (determinism)
     import numpy as np
@@ -88,14 +93,28 @@ def test_fept_run_flow(mock_config):
 
 
 def test_fept_relaxation_failure(mock_config):
-    # Test relaxation failure handling
+    # Test relaxation failure handling via DepositionManager
     mock_engine = MagicMock()
     mock_engine.relax.side_effect = Exception("Relaxation failed")
 
     scenario = FePtMgoScenario(mock_config, engine=mock_engine)
     slab = scenario._generate_surface()
+    dm = DepositionManager(mock_engine, scenario.params, Path("pot"))
 
     with pytest.raises(RuntimeError) as excinfo:
-        scenario._deposit_atoms(slab)
+        dm.deposit(slab)
 
+    assert "Deposition failed" in str(excinfo.value)
+
+def test_deposition_manager_error(mock_config):
+    mock_engine = MagicMock()
+    # relaxation fails
+    mock_engine.relax.side_effect = Exception("Fail")
+
+    scenario = FePtMgoScenario(mock_config, engine=mock_engine)
+    dm = DepositionManager(mock_engine, scenario.params, Path("pot"))
+    slab = scenario._generate_surface()
+
+    with pytest.raises(RuntimeError) as excinfo:
+        dm.deposit(slab)
     assert "Deposition failed" in str(excinfo.value)
