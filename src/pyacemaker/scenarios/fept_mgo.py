@@ -1,7 +1,8 @@
+import contextlib
 import logging
 import random
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from ase import Atom, Atoms
 from ase.build import bulk, surface
@@ -24,6 +25,8 @@ class FePtMgoParameters(BaseModel):
     fe_pt_ratio: float = Field(0.5, ge=0.0, le=1.0, description="Ratio of Fe atoms (0.0 to 1.0)")
     potential_path: Path | None = Field(None, description="Path to potential file (overrides EON config)")
     mgo_lattice_constant: float = Field(4.212, gt=0.0, description="Lattice constant of MgO")
+    deposition_height: float = Field(2.5, gt=0.0, description="Height above surface for deposition (Angstroms)")
+    write_intermediate_files: bool = Field(True, description="Whether to write intermediate XYZ files")
 
 
 class FePtMgoScenario(BaseScenario):
@@ -48,7 +51,7 @@ class FePtMgoScenario(BaseScenario):
             self.params = FePtMgoParameters(**raw_params)
         except ValidationError as e:
             msg = f"Invalid parameters for FePtMgoScenario: {e}"
-            logger.error(msg)
+            logger.exception(msg)
             raise ValueError(msg) from e
 
     def run(self) -> None:
@@ -62,18 +65,22 @@ class FePtMgoScenario(BaseScenario):
 
         # 1. Generate MgO (001) Surface
         mgo_surface = self._generate_surface()
-        try:
-            write("mgo_surface.xyz", mgo_surface)
-        except Exception as e:
-            logger.warning("Failed to write mgo_surface.xyz: %s", e)
+        if self.params.write_intermediate_files:
+            try:
+                write("mgo_surface.xyz", mgo_surface)
+            except Exception as e:
+                logger.warning("Failed to write mgo_surface.xyz: %s", e)
         logger.info("Generated MgO surface with %d atoms.", len(mgo_surface))
 
         # 2. Deposit Fe/Pt Atoms using MD Engine
+        # We work on the existing structure object to minimize copies,
+        # but deposit_atoms returns the final structure.
         deposited_structure = self._deposit_atoms(mgo_surface)
-        try:
-            write("deposited.xyz", deposited_structure)
-        except Exception as e:
-            logger.warning("Failed to write deposited.xyz: %s", e)
+        if self.params.write_intermediate_files:
+            try:
+                write("deposited.xyz", deposited_structure)
+            except Exception as e:
+                logger.warning("Failed to write deposited.xyz: %s", e)
         logger.info("Deposition complete. Total atoms: %d", len(deposited_structure))
 
         # 3. Run aKMC using EON
@@ -96,7 +103,9 @@ class FePtMgoScenario(BaseScenario):
         num_depositions = self.params.num_depositions
         ratio = self.params.fe_pt_ratio
         max_retries = 3
+        dep_height = self.params.deposition_height
 
+        # Work on a copy initially, then reuse
         structure = slab.copy()  # type: ignore[no-untyped-call]
 
         # Determine potential path
@@ -133,7 +142,7 @@ class FePtMgoScenario(BaseScenario):
             ly = structure.cell[1, 1]
             x = random.uniform(0, lx)  # noqa: S311
             y = random.uniform(0, ly)  # noqa: S311
-            z = max_z + 2.5 # Place 2.5 Angstrom above
+            z = max_z + dep_height
 
             # Use Atom object to ensure position is set correctly
             atom = Atom(element, position=(x, y, z))
@@ -143,7 +152,12 @@ class FePtMgoScenario(BaseScenario):
             relaxed_structure = None
             for attempt in range(max_retries):
                 try:
-                    # Relax returns a new Atoms object
+                    # Relax returns a new Atoms object usually (depending on engine impl)
+                    # Ideally engine.relax modifies in place or returns efficient copy.
+                    # LammpsEngine.relax returns a result structure.
+                    # We update 'structure' to point to this new object.
+                    # This replaces the old structure reference, allowing GC to reclaim if refcount drops.
+                    # This is acceptable for incremental growth unless N is huge.
                     relaxed_structure = self.engine.relax(structure, potential)
                     break # Success
                 except Exception as e:
@@ -176,10 +190,8 @@ class FePtMgoScenario(BaseScenario):
             msg = f"Failed to write EON structure: {e}"
             logger.warning("Failed to write pos.con using 'eon' format: %s. Trying fallback if possible.", e)
             # Try plain extended xyz as fallback or just fail
-            try:
+            with contextlib.suppress(Exception):
                 write(work_dir / "pos.con", structure, format="extxyz") # Might not work for EON
-            except Exception:
-                pass
             raise RuntimeError(msg) from e
 
         # Generate config

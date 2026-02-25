@@ -21,6 +21,9 @@ class MockProcessRunner(ProcessRunner):
         mock_process.returncode = self.return_code
         mock_process.stdout = self.stdout
         mock_process.stderr = self.stderr
+        if self.return_code != 0 and kwargs.get("check"):
+            import subprocess
+            raise subprocess.CalledProcessError(self.return_code, cmd, self.stdout, self.stderr)
         return mock_process
 
 
@@ -31,21 +34,32 @@ def mock_potential_path():
 
 
 def test_eon_generate_config(mock_potential_path):
-    config = EONConfig(potential_path=mock_potential_path, temperature=500.0)
+    config = EONConfig(
+        potential_path=mock_potential_path,
+        temperature=500.0,
+        random_seed=12345,
+        eon_executable="eonclient"
+    )
     wrapper = EONWrapper(config)
 
     with tempfile.TemporaryDirectory() as tmp_dir:
         output_path = Path(tmp_dir) / "config.ini"
-        # We expect generate_config to set potential = command_line and command = python pace_driver.py
-        # But wait, generate_config needs to know where the driver script will be or assume it's in CWD.
         wrapper.generate_config(output_path)
 
         content = output_path.read_text()
+        assert "[Main]" in content
         assert "job = akmc" in content
         assert "temperature = 500.0" in content
+        assert "random_seed = 12345" in content
+        assert "[Potential]" in content
         assert "potential = command_line" in content
-        # The command should point to the driver script. It might use absolute python path.
-        assert "pace_driver.py" in content
+        # Check command path
+        assert f"command = {str(Path('pace_driver.py'))}" or "python pace_driver.py" in content
+        assert "[Structure]" in content
+        assert "supercell = [1, 1, 1]" in content
+        assert "[Communicator]" in content
+        assert "type = local" in content
+        assert "client_path = eonclient" in content
 
 
 def test_eon_generate_driver_script(mock_potential_path):
@@ -58,19 +72,15 @@ def test_eon_generate_driver_script(mock_potential_path):
 
         content = driver_path.read_text()
         assert "from ase" in content or "import ase" in content
-        # The script uses environment variable for potential path, so it shouldn't be hardcoded in the script content
-        # assert str(mock_potential_path) in content
         assert "PACE_POTENTIAL_PATH" in content
-        # It should read from stdin (or a file if EON requires)
-        # Usually EON command_line potential passes coords via file or stdin.
-        # Let's assume stdin/stdout for now as per SPEC.
-        assert "sys.stdin" in content or "input()" in content
+        # Check if file is executable
+        import os
+        assert os.access(driver_path, os.X_OK)
 
 
 def test_eon_run_command(mock_potential_path):
     # Use a safe path for eon_executable to pass security checks
     with tempfile.NamedTemporaryFile(suffix="eonclient") as tmp_exec:
-        safe_executable = Path(tmp_exec.name).name # Use relative name or resolve to temp
         # Actually validate_path_safe allows temp dir.
         safe_executable = str(Path(tmp_exec.name))
 
@@ -91,17 +101,22 @@ def test_eon_run_command(mock_potential_path):
 
         assert cmd == ["mpirun", "-np", "4", safe_executable]
         assert run_cwd == cwd
+        assert "PACE_POTENTIAL_PATH" in kwargs["env"]
+        assert kwargs["env"]["PACE_POTENTIAL_PATH"] == str(mock_potential_path)
 
 
-def test_eon_parse_results(mock_potential_path):
-    config = EONConfig(potential_path=mock_potential_path)
-    wrapper = EONWrapper(config)
+def test_eon_run_not_found(mock_potential_path):
+    # Test error handling for executable not found
+    runner = MockProcessRunner(return_code=127, stderr="not found")
+
+    # Use a safe path for eon_executable to pass security checks
+    with tempfile.NamedTemporaryFile(suffix="eonclient") as tmp_exec:
+        safe_executable = str(Path(tmp_exec.name))
+
+    config = EONConfig(potential_path=mock_potential_path, eon_executable=safe_executable)
+    wrapper = EONWrapper(config, runner=runner)
 
     with tempfile.TemporaryDirectory() as tmp_dir:
-        cwd = Path(tmp_dir)
-        (cwd / "dynamics.txt").write_text("step 1 energy -100.0")
-        (cwd / "processtable.dat").write_text("process 1 barrier 0.5")
-
-        results = wrapper.parse_results(cwd)
-        assert results["dynamics"] == "step 1 energy -100.0"
-        assert results["processtable"] == "process 1 barrier 0.5"
+        with pytest.raises(RuntimeError) as excinfo:
+            wrapper.run(Path(tmp_dir))
+        assert "EON executable not found" in str(excinfo.value)

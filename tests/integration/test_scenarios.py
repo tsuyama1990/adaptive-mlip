@@ -22,7 +22,7 @@ def integration_config():
         mock_conf.scenario = ScenarioConfig(
             name="fept_mgo",
             enabled=True,
-            parameters={"num_depositions": 2, "fe_pt_ratio": 0.5}
+            parameters={"num_depositions": 2, "fe_pt_ratio": 0.5, "write_intermediate_files": True}
         )
         mock_conf.eon = EONConfig(potential_path=path, enabled=True)
         # We need a valid MDConfig mostly for instantiation if not mocked
@@ -60,17 +60,30 @@ def test_fept_mgo_integration(integration_config):
             assert (eon_work / "pace_driver.py").exists()
             assert (eon_work / "pos.con").exists()
 
-            # Verify config content
+            # Verify config content thoroughly
             config_content = (eon_work / "config.ini").read_text()
+            assert "[Main]" in config_content
             assert "job = akmc" in config_content
             assert "potential = command_line" in config_content
+            assert "pace_driver.py" in config_content
+            assert "supercell = [1, 1, 1]" in config_content
+
+            # Verify driver script content
+            driver_content = (eon_work / "pace_driver.py").read_text()
+            assert "PACE_POTENTIAL_PATH" in driver_content
+            assert "from ase.calculators.lammpsrun import LAMMPS" in driver_content
+            assert "os.environ.get" in driver_content
 
             # Verify runner call
             assert mock_runner.run.called
-            # Check command
-            args, _ = mock_runner.run.call_args
+            # Check command and environment
+            args, kwargs = mock_runner.run.call_args
             cmd = args[0]
             assert cmd[0] == "eonclient"
+            env = kwargs.get("env")
+            assert env is not None
+            assert "PACE_POTENTIAL_PATH" in env
+            assert env["PACE_POTENTIAL_PATH"] == str(integration_config.eon.potential_path)
 
         finally:
             os.chdir(cwd)
