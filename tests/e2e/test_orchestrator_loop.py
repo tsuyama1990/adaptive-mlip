@@ -8,9 +8,9 @@ from ase import Atoms
 from ase.io import write
 
 from pyacemaker.core.base import BaseGenerator
-from pyacemaker.core.loop import LoopState
 from pyacemaker.domain_models import PyAceConfig
 from pyacemaker.domain_models.md import MDSimulationResult
+from pyacemaker.domain_models.state import LoopState
 from pyacemaker.orchestrator import Orchestrator
 
 
@@ -100,9 +100,8 @@ def orchestrator(mock_config: PyAceConfig, tmp_path: Path) -> Orchestrator:
 
 
 def test_cold_start(orchestrator: Orchestrator, tmp_path: Path) -> None:
-    # Inject loop_state
-    if not hasattr(orchestrator, "loop_state"):
-        orchestrator.loop_state = LoopState()
+    # Reset loop state
+    orchestrator.state_manager.state = LoopState()
 
     # Setup mocks
     assert orchestrator.oracle is not None
@@ -150,9 +149,8 @@ def test_resume_capability(mock_config: PyAceConfig, tmp_path: Path) -> None:
 
 
 def test_run_loop_iteration_halt(orchestrator: Orchestrator, tmp_path: Path) -> None:
-    # Inject loop_state
-    if not hasattr(orchestrator, "loop_state"):
-        orchestrator.loop_state = LoopState()
+    # Reset loop state
+    orchestrator.state_manager.state = LoopState()
 
     orchestrator.loop_state.current_potential = tmp_path / "current.yace"
     orchestrator.loop_state.current_potential.touch()

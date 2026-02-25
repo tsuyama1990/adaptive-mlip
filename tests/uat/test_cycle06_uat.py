@@ -5,9 +5,9 @@ import pytest
 from ase import Atoms
 from ase.io import write
 
-from pyacemaker.core.loop import LoopState, LoopStatus
 from pyacemaker.domain_models import PyAceConfig
 from pyacemaker.domain_models.md import MDSimulationResult
+from pyacemaker.domain_models.state import LoopState, LoopStatus
 from pyacemaker.orchestrator import Orchestrator
 
 
@@ -73,8 +73,9 @@ def test_scenario_06_01_active_learning_campaign(uat_config: PyAceConfig, tmp_pa
         mock_engine = MagicMock()
         mock_selector = MagicMock()
         mock_validator = MagicMock()
+        mock_eon = MagicMock()
 
-        mock_factory.return_value = (mock_gen, mock_oracle, mock_trainer, mock_engine, mock_selector, mock_validator)
+        mock_factory.return_value = (mock_gen, mock_oracle, mock_trainer, mock_engine, mock_selector, mock_validator, mock_eon)
 
         # Pre-create potential files
         pot1 = tmp_path / "pot_v1.yace"
@@ -146,8 +147,8 @@ def test_scenario_06_02_resume_capability(uat_config: PyAceConfig, tmp_path: Pat
         mock_engine = MagicMock()
         mock_selector = MagicMock()
         mock_validator = MagicMock()
-        mock_validator = MagicMock()
-        mock_factory.return_value = (mock_gen, mock_oracle, mock_trainer, mock_engine, mock_selector, mock_validator)
+        mock_eon = MagicMock()
+        mock_factory.return_value = (mock_gen, mock_oracle, mock_trainer, mock_engine, mock_selector, mock_validator, mock_eon)
 
         # Iteration 2: Run MD
         res2 = MDSimulationResult(

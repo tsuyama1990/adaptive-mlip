@@ -49,8 +49,9 @@ class ElasticCalculator:
 
         base_cell = structure.get_cell()  # type: ignore[no-untyped-call]
 
+        # Use a single structure object and modify/restore cell to avoid copying overhead
+        atoms = structure.copy()  # type: ignore[no-untyped-call]
         for eps in strains:
-            atoms = structure.copy()  # type: ignore[no-untyped-call]
             cell = base_cell.copy()
             cell[0, 0] *= (1 + eps)
             atoms.set_cell(cell, scale_atoms=True)
@@ -58,6 +59,9 @@ class ElasticCalculator:
             stress = self._get_stress(atoms, potential_path)
             stress_xx.append(stress[0])
             stress_yy.append(stress[1])
+
+        # Restore structure
+        atoms.set_cell(base_cell, scale_atoms=True)
 
         # Fit
         c11 = np.polyfit(strains, stress_xx, 1)[0]
@@ -67,8 +71,9 @@ class ElasticCalculator:
         # Apply shear e_xy (engineering strain gamma_xy = 2*e_xy)
         # Voigt notation: sigma_xy = C44 * gamma_xy
         stress_xy = []
+        # Reuse atoms object
+        atoms.set_cell(base_cell, scale_atoms=True)
         for eps in strains:
-            atoms = structure.copy()  # type: ignore[no-untyped-call]
             cell = base_cell.copy()
             # Shear in xy
             # cell[0, 1] += eps * cell[1, 1] ? No, simpler for cubic

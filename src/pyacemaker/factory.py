@@ -1,6 +1,9 @@
 from pyacemaker.core.active_set import ActiveSetSelector
 from pyacemaker.core.base import BaseEngine, BaseGenerator, BaseOracle, BaseTrainer
+from pyacemaker.core.calculators.elastic import ElasticCalculator
+from pyacemaker.core.calculators.phonons import PhononCalculator
 from pyacemaker.core.engine import LammpsEngine
+from pyacemaker.core.eon_manager import EONManager
 from pyacemaker.core.exceptions import ConfigError
 from pyacemaker.core.generator import StructureGenerator
 from pyacemaker.core.oracle import DFTManager
@@ -8,8 +11,6 @@ from pyacemaker.core.report import ReportGenerator
 from pyacemaker.core.trainer import PacemakerTrainer
 from pyacemaker.core.validator import Validator
 from pyacemaker.domain_models import PyAceConfig
-from pyacemaker.utils.elastic import ElasticCalculator
-from pyacemaker.utils.phonons import PhononCalculator
 
 
 class ModuleFactory:
@@ -20,7 +21,15 @@ class ModuleFactory:
     @staticmethod
     def create_modules(
         config: PyAceConfig,
-    ) -> tuple[BaseGenerator, BaseOracle, BaseTrainer, BaseEngine, ActiveSetSelector, Validator]:
+    ) -> tuple[
+        BaseGenerator,
+        BaseOracle,
+        BaseTrainer,
+        BaseEngine,
+        ActiveSetSelector,
+        Validator,
+        EONManager | None,
+    ]:
         """
         Creates instances of core modules based on the provided configuration.
 
@@ -38,6 +47,7 @@ class ModuleFactory:
                 - BaseEngine (e.g., LammpsEngine)
                 - ActiveSetSelector
                 - Validator
+                - EONManager (optional)
 
         Raises:
             ConfigError: If configuration is invalid or missing required fields.
@@ -81,6 +91,9 @@ class ModuleFactory:
                 config.validation, phonon_calc, elastic_calc, report_gen
             )
 
+            # EON Manager
+            eon_manager = EONManager(config.eon) if config.eon else None
+
         except Exception as e:
             msg = f"Failed to create modules: {e}"
             raise RuntimeError(msg) from e
@@ -92,4 +105,5 @@ class ModuleFactory:
             engine,
             active_set_selector,
             validator,
+            eon_manager,
         )

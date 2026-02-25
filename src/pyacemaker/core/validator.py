@@ -5,6 +5,8 @@ import numpy as np
 from ase import Atoms
 from ase.data import atomic_numbers
 
+from pyacemaker.core.calculators.elastic import ElasticCalculator
+from pyacemaker.core.calculators.phonons import PhononCalculator
 from pyacemaker.core.report import ReportGenerator
 from pyacemaker.domain_models.constants import (
     ERR_POTENTIAL_NOT_FOUND,
@@ -17,8 +19,6 @@ from pyacemaker.domain_models.constants import (
     ERR_VAL_STRUCT_TYPE,
 )
 from pyacemaker.domain_models.validation import ValidationConfig, ValidationResult
-from pyacemaker.utils.elastic import ElasticCalculator
-from pyacemaker.utils.phonons import PhononCalculator
 
 
 class LammpsInputValidator:
@@ -102,14 +102,10 @@ class LammpsInputValidator:
         if not path.is_file():
             raise ValueError(ERR_VAL_POT_NOT_FILE.format(path=path))
 
-        # Security: Restrict access to project directory or temp dirs
-        allowed_prefixes = [
-            Path.cwd().resolve(),
-            Path("/tmp").resolve(),  # noqa: S108
-            Path("/dev/shm").resolve()  # noqa: S108
-        ]
+        # Security: Restrict access to project directory only
+        project_root = Path.cwd().resolve()
 
-        if not any(str(path).startswith(str(prefix)) for prefix in allowed_prefixes):
+        if not str(path).startswith(str(project_root)):
             raise ValueError(ERR_VAL_POT_OUTSIDE.format(path=path))
 
         return path

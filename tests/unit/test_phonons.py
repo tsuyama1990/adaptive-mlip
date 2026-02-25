@@ -6,7 +6,7 @@ import pytest
 from ase import Atoms
 
 from pyacemaker.core.base import BaseEngine
-from pyacemaker.utils.phonons import PhononCalculator
+from pyacemaker.core.calculators.phonons import PhononCalculator
 
 
 class TestPhononCalculator:
@@ -27,7 +27,7 @@ class TestPhononCalculator:
             imaginary_tol=-0.05
         )
 
-    @patch("pyacemaker.utils.phonons.Phonopy")
+    @patch("pyacemaker.core.calculators.phonons.Phonopy")
     def test_check_stability_stable(self, mock_phonopy_cls, calculator):
         mock_phonopy = mock_phonopy_cls.return_value
 
@@ -54,7 +54,7 @@ class TestPhononCalculator:
         assert is_stable is True
         assert isinstance(plot, str)
 
-    @patch("pyacemaker.utils.phonons.Phonopy")
+    @patch("pyacemaker.core.calculators.phonons.Phonopy")
     def test_check_stability_unstable(self, mock_phonopy_cls, calculator):
         mock_phonopy = mock_phonopy_cls.return_value
 

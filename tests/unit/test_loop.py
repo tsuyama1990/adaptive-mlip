@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from pyacemaker.core.loop import LoopState, LoopStatus
+from pyacemaker.domain_models.state import LoopState, LoopStatus
 
 
 def test_loop_state_initialization() -> None:

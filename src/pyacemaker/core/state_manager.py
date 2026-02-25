@@ -1,13 +1,13 @@
 from logging import Logger
 from pathlib import Path
 
-from pyacemaker.core.loop import LoopState
 from pyacemaker.domain_models.defaults import (
     LOG_STATE_LOAD_FAIL,
     LOG_STATE_LOAD_SUCCESS,
     LOG_STATE_SAVE_FAIL,
     LOG_STATE_SAVED,
 )
+from pyacemaker.domain_models.state import LoopState
 
 
 class StateManager:

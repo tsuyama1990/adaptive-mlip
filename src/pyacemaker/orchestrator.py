@@ -10,6 +10,7 @@ from ase.io import iread, read, write
 from pyacemaker.core.active_set import ActiveSetSelector
 from pyacemaker.core.base import BaseEngine, BaseGenerator, BaseOracle, BaseTrainer
 from pyacemaker.core.directory_manager import DirectoryManager
+from pyacemaker.core.eon_manager import EONManager
 from pyacemaker.core.exceptions import OrchestratorError
 from pyacemaker.core.state_manager import StateManager
 from pyacemaker.core.validator import Validator
@@ -72,6 +73,7 @@ class Orchestrator:
         self.engine: BaseEngine | None = None
         self.active_set_selector: ActiveSetSelector | None = None
         self.validator: Validator | None = None
+        self.eon_manager: EONManager | None = None
 
         # Initialize State
         self.state_manager.load()
@@ -99,6 +101,7 @@ class Orchestrator:
                 self.engine,
                 self.active_set_selector,
                 self.validator,
+                self.eon_manager,
             ) = ModuleFactory.create_modules(self.config)
 
         except Exception as e:
@@ -138,9 +141,9 @@ class Orchestrator:
 
         # Open file once
         with filepath.open(mode) as f:
+            # Iterate through batches
             for batch in batched(generator, batch_size):
-                # Write chunk
-                # ase.io.write handles list of atoms and can write to file handle.
+                # Write chunk to the open file handle
                 # format="extxyz" is standard for streaming.
                 write(f, batch, format="extxyz")
                 count += len(batch)
@@ -423,11 +426,34 @@ class Orchestrator:
 
         try:
             deployed_potential = self._deploy_potential(iteration)
-            result = self._run_md_simulation(iteration, deployed_potential)
+            md_result = self._run_md_simulation(iteration, deployed_potential)
 
-            if result:
-                self._adapt_strategy(result)
-                self._handle_md_halt(result, deployed_potential, paths)
+            if md_result:
+                self._adapt_strategy(md_result)
+                self._handle_md_halt(md_result, deployed_potential, paths)
+
+                # Run EON if enabled and MD was successful (or even if not? let's stick to successful for now)
+                if self.config.eon and self.config.eon.enabled and self.eon_manager and not md_result.halted:
+                    self.logger.info("Running EON simulation...")
+                    initial_structure = self._get_initial_structure(iteration)
+                    if initial_structure:
+                        kmc_work_dir = paths["base"] / "kmc_run"
+                        eon_result = self.eon_manager.run(kmc_work_dir, deployed_potential, initial_structure)
+
+                        if eon_result.get("halted"):
+                            self.logger.info("EON Halted. Triggering refinement.")
+                            halt_structure_path = eon_result.get("halt_structure_path")
+                            if halt_structure_path:
+                                dummy_result = MDSimulationResult(
+                                    energy=0.0, forces=[[0.0, 0.0, 0.0]], halted=True, max_gamma=100.0,
+                                    n_steps=0, temperature=0.0, halt_structure_path=halt_structure_path
+                                )
+                                new_potential = self._refine_potential(dummy_result, deployed_potential, paths)
+                                if new_potential:
+                                    self.state_manager.current_potential = new_potential
+                                    self.logger.info(f"Potential refined from EON halt: {new_potential}")
+                            else:
+                                self.logger.warning("EON halted but no structure returned.")
 
             self.state_manager.iteration = iteration
             self.state_manager.save()
