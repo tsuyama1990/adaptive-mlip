@@ -120,3 +120,16 @@ def test_eon_run_not_found(mock_potential_path):
         with pytest.raises(RuntimeError) as excinfo:
             wrapper.run(Path(tmp_dir))
         assert "EON executable not found" in str(excinfo.value)
+
+def test_eon_file_write_failure(mock_potential_path):
+    config = EONConfig(potential_path=mock_potential_path)
+    wrapper = EONWrapper(config)
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        output_path = Path(tmp_dir) / "config.ini"
+
+        # Mock pathlib.Path.write_text to fail
+        with patch.object(Path, "write_text", side_effect=OSError("Permission denied")):
+            with pytest.raises(RuntimeError) as excinfo:
+                wrapper.generate_config(output_path)
+            assert "Failed to write file" in str(excinfo.value)

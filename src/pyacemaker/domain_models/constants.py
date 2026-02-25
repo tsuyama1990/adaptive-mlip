@@ -1,3 +1,4 @@
+
 from .defaults import (
     DANGEROUS_PATH_CHARS,
     DEFAULT_LJ_PARAMS,
@@ -54,6 +55,10 @@ if not POTENTIAL_PATH:
     sys.stderr.write("Error: PACE_POTENTIAL_PATH not set\\n")
     sys.exit(1)
 
+if not os.path.exists(POTENTIAL_PATH):
+    sys.stderr.write(f"Error: Potential file not found at {POTENTIAL_PATH}\\n")
+    sys.exit(1)
+
 def read_input():
     try:
         lines = sys.stdin.readlines()
@@ -83,69 +88,70 @@ def read_input():
         sys.exit(1)
 
 def main():
-    # 1. Load template structure (pos.con) to get species
-    if not os.path.exists("pos.con"):
-        sys.stderr.write("Error: pos.con not found\\n")
-        sys.exit(1)
-
     try:
-        # EON uses .con format, ASE supports it
-        template = read("pos.con", format="eon")
-    except Exception:
-        # Fallback if ASE cannot read eon format directly or extension issue
-        # Try reading as 'con' or just assume it works if supported
-        template = read("pos.con")
+        # 1. Load template structure (pos.con) to get species
+        if not os.path.exists("pos.con"):
+            sys.stderr.write("Error: pos.con not found\\n")
+            sys.exit(1)
 
-    # 2. Read current configuration from stdin
-    n, cell, coords = read_input()
-    if n is None:
-        sys.exit(0)
+        try:
+            # EON uses .con format, ASE supports it
+            template = read("pos.con", format="eon")
+        except Exception:
+            # Fallback if ASE cannot read eon format directly or extension issue
+            # Try reading as 'con' or just assume it works if supported
+            template = read("pos.con")
 
-    if n != len(template):
-        sys.stderr.write(f"Error: Atom count mismatch ({n} vs {len(template)})\\n")
-        sys.exit(1)
+        # 2. Read current configuration from stdin
+        n, cell, coords = read_input()
+        if n is None:
+            sys.exit(0)
 
-    # 3. Update structure
-    template.set_cell(cell)
-    template.set_positions(coords)
+        if n != len(template):
+            sys.stderr.write(f"Error: Atom count mismatch ({n} vs {len(template)})\\n")
+            sys.exit(1)
 
-    # 4. Setup Calculator
-    # Using LAMMPS via ASE is robust.
-    # For speed, one might use lammps python module directly,
-    # but constructing the input script for PACE is complex.
-    # We rely on ASE's LAMMPS calculator or similar.
-    # We need to specify the potential file.
+        # 3. Update structure
+        template.set_cell(cell)
+        template.set_positions(coords)
 
-    # We construct a pair_style command for PACE.
-    # Assuming 'pace' pair style is available in the LAMMPS binary.
-    # pair_style pace
-    # pair_coeff * * potential.yace Element1 Element2 ...
+        # 4. Setup Calculator
+        # Using LAMMPS via ASE is robust.
+        # For speed, one might use lammps python module directly,
+        # but constructing the input script for PACE is complex.
+        # We rely on ASE's LAMMPS calculator or similar.
+        # We need to specify the potential file.
 
-    species = sorted(list(set(template.get_chemical_symbols())))
-    species_str = " ".join(species)
+        # We construct a pair_style command for PACE.
+        # Assuming 'pace' pair style is available in the LAMMPS binary.
+        # pair_style pace
+        # pair_coeff * * potential.yace Element1 Element2 ...
 
-    parameters = {
-        "pair_style": "pace",
-        "pair_coeff": [f"* * {POTENTIAL_PATH} {species_str}"]
-    }
+        species = sorted(list(set(template.get_chemical_symbols())))
+        species_str = " ".join(species)
 
-    calc = LAMMPS(parameters=parameters, files=[POTENTIAL_PATH])
-    template.calc = calc
+        parameters = {
+            "pair_style": "pace",
+            "pair_coeff": [f"* * {POTENTIAL_PATH} {species_str}"]
+        }
 
-    # 5. Compute
-    try:
+        calc = LAMMPS(parameters=parameters, files=[POTENTIAL_PATH])
+        template.calc = calc
+
+        # 5. Compute
         energy = template.get_potential_energy()
         forces = template.get_forces()
-    except Exception as e:
-        sys.stderr.write(f"Error computing energy: {e}\\n")
-        sys.exit(1)
 
-    # 6. Output results
-    # Format: Energy (1 line)
-    # Forces (N lines, x y z)
-    print(f"{energy:.16f}")
-    for f in forces:
-        print(f"{f[0]:.16f} {f[1]:.16f} {f[2]:.16f}")
+        # 6. Output results
+        # Format: Energy (1 line)
+        # Forces (N lines, x y z)
+        print(f"{energy:.16f}")
+        for f in forces:
+            print(f"{f[0]:.16f} {f[1]:.16f} {f[2]:.16f}")
+
+    except Exception as e:
+        sys.stderr.write(f"Unexpected error: {e}\\n")
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()

@@ -1,3 +1,5 @@
+import tempfile
+from pathlib import Path
 from typing import Final
 
 # Configuration Defaults
@@ -100,9 +102,14 @@ DEFAULT_VALIDATION_PHONON_IMAGINARY_TOL = -0.05
 DEFAULT_VALIDATION_ELASTIC_STRAIN = 0.01
 DEFAULT_VALIDATION_ELASTIC_STEPS = 5
 
-# Security constants (previously in constants.py but seemingly missing/moved)
+# Security constants
 DANGEROUS_PATH_CHARS: Final[set[str]] = {";", "&", "|", "`", "$", "(", ")", "<", ">", "\n", "\r", "\t", "*", "?"}
-DEFAULT_RAM_DISK_PATH = "/dev/shm"  # noqa: S108
+
+# RAM Disk logic
+_ram_disk_candidate = "/dev/shm"  # noqa: S108
+# Path imported inside function or check to avoid E402 if strict, but let's fix import order.
+# Actually I will move the import to top level but I must respect 'from typing import Final' existing block.
+DEFAULT_RAM_DISK_PATH = _ram_disk_candidate if Path(_ram_disk_candidate).exists() else tempfile.gettempdir()
 
 # MD Minimize defaults
 DEFAULT_MD_MINIMIZE_FTOL = 1e-6
