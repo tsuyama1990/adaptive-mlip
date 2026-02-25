@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 
 from pyacemaker.core.base import BaseEngine
-from pyacemaker.utils.elastic import ElasticCalculator
+from pyacemaker.core.calculators.elastic import ElasticCalculator
 
 
 class TestElasticCalculator:

@@ -5,6 +5,8 @@ import numpy as np
 from ase import Atoms
 from ase.data import atomic_numbers
 
+from pyacemaker.core.calculators.elastic import ElasticCalculator
+from pyacemaker.core.calculators.phonons import PhononCalculator
 from pyacemaker.core.report import ReportGenerator
 from pyacemaker.domain_models.constants import (
     ERR_POTENTIAL_NOT_FOUND,
@@ -17,8 +19,6 @@ from pyacemaker.domain_models.constants import (
     ERR_VAL_STRUCT_TYPE,
 )
 from pyacemaker.domain_models.validation import ValidationConfig, ValidationResult
-from pyacemaker.utils.elastic import ElasticCalculator
-from pyacemaker.utils.phonons import PhononCalculator
 
 
 class LammpsInputValidator:

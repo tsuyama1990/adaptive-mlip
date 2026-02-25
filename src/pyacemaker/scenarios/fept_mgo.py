@@ -1,7 +1,7 @@
 import logging
 import random
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from ase import Atoms
 from ase.build import bulk, surface
@@ -70,7 +70,7 @@ class FePtMgoScenario(BaseScenario):
         """Generates MgO (001) surface."""
         a = 4.212
         mgo = bulk("MgO", "rocksalt", a=a)
-        return surface(mgo, (0, 0, 1), layers=4, vacuum=10.0)
+        return cast(Atoms, surface(mgo, (0, 0, 1), layers=4, vacuum=10.0))
 
     def _deposit_atoms(self, slab: Atoms) -> Atoms:
         """

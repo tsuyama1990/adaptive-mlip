@@ -13,6 +13,8 @@ class EONConfig(BaseModel):
     potential_path: Path = Field(..., description="Path to the potential file")
     temperature: float = Field(300.0, ge=0.0, description="Temperature in Kelvin")
     akmc_steps: int = Field(100, ge=1, description="Number of aKMC steps to run")
+    random_seed: int = Field(12345, description="Random seed for EON")
+    otf_threshold: float = Field(5.0, gt=0.0, description="Gamma threshold for OTF halt")
     supercell: list[int] = Field(
         default_factory=lambda: [1, 1, 1],
         min_length=3,
