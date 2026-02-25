@@ -1,4 +1,3 @@
-
 from .defaults import (
     DANGEROUS_PATH_CHARS,
     DEFAULT_LJ_PARAMS,

@@ -31,7 +31,13 @@ class EONConfig(BaseModel):
         default_factory=lambda: int(os.getenv("EON_SEED", str(DEFAULT_EON_SEED))),
         description="Random seed for EON",
     )
-    otf_threshold: float = Field(0.05, ge=0.0, description="On-The-Fly extrapolation grade threshold")
+    otf_threshold: float = Field(
+        0.05, ge=0.0, description="On-The-Fly extrapolation grade threshold"
+    )
+
+    # EON specific job settings
+    job_type: str = Field("akmc", description="EON job type (e.g., 'akmc', 'basin_hopping')")
+    saddle_search_method: str = Field("min_mode", description="Saddle point search method")
 
     @field_validator("potential_path")
     @classmethod

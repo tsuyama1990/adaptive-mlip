@@ -61,6 +61,12 @@ def test_eon_generate_config(mock_potential_path):
         assert "type = local" in content
         assert "client_path = eonclient" in content
 
+        # Verify file permissions (0o600 for config)
+        import os
+        import stat
+        st = os.stat(output_path)
+        assert stat.S_IMODE(st.st_mode) == 0o600
+
 
 def test_eon_generate_driver_script(mock_potential_path):
     config = EONConfig(potential_path=mock_potential_path)
@@ -73,9 +79,12 @@ def test_eon_generate_driver_script(mock_potential_path):
         content = driver_path.read_text()
         assert "from ase" in content or "import ase" in content
         assert "PACE_POTENTIAL_PATH" in content
-        # Check if file is executable
+        # Check if file is executable (0o700)
         import os
+        import stat
         assert os.access(driver_path, os.X_OK)
+        st = os.stat(driver_path)
+        assert stat.S_IMODE(st.st_mode) == 0o700
 
 
 def test_eon_run_command(mock_potential_path):
@@ -99,6 +108,7 @@ def test_eon_run_command(mock_potential_path):
         assert len(runner.commands) == 1
         cmd, run_cwd, kwargs = runner.commands[0]
 
+        # Verify command splitting
         assert cmd == ["mpirun", "-np", "4", safe_executable]
         assert run_cwd == cwd
         assert "PACE_POTENTIAL_PATH" in kwargs["env"]

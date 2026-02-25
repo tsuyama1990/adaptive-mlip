@@ -24,8 +24,11 @@ class EONWrapper:
         self.config = config
         self.runner = runner or SubprocessRunner()
 
-    def _write_file_safe(self, path: Path, content: str, mode: int = 0o644) -> None:
-        """Helper to write files securely with logging."""
+    def _write_file_safe(self, path: Path, content: str, mode: int = 0o600) -> None:
+        """
+        Helper to write files securely with logging.
+        Default permissions are 0o600 (user read/write only) for security.
+        """
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(content)
@@ -43,7 +46,8 @@ class EONWrapper:
         Args:
             output_path: Path to write the script.
         """
-        self._write_file_safe(output_path, PACE_DRIVER_TEMPLATE, mode=0o755)
+        # Script needs execute permission (0o700 for user only)
+        self._write_file_safe(output_path, PACE_DRIVER_TEMPLATE, mode=0o700)
 
     def generate_config(self, output_path: Path) -> None:
         """
@@ -56,10 +60,10 @@ class EONWrapper:
         driver_script_name = "pace_driver.py"
         self.generate_driver_script(output_path.parent / driver_script_name)
 
-        # Basic EON configuration template
+        # Basic EON configuration template using config fields
         config_content = [
             "[Main]",
-            "job = akmc",
+            f"job = {self.config.job_type}",
             f"temperature = {self.config.temperature}",
             f"random_seed = {self.config.random_seed}",
             "",
@@ -68,7 +72,7 @@ class EONWrapper:
             f"command = {sys.executable} {driver_script_name}",
             "",
             "[Saddle Search]",
-            "method = min_mode",
+            f"method = {self.config.saddle_search_method}",
             "",
             "[Structure]",
             f"supercell = {self.config.supercell}",
@@ -79,7 +83,7 @@ class EONWrapper:
         ]
 
         if self.config.mpi_command:
-             pass
+            pass
 
         self._write_file_safe(output_path, "\n".join(config_content))
 
@@ -97,12 +101,14 @@ class EONWrapper:
             if "/" in executable or "\\" in executable:
                 validate_path_safe(Path(executable))
 
+            # Use list for subprocess to avoid shell=True, which is safer
             cmd = [executable]
 
             if self.config.mpi_command:
+                # Split carefully, treating it as a command prefix
                 cmd = shlex.split(self.config.mpi_command) + cmd
 
-            cmd_str = ' '.join(cmd)
+            cmd_str = " ".join(cmd)
             logger.info("Starting EON simulation in %s with command: %s", working_dir, cmd_str)
 
             # Pass environment variable for potential path

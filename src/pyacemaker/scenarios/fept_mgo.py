@@ -21,13 +21,23 @@ logger = logging.getLogger(__name__)
 
 class FePtMgoParameters(BaseModel):
     """Parameters for FePt on MgO scenario."""
+
     num_depositions: int = Field(10, ge=1, description="Number of atoms to deposit")
     fe_pt_ratio: float = Field(0.5, ge=0.0, le=1.0, description="Ratio of Fe atoms (0.0 to 1.0)")
-    potential_path: Path | None = Field(None, description="Path to potential file (overrides EON config)")
+    potential_path: Path | None = Field(
+        None, description="Path to potential file (overrides EON config)"
+    )
     mgo_lattice_constant: float = Field(4.212, gt=0.0, description="Lattice constant of MgO")
-    deposition_height: float = Field(2.5, gt=0.0, description="Height above surface for deposition (Angstroms)")
-    write_intermediate_files: bool = Field(True, description="Whether to write intermediate XYZ files")
-    max_retries: int = Field(3, ge=1, description="Maximum retries for relaxation during deposition")
+    deposition_height: float = Field(
+        2.5, gt=0.0, description="Height above surface for deposition (Angstroms)"
+    )
+    write_intermediate_files: bool = Field(
+        True, description="Whether to write intermediate XYZ files"
+    )
+    max_retries: int = Field(
+        3, ge=1, description="Maximum retries for relaxation during deposition"
+    )
+    random_seed: int | None = Field(None, description="Random seed for reproducibility")
 
 
 class FePtMgoScenario(BaseScenario):
@@ -54,6 +64,10 @@ class FePtMgoScenario(BaseScenario):
             msg = f"Invalid parameters for FePtMgoScenario: {e}"
             logger.exception(msg)
             raise ValueError(msg) from e
+
+        # Initialize random seed if provided
+        if self.params.random_seed is not None:
+            random.seed(self.params.random_seed)
 
     def run(self) -> None:
         """Executes the full FePt/MgO workflow."""
@@ -94,18 +108,18 @@ class FePtMgoScenario(BaseScenario):
         """Generates MgO (001) surface."""
         a = self.params.mgo_lattice_constant
         mgo = bulk("MgO", "rocksalt", a=a)
-        return surface(mgo, (0, 0, 1), layers=4, vacuum=10.0)
+        return surface(mgo, (0, 0, 1), layers=4, vacuum=10.0)  # type: ignore[no-untyped-call, no-any-return]
 
     def _select_element(self) -> str:
         """Selects element (Fe or Pt) based on ratio."""
-        return "Fe" if random.random() < self.params.fe_pt_ratio else "Pt" # noqa: S311
+        return "Fe" if random.random() < self.params.fe_pt_ratio else "Pt"  # noqa: S311
 
     def _calculate_deposition_position(self, structure: Atoms) -> tuple[float, float, float]:
         """Calculates random x, y and max_z + height for deposition."""
         # Find max z of surface atoms
         if len(structure) > 0:
             # Use get_positions() to be safe across ASE versions
-            positions = structure.get_positions()
+            positions = structure.get_positions()  # type: ignore[no-untyped-call]
             max_z = positions[:, 2].max()
         else:
             max_z = 0.0
@@ -155,7 +169,7 @@ class FePtMgoScenario(BaseScenario):
             x, y, z = self._calculate_deposition_position(structure)
 
             # Use Atom object to ensure position is set correctly
-            atom = Atom(element, position=(x, y, z))
+            atom = Atom(element, position=(x, y, z))  # type: ignore[no-untyped-call]
             structure.append(atom)
 
             # Relax structure using MD Engine with retries
@@ -169,7 +183,9 @@ class FePtMgoScenario(BaseScenario):
 
         return structure
 
-    def _relax_structure_with_retries(self, structure: Atoms, potential: Path, step_index: int) -> Atoms | None:
+    def _relax_structure_with_retries(
+        self, structure: Atoms, potential: Path, step_index: int
+    ) -> Atoms | None:
         """Attempts to relax the structure with retries."""
         max_retries = self.params.max_retries
 
@@ -180,9 +196,17 @@ class FePtMgoScenario(BaseScenario):
                 # LammpsEngine.relax returns a result structure.
                 return self.engine.relax(structure, potential)
             except Exception as e:
-                logger.warning("Deposition %d relaxation failed (attempt %d/%d): %s", step_index, attempt + 1, max_retries, e)
+                logger.warning(
+                    "Deposition %d relaxation failed (attempt %d/%d): %s",
+                    step_index,
+                    attempt + 1,
+                    max_retries,
+                    e,
+                )
 
-        logger.error("Failed to relax structure after deposition %d. Aborting deposition loop.", step_index)
+        logger.error(
+            "Failed to relax structure after deposition %d. Aborting deposition loop.", step_index
+        )
         return None
 
     def _run_akmc(self, structure: Atoms) -> None:
@@ -192,7 +216,7 @@ class FePtMgoScenario(BaseScenario):
 
         # Use injected wrapper or create new one via factory/config if missing
         if not self.eon_wrapper:
-             self.eon_wrapper = EONWrapper(self.config.eon)
+            self.eon_wrapper = EONWrapper(self.config.eon)
 
         work_dir = Path("eon_work")
         work_dir.mkdir(exist_ok=True)
@@ -202,10 +226,12 @@ class FePtMgoScenario(BaseScenario):
             write(work_dir / "pos.con", structure, format="eon")
         except Exception as e:
             msg = f"Failed to write EON structure: {e}"
-            logger.warning("Failed to write pos.con using 'eon' format: %s. Trying fallback if possible.", e)
+            logger.warning(
+                "Failed to write pos.con using 'eon' format: %s. Trying fallback if possible.", e
+            )
             # Try plain extended xyz as fallback or just fail
             with contextlib.suppress(Exception):
-                write(work_dir / "pos.con", structure, format="extxyz") # Might not work for EON
+                write(work_dir / "pos.con", structure, format="extxyz")  # Might not work for EON
             raise RuntimeError(msg) from e
 
         # Generate config
