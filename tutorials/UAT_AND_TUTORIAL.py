@@ -18,11 +18,14 @@ def _(mo):
 
         This interactive notebook serves as both a **User Tutorial** and an automated **User Acceptance Test (UAT)** for the PYACEMAKER system. It simulates the "Grand Challenge" scenario: depositing Fe and Pt atoms onto an MgO surface and observing their ordering into the L10 phase.
 
-        We demonstrate the core components of the **Active Learning Loop**:
-        1.  **Structure Generation**: Creating candidate atomic configurations.
-        2.  **Oracle Calculation**: Computing ground-truth energies (DFT).
-        3.  **Potential Training**: Fitting a machine learning potential.
-        4.  **Simulation**: Running Molecular Dynamics (MD) or Kinetic Monte Carlo (KMC).
+        ### Scientific Background
+        **L10 Ordering**: The L10 phase is a chemically ordered structure found in binary alloys like FePt. It consists of alternating layers of Fe and Pt atoms along the [001] direction. This phase is crucial for magnetic recording applications due to its high magnetocrystalline anisotropy.
+
+        **Active Learning Loop**: To simulate this process accurately, we need an interatomic potential (Force Field). Instead of training on a static dataset, we use an **Active Learning** approach:
+        1.  **Structure Generation**: The system explores new atomic configurations (e.g., during deposition).
+        2.  **Uncertainty Detection**: If the model encounters a structure it "doesn't know" (high uncertainty), it halts.
+        3.  **Oracle Calculation**: We compute the true energy/forces using Density Functional Theory (DFT).
+        4.  **Retraining**: The potential is updated with the new data and the simulation resumes.
         """
     )
     return
@@ -32,15 +35,15 @@ def _(mo):
 def _(mo):
     mo.md(
         r"""
-        ## 1. Environment Setup & Configuration
-        We first check if the `pyacemaker` package is installed. If not, we fall back to a **Pure Demo Mode** using internal mocks to demonstrate the API and workflow without external dependencies.
+        ## 1. Environment Setup
+        We first check if the `pyacemaker` package is installed. If not, we fall back to a **Pure Demo Mode** using internal mocks.
         """
     )
     return
 
 
 @app.cell
-def _():
+def _(mo):
     import sys
     import os
     import shutil
@@ -150,6 +153,22 @@ def _():
     WORK_DIR = Path(WORK_DIR_OBJ.name)
     logger.info(f"📂 Working Directory: {WORK_DIR}")
 
+    # Notify User about Mode
+    if not HAS_PYACEMAKER:
+        mo.output.append(
+            mo.callout(
+                "**Running in Pure Demo Mode**: `pyacemaker` package was not found. Using internal mocks for demonstration.",
+                kind="warn"
+            )
+        )
+    else:
+        mo.output.append(
+            mo.callout(
+                "**Running in Real Mode**: `pyacemaker` package loaded. Mocks will be used only for heavy external codes (DFT/LAMMPS) if they are missing.",
+                kind="success"
+            )
+        )
+
     return (
         Any,
         Atoms,
@@ -199,12 +218,20 @@ def _():
 def _(mo):
     mo.md(
         r"""
-        ## 2. Define Components (Mock vs Real)
-        Here we define the components used in the tutorial. In a real scenario, these would connect to heavy simulation codes.
-        For this tutorial, we use simplified python-based implementations (mocks) that mimic the interface.
+        ## 2. Interactive Configuration
+        Adjust the simulation parameters below.
         """
     )
     return
+
+
+@app.cell
+def _(mo):
+    temperature_slider = mo.ui.slider(start=300, stop=2000, step=100, value=600, label="Deposition Temperature (K)")
+    depositions_slider = mo.ui.slider(start=5, stop=50, step=5, value=10, label="Number of Atoms")
+
+    mo.vstack([temperature_slider, depositions_slider])
+    return depositions_slider, temperature_slider
 
 
 @app.cell
@@ -312,21 +339,25 @@ def _(mo):
     mo.md(
         r"""
         ## 3. Phase 1: Training the Potential
-        We simulate the first phase of the active learning loop: generating data and training a potential.
+        In this phase, we bootstrap the potential.
+
+        **Steps**:
+        1.  **Generate Candidates**: Create initial random structures (Rattled Bulk, Surfaces).
+        2.  **Oracle Labeling**: Calculate their true energy using DFT (Mocked here).
+        3.  **Training**: Fit an initial ACE potential to this data.
         """
     )
     return
 
 
 @app.cell
-def _(DFTConfig, MDConfig, MockGenerator, MockOracle, MockTrainer, Path, PyAceConfig, StructureConfig, TrainingConfig, WORK_DIR, WorkflowConfig, mo):
+def _(DFTConfig, MDConfig, MockGenerator, MockOracle, MockTrainer, PyAceConfig, StructureConfig, TrainingConfig, WORK_DIR, WorkflowConfig, depositions_slider, mo, temperature_slider):
     # Setup Config
 
-    # Create dummy UPF files for mock mode if running with real PyAceConfig validation
-    for el in ["Fe", "Pt", "Mg", "O"]:
-        p = Path(f"{el}.upf")
-        if not p.exists():
-            p.write_text("<UPF version=\"2.0.1\">\nPP_HEADER\n")
+    # NOTE: In Mock Mode, we bypass strict file validation for Pseudopotentials
+    # by using strings that look like paths but aren't checked by our Mock Configs.
+    # If running with real PyAceConfig, we would need real files.
+    # Here we rely on the fact that MockOracle ignores the config content mostly.
 
     config = PyAceConfig(
         project_name="FePt_Tutorial",
@@ -355,7 +386,7 @@ def _(DFTConfig, MDConfig, MockGenerator, MockOracle, MockTrainer, Path, PyAceCo
             seed=42
         ),
         md=MDConfig(
-            temperature=300.0,
+            temperature=float(temperature_slider.value),
             pressure=0.0,
             timestep=0.001,
             n_steps=100
@@ -367,7 +398,7 @@ def _(DFTConfig, MDConfig, MockGenerator, MockOracle, MockTrainer, Path, PyAceCo
     oracle = MockOracle(config.dft)
     trainer = MockTrainer(config.training)
 
-    mo.md(f"Initialized components. Config Project: `{config.project_name}`")
+    mo.output.append(mo.md(f"Initialized components. Config Project: `{config.project_name}`"))
     return config, generator, oracle, trainer
 
 
@@ -375,11 +406,11 @@ def _(DFTConfig, MDConfig, MockGenerator, MockOracle, MockTrainer, Path, PyAceCo
 def _(WORK_DIR, generator, mo, oracle, trainer):
     # 1. Generate Candidates
     candidates = list(generator.generate(n_candidates=5))
-    msg1 = f"**Step 1 (Generator)**: Generated {len(candidates)} candidate structures."
+    mo.output.append(mo.md(f"**Step 1 (Generator)**: Generated {len(candidates)} candidate structures."))
 
     # 2. Label (Oracle)
     labelled_data = list(oracle.compute(candidates))
-    msg2 = f"**Step 2 (Oracle)**: Labelled {len(labelled_data)} structures (Energy computed)."
+    mo.output.append(mo.md(f"**Step 2 (Oracle)**: Labelled {len(labelled_data)} structures (Energy computed)."))
 
     # 3. Train (Trainer)
     from ase.io import write
@@ -387,10 +418,9 @@ def _(WORK_DIR, generator, mo, oracle, trainer):
     write(training_file, labelled_data)
 
     potential_path = trainer.train(training_data_path=training_file)
-    msg3 = f"**Step 3 (Trainer)**: Trained potential saved to `{potential_path}`."
+    mo.output.append(mo.md(f"**Step 3 (Trainer)**: Trained potential saved to `{potential_path}`."))
 
-    mo.md("\n\n".join([msg1, msg2, msg3]))
-    return candidates, labelled_data, msg1, msg2, msg3, potential_path, training_file, write
+    return candidates, labelled_data, potential_path, training_file, write
 
 
 @app.cell
@@ -398,14 +428,15 @@ def _(mo):
     mo.md(
         r"""
         ## 4. Phase 2: Dynamic Deposition (Simulation)
-        Now we simulate the deposition of atoms onto a surface using the trained potential.
+        Now we simulate the physical process of depositing atoms onto the MgO substrate.
+        The system uses the trained potential to relax the structure after each deposition.
         """
     )
     return
 
 
 @app.cell
-def _(DepositionManager, FePtMgoParameters, MockLammpsEngine, bulk, config, mo, plot_atoms, plt, potential_path, surface):
+def _(DepositionManager, FePtMgoParameters, MockLammpsEngine, bulk, config, depositions_slider, mo, plot_atoms, plt, potential_path, surface):
     # Initialize Surface
     a = 4.212
     mgo = bulk("MgO", "rocksalt", a=a)
@@ -413,7 +444,7 @@ def _(DepositionManager, FePtMgoParameters, MockLammpsEngine, bulk, config, mo, 
 
     # Setup Deposition Manager
     params = FePtMgoParameters(
-        num_depositions=5,
+        num_depositions=depositions_slider.value,
         fe_pt_ratio=0.5,
         deposition_height=2.5,
         max_retries=1
@@ -460,7 +491,9 @@ def _(mo):
     mo.md(
         r"""
         ## 5. Phase 3: Validation & Ordering
-        Finally, we validate the stability of the structure and simulate long-term ordering.
+        In the final phase, we use **Adaptive Kinetic Monte Carlo (aKMC)** via the EON software interface to simulate long-timescale ordering of the L10 phase.
+
+        *Note: EON is an external binary. In this tutorial, we mock its execution and return a simulated trajectory.*
         """
     )
     return
@@ -521,6 +554,7 @@ def _(EONConfig, EONWrapper, WORK_DIR, mo, plt, shutil):
         ax_order,
         eon_wrapper,
         fig_order,
+        mock_pot,
         order,
         results,
         t,
