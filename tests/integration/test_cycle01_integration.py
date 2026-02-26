@@ -1,10 +1,9 @@
-import yaml
-from pathlib import Path
 
 import pytest
+import yaml
 
-from pyacemaker.orchestrator import Orchestrator
 from pyacemaker.domain_models.config import PyAceConfig
+from pyacemaker.orchestrator import Orchestrator
 
 
 @pytest.fixture

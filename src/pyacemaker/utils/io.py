@@ -1,7 +1,7 @@
 import logging
 from collections.abc import Iterable
 from pathlib import Path
-from typing import Any
+from typing import IO, Any
 
 import numpy as np
 import yaml
@@ -82,7 +82,7 @@ def _get_atomic_mass(symbol: str) -> float:
 
 
 def write_lammps_streaming(
-    fileobj: Any,
+    fileobj: IO[str],
     atoms: Atoms,
     species: list[str],
     atom_style: str = "atomic"
@@ -97,6 +97,16 @@ def write_lammps_streaming(
         species: List of chemical symbols mapping to types 1..N.
         atom_style: LAMMPS atom style (currently only 'atomic' supported for streaming).
     """
+    # Security: Validate structure
+    if len(atoms) == 0:
+        msg = "Cannot write empty structure to LAMMPS data file"
+        raise ValueError(msg)
+
+    positions = atoms.get_positions()
+    if not np.isfinite(positions).all():
+        msg = "Structure contains non-finite atomic positions"
+        raise ValueError(msg)
+
     natoms = len(atoms)
 
     # 1. Header

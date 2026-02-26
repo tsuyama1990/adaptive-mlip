@@ -1,9 +1,12 @@
+from unittest.mock import patch
+
 import pytest
 from ase import Atoms
+
 from pyacemaker.domain_models.structure import StructureConfig
+
 # DirectSampler will be implemented in the next step
 from pyacemaker.structure_generator.direct import DirectSampler
-from unittest.mock import patch
 
 
 @pytest.fixture
