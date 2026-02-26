@@ -171,7 +171,8 @@ class DFTManager(BaseOracle):
             else:
                 return atoms
 
-        raise OracleError(ERR_ORACLE_FAILED.format(attempts=len(strategies))) from last_error
+        # Correctly format the error message with the captured exception
+        raise OracleError(ERR_ORACLE_FAILED.format(error=last_error)) from last_error
 
     def _run_calculator(self, atoms: Atoms, config: DFTConfig, calc_dir: str) -> None:
         """Helper to run a single calculation attempt."""

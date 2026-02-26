@@ -51,13 +51,14 @@ class LammpsInputValidator:
         # Validate structure physical properties
         try:
             vol = structure.get_volume()  # type: ignore[no-untyped-call]
-            if vol <= 1e-9:
-                msg = "Structure has near-zero or negative volume."
-                raise ValueError(msg)
         except Exception as e:
             # get_volume might fail if no cell is set
             msg = f"Failed to compute structure volume: {e}"
             raise ValueError(msg) from e
+
+        if vol <= 1e-9:
+            msg = "Structure has near-zero or negative volume."
+            raise ValueError(msg)
 
         # Validate positions are numeric and finite
         pos = structure.get_positions()  # type: ignore[no-untyped-call]

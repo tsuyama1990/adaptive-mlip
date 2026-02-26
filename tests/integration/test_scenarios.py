@@ -4,14 +4,12 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
-from ase import Atoms
 
 from pyacemaker.domain_models.config import PyAceConfig
 from pyacemaker.domain_models.eon import EONConfig
-from pyacemaker.domain_models.md import MDConfig
 from pyacemaker.domain_models.scenario import ScenarioConfig
-from pyacemaker.scenarios.fept_mgo import FePtMgoScenario
 from pyacemaker.interfaces.eon_driver import EONWrapper
+from pyacemaker.scenarios.fept_mgo import FePtMgoScenario
 
 
 @pytest.fixture
@@ -45,7 +43,7 @@ def test_fept_mgo_integration(integration_config):
 
     # Run in temp dir
     with tempfile.TemporaryDirectory() as tmp_dir:
-        cwd = os.getcwd()
+        cwd = Path.cwd()
         os.chdir(tmp_dir)
         try:
             scenario.run()

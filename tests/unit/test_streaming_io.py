@@ -54,7 +54,7 @@ def test_write_lammps_streaming_large_structure_mock() -> None:
     Verifies that write_lammps_streaming can handle a large number of atoms
     without crashing or errors, using a mock structure to avoid memory overhead.
     """
-    buffer = StringIO()
+    # Removed unused buffer = StringIO()
 
     with patch("ase.Atoms.__len__", return_value=1000), \
          patch.object(Atoms, "get_positions", return_value=np.zeros((1000, 3))), \

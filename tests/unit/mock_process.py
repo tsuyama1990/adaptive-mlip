@@ -6,7 +6,7 @@ from pyacemaker.interfaces.process import ProcessRunner
 
 class MockProcessRunner(ProcessRunner):
     """Mock runner for testing."""
-    def __init__(self, returncode=0, stdout="", stderr=""):
+    def __init__(self, returncode=0, stdout="", stderr="") -> None:
         self.returncode = returncode
         self.stdout = stdout
         self.stderr = stderr

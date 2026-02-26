@@ -413,6 +413,9 @@ class Orchestrator:
         """
         Placeholder for adaptive policy logic.
         Future implementation: Update self.generator.config based on result metrics.
+
+        Note: This method is intended to implement the "Adaptive Exploration Policy" described in the Spec.
+        Currently, it is a no-op as the complex adaptation logic requires further requirements analysis.
         """
 
     def _run_loop_iteration(self) -> None:

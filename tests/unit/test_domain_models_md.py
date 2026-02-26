@@ -1,7 +1,13 @@
 import pytest
 from pydantic import ValidationError
 
-from pyacemaker.domain_models.md import HybridParams, MDConfig, MDSimulationResult
+from pyacemaker.domain_models.md import (
+    HybridParams,
+    MCConfig,
+    MDConfig,
+    MDRampingConfig,
+    MDSimulationResult,
+)
 
 
 def test_hybrid_params_valid() -> None:
@@ -104,3 +110,51 @@ def test_md_simulation_result_halted() -> None:
     assert result.halted is True
     assert result.max_gamma == 10.0
     assert result.halt_structure_path == "halt_structure.xyz"
+
+
+def test_md_ramping_config() -> None:
+    """Tests MDRampingConfig validation."""
+    # Valid
+    config = MDRampingConfig(
+        temp_start=300.0, temp_end=1000.0, press_start=1.0, press_end=100.0
+    )
+    assert config.temp_start == 300.0
+    assert config.press_end == 100.0
+
+    # Test invalid temperature
+    with pytest.raises(ValidationError):
+        MDRampingConfig(temp_start=-50.0)
+
+
+def test_mc_config() -> None:
+    """Tests MCConfig validation."""
+    # Valid
+    config = MCConfig(swap_freq=100, swap_prob=0.5, seed=123)
+    assert config.swap_freq == 100
+    assert config.swap_prob == 0.5
+
+    # Test invalid probability (prob > 1.0)
+    with pytest.raises(ValidationError):
+        MCConfig(swap_freq=10, swap_prob=1.5)
+
+    # Test invalid frequency (freq <= 0)
+    with pytest.raises(ValidationError):
+        MCConfig(swap_freq=0, swap_prob=0.5)
+
+
+def test_md_config_with_ramping_and_mc() -> None:
+    """Tests MDConfig integration with Ramping and MC."""
+    ramping = MDRampingConfig(temp_start=100.0, temp_end=500.0)
+    mc = MCConfig(swap_freq=50, swap_prob=0.1)
+
+    config = MDConfig(
+        temperature=300.0,
+        pressure=1.0,
+        timestep=0.001,
+        n_steps=1000,
+        ramping=ramping,
+        mc=mc,
+    )
+
+    assert config.ramping.temp_start == 100.0
+    assert config.mc.swap_freq == 50

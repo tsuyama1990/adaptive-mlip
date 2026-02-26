@@ -79,7 +79,33 @@ class LammpsScriptGenerator:
             f"v_max_g > {self.config.uncertainty_threshold} error continue\n"
         )
 
-    def _gen_execution(self, buffer: TextIO) -> None:
+    def _gen_mc(self, buffer: TextIO, elements: list[str]) -> None:
+        """Generates Monte Carlo atom swapping commands."""
+        if not self.config.mc:
+            return
+
+        n_types = len(elements)
+        if n_types < 2:
+            return  # Can't swap if fewer than 2 types
+
+        # types keyword requires list of types to swap
+        types_str = " ".join(str(i + 1) for i in range(n_types))
+
+        # Command syntax: fix mc all atom/swap N X seed T types {types}
+        # N: swap frequency (steps)
+        # X: swaps per attempt (set to 1)
+        # T: temperature (for Boltzmann factor)
+
+        temp = self.config.temperature
+        if self.config.ramping and self.config.ramping.temp_start is not None:
+             temp = self.config.ramping.temp_start
+
+        buffer.write(
+            f"fix mc_swap all atom/swap {self.config.mc.swap_freq} 1 {self.config.mc.seed} "
+            f"{temp} ke no types {types_str}\n"
+        )
+
+    def _gen_execution(self, buffer: TextIO, elements: list[str]) -> None:
         """Generates minimization and MD run commands."""
         if self.config.minimize:
             buffer.write(
@@ -87,15 +113,34 @@ class LammpsScriptGenerator:
                 f"{self.config.minimize_steps} {self.config.minimize_max_iter}\n"
             )
 
+        # MC
+        self._gen_mc(buffer, elements)
+
         # Calculate damping parameters
         tdamp = self.config.tdamp_factor * self.config.timestep
         pdamp = self.config.pdamp_factor * self.config.timestep
 
+        # Determine T/P start/end
+        temp_start = self.config.temperature
+        temp_end = self.config.temperature
+        press_start = self.config.pressure
+        press_end = self.config.pressure
+
+        if self.config.ramping:
+            if self.config.ramping.temp_start is not None:
+                temp_start = self.config.ramping.temp_start
+            if self.config.ramping.temp_end is not None:
+                temp_end = self.config.ramping.temp_end
+            if self.config.ramping.press_start is not None:
+                press_start = self.config.ramping.press_start
+            if self.config.ramping.press_end is not None:
+                press_end = self.config.ramping.press_end
+
         # Use configurable velocity seed
-        buffer.write(f"velocity all create {self.config.temperature} {self.config.velocity_seed}\n")
+        buffer.write(f"velocity all create {temp_start} {self.config.velocity_seed}\n")
         buffer.write(
-            f"fix npt all npt temp {self.config.temperature} {self.config.temperature} {tdamp} "
-            f"iso {self.config.pressure} {self.config.pressure} {pdamp}\n"
+            f"fix npt all npt temp {temp_start} {temp_end} {tdamp} "
+            f"iso {press_start} {press_end} {pdamp}\n"
         )
         buffer.write(f"run {self.config.n_steps}\n")
 
@@ -152,7 +197,7 @@ class LammpsScriptGenerator:
         # Output setup MUST come before run
         self._gen_output_setup(buffer, dump_file)
 
-        self._gen_execution(buffer)
+        self._gen_execution(buffer, elements)
 
         self._gen_post_run_diagnostics(buffer)
 

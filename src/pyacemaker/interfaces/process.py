@@ -20,6 +20,9 @@ class SubprocessRunner(ProcessRunner):
         # EONWrapper expects capture_output=True, text=True.
         kwargs.setdefault("capture_output", True)
         kwargs.setdefault("text", True)
-        kwargs.setdefault("check", True)
 
-        return subprocess.run(cmd, cwd=cwd, **kwargs)  # noqa: S603
+        # Explicit check argument for security/audit (PLW1510)
+        # Default to True (fail fast)
+        check = kwargs.pop("check", True)
+
+        return subprocess.run(cmd, cwd=cwd, check=check, **kwargs)  # noqa: S603

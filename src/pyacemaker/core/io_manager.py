@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from ase import Atoms
-from ase.io import read, write
+from ase.io import write
 
 from pyacemaker.domain_models.md import MDConfig
 from pyacemaker.utils.io import write_lammps_streaming
@@ -56,11 +56,8 @@ class LammpsFileManager:
             # Assuming first frame has all species is risky for alloys.
             # But usually acceptable.
             # Ideally we iterate.
-            struct_iter = read(str(structure), index=":")
-            # If it's a list (not generator), we just loaded it.
-            # ASE read returns list by default unless index is complex?
-            # iread returns generator.
-            # Let's assume input is a path to a single structure for MD.
+
+            # We assume input is a path to a single structure for MD.
             # MD usually starts from one structure.
             # If it's a trajectory file, we likely only want the last frame or first.
             # For now, let's load it as Atoms to get elements if it's a file.
@@ -91,7 +88,8 @@ class LammpsFileManager:
             atoms = next(atoms_iter)
             self._write_structure_memory(atoms, output_path, elements)
         except StopIteration:
-             raise ValueError("Input structure file is empty.")
+             msg = "Input structure file is empty."
+             raise ValueError(msg) from None
 
     def _write_structure_memory(self, structure: Atoms, output_path: Path, elements: list[str]) -> None:
         """Writes structure to disk using streaming writer if possible."""

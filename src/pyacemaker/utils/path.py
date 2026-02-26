@@ -39,27 +39,27 @@ def validate_path_safe(path: Path) -> Path:
         # Canonicalize path (resolve symlinks, collapse ..)
         # We use strict=False because the file might be an output file that doesn't exist yet.
         resolved = path.resolve(strict=False)
-        base_dir = Path.cwd().resolve()
-
-        # Allowed roots: CWD, System Temp, RAM Disk
-        allowed_roots = [
-            base_dir,
-            Path(tempfile.gettempdir()).resolve(),
-            Path(DEFAULT_RAM_DISK_PATH).resolve()
-        ]
-
-        is_safe = False
-        for root in allowed_roots:
-            if resolved.is_relative_to(root):
-                is_safe = True
-                break
-
-        if not is_safe:
-             msg = f"Path traversal detected: {resolved} is outside allowed roots {allowed_roots}"
-             raise ValueError(msg)
-
     except Exception as e:
          msg = f"Invalid path resolution: {path}"
          raise ValueError(msg) from e
+
+    base_dir = Path.cwd().resolve()
+
+    # Allowed roots: CWD, System Temp, RAM Disk
+    allowed_roots = [
+        base_dir,
+        Path(tempfile.gettempdir()).resolve(),
+        Path(DEFAULT_RAM_DISK_PATH).resolve()
+    ]
+
+    is_safe = False
+    for root in allowed_roots:
+        if resolved.is_relative_to(root):
+            is_safe = True
+            break
+
+    if not is_safe:
+         msg = f"Path traversal detected: {resolved} is outside allowed roots {allowed_roots}"
+         raise ValueError(msg)
 
     return resolved

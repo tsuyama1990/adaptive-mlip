@@ -43,17 +43,12 @@ class EONConfig(BaseModel):
     @classmethod
     def validate_potential_path(cls, v: Path) -> Path:
         """Validates the potential path using secure path validation."""
-        try:
-            # First, standard path safety check
-            validate_path_safe(v)
+        # First, standard path safety check
+        validate_path_safe(v)
 
-            # Second, existence check (EON requires it to run)
-            if not v.exists():
-                msg = f"Potential file does not exist: {v}"
-                raise ValueError(msg)
-
-        except ValueError as e:
-            # Re-raise as ValueError for Pydantic to catch
-            raise ValueError(str(e)) from e
+        # Second, existence check (EON requires it to run)
+        if not v.exists():
+            msg = f"Potential file does not exist: {v}"
+            raise ValueError(msg)
 
         return v

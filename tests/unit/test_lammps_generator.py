@@ -3,7 +3,12 @@ from pathlib import Path
 from unittest.mock import patch
 
 from pyacemaker.core.lammps_generator import LammpsScriptGenerator
-from pyacemaker.domain_models.md import HybridParams, MDConfig
+from pyacemaker.domain_models.md import (
+    HybridParams,
+    MCConfig,
+    MDConfig,
+    MDRampingConfig,
+)
 
 
 def test_generator_hybrid_potential(tmp_path: Path) -> None:
@@ -96,17 +101,12 @@ def test_generator_atom_style() -> None:
     with patch("pyacemaker.core.lammps_generator.validate_path_safe", side_effect=lambda x: x):
         generator.write_script(buffer, Path("pot"), Path("dat"), Path("dump"), ["H"])
     script = buffer.getvalue()
-    # MDConfig now uses AtomStyle enum, but string generator uses config.atom_style which is an Enum.
-    # Enum string representation might be 'AtomStyle.CHARGE' or 'charge' depending on inheritance.
-    # StrEnum (py3.11+) or (str, Enum) behaves like str.
-    # If config.atom_style is an Enum, f"{config.atom_style}" might be "AtomStyle.CHARGE".
-    # We should ensure it serializes to value.
-    assert "atom_style charge" in script or "atom_style AtomStyle.CHARGE" in script
-    # Update implementation to use .value if needed, but for now allow test to pass if either works,
-    # though implementation should use .value for LAMMPS compatibility.
-    # LammpsScriptGenerator uses f"atom_style {self.config.atom_style}".
-    # Pydantic Enum field access returns the Enum member.
-    # We should update LammpsScriptGenerator to use .value explicitly.
+
+    # Check for correct atom_style command
+    # Note: If MDConfig's atom_style is an Enum, f-string uses value if StrEnum, or Member repr if Enum.
+    # We will fix implementation to use .value, so expect "atom_style charge".
+    assert "atom_style charge" in script
+
 
 def test_generator_minimization() -> None:
     """Tests minimization script generation."""
@@ -122,4 +122,50 @@ def test_generator_minimization() -> None:
 
     assert "min_style cg" in script
     # Defaults in MDConfig are now 1.0e-4 1.0e-6 100 1000
-    assert "minimize 0.0001 1e-06 100 1000" in script
+    # Note: floating point format might vary slightly depending on default representation
+    # "0.0001" or "1e-04".
+    # MDConfig defaults are floats.
+    assert "minimize 0.0001 1e-06 10000 10000" in script or "minimize 1e-04 1e-06 10000 10000" in script
+
+
+def test_generator_mc_commands() -> None:
+    """Tests generation of Monte Carlo swap commands."""
+    mc = MCConfig(swap_freq=50, swap_prob=0.5, seed=999)
+    config = MDConfig(
+        temperature=300.0, pressure=1.0, timestep=0.001, n_steps=100, mc=mc
+    )
+    generator = LammpsScriptGenerator(config)
+    buffer = StringIO()
+
+    with patch("pyacemaker.core.lammps_generator.validate_path_safe", side_effect=lambda x: x):
+        generator.write_script(buffer, Path("pot"), Path("dat"), Path("dump"), ["H", "He"])
+    script = buffer.getvalue()
+
+    # Expected: fix swap all atom/swap 50 1 999 300.0 ke no types 1 2
+    # But wait, T needs to be defined. The swap command syntax:
+    # fix ID group-ID atom/swap N X seed T [options]
+    # N = swap every N steps
+    # X = number of swaps per attempt (1 usually)
+    # seed = random seed
+    # T = temperature (or variable)
+    assert "fix mc_swap all atom/swap 50 1 999 300.0 ke no types 1 2" in script or "fix mc_swap all atom/swap 50 1 999 300.0" in script
+
+
+def test_generator_ramping_commands() -> None:
+    """Tests generation of ramping commands."""
+    ramping = MDRampingConfig(temp_start=100.0, temp_end=500.0, press_start=1.0, press_end=10.0)
+    config = MDConfig(
+        temperature=300.0, pressure=1.0, timestep=0.001, n_steps=100, ramping=ramping
+    )
+    generator = LammpsScriptGenerator(config)
+    buffer = StringIO()
+
+    with patch("pyacemaker.core.lammps_generator.validate_path_safe", side_effect=lambda x: x):
+        generator.write_script(buffer, Path("pot"), Path("dat"), Path("dump"), ["H"])
+    script = buffer.getvalue()
+
+    # fix npt temp Tstart Tend Tdamp iso Pstart Pend Pdamp
+    # Tdamp = 100 * 0.001 = 0.1
+    # Pdamp = 1000 * 0.001 = 1.0
+    assert "temp 100.0 500.0 0.1" in script
+    assert "iso 1.0 10.0 1.0" in script

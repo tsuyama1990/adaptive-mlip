@@ -107,7 +107,8 @@ def test_generator_invalid_composition() -> None:
 
     generator.m3gnet.predict_structure = mock_raise # type: ignore
 
-    with pytest.raises(GeneratorError, match="Failed to generate base structure"):
+    # Updated error message expectation
+    with pytest.raises(GeneratorError, match="Base generator failed"):
         next(generator.generate(1))
 
 

@@ -52,6 +52,23 @@ class HybridParams(BaseModel):
     )
 
 
+class MDRampingConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    temp_start: PositiveFloat | None = Field(None, description="Starting temperature (K)")
+    temp_end: PositiveFloat | None = Field(None, description="Ending temperature (K)")
+    press_start: float | None = Field(None, ge=0.0, description="Starting pressure (Bar)")
+    press_end: float | None = Field(None, ge=0.0, description="Ending pressure (Bar)")
+
+
+class MCConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    swap_freq: int = Field(..., gt=0, description="Frequency of MC swaps (steps)")
+    swap_prob: float = Field(..., gt=0.0, le=1.0, description="Probability of swapping atoms")
+    seed: int = Field(12345, description="Random seed for MC swaps")
+
+
 class MDSimulationResult(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -159,6 +176,10 @@ class MDConfig(BaseModel):
     check_interval: int = Field(
         DEFAULT_MD_CHECK_INTERVAL, gt=0, description="Step interval for uncertainty check"
     )
+
+    # Spec Section 3.1: Ramping and MC
+    ramping: MDRampingConfig | None = Field(None, description="Configuration for T/P ramping")
+    mc: MCConfig | None = Field(None, description="Configuration for Monte Carlo atom swapping")
 
     @model_validator(mode="after")
     def validate_simulation_physics(self) -> "MDConfig":

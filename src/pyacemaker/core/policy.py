@@ -13,6 +13,7 @@ from pyacemaker.utils.perturbations import apply_strain, create_vacancy, rattle
 
 logger = logging.getLogger(__name__)
 
+
 class BasePolicy(ABC):
     def __init__(self) -> None:
         # Initialize RNG once per policy instance
@@ -136,6 +137,7 @@ class NormalModePolicy(BasePolicy):
         """
         # Placeholder for full implementation
         # Real implementation would calculate Hessian via kwargs['engine']
+        # We assume Rattle fallback for now
         for _ in range(n_structures):
             yield rattle(base_structure, config.rattle_stdev, rng=self.rng)
 
@@ -189,11 +191,18 @@ class MDMicroBurstPolicy(BasePolicy):
             "n_steps": burst_steps,
             "minimize": False,
             "temperature": burst_temp,
-            "dump_freq": 0
+            "dump_freq": 0, # Don't dump intermediate frames
+            # Force constant T for burst unless specified otherwise?
+            # Assuming ramping not needed for burst unless specifically requested.
+            # We clear ramping to simple NVT for burst.
+            "ramping": None,
+            "mc": None # Disable MC for burst unless we want it?
+            # If config has MC, we might want to disable it for simple thermalization burst.
         })
 
         # Instantiate new engine of same type
         BurstEngine = type(engine)
+        # Assuming BurstEngine accepts config as first arg
         burst_engine = BurstEngine(burst_config)
 
         for _ in range(n_structures):
