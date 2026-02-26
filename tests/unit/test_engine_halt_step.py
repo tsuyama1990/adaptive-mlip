@@ -1,5 +1,6 @@
 from pathlib import Path
 from unittest.mock import patch
+import numpy as np
 
 from ase import Atoms
 
@@ -20,13 +21,16 @@ def test_lammps_engine_halt_step_populated(tmp_path: Path) -> None:
     with patch("pyacemaker.core.engine.LammpsDriver") as MockDriver:
         driver = MockDriver.return_value
 
-        # Simulate halted run at step 500
+        # Simulate halted run
         driver.extract_variable.side_effect = lambda name: {
             "pe": -100.0,
             "step": 500, # Halted at 500
             "max_g": 10.0,
             "temp": 300.0
         }.get(name, 0.0)
+
+        driver.get_forces.return_value = np.zeros((1, 3))
+        driver.get_stress.return_value = np.zeros(6)
 
         engine = LammpsEngine(config)
         atoms = Atoms("H", cell=[10,10,10], pbc=True)
@@ -37,6 +41,8 @@ def test_lammps_engine_halt_step_populated(tmp_path: Path) -> None:
 
         assert result.halted is True
         assert result.halt_step == 500
+        assert result.halt_structure_path is not None
+
 
 def test_lammps_engine_halt_step_none_if_not_halted(tmp_path: Path) -> None:
     # Mock config
@@ -59,6 +65,9 @@ def test_lammps_engine_halt_step_none_if_not_halted(tmp_path: Path) -> None:
             "temp": 300.0
         }.get(name, 0.0)
 
+        driver.get_forces.return_value = np.zeros((1, 3))
+        driver.get_stress.return_value = np.zeros(6)
+
         engine = LammpsEngine(config)
         atoms = Atoms("H", cell=[10,10,10], pbc=True)
         pot_path = tmp_path / "pot.yace"
@@ -68,3 +77,4 @@ def test_lammps_engine_halt_step_none_if_not_halted(tmp_path: Path) -> None:
 
         assert result.halted is False
         assert result.halt_step is None
+        assert result.halt_structure_path is None

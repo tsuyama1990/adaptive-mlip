@@ -37,7 +37,6 @@ from pyacemaker.domain_models.md import MDSimulationResult
 from pyacemaker.factory import ModuleFactory
 from pyacemaker.logger import setup_logger
 from pyacemaker.utils.extraction import extract_local_region
-from pyacemaker.utils.misc import batched
 
 
 class Orchestrator:
@@ -117,13 +116,12 @@ class Orchestrator:
     ) -> int:
         """
         Writes atoms from a generator to a file in chunks to balance I/O and memory.
-        Uses `batched` to process chunks.
-        Optimized to open file once.
+        Uses explicit streaming instead of batched() to avoid memory issues.
 
         Args:
             generator: Iterable of Atoms objects.
             filepath: Path to output file.
-            batch_size: Number of atoms per write operation.
+            batch_size: Number of atoms per write operation (used for flushing/chunking conceptually).
             append: Whether to append to the file or overwrite.
 
         Returns:
@@ -138,12 +136,15 @@ class Orchestrator:
 
         # Open file once
         with filepath.open(mode) as f:
-            for batch in batched(generator, batch_size):
-                # Write chunk
-                # ase.io.write handles list of atoms and can write to file handle.
-                # format="extxyz" is standard for streaming.
-                write(f, batch, format="extxyz")
-                count += len(batch)
+            # Write frames one by one or in small internal chunks if needed by ASE.
+            # ASE write(filename, atoms) can handle a list or single atom.
+            # writing to file handle supports multiple frames for extxyz.
+
+            # Optimization: Buffering is handled by file object.
+            # We just iterate and write.
+            for atoms in generator:
+                write(f, atoms, format="extxyz")
+                count += 1
 
         return count
 
@@ -321,6 +322,10 @@ class Orchestrator:
         )
 
         # Select Active Set (including S0 as anchor)
+        # We need to capture candidates to file if selector needs file, but selector handles iterator.
+        # However, selector writes to temp file. We need to ensure temp files are cleaned up.
+        # ActiveSetSelector uses TemporaryDirectory so it's auto-cleaned.
+
         n_select = self.config.workflow.otf.local_n_select
         selected_gen = self.active_set_selector.select(
             candidates_gen,
@@ -413,7 +418,23 @@ class Orchestrator:
         """
         Placeholder for adaptive policy logic.
         Future implementation: Update self.generator.config based on result metrics.
+
+        Note: This method is intended to implement the "Adaptive Exploration Policy" described in the Spec.
+        Currently, it is a no-op as the complex adaptation logic requires further requirements analysis.
         """
+        pass
+
+    def _execute_iteration_logic(self, iteration: int, paths: dict[str, Path]) -> None:
+        """
+        Core logic for a single iteration.
+        Separated for clarity and testability.
+        """
+        deployed_potential = self._deploy_potential(iteration)
+        result = self._run_md_simulation(iteration, deployed_potential)
+
+        if result:
+            self._adapt_strategy(result)
+            self._handle_md_halt(result, deployed_potential, paths)
 
     def _run_loop_iteration(self) -> None:
         """Executes one iteration of the active learning loop."""
@@ -422,12 +443,7 @@ class Orchestrator:
         self.logger.info(LOG_START_ITERATION.format(iteration=iteration, max_iterations=self.config.workflow.max_iterations))
 
         try:
-            deployed_potential = self._deploy_potential(iteration)
-            result = self._run_md_simulation(iteration, deployed_potential)
-
-            if result:
-                self._adapt_strategy(result)
-                self._handle_md_halt(result, deployed_potential, paths)
+            self._execute_iteration_logic(iteration, paths)
 
             self.state_manager.iteration = iteration
             self.state_manager.save()

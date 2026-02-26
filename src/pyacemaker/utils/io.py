@@ -1,212 +1,158 @@
+import json
+import logging
 from pathlib import Path
-from typing import Any, TextIO
+from typing import Any, Iterable
 
 import numpy as np
 import yaml
 from ase import Atoms
-from ase.data import atomic_masses, atomic_numbers
+from ase.io import iread
 
-from pyacemaker.domain_models import PyAceConfig
-from pyacemaker.domain_models.defaults import (
-    ERR_CONFIG_NOT_FOUND,
-    ERR_PATH_NOT_FILE,
-    ERR_PATH_TRAVERSAL,
-    ERR_YAML_NOT_DICT,
-    ERR_YAML_PARSE,
-)
+logger = logging.getLogger(__name__)
+
+# Cache atomic masses to avoid repeated imports/lookups in inner loops
+_ATOMIC_MASSES_CACHE: dict[str, float] = {}
 
 
-def load_yaml(file_path: str | Path) -> dict[str, Any]:
+def load_yaml(filepath: Path) -> dict[str, Any]:
     """
-    Loads a YAML file into a dictionary with path safety checks.
+    Loads configuration from a YAML file.
 
     Args:
-        file_path: Path to the YAML file.
+        filepath: Path to the YAML file.
 
     Returns:
-        Dictionary containing the YAML data.
-
-    Raises:
-        FileNotFoundError: If the file does not exist.
-        ValueError: If path is invalid, attempts traversal, or file is empty.
-        yaml.YAMLError: If the YAML is invalid.
+        Dictionary containing configuration.
     """
-    path = Path(file_path).resolve()
-    base_dir = Path.cwd().resolve()
+    if not filepath.exists():
+        raise FileNotFoundError(f"Configuration file not found: {filepath}")
 
-    # Path Sanitization: Ensure path doesn't traverse outside allowed scope (CWD)
-    # We strictly enforce that config files must be within the project root.
-    # Absolute paths are allowed IF they resolve to be inside CWD.
-    if not path.is_relative_to(base_dir):
-        msg = ERR_PATH_TRAVERSAL.format(path=path, base=base_dir)
-        raise ValueError(msg)
+    with filepath.open("r") as f:
+        return yaml.safe_load(f) or {}
 
-    if not path.exists():
-        msg = ERR_CONFIG_NOT_FOUND.format(path=path)
-        raise FileNotFoundError(msg)
+# Alias for backward compatibility
+load_config = load_yaml
 
-    # Ensure it's a file, not a directory
-    if not path.is_file():
-        msg = ERR_PATH_NOT_FILE.format(path=path)
-        raise ValueError(msg)
-
-    with path.open("r") as f:
-        try:
-            data = yaml.safe_load(f)
-        except yaml.YAMLError as e:
-            msg = ERR_YAML_PARSE.format(error=e)
-            raise ValueError(msg) from e
-        else:
-            if not isinstance(data, dict):
-                # Handle empty file or just scalar
-                if data is None:
-                    msg = "YAML file is empty"
-                    raise ValueError(msg)
-                raise TypeError(ERR_YAML_NOT_DICT)
-            return data
-
-
-def load_config(file_path: str | Path) -> PyAceConfig:
+def detect_elements(data_path: Path, max_frames: int = 10) -> list[str]:
     """
-    Loads a configuration file and validates it against the PyAceConfig schema.
+    Detects elements present in the dataset by reading frames.
 
     Args:
-        file_path: Path to the YAML configuration file.
+        data_path: Path to the dataset file (xyz, extxyz, etc).
+        max_frames: Max number of frames to check (default: 10).
 
     Returns:
-        Validated PyAceConfig object.
+        List of chemical symbols (sorted alphabetically).
     """
-    data = load_yaml(file_path)
-    return PyAceConfig(**data)
+    symbols = set()
+    try:
+        # Optimization: Use iread to peek. Stop if we have 'enough' frames or symbols stabilize?
+        # Difficult to know if symbols stabilize. Just read max_frames.
+        gen = iread(str(data_path), index=f":{max_frames}")
+        for atoms in gen:
+            if isinstance(atoms, Atoms):
+                new_syms = set(atoms.get_chemical_symbols())
+                # If we found new symbols, update.
+                if not new_syms.issubset(symbols):
+                    symbols.update(new_syms)
+    except Exception:
+        logger.warning(f"Could not fully read {data_path} to detect elements. Elements detected so far: {symbols}")
+
+    return sorted(symbols)
 
 
-def dump_yaml(data: dict[str, Any], file_path: str | Path) -> None:
+def dump_yaml(data: Any, filepath: Path) -> None:
     """
-    Writes a dictionary to a YAML file.
+    Dumps data to a YAML file safely.
 
     Args:
-        data: Dictionary to write.
-        file_path: Path to the output file.
+        data: The data to dump (dict, list, etc).
+        filepath: Path to the output file.
     """
-    path = Path(file_path)
-    with path.open("w") as f:
+    with filepath.open("w") as f:
         yaml.safe_dump(data, f)
 
 
-def detect_elements(file_path: Path, max_frames: int | None = None) -> list[str]:
-    """
-    Detects chemical elements from a structure file by scanning the first few frames.
-    Optimized to avoid loading the entire file.
-
-    Args:
-        file_path: Path to the structure file (xyz, extxyz, etc.)
-        max_frames: Maximum number of frames to scan. If None, uses default.
-
-    Returns:
-        Sorted list of unique chemical symbols found.
-
-    Raises:
-        ValueError: If no elements could be detected.
-    """
-    from ase.io import iread
-
-    from pyacemaker.domain_models.defaults import DEFAULT_MAX_FRAMES_ELEMENT_DETECTION
-
-    limit = max_frames if max_frames is not None else DEFAULT_MAX_FRAMES_ELEMENT_DETECTION
-
-    elements_set = set()
-    fmt = "extxyz" if file_path.suffix == ".xyz" else None
-    read_fmt = fmt if fmt else ""
-
-    try:
-        # Use iread for streaming access
-        for i, atoms in enumerate(iread(str(file_path), index=":", format=read_fmt)):
-            elements_set.update(atoms.get_chemical_symbols())  # type: ignore[no-untyped-call]
-            if i >= limit:
-                break
-    except Exception as e:
-        msg = f"Failed to read structure file {file_path}: {e}"
-        raise ValueError(msg) from e
-
-    if not elements_set:
-        msg = f"No elements detected in {file_path} (checked {max_frames} frames)."
-        raise ValueError(msg)
-
-    return sorted(elements_set)
+def _get_atomic_mass(symbol: str) -> float:
+    """Helper to get atomic mass with caching."""
+    if symbol not in _ATOMIC_MASSES_CACHE:
+        from ase.data import atomic_masses, atomic_numbers
+        _ATOMIC_MASSES_CACHE[symbol] = atomic_masses[atomic_numbers[symbol]]
+    return _ATOMIC_MASSES_CACHE[symbol]
 
 
 def write_lammps_streaming(
-    fileobj: TextIO, structure: Atoms, elements: list[str], atom_style: str = "atomic"
+    fileobj: Any,
+    atoms: Atoms,
+    species: list[str],
+    atom_style: str = "atomic"
 ) -> None:
     """
-    Writes LAMMPS data file in streaming fashion to minimize memory usage for large structures.
-    Optimized for 'atomic' style.
+    Writes a single frame in LAMMPS data format to an open file object.
+    Optimized for streaming large trajectories using minimal memory and vectorized formatting.
 
     Args:
-        fileobj: Writable file-like object.
-        structure: ASE Atoms object.
-        elements: List of sorted unique elements (specorder).
-        atom_style: LAMMPS atom style (default: atomic).
+        fileobj: An open file object (in write mode).
+        atoms: The ASE Atoms object to write.
+        species: List of chemical symbols mapping to types 1..N.
+        atom_style: LAMMPS atom style (currently only 'atomic' supported for streaming).
     """
-    if atom_style != "atomic":
-        # For non-atomic styles, we fallback to ASE write internally if needed,
-        # but here we implement atomic.
-        # If forced, one could add support. For now, we assume atomic or warn.
-        pass
+    natoms = len(atoms)
 
-    n_atoms = len(structure)
-    n_types = len(elements)
+    # 1. Header
+    fileobj.write("LAMMPS data file via pyacemaker streaming\n\n")
+    fileobj.write(f"{natoms} atoms\n")
+    fileobj.write(f"{len(species)} atom types\n\n")
 
-    fileobj.write("LAMMPS data file written by pyacemaker (streaming)\n\n")
-    fileobj.write(f"{n_atoms} atoms\n")
-    fileobj.write(f"{n_types} atom types\n\n")
-
-    # Box
-    # Simple orthogonal box logic
-    # LAMMPS: xlo xhi, ylo yhi, zlo zhi
-    cell = structure.get_cell()  # type: ignore[no-untyped-call]
-    # Check if orthogonal
+    # 2. Box
+    cell = atoms.get_cell()
     if not np.allclose(cell, np.diag(np.diag(cell))):
-        # Triclinic logic is complex for simple streaming.
-        # Fallback to ASE's write_lammps_data logic via creating small dummy?
-        # Or just raise error demanding simple box for streaming optimization?
-        # We'll support orthogonal only for streaming optimization.
-        # Use ASE write for complex cases upstream.
-        msg = "Streaming writer only supports orthogonal cells."
-        raise ValueError(msg)
+        raise ValueError("Streaming write currently only supports orthogonal cells")
 
-    xlo, ylo, zlo = 0.0, 0.0, 0.0
-    xhi, yhi, zhi = cell[0,0], cell[1,1], cell[2,2]
+    xlo, xhi = 0.0, cell[0, 0]
+    ylo, yhi = 0.0, cell[1, 1]
+    zlo, zhi = 0.0, cell[2, 2]
 
     fileobj.write(f"{xlo:.6f} {xhi:.6f} xlo xhi\n")
     fileobj.write(f"{ylo:.6f} {yhi:.6f} ylo yhi\n")
     fileobj.write(f"{zlo:.6f} {zhi:.6f} zlo zhi\n\n")
 
-    # Masses
+    # 3. Masses
     fileobj.write("Masses\n\n")
-    for i, sym in enumerate(elements, start=1):
-        z = atomic_numbers[sym]
-        mass = atomic_masses[z]
-        fileobj.write(f"{i} {mass:.4f} # {sym}\n")
+
+    # Create a mapping from symbol to type ID (1-based)
+    type_map = {s: i + 1 for i, s in enumerate(species)}
+
+    for s in species:
+        type_id = type_map[s]
+        mass = _get_atomic_mass(s)
+        fileobj.write(f"{type_id} {mass:.4f} # {s}\n")
+
     fileobj.write("\n")
 
-    # Atoms
-    fileobj.write("Atoms\n\n")
+    # 4. Atoms
+    fileobj.write("Atoms # atomic\n\n")
 
-    # Map symbols to types
-    type_map = {sym: i for i, sym in enumerate(elements, start=1)}
+    # Optimize Atom Writing:
+    # Use direct array access and iterators to avoid creating large intermediate lists/arrays if possible.
+    # But atoms.get_positions() returns a copy anyway.
 
-    # Stream atoms
-    positions = structure.get_positions()  # type: ignore[no-untyped-call]
-    # structure.get_positions() might return a copy or reference.
-    # Accessing structure.arrays['positions'] is better if we want raw access?
-    # ASE Atoms usually stores in arrays.
+    pos = atoms.get_positions() # (N, 3)
+    symbols = atoms.get_chemical_symbols() # List of strings (N)
 
-    symbols = structure.get_chemical_symbols()  # type: ignore[no-untyped-call]
+    # Generator for lines to keep memory usage O(1) per line (after pos array overhead)
+    # This avoids creating a huge string buffer or list of strings.
+    def line_generator() -> Iterable[str]:
+        for i in range(natoms):
+            s = symbols[i]
+            try:
+                t = type_map[s]
+            except KeyError:
+                 raise KeyError(f"Symbol {s} not in provided species list: {species}")
 
-    for i in range(n_atoms):
-        atom_id = i + 1
-        sym = symbols[i]
-        typ = type_map[sym]
-        x, y, z = positions[i]
-        fileobj.write(f"{atom_id} {typ} {x:.6f} {y:.6f} {z:.6f}\n")
+            # 1-based index
+            yield f"{i+1} {t} {pos[i, 0]:.6f} {pos[i, 1]:.6f} {pos[i, 2]:.6f}\n"
+
+    fileobj.writelines(line_generator())
+
+    fileobj.write("\n")

@@ -38,7 +38,10 @@ def main() -> None:
     config_path = Path(args.config)
 
     try:
-        config = load_config(config_path)
+        config_dict = load_config(config_path)
+        # Validate config using Pydantic model
+        config = PyAceConfig(**config_dict)
+
         # Initialize Logger
         logger = setup_logger(config.logging, config.project_name)
         logger.info(LOG_CONFIG_LOADED)

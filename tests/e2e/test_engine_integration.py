@@ -28,9 +28,6 @@ def mock_lammps_module() -> Any:
         }.get(name, 0.0)
         # Mock get_natoms
         instance.get_natoms.return_value = 1
-        # Mock gather_atoms
-        # We need to ensure get_atoms works.
-        # But since we mock the module, LammpsDriver will use the mock.
         yield mock
 
 
@@ -45,9 +42,6 @@ def test_engine_integration_workflow(tmp_path: Path, mock_md_config: MDConfig, m
 
     atoms = Atoms("H", positions=[[0, 0, 0]], cell=[10, 10, 10], pbc=True)
 
-    # Update config to use a safe potential for testing (e.g., LJ if we were running real)
-    # But here we mock.
-
     # 2. Execution
     engine = LammpsEngine(mock_md_config)
     result = engine.run(atoms, potential_path)
@@ -58,29 +52,13 @@ def test_engine_integration_workflow(tmp_path: Path, mock_md_config: MDConfig, m
     assert result.n_steps == 1000
 
     # Verify that run was called on the mock (run_file calls lmp.command now)
-    # mock_lammps_module.return_value.file.assert_called() is NO LONGER TRUE.
-    # We verify command was called instead.
     mock_lammps_module.return_value.command.assert_called()
 
     # We can verify the content by inspecting calls to command()
-    # It should have called command for each line in the generated script.
-    # Since we can't easily capture the temp file, we rely on the fact that command() was called with expected tokens.
     calls = mock_lammps_module.return_value.command.call_args_list
+    # The script execution iterates over lines and calls command() for each valid line.
     assert any("units metal" in c[0][0] for c in calls)
     assert any("pair_style hybrid/overlay" in c[0][0] for c in calls)
-
-    # Read the script file (it should still exist or we mock reading it if we care,
-    # but here we just check integration flow. The file writing logic is tested in unit tests)
-    # Actually temp dir might be gone?
-    # LammpsFileManager uses tempfile.TemporaryDirectory. It cleans up on exit of context.
-    # But run() calls prepare_workspace then execute inside ctx.
-    # Engine.run returns result after ctx exit?
-    # No, Engine.run does: with ctx: execute(); return result.
-    # So ctx exits before return. File is gone.
-    # We can't read script content here easily unless we mock open or check calls before exit.
-
-    # But we can assume if file() was called, script generation happened.
-    # Unit tests cover generator content.
 
 
 def test_engine_integration_lammps_failure(tmp_path: Path, mock_md_config: MDConfig, mock_lammps_module: Any) -> None:
@@ -94,5 +72,6 @@ def test_engine_integration_lammps_failure(tmp_path: Path, mock_md_config: MDCon
 
     engine = LammpsEngine(mock_md_config)
 
-    with pytest.raises(RuntimeError, match="LAMMPS engine execution failed"):
+    # Updated match string
+    with pytest.raises(RuntimeError, match="Simulation execution failed"):
         engine.run(atoms, potential_path)

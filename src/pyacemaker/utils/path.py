@@ -1,4 +1,5 @@
 import tempfile
+import os
 from pathlib import Path
 
 from pyacemaker.domain_models.constants import DANGEROUS_PATH_CHARS, DEFAULT_RAM_DISK_PATH
@@ -36,30 +37,49 @@ def validate_path_safe(path: Path) -> Path:
         raise ValueError(msg)
 
     try:
-        # Canonicalize path (resolve symlinks, collapse ..)
-        # We use strict=False because the file might be an output file that doesn't exist yet.
-        resolved = path.resolve(strict=False)
-        base_dir = Path.cwd().resolve()
-
-        # Allowed roots: CWD, System Temp, RAM Disk
-        allowed_roots = [
-            base_dir,
-            Path(tempfile.gettempdir()).resolve(),
-            Path(DEFAULT_RAM_DISK_PATH).resolve()
-        ]
-
-        is_safe = False
-        for root in allowed_roots:
-            if resolved.is_relative_to(root):
-                is_safe = True
-                break
-
-        if not is_safe:
-             msg = f"Path traversal detected: {resolved} is outside allowed roots {allowed_roots}"
-             raise ValueError(msg)
+        # Canonicalize path.
+        # Enforce strict=True if the path exists to catch symlink attacks immediately.
+        # If it doesn't exist (e.g. output file), we must resolve based on parent.
+        if path.exists():
+            resolved = path.resolve(strict=True)
+        else:
+            # For non-existent files, check parent
+            if path.parent.exists():
+                resolved_parent = path.parent.resolve(strict=True)
+                # Combine resolved parent with filename
+                resolved = resolved_parent / path.name
+            else:
+                # If even parent doesn't exist, this is likely unsafe or too deep
+                # Fallback to loose resolve but we will check containment
+                resolved = path.resolve(strict=False)
 
     except Exception as e:
          msg = f"Invalid path resolution: {path}"
          raise ValueError(msg) from e
+
+    base_dir = Path.cwd().resolve()
+
+    # Allowed roots: CWD, System Temp, RAM Disk
+    allowed_roots = [
+        base_dir,
+        Path(tempfile.gettempdir()).resolve(),
+        Path(DEFAULT_RAM_DISK_PATH).resolve()
+    ]
+
+    is_safe = False
+    for root in allowed_roots:
+        # Robust check using os.path.commonpath to ensure resolved path is under root
+        try:
+            # commonpath resolves mixed relative/absolute issues, but we used absolute resolved paths
+            common = Path(os.path.commonpath([root, resolved]))
+            if common == root:
+                is_safe = True
+                break
+        except ValueError:
+            continue
+
+    if not is_safe:
+         msg = f"Path traversal detected: {resolved} is outside allowed roots {allowed_roots}"
+         raise ValueError(msg)
 
     return resolved

@@ -9,8 +9,9 @@ def test_md_config_defaults() -> None:
         n_steps=1000
     )
     assert config.velocity_seed == 12345
-    assert config.minimize_steps == 100
-    assert config.minimize_max_iter == 1000
+    # Updated expectations based on constants.py
+    assert config.minimize_steps == 10000
+    assert config.minimize_max_iter == 10000
     assert config.minimize_tol == 1.0e-4
     assert config.minimize_ftol == 1.0e-6
 

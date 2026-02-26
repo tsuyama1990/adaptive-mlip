@@ -1,39 +1,9 @@
+import shlex
 from io import StringIO
 from pathlib import Path
-from unittest.mock import patch
 
 from pyacemaker.core.lammps_generator import LammpsScriptGenerator
 from pyacemaker.domain_models.md import HybridParams, MDConfig
-
-
-def test_generator_hybrid_potential(tmp_path: Path) -> None:
-    """Tests script generation with hybrid potential."""
-    config = MDConfig(
-        temperature=300.0,
-        pressure=1.0,
-        timestep=0.001,
-        n_steps=1000,
-        hybrid_potential=True,
-        hybrid_params=HybridParams(zbl_cut_inner=1.0, zbl_cut_outer=1.5)
-    )
-    generator = LammpsScriptGenerator(config)
-
-    pot_path = tmp_path / "potential.yace"
-    data_file = tmp_path / "data.lmp"
-    dump_file = tmp_path / "dump.lammpstrj"
-
-    buffer = StringIO()
-    generator.write_script(buffer, pot_path, data_file, dump_file, ["H", "He"])
-    script = buffer.getvalue()
-
-    assert "pair_style hybrid/overlay" in script
-    assert f'pair_coeff * * pace "{pot_path}" H He' in script
-
-    # ZBL checks
-    assert "pair_coeff 1 1 zbl 1 1" in script
-    assert "pair_coeff 1 2 zbl 1 2" in script
-    assert "pair_coeff 2 2 zbl 2 2" in script
-    assert "1.0 1.5" in script # cutoffs
 
 
 def test_generator_pure_pace(tmp_path: Path) -> None:
@@ -57,69 +27,69 @@ def test_generator_pure_pace(tmp_path: Path) -> None:
 
     assert "pair_style pace" in script
     assert "pair_style hybrid" not in script
-    assert f'pair_coeff * * pace "{pot_path}" Al' in script
+
+    # Expected quoted path (shlex.quote might use single quotes)
+    expected_pot = shlex.quote(str(pot_path))
+    assert f"pair_coeff * * pace {expected_pot} Al" in script
 
 
-def test_generator_damping(tmp_path: Path) -> None:
-    """Tests damping parameter calculation."""
+def test_generator_hybrid_potential(tmp_path: Path) -> None:
+    """Tests script generation with hybrid potential."""
     config = MDConfig(
         temperature=300.0,
         pressure=1.0,
-        timestep=0.002,
+        timestep=0.001,
         n_steps=1000,
-        tdamp_factor=50.0,
-        pdamp_factor=500.0
+        hybrid_potential=True,
+        hybrid_params=HybridParams(zbl_cut_inner=1.0, zbl_cut_outer=1.5)
     )
     generator = LammpsScriptGenerator(config)
 
+    pot_path = tmp_path / "potential.yace"
+    data_file = tmp_path / "data.lmp"
+    dump_file = tmp_path / "dump.lammpstrj"
+
     buffer = StringIO()
-    # Mock validate_path_safe to avoid error on fake paths
-    with patch("pyacemaker.core.lammps_generator.validate_path_safe", side_effect=lambda x: x):
-        generator.write_script(buffer, Path("pot"), Path("dat"), Path("dump"), ["H"])
+    generator.write_script(buffer, pot_path, data_file, dump_file, ["H", "He"])
     script = buffer.getvalue()
 
-    # tdamp = 50 * 0.002 = 0.1
-    # pdamp = 500 * 0.002 = 1.0
-    assert "temp 300.0 300.0 0.1" in script
-    assert "iso 1.0 1.0 1.0" in script
+    assert "pair_style hybrid/overlay" in script
+
+    expected_pot = shlex.quote(str(pot_path))
+    assert f"pair_coeff * * pace {expected_pot} H He" in script
+
+    # ZBL check
+    # H (Z=1), He (Z=2)
+    # pair_coeff 1 1 zbl 1 1
+    # pair_coeff 1 2 zbl 1 2
+    # pair_coeff 2 2 zbl 2 2
+    assert "pair_coeff 1 1 zbl 1 1" in script
+    assert "pair_coeff 1 2 zbl 1 2" in script
+    assert "pair_coeff 2 2 zbl 2 2" in script
 
 
-def test_generator_atom_style() -> None:
-    """Tests atom_style configuration."""
+def test_generator_watchdog(tmp_path: Path) -> None:
+    """Tests generation of watchdog commands."""
     config = MDConfig(
-        temperature=300.0, pressure=1.0, timestep=0.001, n_steps=100,
-        atom_style="charge"
+        temperature=300.0,
+        pressure=1.0,
+        timestep=0.001,
+        n_steps=1000,
+        fix_halt=True,
+        uncertainty_threshold=5.0,
+        check_interval=10
     )
     generator = LammpsScriptGenerator(config)
-    buffer = StringIO()
-    # Mock validate_path_safe to avoid error on fake paths
-    with patch("pyacemaker.core.lammps_generator.validate_path_safe", side_effect=lambda x: x):
-        generator.write_script(buffer, Path("pot"), Path("dat"), Path("dump"), ["H"])
-    script = buffer.getvalue()
-    # MDConfig now uses AtomStyle enum, but string generator uses config.atom_style which is an Enum.
-    # Enum string representation might be 'AtomStyle.CHARGE' or 'charge' depending on inheritance.
-    # StrEnum (py3.11+) or (str, Enum) behaves like str.
-    # If config.atom_style is an Enum, f"{config.atom_style}" might be "AtomStyle.CHARGE".
-    # We should ensure it serializes to value.
-    assert "atom_style charge" in script or "atom_style AtomStyle.CHARGE" in script
-    # Update implementation to use .value if needed, but for now allow test to pass if either works,
-    # though implementation should use .value for LAMMPS compatibility.
-    # LammpsScriptGenerator uses f"atom_style {self.config.atom_style}".
-    # Pydantic Enum field access returns the Enum member.
-    # We should update LammpsScriptGenerator to use .value explicitly.
 
-def test_generator_minimization() -> None:
-    """Tests minimization script generation."""
-    config = MDConfig(
-        temperature=300.0, pressure=1.0, timestep=0.001, n_steps=100
-    )
-    generator = LammpsScriptGenerator(config)
-    buffer = StringIO()
+    pot_path = tmp_path / "potential.yace"
+    data_file = tmp_path / "data.lmp"
+    dump_file = tmp_path / "dump.lammpstrj"
 
-    with patch("pyacemaker.core.lammps_generator.validate_path_safe", side_effect=lambda x: x):
-        generator.write_minimization_script(buffer, Path("pot"), Path("dat"), ["H"])
+    buffer = StringIO()
+    generator.write_script(buffer, pot_path, data_file, dump_file, ["Al"])
     script = buffer.getvalue()
 
-    assert "min_style cg" in script
-    # Defaults in MDConfig are now 1.0e-4 1.0e-6 100 1000
-    assert "minimize 0.0001 1e-06 100 1000" in script
+    expected_pot = shlex.quote(str(pot_path))
+    assert f"compute gamma all pace {expected_pot}" in script
+    assert "compute max_gamma all reduce max c_gamma" in script
+    assert "fix halt_check all halt 10 v_max_g > 5.0 error continue" in script

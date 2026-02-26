@@ -18,7 +18,10 @@ class EONConfig(BaseModel):
         description="Path to EON executable",
     )
     potential_path: Path = Field(..., description="Path to the potential file")
-    temperature: float = Field(300.0, ge=0.0, description="Temperature in Kelvin")
+
+    # Audit Fix: Add upper bound for temperature
+    temperature: float = Field(300.0, gt=0.0, le=10000.0, description="Temperature in Kelvin")
+
     akmc_steps: int = Field(100, ge=1, description="Number of aKMC steps to run")
     supercell: list[int] = Field(
         default_factory=lambda: [1, 1, 1],
@@ -43,17 +46,21 @@ class EONConfig(BaseModel):
     @classmethod
     def validate_potential_path(cls, v: Path) -> Path:
         """Validates the potential path using secure path validation."""
-        try:
-            # First, standard path safety check
-            validate_path_safe(v)
+        # First, standard path safety check
+        validate_path_safe(v)
 
-            # Second, existence check (EON requires it to run)
-            if not v.exists():
-                msg = f"Potential file does not exist: {v}"
-                raise ValueError(msg)
+        # Second, existence check (EON requires it to run)
+        if not v.exists():
+            msg = f"Potential file does not exist: {v}"
+            raise ValueError(msg)
 
-        except ValueError as e:
-            # Re-raise as ValueError for Pydantic to catch
-            raise ValueError(str(e)) from e
+        return v
 
+    @field_validator("supercell")
+    @classmethod
+    def validate_supercell(cls, v: list[int]) -> list[int]:
+        """Validates supercell dimensions."""
+        if any(x <= 0 for x in v):
+            msg = "Supercell dimensions must be positive integers"
+            raise ValueError(msg)
         return v

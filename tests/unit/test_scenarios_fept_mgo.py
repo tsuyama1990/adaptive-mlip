@@ -1,18 +1,19 @@
+import tempfile
 from pathlib import Path
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
-import tempfile
 from ase import Atoms
 
 from pyacemaker.domain_models.config import PyAceConfig
 from pyacemaker.domain_models.eon import EONConfig
 from pyacemaker.domain_models.scenario import ScenarioConfig
-from pyacemaker.scenarios.fept_mgo import FePtMgoScenario, DepositionManager
+from pyacemaker.scenarios.fept_mgo import DepositionManager, FePtMgoScenario
 
 
 @pytest.fixture
-def mock_config():
+def mock_config() -> Any:
     # Mock minimal config for scenario
     with tempfile.NamedTemporaryFile(suffix=".yace") as tmp:
         path = Path(tmp.name)
@@ -27,26 +28,27 @@ def mock_config():
         yield mock_conf
 
 
-def test_fept_init(mock_config):
+def test_fept_init(mock_config: Any) -> None:
     scenario = FePtMgoScenario(mock_config)
     assert scenario.name == "fept_mgo"
     assert scenario.eon_wrapper is None  # Should be None initially or mocked
 
 
-def test_fept_generate_surface(mock_config):
+def test_fept_generate_surface(mock_config: Any) -> None:
     scenario = FePtMgoScenario(mock_config)
     surface = scenario._generate_surface()
     assert isinstance(surface, Atoms)
     assert len(surface) > 0
     # MgO rocksalt structure check
-    syms = surface.get_chemical_symbols()
-    assert "Mg" in syms and "O" in syms
+    syms = list(surface.get_chemical_symbols())
+    assert "Mg" in syms
+    assert "O" in syms
 
 
-def test_fept_deposit_atoms_deterministic(mock_config):
+def test_fept_deposit_atoms_deterministic(mock_config: Any) -> None:
     mock_engine = MagicMock()
     # Configure engine.relax to return a modified structure (simulating relaxation)
-    def mock_relax(atoms, pot):
+    def mock_relax(atoms: Atoms, pot: Any) -> Atoms:
         atoms_copy = atoms.copy()
         atoms_copy.positions[0] += 0.1
         return atoms_copy
@@ -73,7 +75,7 @@ def test_fept_deposit_atoms_deterministic(mock_config):
     assert deposited1.get_chemical_symbols() == deposited2.get_chemical_symbols()
 
 
-def test_fept_run_flow(mock_config):
+def test_fept_run_flow(mock_config: Any) -> None:
     mock_config.eon.enabled = True # Enable EON for this test
     mock_engine = MagicMock()
     mock_engine.relax.side_effect = lambda atoms, pot: atoms.copy()
@@ -92,7 +94,7 @@ def test_fept_run_flow(mock_config):
     assert mock_eon.run.called
 
 
-def test_fept_relaxation_failure(mock_config):
+def test_fept_relaxation_failure(mock_config: Any) -> None:
     # Test relaxation failure handling via DepositionManager
     mock_engine = MagicMock()
     mock_engine.relax.side_effect = Exception("Relaxation failed")
@@ -106,7 +108,7 @@ def test_fept_relaxation_failure(mock_config):
 
     assert "Deposition failed" in str(excinfo.value)
 
-def test_deposition_manager_error(mock_config):
+def test_deposition_manager_error(mock_config: Any) -> None:
     mock_engine = MagicMock()
     # relaxation fails
     mock_engine.relax.side_effect = Exception("Fail")

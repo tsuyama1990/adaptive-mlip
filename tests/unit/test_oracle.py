@@ -109,7 +109,7 @@ def test_dft_manager_fatal_error(mock_dft_config: DFTConfig) -> None:
     # Now raises OracleError
     # Use next() to trigger execution
     gen = manager.compute(iter([atoms]))
-    with pytest.raises(OracleError, match="DFT calculation failed"):
+    with pytest.raises(OracleError, match="Oracle calculation failed"):
         next(gen)
 
     # Verify retries happened (at least > 1)
@@ -127,7 +127,7 @@ def test_dft_manager_setup_error(mock_dft_config: DFTConfig) -> None:
     manager = DFTManager(mock_dft_config, driver=mock_driver)
 
     gen = manager.compute(iter([atoms]))
-    with pytest.raises(OracleError, match="DFT calculation failed"):
+    with pytest.raises(OracleError, match="Oracle calculation failed"):
         next(gen)
 
     # Should retry even on setup error if it's considered transient or parameter based?
@@ -172,13 +172,9 @@ def test_dft_manager_invalid_input(mock_dft_config: DFTConfig) -> None:
     manager = DFTManager(mock_dft_config)
     atoms_list = [Atoms("H")]
 
-    # Check that it raises TypeError immediately upon calling next()
-    # because generator execution is deferred.
-    # We want to ensure it fails.
-    gen = manager.compute(atoms_list) # type: ignore[arg-type]
-
-    with pytest.raises(TypeError, match="must be an Iterator"):
-        next(gen)
+    # Check that it raises TypeError immediately upon calling compute (before next)
+    with pytest.raises(TypeError, match="Oracle failed to create iterator"):
+        manager.compute(atoms_list) # type: ignore[arg-type]
 
 def test_dft_manager_empty_iterator(mock_dft_config: DFTConfig) -> None:
     """Test compute handles empty iterator correctly with warning."""

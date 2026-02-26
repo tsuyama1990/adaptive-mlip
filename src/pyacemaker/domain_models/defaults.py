@@ -99,6 +99,11 @@ DEFAULT_MD_BASE_ENERGY = -100.0
 DEFAULT_MD_CHECK_INTERVAL = 10
 DEFAULT_MD_HYBRID_ZBL_INNER = 2.0
 DEFAULT_MD_HYBRID_ZBL_OUTER = 2.5
+MAX_MD_PRESSURE = 1.0e6
+MAX_MD_DURATION = 1.0e6  # ps
+
+# MC Defaults
+DEFAULT_MC_SEED = 12345
 
 # Validation Defaults
 DEFAULT_VALIDATION_PHONON_SUPERCELL = [2, 2, 2]
@@ -108,21 +113,10 @@ DEFAULT_VALIDATION_ELASTIC_STRAIN = 0.01
 DEFAULT_VALIDATION_ELASTIC_STEPS = 5
 
 # Security constants
+# Audit fix: Expanded list of dangerous characters
 DANGEROUS_PATH_CHARS: Final[set[str]] = {
-    ";",
-    "&",
-    "|",
-    "`",
-    "$",
-    "(",
-    ")",
-    "<",
-    ">",
-    "\n",
-    "\r",
-    "\t",
-    "*",
-    "?",
+    ";", "&", "|", "`", "$", "(", ")", "<", ">", "\n", "\r", "\t", "?",
+    "*", "[", "]", "{", "}", "'", '"', "!", "#",
 }
 
 # RAM Disk logic
@@ -137,7 +131,8 @@ DEFAULT_MD_MINIMIZE_TOL = 1e-4
 LAMMPS_MINIMIZE_MAX_ITER = 10000
 LAMMPS_MINIMIZE_STEPS = 10000
 LAMMPS_VELOCITY_SEED = 12345
-LAMMPS_SAFE_CMD_PATTERN = r"^[a-zA-Z0-9\s_\-\.\/=]+$"  # Whitelist alphanumeric, space, underscore, dash, dot, slash, equals
+# Allowed characters in LAMMPS commands: Alphanumeric, space, common punctuation including *
+LAMMPS_SAFE_CMD_PATTERN = r"^[a-zA-Z0-9\s_\-\.\/=\"\*]+$"
 LAMMPS_SCREEN_ARG = "-screen"
 LAMMPS_MIN_STYLE_CG = "cg"
 
@@ -154,19 +149,25 @@ ERR_GEN_BASE_FAIL = "Base generator failed: {error}"
 ERR_GEN_NCAND_NEG = "Number of candidates must be positive."
 ERR_ORACLE_FAILED = "Oracle calculation failed: {error}"
 ERR_ORACLE_ITERATOR = "Oracle failed to create iterator."
+ERR_ORACLE_WARN_EMPTY = "Oracle received empty iterator. No calculations performed."
 ERR_SIM_EXEC_FAIL = "Simulation execution failed: {error}"
 ERR_SIM_SECURITY_FAIL = "Simulation security check failed: {error}"
 ERR_SIM_SETUP_FAIL = "Simulation setup failed: {error}"
 ERR_SIM_UNEXPECTED = "Unexpected simulation error: {error}"
 ERR_STRUCTURE_NONE = "Structure cannot be None."
-ERR_POTENTIAL_NOT_FOUND = "Potential file not found."
+ERR_POTENTIAL_NOT_FOUND = "Potential file not found: {path}"
 ERR_VAL_POT_NONE = "Validator requires a potential."
-ERR_VAL_POT_NOT_FILE = "Potential path is not a file."
-ERR_VAL_POT_OUTSIDE = "Potential path is outside allowed directory."
+ERR_VAL_POT_NOT_FILE = "Potential path is not a file: {path}"
+ERR_VAL_POT_OUTSIDE = "Potential path is outside allowed directory: {path}"
 ERR_VAL_REQ_STRUCT = "Validator requires a structure."
 ERR_VAL_STRUCT_EMPTY = "Structure is empty."
 ERR_VAL_STRUCT_NONE = "Structure is None."
-ERR_VAL_STRUCT_TYPE = "Invalid structure type."
+ERR_VAL_STRUCT_TYPE = "Invalid structure type: {type}"
+ERR_VAL_STRUCT_VOL_FAIL = "Failed to compute structure volume: {error}"
+ERR_VAL_STRUCT_ZERO_VOL = "Structure has near-zero or negative volume."
+ERR_VAL_STRUCT_NAN_POS = "Structure contains non-finite atomic positions."
+ERR_VAL_STRUCT_UNKNOWN_SYM = "Structure contains unknown chemical symbol: {symbol}"
+ERR_VAL_STRUCT_DUMMY_ELEM = "Structure contains dummy element: {symbol} (Z=0)"
 
 # DFT
 RECIPROCAL_FACTOR = 2.0 * 3.141592653589793  # 2*PI approx
@@ -178,6 +179,7 @@ DEFAULT_STRAIN_RANGE: Final[tuple[float, float]] = (-0.05, 0.05)
 PACE_DRIVER_TEMPLATE = """
 import sys
 import os
+import re
 import numpy as np
 from ase.io import read
 from ase.calculators.lammpsrun import LAMMPS
@@ -186,6 +188,12 @@ from ase.calculators.lammpsrun import LAMMPS
 POTENTIAL_PATH = os.environ.get("PACE_POTENTIAL_PATH")
 if not POTENTIAL_PATH:
     sys.stderr.write("Error: PACE_POTENTIAL_PATH not set\\n")
+    sys.exit(1)
+
+# Security: Validate POTENTIAL_PATH to prevent injection in pair_coeff
+# Allow alphanumeric, dot, underscore, dash, slash.
+if not re.match(r"^[a-zA-Z0-9_\\-\\.\\/]+$", POTENTIAL_PATH):
+    sys.stderr.write("Error: Invalid characters in potential path\\n")
     sys.exit(1)
 
 if not os.path.exists(POTENTIAL_PATH):

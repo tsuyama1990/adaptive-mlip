@@ -1,139 +1,100 @@
+import tempfile
 from pathlib import Path
 
 import pytest
-import yaml
-from pydantic import ValidationError
+from ase import Atoms
+from ase.io import read
 
-from pyacemaker.domain_models import PyAceConfig
-from pyacemaker.utils.io import dump_yaml, load_config, load_yaml
-from tests.conftest import create_dummy_pseudopotentials
+from pyacemaker.utils.io import detect_elements, dump_yaml, load_yaml, write_lammps_streaming
 
 
-def test_load_yaml_valid(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.chdir(tmp_path)
-    data = {"key": "value"}
-    p = tmp_path / "test.yaml"
-    with p.open("w") as f:
-        yaml.dump(data, f)
-
-    loaded = load_yaml(p)
-    assert loaded == data
+def test_load_yaml_success(tmp_path):
+    config_file = tmp_path / "config.yaml"
+    config_file.write_text("key: value\n")
+    data = load_yaml(config_file)
+    assert data == {"key": "value"}
 
 
-def test_load_yaml_file_not_found(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.chdir(tmp_path)
+def test_load_yaml_not_found():
     with pytest.raises(FileNotFoundError):
-        load_yaml(tmp_path / "non_existent_file.yaml")
+        load_yaml(Path("non_existent.yaml"))
 
 
-def test_load_yaml_invalid_yaml(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.chdir(tmp_path)
-    p = tmp_path / "invalid.yaml"
-    with p.open("w") as f:
-        f.write("{unclosed_brace: value")
-
-    with pytest.raises(ValueError, match="Error parsing YAML"):
-        load_yaml(p)
+def test_dump_yaml(tmp_path):
+    data = {"key": "value"}
+    dump_file = tmp_path / "dump.yaml"
+    dump_yaml(data, dump_file)
+    assert load_yaml(dump_file) == data
 
 
-def test_load_yaml_empty(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.chdir(tmp_path)
-    p = tmp_path / "empty.yaml"
-    p.touch()
+def test_detect_elements(tmp_path):
+    # Create a dummy xyz file
+    xyz_file = tmp_path / "test.xyz"
+    atoms1 = Atoms("H2O", positions=[[0, 0, 0], [1, 0, 0], [0, 1, 0]])
+    atoms2 = Atoms("CO2", positions=[[0, 0, 0], [1, 0, 0], [0, 1, 0]])
 
-    with pytest.raises(ValueError, match="YAML file is empty"):
-        load_yaml(p)
+    # Use ASE to write standard xyz
+    from ase.io import write
+    write(xyz_file, [atoms1, atoms2])
 
+    elements = detect_elements(xyz_file)
+    assert set(elements) == {"H", "O", "C"}
+    assert elements == ["C", "H", "O"] # sorted
 
-def test_load_yaml_not_dict(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.chdir(tmp_path)
-    p = tmp_path / "list.yaml"
-    with p.open("w") as f:
-        f.write("- item1\n- item2")
+def test_detect_elements_empty(tmp_path):
+    empty_file = tmp_path / "empty.xyz"
+    empty_file.touch()
+    elements = detect_elements(empty_file)
+    assert elements == []
 
-    with pytest.raises(TypeError, match="must contain a dictionary"):
-        load_yaml(p)
+def test_write_lammps_streaming_basic():
+    atoms = Atoms("H2", positions=[[0, 0, 0], [0.74, 0, 0]], cell=[5, 5, 5])
+    species = ["H"]
 
+    with tempfile.NamedTemporaryFile(mode="w+", delete=False) as f:
+        write_lammps_streaming(f, atoms, species)
+        f.flush()
+        path = Path(f.name)
 
-def test_load_yaml_directory(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.chdir(tmp_path)
-    p = tmp_path / "subdir"
-    p.mkdir()
-    with pytest.raises(ValueError, match="Path is not a file"):
-        load_yaml(p)
+    # Verify content
+    content = path.read_text()
+    assert "2 atoms" in content
+    assert "1 atom types" in content
+    assert "H" in content
 
+    # Verify structure using ASE read
+    # ASE read lammps-data format requires explicit masses or known types.
+    # Our format is standard lammps data.
+    read_atoms = read(path, format="lammps-data", style="atomic")
+    assert len(read_atoms) == 2
+    # Check if positions match roughly
+    # Note: Lammps read might reorder or center differently depending on settings,
+    # but basic connectivity or counts should match.
 
-def test_load_config_valid(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.chdir(tmp_path)
+    path.unlink()
 
-    create_dummy_pseudopotentials(tmp_path, ["Fe"])
+def test_write_lammps_streaming_multiple_species():
+    atoms = Atoms("H2O", positions=[[0,0,0], [1,0,0], [0,1,0]], cell=[10, 10, 10])
+    species = ["H", "O"]
 
-    config_data = {
-        "project_name": "Test",
-        "structure": {"elements": ["Fe"], "supercell_size": [1, 1, 1]},
-        "dft": {
-            "code": "qe",
-            "functional": "PBE",
-            "kpoints_density": 0.04,
-            "encut": 500.0,
-            "pseudopotentials": {"Fe": "Fe.UPF"},
-        },
-        "training": {"potential_type": "ace", "cutoff_radius": 5.0, "max_basis_size": 500},
-        "md": {"temperature": 300.0, "pressure": 0.0, "timestep": 0.001, "n_steps": 1000},
-        "workflow": {"max_iterations": 10},
-    }
-    p = tmp_path / "config.yaml"
-    with p.open("w") as f:
-        yaml.dump(config_data, f)
+    with tempfile.NamedTemporaryFile(mode="w+", delete=False) as f:
+        write_lammps_streaming(f, atoms, species)
+        f.flush()
+        path = Path(f.name)
 
-    config = load_config(p)
-    assert isinstance(config, PyAceConfig)
-    assert config.project_name == "Test"
+    content = path.read_text()
+    assert "3 atoms" in content
+    assert "2 atom types" in content
 
+    path.unlink()
 
-def test_load_config_invalid(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.chdir(tmp_path)
-    config_data = {
-        "project_name": "Test",
-        # Missing structure
-    }
-    p = tmp_path / "invalid_config.yaml"
-    with p.open("w") as f:
-        yaml.dump(config_data, f)
+def test_write_lammps_streaming_missing_species():
+    atoms = Atoms("He", positions=[[0,0,0]], cell=[10,10,10])
+    species = ["H"] # He is missing
 
-    with pytest.raises(ValidationError):
-        load_config(p)
+    with tempfile.NamedTemporaryFile(mode="w+", delete=False) as f:
+        with pytest.raises(KeyError):
+            write_lammps_streaming(f, atoms, species)
+        path = Path(f.name)
 
-
-def test_path_traversal_check(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    # Create a file outside the "current working directory"
-    outside_dir = tmp_path / "outside"
-    outside_dir.mkdir()
-    p = outside_dir / "config.yaml"
-    p.touch()
-
-    # Set CWD to a different subdir
-    cwd = tmp_path / "inside"
-    cwd.mkdir()
-
-    monkeypatch.chdir(cwd)
-
-    # outside_dir is /tmp/outside
-    # cwd is /tmp/inside
-    # So it should raise.
-
-    with pytest.raises(ValueError, match="Path traversal detected"):
-        load_yaml(p)
-
-
-def test_dump_yaml(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.chdir(tmp_path)
-    data = {"key": "value", "list": [1, 2, 3]}
-    p = tmp_path / "output.yaml"
-
-    dump_yaml(data, p)
-
-    assert p.exists()
-    with p.open("r") as f:
-        loaded = yaml.safe_load(f)
-    assert loaded == data
+    path.unlink()

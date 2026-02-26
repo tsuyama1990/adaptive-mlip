@@ -1,15 +1,16 @@
 import tempfile
 from pathlib import Path
-from unittest.mock import MagicMock, mock_open, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
+
 from pyacemaker.domain_models.eon import EONConfig
 from pyacemaker.interfaces.eon_driver import EONWrapper
 from pyacemaker.interfaces.process import ProcessRunner
 
 
 class MockProcessRunner(ProcessRunner):
-    def __init__(self, return_code=0, stdout="", stderr=""):
+    def __init__(self, return_code=0, stdout="", stderr="") -> None:
         self.return_code = return_code
         self.stdout = stdout
         self.stderr = stderr
@@ -54,7 +55,7 @@ def test_eon_generate_config(mock_potential_path):
         assert "[Potential]" in content
         assert "potential = command_line" in content
         # Check command path
-        assert f"command = {str(Path('pace_driver.py'))}" or "python pace_driver.py" in content
+        assert f"command = {Path('pace_driver.py')!s}" or "python pace_driver.py" in content
         assert "[Structure]" in content
         assert "supercell = [1, 1, 1]" in content
         assert "[Communicator]" in content
@@ -62,9 +63,8 @@ def test_eon_generate_config(mock_potential_path):
         assert "client_path = eonclient" in content
 
         # Verify file permissions (0o600 for config)
-        import os
         import stat
-        st = os.stat(output_path)
+        st = output_path.stat()
         assert stat.S_IMODE(st.st_mode) == 0o600
 
 
@@ -83,7 +83,7 @@ def test_eon_generate_driver_script(mock_potential_path):
         import os
         import stat
         assert os.access(driver_path, os.X_OK)
-        st = os.stat(driver_path)
+        st = driver_path.stat()
         assert stat.S_IMODE(st.st_mode) == 0o700
 
 

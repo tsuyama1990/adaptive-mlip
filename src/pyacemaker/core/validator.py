@@ -5,19 +5,24 @@ import numpy as np
 from ase import Atoms
 from ase.data import atomic_numbers
 
-from pyacemaker.core.report import ReportGenerator
 from pyacemaker.domain_models.constants import (
     ERR_POTENTIAL_NOT_FOUND,
     ERR_VAL_POT_NONE,
     ERR_VAL_POT_NOT_FILE,
     ERR_VAL_POT_OUTSIDE,
     ERR_VAL_REQ_STRUCT,
+    ERR_VAL_STRUCT_DUMMY_ELEM,
     ERR_VAL_STRUCT_EMPTY,
+    ERR_VAL_STRUCT_NAN_POS,
     ERR_VAL_STRUCT_NONE,
     ERR_VAL_STRUCT_TYPE,
+    ERR_VAL_STRUCT_UNKNOWN_SYM,
+    ERR_VAL_STRUCT_VOL_FAIL,
+    ERR_VAL_STRUCT_ZERO_VOL,
 )
 from pyacemaker.domain_models.validation import ValidationConfig, ValidationResult
 from pyacemaker.utils.elastic import ElasticCalculator
+from pyacemaker.utils.path import validate_path_safe
 from pyacemaker.utils.phonons import PhononCalculator
 
 
@@ -51,35 +56,31 @@ class LammpsInputValidator:
         # Validate structure physical properties
         try:
             vol = structure.get_volume()  # type: ignore[no-untyped-call]
-            if vol <= 1e-9:
-                msg = "Structure has near-zero or negative volume."
-                raise ValueError(msg)
         except Exception as e:
             # get_volume might fail if no cell is set
-            msg = f"Failed to compute structure volume: {e}"
-            raise ValueError(msg) from e
+            raise ValueError(ERR_VAL_STRUCT_VOL_FAIL.format(error=e)) from e
+
+        if vol <= 1e-9:
+            raise ValueError(ERR_VAL_STRUCT_ZERO_VOL)
 
         # Validate positions are numeric and finite
         pos = structure.get_positions()  # type: ignore[no-untyped-call]
         if not np.isfinite(pos).all():
-            msg = "Structure contains non-finite atomic positions."
-            raise ValueError(msg)
+            raise ValueError(ERR_VAL_STRUCT_NAN_POS)
 
         # Validate elements against atomic_numbers
         symbols = set(structure.get_chemical_symbols())  # type: ignore[no-untyped-call]
         for s in symbols:
             if s not in atomic_numbers:
-                msg = f"Structure contains unknown chemical symbol: {s}"
-                raise ValueError(msg)
+                raise ValueError(ERR_VAL_STRUCT_UNKNOWN_SYM.format(symbol=s))
             if atomic_numbers[s] == 0:
-                msg = f"Structure contains dummy element: {s} (Z=0)"
-                raise ValueError(msg)
+                raise ValueError(ERR_VAL_STRUCT_DUMMY_ELEM.format(symbol=s))
 
     @staticmethod
     def validate_potential(potential: Any) -> Path:
         """
         Validates the potential path.
-        Ensures path exists, is a file, and is within allowed directories.
+        Ensures path exists, is a file, and is within allowed directories using secure validation.
 
         Args:
             potential: Path to potential file (str or Path).
@@ -94,23 +95,18 @@ class LammpsInputValidator:
         if potential is None:
             raise ValueError(ERR_VAL_POT_NONE)
 
-        path = Path(potential).resolve()
+        # Convert to Path but do not resolve yet; validate_path_safe handles resolution checks
+        p = Path(potential)
 
+        # Use centralized secure validator
+        path = validate_path_safe(p)
+
+        # Additional checks for existence (validate_path_safe ensures safety, not existence)
         if not path.exists():
             raise FileNotFoundError(ERR_POTENTIAL_NOT_FOUND.format(path=path))
 
         if not path.is_file():
             raise ValueError(ERR_VAL_POT_NOT_FILE.format(path=path))
-
-        # Security: Restrict access to project directory or temp dirs
-        allowed_prefixes = [
-            Path.cwd().resolve(),
-            Path("/tmp").resolve(),  # noqa: S108
-            Path("/dev/shm").resolve()  # noqa: S108
-        ]
-
-        if not any(str(path).startswith(str(prefix)) for prefix in allowed_prefixes):
-            raise ValueError(ERR_VAL_POT_OUTSIDE.format(path=path))
 
         return path
 
@@ -125,7 +121,7 @@ class Validator:
         config: ValidationConfig,
         phonon_calculator: PhononCalculator,
         elastic_calculator: ElasticCalculator,
-        report_generator: ReportGenerator,
+        report_generator: Any,
     ) -> None:
         self.config = config
         self.phonon_calc = phonon_calculator
@@ -135,7 +131,6 @@ class Validator:
     def _relax_structure(self, structure: Atoms, potential_path: Path) -> Atoms:
         """
         Relaxes the structure using the engine provided in calculators.
-        Assuming both calculators use the same engine instance.
         """
         # Use engine from elastic_calc (arbitrary choice, they should share engine)
         engine = self.elastic_calc.engine
@@ -148,11 +143,10 @@ class Validator:
         Runs validation checks and generates report.
         """
         if structure is None:
-            # TODO: In future, generate a structure based on elements?
-            # For now, require it.
-            # But Orchestrator might call it without structure if we didn't update it.
-            # I'll raise error.
             raise ValueError(ERR_VAL_REQ_STRUCT)
+
+        # Data Integrity Fix: Validate structure input
+        LammpsInputValidator.validate_structure(structure)
 
         # Relax structure
         relaxed_structure = self._relax_structure(structure, potential_path)
