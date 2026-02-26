@@ -115,7 +115,8 @@ def write_lammps_streaming(
     # 2. Box
     cell = atoms.get_cell()  # type: ignore[no-untyped-call]
     if not np.allclose(cell, np.diag(np.diag(cell))):
-        raise ValueError("Streaming write currently only supports orthogonal cells")
+        msg = "Streaming write currently only supports orthogonal cells"
+        raise ValueError(msg)
 
     xlo, xhi = 0.0, cell[0, 0]
     ylo, yhi = 0.0, cell[1, 1]
@@ -156,7 +157,8 @@ def write_lammps_streaming(
             try:
                 t = type_map[s]
             except KeyError:
-                 raise KeyError(f"Symbol {s} not in provided species list: {species}")
+                 msg = f"Symbol {s} not in provided species list: {species}"
+                 raise KeyError(msg) from None
 
             # 1-based index
             yield f"{i+1} {t} {pos[i, 0]:.6f} {pos[i, 1]:.6f} {pos[i, 2]:.6f}\n"

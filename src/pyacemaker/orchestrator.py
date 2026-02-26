@@ -103,10 +103,6 @@ class Orchestrator:
         """
         self.initialize_modules()
 
-        # Manually invoke _explore for Cycle 01
-        # Use iteration 0 context
-        # paths = self.dir_manager.setup_iteration(0)
-
         self.logger.info("Starting Step 1: DIRECT Sampling...")
 
         try:
@@ -123,8 +119,8 @@ class Orchestrator:
             else:
                 self.logger.error("Generator not initialized.")
 
-        except Exception as e:
-            self.logger.exception(f"Step 1 Failed: {e}")
+        except Exception:
+            self.logger.exception("Step 1 Failed")
             raise
 
     def initialize_modules(self) -> None:
@@ -445,8 +441,8 @@ class Orchestrator:
         if self.engine:
             try:
                 return self.engine.run(structure=initial_structure, potential=deployed_potential)
-            except Exception as e:
-                self.logger.exception(f"MD Simulation failed: {e}")
+            except Exception:
+                self.logger.exception("MD Simulation failed")
                 # Consider raising or returning None depending on policy.
                 # Returning None effectively skips this iteration logic.
                 return None

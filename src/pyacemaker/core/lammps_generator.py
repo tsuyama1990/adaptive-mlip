@@ -21,14 +21,15 @@ class LammpsScriptGenerator:
         # Use lru_cache for methods instead of manual dict
         self._atomic_numbers_cache = {}
 
+    @staticmethod
     @lru_cache(maxsize=128)
-    def _get_atomic_number(self, symbol: str) -> int:
+    def _get_atomic_number(symbol: str) -> int:
         """Cached atomic number lookup."""
         return atomic_numbers[symbol]
 
+    @staticmethod
     @lru_cache(maxsize=128)
-    @lru_cache(maxsize=128)
-    def _quote(self, path: str, check_exists: bool = False) -> str:
+    def _quote(path: str, check_exists: bool = False) -> str:
         """
         Quotes a path for LAMMPS script safety after validation.
         Uses caching to avoid redundant validation calls.
@@ -38,19 +39,10 @@ class LammpsScriptGenerator:
         path_obj = Path(path)
         safe_path = validate_path_safe(path_obj)
 
-        # Check existence if it's meant to be an input file (potential, structure)
-        # We can't strictly know context here, but generally paths in scripts are inputs unless dumps
-        # This check might be too aggressive for output files.
-        # But for potentials (usually inputs), we should check.
-        # However, _quote is generic.
-
-        # Since this method is used for both input and output paths, we only validate safety.
-        # Specific methods calling this should check existence if needed.
-        # BUT the audit demanded: "Add file existence validation in _quote or before script generation"
-
-        # We will assume if the file has an extension typical of inputs (yace, xyz, data) and exists, it's fine.
-        # If it doesn't exist, we assume it's an output file or future file?
-        # A strictly better approach is to check existence in the caller: _gen_potential.
+        if check_exists and not safe_path.exists():
+            # If explicit check requested (e.g. potentials), fail hard
+            msg = f"File required for LAMMPS script not found: {safe_path}"
+            raise FileNotFoundError(msg)
 
         # Use shlex.quote for shell safety
         return shlex.quote(str(safe_path))
@@ -77,7 +69,7 @@ class LammpsScriptGenerator:
 
         # Optimize nested loop using list comprehension as requested
         zbl_lines = [
-            f"pair_coeff {i+1} {j+1} zbl {self._get_atomic_number(elements[i])} {self._get_atomic_number(elements[j])}\n"
+            f"pair_coeff {i+1} {j+1} zbl {LammpsScriptGenerator._get_atomic_number(elements[i])} {LammpsScriptGenerator._get_atomic_number(elements[j])}\n"
             for i in range(n_types)
             for j in range(i, n_types)
         ]

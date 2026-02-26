@@ -74,7 +74,6 @@ def test_generate_multiple_elements(structure_config):
     assert set(syms).issubset({"Si", "C"})
 
 def test_generate_duplicate_elements_validation(structure_config):
-    config = structure_config.model_copy()
     # Pydantic validates this on creation actually, but let's force it if possible
     # Or create a DirectSampler with a config that was manually mutated (bad practice but possible in python)
     # Actually StructureConfig validators run on init.

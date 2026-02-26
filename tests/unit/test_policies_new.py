@@ -17,7 +17,14 @@ class MockPolicy(BasePolicy):
         super().__init__()
         self.name = name
 
-    def generate(self, base_structure: Atoms, config: StructureConfig, n_structures: int = 1, **kwargs: Any):
+    def generate(self, **kwargs: Any):
+        # Extract arguments from kwargs
+        base_structure = kwargs.get("base_structure")
+        n_structures = kwargs.get("n_structures", 1)
+
+        if base_structure is None:
+            return
+
         for _ in range(n_structures):
             a = base_structure.copy()
             a.info["policy"] = self.name
@@ -47,7 +54,8 @@ def test_composite_policy_distribution() -> None:
     base = Atoms("H")
 
     # n=10, 2 policies -> 5 each
-    results = list(composite.generate(base, config, n_structures=10))
+    # MUST USE KEYWORD ARGUMENTS
+    results = list(composite.generate(base_structure=base, config=config, n_structures=10))
     assert len(results) == 10
     counts = {"p1": 0, "p2": 0}
     for r in results:
@@ -57,7 +65,7 @@ def test_composite_policy_distribution() -> None:
     assert counts["p2"] == 5
 
     # n=3, 2 policies -> 2 for p1, 1 for p2 (remainder logic)
-    results = list(composite.generate(base, config, n_structures=3))
+    results = list(composite.generate(base_structure=base, config=config, n_structures=3))
     assert len(results) == 3
     counts = {"p1": 0, "p2": 0}
     for r in results:
@@ -79,6 +87,7 @@ def test_md_micro_burst_policy() -> None:
     # Setup initial engine
     config_mock = MagicMock()
     config_mock.model_copy.return_value = config_mock
+    # Create instance to mimic factory or existing engine
     initial_engine = MockEngine(config_mock)
 
     # Mock trajectory read
@@ -90,7 +99,14 @@ def test_md_micro_burst_policy() -> None:
         config = StructureConfig(elements=["H"], supercell_size=[1,1,1])
         base = Atoms("H")
 
-        results = list(policy.generate(base, config, n_structures=1, engine=initial_engine, potential="pot"))
+        # MUST USE KEYWORD ARGUMENTS
+        results = list(policy.generate(
+            base_structure=base,
+            config=config,
+            n_structures=1,
+            engine=initial_engine,
+            potential="pot"
+        ))
 
         assert len(results) == 1
         assert results[0] == final_atoms
@@ -103,12 +119,15 @@ def test_md_micro_burst_fallback() -> None:
     config = StructureConfig(elements=["H"], supercell_size=[1,1,1])
     base = Atoms("H")
 
-    results = list(policy.generate(base, config, n_structures=1)) # No engine kwarg
+    # Missing engine kwarg -> Fallback
+    results = list(policy.generate(base_structure=base, config=config, n_structures=1))
 
     assert len(results) == 1
-    # Check if rattled (positions changed) or fallback logic executed
-    # Rattle changes positions.
-    assert results[0].get_chemical_symbols() == ["H"]
+    # Rattle generates a copy with perturbed positions
+    # Check if positions are different (Rattle)
+    # Rattle defaults to stdev=0.1
+    import numpy as np
+    assert not np.allclose(results[0].positions, base.positions)
 
 
 def test_normal_mode_policy_fallback() -> None:
@@ -116,9 +135,9 @@ def test_normal_mode_policy_fallback() -> None:
     config = StructureConfig(elements=["H"], supercell_size=[1,1,1])
     base = Atoms("H", positions=[[0,0,0]], cell=[10,10,10])
 
-    results = list(policy.generate(base, config, n_structures=1))
+    results = list(policy.generate(base_structure=base, config=config, n_structures=1))
 
     assert len(results) == 1
     # Should fall back to rattle
     import numpy as np
-    assert np.any(results[0].positions[0] != [0,0,0]) # Rattle moves atoms
+    assert not np.allclose(results[0].positions, base.positions)

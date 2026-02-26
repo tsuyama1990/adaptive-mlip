@@ -38,7 +38,9 @@ class TestValidator:
 
         potential_path = Path("pot.yace")
         output_path = Path("report.html")
-        structure = MagicMock()
+
+        # Use real Atoms object with valid physical properties
+        structure = Atoms("H", positions=[[0, 0, 0]], cell=[5, 5, 5], pbc=True)
 
         # Mock _relax_structure to isolate
         with patch.object(validator, "_relax_structure") as mock_relax:
@@ -62,7 +64,7 @@ class TestValidator:
 
         potential_path = Path("pot.yace")
         output_path = Path("report.html")
-        structure = MagicMock()
+        structure = Atoms("H", positions=[[0, 0, 0]], cell=[5, 5, 5], pbc=True)
 
         with patch.object(validator, "_relax_structure") as mock_relax:
             mock_relax.return_value = structure
@@ -72,26 +74,23 @@ class TestValidator:
         assert result.elastic_stable is True
 
     def test_relax_structure(self, validator, mock_elastic_calc):
-        structure = MagicMock()
+        structure = Atoms("H", positions=[[0, 0, 0]], cell=[5, 5, 5], pbc=True)
         pot_path = Path("pot.yace")
 
         # mock_elastic_calc.engine is accessed in _relax_structure
         mock_engine = MagicMock()
         mock_elastic_calc.engine = mock_engine
-        mock_engine.relax.return_value = "relaxed_structure"
+        mock_engine.relax.return_value = structure
 
         relaxed = validator._relax_structure(structure, pot_path)
 
-        assert relaxed == "relaxed_structure"
+        assert relaxed == structure
         mock_engine.relax.assert_called_once_with(structure, pot_path)
 
     def test_validate_structure_invalid_element(self):
         """Test rejection of structure with invalid chemical symbol (dummy X)."""
         # 'X' is in atomic_numbers but Z=0
-        # Need pbc and cell for get_volume() check to pass first if we want to hit the element check.
-        # Or let volume check fail? But volume check raises "Failed to compute structure volume"
-        # We want to test element check specifically.
-        # So we provide a valid cell.
+        # Need pbc and cell for get_volume() check to pass first
         structure = Atoms("X", positions=[[0,0,0]], cell=[10, 10, 10], pbc=True)
         with pytest.raises(ValueError, match="dummy element"):
             LammpsInputValidator.validate_structure(structure)

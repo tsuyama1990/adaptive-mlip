@@ -1,5 +1,5 @@
 import os
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 
 import numpy as np
@@ -41,7 +41,7 @@ def _get_default_temp_dir() -> str | None:
     return None
 
 
-class AtomStyle(str, Enum):
+class AtomStyle(StrEnum):
     ATOMIC = "atomic"
     CHARGE = "charge"
     FULL = "full"
@@ -250,14 +250,18 @@ class MDConfig(BaseModel):
             try:
                 # Use secure validation logic
                 validate_path_safe(Path(self.temp_dir))
-                p = Path(self.temp_dir)
-                if not p.exists() or not os.access(p, os.W_OK):
-                    msg = f"Temporary directory {p} does not exist or is not writable."
-                    raise ValueError(msg)
             except Exception as e:
-                msg = f"Invalid temporary directory: {e}"
-                raise ValueError(msg) from e
+                self._raise_invalid_temp_dir(e)
+
+            p = Path(self.temp_dir)
+            if not p.exists() or not os.access(p, os.W_OK):
+                msg = f"Temporary directory {p} does not exist or is not writable."
+                raise ValueError(msg)
         return self
+
+    def _raise_invalid_temp_dir(self, e: Exception) -> None:
+        msg = f"Invalid temporary directory: {e}"
+        raise ValueError(msg) from e
 
     @model_validator(mode="after")
     def validate_default_forces(self) -> "MDConfig":

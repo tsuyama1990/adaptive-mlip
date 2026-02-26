@@ -6,10 +6,10 @@ import pytest
 
 from pyacemaker.core.engine import LammpsEngine
 from pyacemaker.core.exceptions import ConfigError
-from pyacemaker.core.generator import StructureGenerator
 from pyacemaker.core.trainer import PacemakerTrainer
 from pyacemaker.domain_models import PyAceConfig
 from pyacemaker.factory import ModuleFactory
+from pyacemaker.structure_generator.direct import DirectSampler
 from tests.conftest import create_dummy_pseudopotentials
 
 
@@ -49,7 +49,7 @@ def test_module_factory_create_modules(mock_config: PyAceConfig) -> None:
     with patch("pyacemaker.factory.DFTManager") as MockDFTManager:
         gen, oracle, trainer, engine, active_set, validator = ModuleFactory.create_modules(mock_config)
 
-        assert isinstance(gen, StructureGenerator)
+        assert isinstance(gen, DirectSampler)
         assert isinstance(trainer, PacemakerTrainer)
         assert isinstance(engine, LammpsEngine)
         assert active_set is not None

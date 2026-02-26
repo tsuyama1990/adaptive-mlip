@@ -66,10 +66,10 @@ class DFTManager(BaseOracle):
             raise TypeError(ERR_ORACLE_ITERATOR.format(type=type(structures)))
 
         # Robust check for iterator protocol
-        if not hasattr(structures, "__next__") or not hasattr(structures, "__iter__"):
-             # It might be a generator which is an iterator, but let's be strict
-             if not isinstance(structures, Iterator):
-                 raise TypeError(ERR_ORACLE_ITERATOR.format(type=type(structures)))
+        if (
+            not hasattr(structures, "__next__") or not hasattr(structures, "__iter__")
+        ) and not isinstance(structures, Iterator):
+            raise TypeError(ERR_ORACLE_ITERATOR.format(type=type(structures)))
 
         return self._compute_generator(structures, batch_size)
 

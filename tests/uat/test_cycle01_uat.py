@@ -54,13 +54,13 @@ workflow:
     # 2. Action
     from pyacemaker.main import main
 
+    # Use 'init' command which is the Cycle 01 equivalent of "Hello Config"
     with patch(
         "argparse.ArgumentParser.parse_args",
-        return_value=MagicMock(config=str(config_file), dry_run=True, scenario=None),
+        return_value=MagicMock(command="init", config=config_file),
     ):
-        with pytest.raises(SystemExit) as excinfo:
-            main()
-        assert excinfo.value.code == 0
+        # Should execute successfully without SystemExit
+        main()
 
 
 def test_scenario_01_02_guardrails_check_temp(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

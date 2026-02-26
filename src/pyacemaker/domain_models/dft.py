@@ -65,6 +65,19 @@ class DFTConfig(BaseModel):
         ..., description="Mapping of element symbols to pseudopotential filenames"
     )
 
+    @field_validator("pseudopotentials")
+    @classmethod
+    def validate_pseudopotentials_structure(cls, v: dict[str, str]) -> dict[str, str]:
+        """Validates that keys are strings and values are non-empty strings."""
+        for elem, path_str in v.items():
+            if not isinstance(elem, str) or not elem:
+                msg = "Pseudopotential keys must be non-empty element symbols"
+                raise ValueError(msg)
+            if not isinstance(path_str, str) or not path_str:
+                msg = f"Pseudopotential path for {elem} must be a non-empty string"
+                raise ValueError(msg)
+        return v
+
     @staticmethod
     def _validate_single_path(elem: str, path_str: str) -> Path:
         """Helper to validate a single pseudopotential path."""
