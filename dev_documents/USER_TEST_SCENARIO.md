@@ -1,78 +1,78 @@
-# User Test Scenario: Fe/Pt Deposition on MgO
+# User Acceptance Testing (UAT) & Tutorial Master Plan
 
-## 1. Grand Challenge Overview
-**Goal**: Simulate the deposition of Iron (Fe) and Platinum (Pt) atoms onto a Magnesium Oxide (MgO) (001) substrate, observe the nucleation of clusters, and visualize the L10 ordering process using a combination of Molecular Dynamics (MD) and Adaptive Kinetic Monte Carlo (aKMC).
+## 1. Overview
+This document outlines the strategy for User Acceptance Testing (UAT) and the creation of executable tutorials for the **PYACEMAKER** system. The primary goal is to verify the efficacy of the **MACE Knowledge Distillation & Delta Learning** workflow (Cycles 01-06).
 
-This scenario serves as the ultimate acceptance test for the **PYACEMAKER** system, validating the integration of all 8 development cycles.
+## 2. Tutorial Strategy
 
-## 2. Tutorial Strategy: "Dual-Mode" Execution
+We will adopt a dual-mode execution strategy to ensure that the tutorials serve both as educational material for users and as rigorous integration tests for the development team.
 
-To ensure this complex scientific workflow is accessible for verification (CI/CD) and powerful enough for research, we implement a "Dual-Mode" strategy.
+### 2.1. Mock Mode (CI/Quick Start)
+-   **Objective**: Verify the software logic and pipeline orchestration without requiring heavy computational resources or external API keys.
+-   **Method**:
+    -   DFT calculations are replaced by a "Mock Oracle" (e.g., a simple Lennard-Jones potential).
+    -   MACE model loading is simulated or uses a tiny random model.
+    -   Training steps are shortened (1 epoch).
+-   **Trigger**: Activated when the environment variable `CI=true` or `PYACEMAKER_MODE=MOCK` is set.
+-   **Expected Runtime**: < 5 minutes.
 
-### 2.1. Modes of Operation
-*   **Mock Mode (CI/CD & Quick Start)**:
-    *   **Purpose**: Verify software logic without heavy computation.
-    *   **Substrate**: Tiny $2 \times 2 \times 1$ supercell.
-    *   **Deposition**: 5 atoms only.
-    *   **MD**: 100 steps (dummy run).
-    *   **Oracle/Trainer**: Mocked (returns pre-calculated energies/potentials).
-    *   **Execution Time**: < 5 minutes.
-    *   **Hardware**: Standard Laptop / GitHub Actions runner.
+### 2.2. Real Mode (Scientific Validation)
+-   **Objective**: Reproduce actual scientific results and demonstrate the system's accuracy.
+-   **Method**:
+    -   Uses real DFT codes (VASP/Quantum Espresso) or a high-fidelity surrogate (MACE-MP-0).
+    -   Performs full training and fine-tuning.
+-   **Trigger**: Activated by default or when `PYACEMAKER_MODE=REAL`.
+-   **Expected Runtime**: Hours to Days (depending on hardware).
 
-*   **Real Mode (Production Research)**:
-    *   **Purpose**: Generate publishable scientific data.
-    *   **Substrate**: Large $10 \times 10 \times 4$ slab.
-    *   **Deposition**: 500+ atoms.
-    *   **MD**: 1,000,000 steps.
-    *   **Oracle/Trainer**: Real Quantum Espresso and Pacemaker execution.
-    *   **Execution Time**: Hours/Days.
-    *   **Hardware**: Workstation (16+ cores) or HPC.
+## 3. Tutorial Plan: `tutorials/UAT_AND_TUTORIAL.py`
 
-### 2.2. Technology Stack
-*   **Marimo**: We will use a single Marimo notebook `tutorials/UAT_AND_TUTORIAL.py` as the executable documentation. This allows interactive visualization and code execution in a reactive environment.
-*   **ASE**: Atomic Simulation Environment for structure manipulation.
-*   **PyVista/Matplotlib**: For in-notebook visualization.
+A **SINGLE** executable file named `tutorials/UAT_AND_TUTORIAL.py` (formatted as a Marimo notebook) will be created. This file will contain the complete end-to-end workflow for the SN2 Reaction scenario described below.
 
-## 3. Tutorial Plan (The Marimo File)
+### 3.1. File Structure
+The script will be structured into the following sections:
+1.  **Setup & Configuration**: Importing libraries, setting up the `config.yaml`, and detecting the execution mode (Mock/Real).
+2.  **Step 1-2: Active Learning**: Visualizing the selection of high-uncertainty structures.
+3.  **Step 3-4: Surrogate Generation**: Displaying the MACE fine-tuning loss and MD trajectories.
+4.  **Step 5-6: Base Training**: Showing the initial ACE potential's performance.
+5.  **Step 7: Delta Learning**: Demonstrating the accuracy improvement after fine-tuning with DFT data.
+6.  **Analysis**: Plotting the Energy Barrier (NEB) comparison between DFT, MACE, and the final ACE potential.
 
-The `tutorials/UAT_AND_TUTORIAL.py` will contain the following sections, mapping to the development cycles:
+## 4. Test Scenario: SN2 Reaction (Transition State)
 
-### Section 1: Setup & Initialization (Cycle 01)
-*   Import `pyacemaker`.
-*   Detect environment (`CI=true` or `false`) to set simulation parameters.
-*   Initialize `Orchestrator` with the appropriate `config.yaml`.
-*   *Validation*: Check that configuration loads correctly.
+**Target System**: Methyl Chloride SN2 Reaction ($CH_3Cl + OH^- \rightarrow CH_3OH + Cl^-$)
+**Goal**: Accurately reproduce the energy barrier of the transition state (TS) using the generated ACE potential.
 
-### Section 2: Phase 1 - Divide & Conquer Training (Cycles 02-04)
-*   **Step A (Oracle)**: Define the chemical system (Fe, Pt, Mg, O).
-*   **Step B (Generator)**: Generate random bulk and surface structures (mocked in CI).
-*   **Step C (Trainer)**: Train the Fe-Pt alloy potential (L10 phase) and MgO potential.
-*   *Visualization*: Show the training error convergence plot (RMSE vs Epoch).
+### 4.1. Prerequisites
+-   Initial structures for Reactant and Product.
+-   Access to VASP/QE (for Real Mode) or Mock Oracle (for CI).
 
-### Section 3: Phase 2 - Dynamic Deposition (Cycles 05-06)
-*   **Step A (Engine)**: Load the trained hybrid potential.
-*   **Step B (Orchestrator)**: Run the Active Learning Loop.
-    *   Deposit atoms.
-    *   Detect high uncertainty (simulated in Mock).
-    *   Trigger refinement.
-*   *Visualization*: Interactive 3D view of atoms landing on the surface (using `pyvista`).
+### 4.2. Step-by-Step Execution
+1.  **Initialization**: The system initializes with `elements: ["C", "H", "O", "Cl"]`.
+2.  **DIRECT Sampling**: Generates 50 diverse configurations around the reaction path.
+3.  **Active Learning**: Selects the top 10 most uncertain structures (likely near the TS) for DFT labeling.
+4.  **MACE Fine-tuning**: Adapts MACE-MP-0 to this specific reaction.
+5.  **Surrogate Sampling**: Runs high-temperature MD to sample the phase space broadly.
+6.  **Labeling & Training**: Creates a dataset of 500+ structures and trains the base ACE model.
+7.  **Delta Learning**: Fine-tunes the ACE potential using the high-accuracy DFT data from Step 3.
 
-### Section 4: Phase 3 - Quality Assurance (Cycle 07)
-*   **Step A (Validator)**: Calculate phonon band structure for the L10-FePt phase.
-*   *Validation*: Assert no imaginary frequencies (in Real mode) or check report generation (in Mock mode).
+### 4.3. Validation Criteria
+-   **Mock Mode**: The pipeline completes all 7 steps without error. Artifacts (`final_potential.yace`) are created.
+-   **Real Mode**: The calculated activation energy ($E_a$) matches the DFT reference within 0.05 eV.
 
-### Section 5: Phase 4 - Long-Term Ordering (Cycle 08)
-*   **Step A (Expander)**: Take the final MD snapshot (disordered cluster).
-*   **Step B (EON)**: Bridge to EON for aKMC.
-*   **Step C (Result)**: Observe L10 ordering (chemically ordered layers).
-*   *Visualization*: Show the "Order Parameter" vs Time graph.
+## 5. Validation Instructions
 
-## 4. Validation Criteria
-*   **Crash-Free**: The notebook must run top-to-bottom without error in CI mode.
-*   **Physics Check**:
-    *   Potential energy must be negative.
-    *   No atoms should be closer than 1.5 Å (Core repulsion check).
-*   **Artifacts**:
-    *   `potential.yace` file created.
-    *   `trajectory.xyz` file created.
-    *   `validation_report.html` generated.
+To validate the tutorial and system:
+
+```bash
+# 1. Install dependencies
+uv sync
+
+# 2. Run in Mock Mode (Fast Verification)
+export PYACEMAKER_MODE=MOCK
+python tutorials/UAT_AND_TUTORIAL.py
+# OR if using marimo
+marimo run tutorials/UAT_AND_TUTORIAL.py
+
+# 3. Check Outputs
+ls -l uat_sn2_reaction/final_potential.yace
+```

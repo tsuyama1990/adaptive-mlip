@@ -1,4 +1,0 @@
-ImportError while loading conftest '/app/tests/conftest.py'.
-tests/conftest.py:3: in <module>
-    import numpy as np
-E   ModuleNotFoundError: No module named 'numpy'
