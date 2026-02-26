@@ -47,15 +47,17 @@ def test_generate_returns_iterator(structure_config):
 def test_generated_structures_provenance(structure_config):
     """Test generated structures have correct metadata."""
     sampler = DirectSampler(structure_config)
-    # Ensure generator produces something
+    # Ensure generator produces something, use islice to avoid full consumption risk
     gen = sampler.generate(n_candidates=1)
-    try:
-        structure = next(gen)
-    except StopIteration:
-        pytest.fail("Generator yielded no structures.")
 
-    assert structure.info["provenance"] == "DIRECT_SAMPLING"
-    assert structure.info["method"] == "random_packing"
+    count = 0
+    for structure in islice(gen, 1):
+        assert structure.info["provenance"] == "DIRECT_SAMPLING"
+        assert structure.info["method"] == "random_packing"
+        count += 1
+
+    if count == 0:
+        pytest.fail("Generator yielded no structures.")
 
 def test_no_overlaps(structure_config):
     """Test generated structures respect r_cut (hard-sphere constraint)."""
@@ -87,13 +89,15 @@ def test_multi_element_generation():
     )
     sampler = DirectSampler(config)
     gen = sampler.generate(n_candidates=1)
-    try:
-        structure = next(gen)
-    except StopIteration:
-        pytest.fail("Generator yielded no structures for multi-element test.")
 
-    symbols = set(structure.get_chemical_symbols())
-    assert "Fe" in symbols or "Pt" in symbols
+    count = 0
+    for structure in islice(gen, 1):
+        symbols = set(structure.get_chemical_symbols())
+        assert "Fe" in symbols or "Pt" in symbols
+        count += 1
+
+    if count == 0:
+        pytest.fail("Generator yielded no structures for multi-element test.")
 
 def test_generate_respects_n_candidates(structure_config):
     """Test generator yields exactly n_candidates."""

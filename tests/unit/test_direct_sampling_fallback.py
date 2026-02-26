@@ -20,10 +20,8 @@ def test_create_template_fallback(structure_config):
     """Test that _create_template falls back to cubic cell if bulk fails."""
     sampler = DirectSampler(structure_config)
 
-    # Patch ase.build.bulk to raise an generic Exception
-    # NOTE: SIM117 (nested with) is ignored here for readability/compatibility if needed,
-    # but I will combine them to be clean as per previous linting hint.
-    with patch("ase.build.bulk", side_effect=Exception("Bulk generation failed")), \
+    # Patch the 'bulk' function imported in the direct module, NOT the original ase.build.bulk
+    with patch("pyacemaker.structure_generator.direct.bulk", side_effect=Exception("Bulk generation failed")), \
          patch("logging.getLogger"):
 
         template = sampler._create_template()
@@ -33,10 +31,13 @@ def test_create_template_fallback(structure_config):
         # Multiplied by [2, 2, 2] -> [20, 20, 20]
 
         cell = template.get_cell()
-        # Ensure we are comparing float to float
         expected_len = float(DEFAULT_FALLBACK_CELL_SIZE * 2.0)
 
         # Check cell dimensions
+        # Debug info: print cell if assertion fails
+        print(f"DEBUG: cell={cell}, expected={expected_len}")
+
+        # We expect a diagonal cell [20, 20, 20]
         assert cell[0][0] == expected_len
         # Fallback creates 1 atom per primitive cell (Atoms('Cu', ...)).
         # Repeated 2x2x2 -> 8 atoms.

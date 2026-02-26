@@ -66,9 +66,15 @@ class DirectSampler(BaseGenerator):
 
             atoms_template = Atoms(
                 self.config.elements[0],
-                cell=[DEFAULT_FALLBACK_CELL_SIZE]*3,
+                cell=[DEFAULT_FALLBACK_CELL_SIZE, DEFAULT_FALLBACK_CELL_SIZE, DEFAULT_FALLBACK_CELL_SIZE],
                 pbc=True,
             )
+            # Ensure cell is properly set before repeating
+            if not np.any(atoms_template.get_cell()):
+                 # If cell is 0, something went wrong with init.
+                 # Force set cell.
+                 atoms_template.set_cell([DEFAULT_FALLBACK_CELL_SIZE]*3)
+
             atoms_template = atoms_template.repeat(self.config.supercell_size) # type: ignore[no-untyped-call]
 
         return atoms_template
@@ -122,6 +128,10 @@ class DirectSampler(BaseGenerator):
             mask = indices_i != indices_j
 
             if len(dists[mask]) == 0:
+                # IMPORTANT: We must yield a copy because atoms_template is mutated in the next iteration.
+                # To minimize memory churn, we could conceptually yield the arrays and let consumer construct,
+                # but BaseGenerator contract requires yielding Atoms objects.
+                # We stick to copy() for safety, but ensure we don't hold references to it internally.
                 candidate = atoms_template.copy() # type: ignore[no-untyped-call]
                 candidate.info["provenance"] = "DIRECT_SAMPLING"
                 candidate.info["method"] = "random_packing"

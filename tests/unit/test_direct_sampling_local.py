@@ -16,7 +16,10 @@ def structure_config():
     )
 
 def test_generate_local_returns_empty(structure_config):
-    """Test that generate_local returns an empty iterator for now (not implemented)."""
+    """
+    Test that generate_local returns an empty iterator for now (not implemented).
+    This confirms the intended stub behavior for Cycle 01.
+    """
     sampler = DirectSampler(structure_config)
     dummy_atoms = Atoms("Cu")
 
