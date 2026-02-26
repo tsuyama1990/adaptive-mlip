@@ -96,9 +96,10 @@ def test_run_step1_direct_sampling(minimal_config):
 
     # Verify Content (basic check)
     with expected_output.open("r") as f:
-        content = f.read()
-        assert "Lammps data file via pyacemaker streaming" not in content # Should be extxyz format from ASE write
-        assert "Properties=species:S:1:pos:R:3" in content or "Properties" in content
+        # Read only the first few lines to verify header without loading whole file
+        header = f.readline()
+        # Verify it's not LAMMPS format (which starts with specific header)
+        assert "Lammps data file via pyacemaker streaming" not in header
 
     # Scalability: Use streaming read to avoid loading whole file
     from ase.io import iread

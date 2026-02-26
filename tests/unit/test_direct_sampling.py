@@ -36,9 +36,13 @@ def test_generate_returns_iterator(structure_config):
     # Use islice to avoid consuming potential infinite streams (though direct is finite)
     # and to verify it works as an iterator
     gen = sampler.generate(n_candidates=3)
-    structures = list(islice(gen, 3))
-    assert len(structures) == 3, f"Expected 3 structures, got {len(structures)}"
-    assert all(isinstance(s, Atoms) for s in structures)
+
+    count = 0
+    for s in islice(gen, 3):
+        assert isinstance(s, Atoms)
+        count += 1
+
+    assert count == 3, f"Expected 3 structures, got {count}"
 
 def test_generated_structures_provenance(structure_config):
     """Test generated structures have correct metadata."""
@@ -102,9 +106,11 @@ def test_generate_respects_n_candidates(structure_config):
 def test_generate_zero_candidates(structure_config):
     """Test generate with 0 candidates."""
     sampler = DirectSampler(structure_config)
-    # Using list() on 0 items is safe and correct way to verify emptiness
-    structures = list(sampler.generate(n_candidates=0))
-    assert len(structures) == 0
+    # Iterating over empty generator is safe
+    count = 0
+    for _ in sampler.generate(n_candidates=0):
+        count += 1
+    assert count == 0
 
 def test_invalid_n_candidates(structure_config):
     """Test generate with negative candidates raises ValueError."""

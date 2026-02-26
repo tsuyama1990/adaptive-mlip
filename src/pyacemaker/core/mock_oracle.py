@@ -40,6 +40,9 @@ class MockOracle(BaseOracle):
         """
         Computes properties using Lennard-Jones potential.
         """
+        from logging import getLogger
+        logger = getLogger(__name__)
+
         for atoms in structures:
             # Create a fresh calculator for each structure to be safe
             # ASE LJ calculator is very lightweight
@@ -60,13 +63,12 @@ class MockOracle(BaseOracle):
                 atoms.calc = None
 
                 yield atoms
-            except Exception:
-                # In a real scenario, we might log this.
-                # For mock, just skip or yield with None?
-                # BaseOracle contract says yield with properties.
-                # If calc fails, we skip.
-                # Logging is better than silent failure.
-                from logging import getLogger
-                logger = getLogger(__name__)
-                logger.exception("MockOracle computation failed for a structure.")
+            except (ValueError, ArithmeticError, RuntimeError) as e:
+                # Catch known calculation errors and log them
+                logger.error(f"MockOracle computation failed: {e}")
+                # We do not yield the atom if calculation fails, effectively filtering it out.
                 continue
+            except Exception as e:
+                # Propagate unexpected errors (programming bugs)
+                logger.critical(f"Unexpected error in MockOracle: {e}")
+                raise

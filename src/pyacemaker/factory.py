@@ -98,6 +98,9 @@ class ModuleFactory:
 
         except Exception as e:
             msg = f"Failed to create modules: {e}"
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.exception(msg)
             raise RuntimeError(msg) from e
 
         return (

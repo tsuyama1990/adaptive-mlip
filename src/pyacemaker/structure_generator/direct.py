@@ -37,7 +37,7 @@ class DirectSampler(BaseGenerator):
 
     def _create_template(self) -> Atoms:
         """Creates the template atoms object and validates feasibility."""
-        r_cut = getattr(self.config, "r_cut", 2.0)
+        r_cut = self.config.r_cut
         try:
             prim = bulk(self.config.elements[0])
             atoms_template = prim.repeat(self.config.supercell_size) # type: ignore[no-untyped-call]
@@ -54,11 +54,16 @@ class DirectSampler(BaseGenerator):
                 msg = f"Impossible packing density: {packing_fraction:.2f} > 0.55. Increase supercell size or decrease r_cut."
                 raise ValueError(msg)
 
-        except (ValueError, IndexError): # Capture specific errors or re-raise
+        except ValueError:
              # Reraise ValueError from packing check
              raise
-        except Exception:
-            # Fallback
+        except Exception as e:
+            # Fallback for ASE build errors (e.g. crystal structure generation fail)
+            # Only if it's NOT our packing density error
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Failed to create template from bulk: {e}. Using fallback cubic cell.")
+
             atoms_template = Atoms(
                 self.config.elements[0],
                 cell=[DEFAULT_FALLBACK_CELL_SIZE]*3,
