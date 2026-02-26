@@ -1,0 +1,105 @@
+from pathlib import Path
+from unittest.mock import patch
+
+import pytest
+from ase import Atoms
+
+from pyacemaker.core.oracle import DFTManager
+from pyacemaker.domain_models import DFTConfig
+from tests.conftest import MockCalculator
+from tests.constants import TEST_ENERGY_H2O
+
+
+@pytest.fixture
+def uat_dft_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> DFTConfig:
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "H.UPF").touch()
+    (tmp_path / "O.UPF").touch()
+
+    return DFTConfig(
+        code="pw.x",
+        functional="PBE",
+        kpoints_density=0.04,
+        encut=500.0,
+        mixing_beta=0.7,
+        smearing_type="mv",
+        smearing_width=0.1,
+        diagonalization="david",
+        pseudopotentials={"H": "H.UPF", "O": "O.UPF"},
+    )
+
+
+def test_uat_02_01_single_point_calculation(uat_dft_config: DFTConfig, monkeypatch: pytest.MonkeyPatch) -> None:
+    """
+    Scenario 02-01: Single Point Calculation.
+    Verify that the system can run a simple DFT calculation (mocked).
+    """
+    # 1. Preparation: H2O molecule
+    h2o = Atoms("H2O", positions=[[0, 0, 0], [0, 0, 0.96], [0, 0.96, 0]], cell=[10, 10, 10], pbc=True)
+
+    # 2. Action: Run DFTManager with mocked driver
+    # We patch QEDriver but we also need to ensure the driver instance returned
+    # has a get_calculator method that returns our calculator
+
+    # We patch at the source where DFTManager imports it or uses it
+    # DFTManager imports QEDriver from interfaces.qe_driver
+
+    with patch("pyacemaker.core.oracle.QEDriver") as MockDriverClass:
+        mock_driver_instance = MockDriverClass.return_value
+        # Mock get_calculator to return a MockCalculator instance with H2O energy
+        # Accept **kwargs to handle 'directory' argument
+        mock_driver_instance.get_calculator.side_effect = lambda atoms, config, **kwargs: MockCalculator(
+            fail_count=0, test_energy=TEST_ENERGY_H2O
+        )
+
+        manager = DFTManager(uat_dft_config)
+
+        # Use explicit iteration
+        gen = manager.compute(iter([h2o]))
+        result = next(gen)
+
+        # 3. Expectation
+        assert result.get_potential_energy() == TEST_ENERGY_H2O  # type: ignore[no-untyped-call]
+        assert result.get_forces().shape == (3, 3)  # type: ignore[no-untyped-call]
+
+
+def test_uat_02_02_self_healing(uat_dft_config: DFTConfig, caplog: pytest.LogCaptureFixture) -> None:
+    """
+    Scenario 02-02: Self-Healing Test.
+    Verify that the system recovers from a simulated SCF convergence failure.
+    """
+    # 1. Preparation
+    h2o = Atoms("H2O", positions=[[0, 0, 0], [0, 0, 0.96], [0, 0.96, 0]], cell=[10, 10, 10], pbc=True)
+
+    # 2. Action: Run DFTManager with failure
+    with patch("pyacemaker.core.oracle.QEDriver") as MockDriverClass:
+        mock_driver_instance = MockDriverClass.return_value
+
+        # Mock failure on first attempt, success on second
+        # We need side_effect to return distinct calculator instances or handle state
+        # But here get_calculator is called with (atoms, config)
+        # We can use side_effect on the mock method
+
+        calc_fail = MockCalculator(fail_count=1, test_energy=TEST_ENERGY_H2O)
+        calc_success = MockCalculator(fail_count=0, test_energy=TEST_ENERGY_H2O)
+
+        mock_driver_instance.get_calculator.side_effect = [calc_fail, calc_success]
+
+        manager = DFTManager(uat_dft_config)
+
+        gen = manager.compute(iter([h2o]))
+        result = next(gen)
+
+        # 3. Expectation
+        assert result.get_potential_energy() == TEST_ENERGY_H2O  # type: ignore[no-untyped-call]
+
+        # Verify that get_calculator was called twice (original + retry)
+        assert mock_driver_instance.get_calculator.call_count == 2
+
+        # Verify second call had reduced mixing_beta
+        # First call: original (0.7)
+        # Second call: reduced (0.35)
+        args, _ = mock_driver_instance.get_calculator.call_args  # Last call
+        final_config = args[1]
+        assert final_config.mixing_beta < 0.7
+        assert final_config.mixing_beta == 0.35

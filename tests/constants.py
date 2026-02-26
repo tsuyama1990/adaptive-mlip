@@ -1,0 +1,3 @@
+# Test Constants
+TEST_ENERGY_H2O = -14.5
+TEST_ENERGY_GENERIC = -13.6
