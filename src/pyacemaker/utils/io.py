@@ -1,7 +1,7 @@
 import json
 import logging
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable
 
 import numpy as np
 import yaml
@@ -46,11 +46,15 @@ def detect_elements(data_path: Path, max_frames: int = 10) -> list[str]:
     """
     symbols = set()
     try:
-        # Use iread to peek without loading whole file
+        # Optimization: Use iread to peek. Stop if we have 'enough' frames or symbols stabilize?
+        # Difficult to know if symbols stabilize. Just read max_frames.
         gen = iread(str(data_path), index=f":{max_frames}")
         for atoms in gen:
             if isinstance(atoms, Atoms):
-                symbols.update(atoms.get_chemical_symbols())
+                new_syms = set(atoms.get_chemical_symbols())
+                # If we found new symbols, update.
+                if not new_syms.issubset(symbols):
+                    symbols.update(new_syms)
     except Exception:
         logger.warning(f"Could not fully read {data_path} to detect elements. Elements detected so far: {symbols}")
 
@@ -85,7 +89,7 @@ def write_lammps_streaming(
 ) -> None:
     """
     Writes a single frame in LAMMPS data format to an open file object.
-    Optimized for streaming large trajectories using vectorized operations.
+    Optimized for streaming large trajectories using minimal memory and vectorized formatting.
 
     Args:
         fileobj: An open file object (in write mode).
@@ -117,7 +121,6 @@ def write_lammps_streaming(
     fileobj.write("Masses\n\n")
 
     # Create a mapping from symbol to type ID (1-based)
-    # species list index i -> type i+1
     type_map = {s: i + 1 for i, s in enumerate(species)}
 
     for s in species:
@@ -130,47 +133,26 @@ def write_lammps_streaming(
     # 4. Atoms
     fileobj.write("Atoms # atomic\n\n")
 
-    # Optimize Atom Writing: Vectorize
-    # Get arrays
+    # Optimize Atom Writing:
+    # Use direct array access and iterators to avoid creating large intermediate lists/arrays if possible.
+    # But atoms.get_positions() returns a copy anyway.
+
     pos = atoms.get_positions() # (N, 3)
-    symbols = np.array(atoms.get_chemical_symbols()) # (N,)
+    symbols = atoms.get_chemical_symbols() # List of strings (N)
 
-    # Map symbols to types using lookup (vectorized if possible, or list comp)
-    # A fast way is using numpy extract/place or just list comprehension which is fast enough for 1M items compared to I/O
-    # But np.vectorize with a dict lookup is okay.
-    # Better: Precompute integer types from atomic numbers if possible?
-    # species list is small.
+    # Generator for lines to keep memory usage O(1) per line (after pos array overhead)
+    # This avoids creating a huge string buffer or list of strings.
+    def line_generator() -> Iterable[str]:
+        for i in range(natoms):
+            s = symbols[i]
+            try:
+                t = type_map[s]
+            except KeyError:
+                 raise KeyError(f"Symbol {s} not in provided species list: {species}")
 
-    # Create an integer array for types
-    # Initialize with 0
-    atom_types = np.zeros(natoms, dtype=int)
+            # 1-based index
+            yield f"{i+1} {t} {pos[i, 0]:.6f} {pos[i, 1]:.6f} {pos[i, 2]:.6f}\n"
 
-    # Fill atom_types
-    for s, t_id in type_map.items():
-        # Mask where symbol matches s
-        mask = (symbols == s)
-        atom_types[mask] = t_id
-
-    # Check for unassigned (missing species)
-    if np.any(atom_types == 0):
-        # Find first missing
-        missing_mask = (atom_types == 0)
-        missing_sym = symbols[missing_mask][0]
-        raise KeyError(f"Symbol {missing_sym} not in provided species list: {species}")
-
-    # Construct the data array to dump
-    # Columns: id type x y z
-    ids = np.arange(1, natoms + 1)
-
-    # We can write line by line or construct a big string buffer.
-    # For OOM safety on massive systems, line by line or chunks is better.
-    # np.savetxt is fast but formatting mixed int/float is tricky.
-
-    # Manual loop with f-string is usually the bottleneck in python.
-    # Let's use np.savetxt with a structured array or just loop over the arrays which is faster than getting atom by atom.
-
-    # Iterate over zip of arrays is faster than atoms indexing
-    for i, (atom_id, type_id, (x, y, z)) in enumerate(zip(ids, atom_types, pos)):
-        fileobj.write(f"{atom_id} {type_id} {x:.6f} {y:.6f} {z:.6f}\n")
+    fileobj.writelines(line_generator())
 
     fileobj.write("\n")

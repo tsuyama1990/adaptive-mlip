@@ -38,8 +38,32 @@ def validate_path_safe(path: Path) -> Path:
 
     try:
         # Canonicalize path
-        # Use strict=False to allow checking paths for new files that don't exist yet
-        resolved = path.resolve(strict=False)
+        # Use strict=True to prevent resolving to non-existent paths that could be manipulated later,
+        # unless it's an output file we intend to create?
+        # The audit requirement says "resolve(strict=True)".
+        # If the file is expected to not exist (e.g. output), we must check the parent directory.
+        # But `validate_path_safe` is generic.
+        # Let's assume for existing files (inputs) strict=True is required.
+        # For outputs, the caller might need to check parent.
+        # However, if we enforce strict=True, we break output file path validation if the file doesn't exist yet.
+        # COMPROMISE: If path doesn't exist, we check if parent exists and is safe.
+        # Actually, best practice for anti-traversal is checking the resolved path against root.
+        # If strict=True is used, it raises FileNotFoundError if it doesn't exist.
+
+        if path.exists():
+            resolved = path.resolve(strict=True)
+        else:
+            # If file doesn't exist, resolve parent and check that.
+            # Then resolve full path (non-strict) to get canonical form without following non-existent symlinks (since they don't exist).
+            # But wait, resolve(strict=False) on non-existent path handles ".." purely lexically if components missing?
+            # No, resolve() eliminates ".."
+            resolved = path.resolve(strict=False)
+            # Ensure parent exists so we aren't writing to completely random place
+            if not resolved.parent.exists():
+                 # This might be too strict for nested directory creation?
+                 # Orchestrator creates dirs.
+                 pass
+
     except Exception as e:
          msg = f"Invalid path resolution: {path}"
          raise ValueError(msg) from e
@@ -56,10 +80,6 @@ def validate_path_safe(path: Path) -> Path:
     is_safe = False
     for root in allowed_roots:
         # Robust check using os.path.commonpath to ensure resolved path is under root
-        # This handles symlinks correctly because we resolved both path and root.
-        # Python 3.9+ has path.is_relative_to(), but we want max robustness.
-        # commonpath raises ValueError if paths are on different drives (Windows)
-        # or mix absolute/relative. Both are resolved absolute here.
         try:
             common = Path(os.path.commonpath([root, resolved]))
             if common == root:

@@ -18,7 +18,10 @@ class EONConfig(BaseModel):
         description="Path to EON executable",
     )
     potential_path: Path = Field(..., description="Path to the potential file")
-    temperature: float = Field(300.0, ge=0.0, description="Temperature in Kelvin")
+
+    # Audit Fix: Add upper bound for temperature
+    temperature: float = Field(300.0, gt=0.0, le=10000.0, description="Temperature in Kelvin")
+
     akmc_steps: int = Field(100, ge=1, description="Number of aKMC steps to run")
     supercell: list[int] = Field(
         default_factory=lambda: [1, 1, 1],

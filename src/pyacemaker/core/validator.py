@@ -5,12 +5,10 @@ import numpy as np
 from ase import Atoms
 from ase.data import atomic_numbers
 
-from pyacemaker.core.report import ReportGenerator
 from pyacemaker.domain_models.constants import (
     ERR_POTENTIAL_NOT_FOUND,
     ERR_VAL_POT_NONE,
     ERR_VAL_POT_NOT_FILE,
-    ERR_VAL_POT_OUTSIDE,
     ERR_VAL_REQ_STRUCT,
     ERR_VAL_STRUCT_DUMMY_ELEM,
     ERR_VAL_STRUCT_EMPTY,
@@ -23,6 +21,7 @@ from pyacemaker.domain_models.constants import (
 )
 from pyacemaker.domain_models.validation import ValidationConfig, ValidationResult
 from pyacemaker.utils.elastic import ElasticCalculator
+from pyacemaker.utils.path import validate_path_safe
 from pyacemaker.utils.phonons import PhononCalculator
 
 
@@ -80,7 +79,7 @@ class LammpsInputValidator:
     def validate_potential(potential: Any) -> Path:
         """
         Validates the potential path.
-        Ensures path exists, is a file, and is within allowed directories.
+        Ensures path exists, is a file, and is within allowed directories using secure validation.
 
         Args:
             potential: Path to potential file (str or Path).
@@ -95,37 +94,18 @@ class LammpsInputValidator:
         if potential is None:
             raise ValueError(ERR_VAL_POT_NONE)
 
-        path = Path(potential).resolve()
+        # Convert to Path but do not resolve yet; validate_path_safe handles resolution checks
+        p = Path(potential)
 
+        # Use centralized secure validator
+        path = validate_path_safe(p)
+
+        # Additional checks for existence (validate_path_safe ensures safety, not existence)
         if not path.exists():
             raise FileNotFoundError(ERR_POTENTIAL_NOT_FOUND.format(path=path))
 
         if not path.is_file():
             raise ValueError(ERR_VAL_POT_NOT_FILE.format(path=path))
-
-        # Security: Restrict access to project directory or temp dirs
-        allowed_prefixes = [
-            Path.cwd().resolve(),
-            Path("/tmp").resolve(),  # noqa: S108
-            Path("/dev/shm").resolve()  # noqa: S108
-        ]
-
-        # Use is_relative_to for secure path checking (Python 3.9+)
-        is_safe = False
-        for prefix in allowed_prefixes:
-            try:
-                if path.is_relative_to(prefix):
-                    is_safe = True
-                    break
-            except ValueError:
-                # is_relative_to raises ValueError on some versions if not relative?
-                # Python 3.9+ definition: True if path is relative to other, else False.
-                # Actually it doesn't raise, it just returns False (in 3.9 it was added).
-                # But to be safe against older python if environment is mixed (though requirement is 3.12)
-                continue
-
-        if not is_safe:
-            raise ValueError(ERR_VAL_POT_OUTSIDE.format(path=path))
 
         return path
 
@@ -140,7 +120,7 @@ class Validator:
         config: ValidationConfig,
         phonon_calculator: PhononCalculator,
         elastic_calculator: ElasticCalculator,
-        report_generator: ReportGenerator,
+        report_generator: Any,
     ) -> None:
         self.config = config
         self.phonon_calc = phonon_calculator

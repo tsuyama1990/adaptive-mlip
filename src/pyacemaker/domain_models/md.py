@@ -1,8 +1,9 @@
-import os
 from enum import Enum
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field, PositiveFloat, PositiveInt, model_validator
+from pydantic_core import PydanticCustomError
+import numpy as np
 
 from pyacemaker.domain_models.constants import (
     DEFAULT_MC_SEED,
@@ -28,6 +29,7 @@ from pyacemaker.domain_models.defaults import (
     DEFAULT_MD_THERMO_FREQ,
     DEFAULT_OTF_UNCERTAINTY_THRESHOLD,
 )
+import os
 
 
 def _get_default_temp_dir() -> str | None:
@@ -65,9 +67,9 @@ class MDRampingConfig(BaseModel):
 
     @model_validator(mode="after")
     def validate_ramping(self) -> "MDRampingConfig":
-        # Check temperature logic if both are provided (e.g. usually end > start for heating)
-        # But cooling is valid too.
-        # Just ensure non-negative (covered by ge=0.0)
+        # Ensure that if one end is defined, logic holds (though not strictly required for MD engines)
+        # Main check: Positive values enforced by field types.
+        # Logical consistency:
         return self
 
 
@@ -100,21 +102,38 @@ class MDSimulationResult(BaseModel):
     halt_step: int | None = Field(None, description="The step at which the simulation was halted")
 
     @model_validator(mode="after")
-    def validate_forces_shape(self) -> "MDSimulationResult":
+    def validate_physical_values(self) -> "MDSimulationResult":
+        # Validate energy is finite
+        if not np.isfinite(self.energy):
+            raise ValueError("Energy must be a finite number")
+
+        # Validate forces shape and values
         for f in self.forces:
             if len(f) != 3:
-                msg = "Forces must be 3D vectors (list of 3 floats)"
-                raise ValueError(msg)
+                raise ValueError("Forces must be 3D vectors (list of 3 floats)")
+            if not np.isfinite(f).all():
+                raise ValueError("Forces must contain finite numbers")
+
+        # Validate stress
+        if len(self.stress) != 6:
+             raise ValueError("Stress must be a 6-element list (Voigt notation)")
+        if not np.isfinite(self.stress).all():
+             raise ValueError("Stress must contain finite numbers")
+
         return self
 
 
 class MDConfig(BaseModel):
+    """
+    Configuration for Molecular Dynamics simulations.
+    """
     model_config = ConfigDict(extra="forbid")
 
+    # Basic Physics
     temperature: float = Field(..., ge=0.0, description="Simulation temperature in Kelvin")
     pressure: float = Field(..., ge=0.0, le=MAX_MD_PRESSURE, description="Simulation pressure in Bar")
-    timestep: PositiveFloat = Field(..., description="Timestep in ps")
-    n_steps: int = Field(..., gt=0, description="Number of MD steps")
+    timestep: PositiveFloat = Field(..., gt=0.0, le=10.0, description="Timestep in ps")
+    n_steps: int = Field(..., gt=0, le=1000000000, description="Number of MD steps")
 
     # Output Control
     thermo_freq: PositiveInt = Field(
@@ -153,11 +172,11 @@ class MDConfig(BaseModel):
         default_factory=_get_default_temp_dir,
         description="Directory for temporary files (e.g., /dev/shm for RAM disk)"
     )
-    tdamp_factor: PositiveFloat = Field(
-        DEFAULT_MD_TDAMP_FACTOR, description="Temperature damping factor (multiplies timestep)"
+    tdamp_factor: float = Field(
+        DEFAULT_MD_TDAMP_FACTOR, gt=0.0, description="Temperature damping factor (multiplies timestep)"
     )
-    pdamp_factor: PositiveFloat = Field(
-        DEFAULT_MD_PDAMP_FACTOR, description="Pressure damping factor (multiplies timestep)"
+    pdamp_factor: float = Field(
+        DEFAULT_MD_PDAMP_FACTOR, gt=0.0, description="Pressure damping factor (multiplies timestep)"
     )
 
     # Mocking Parameters (Audit Requirement)
@@ -195,19 +214,13 @@ class MDConfig(BaseModel):
     def validate_simulation_physics(self) -> "MDConfig":
         total_time = self.n_steps * self.timestep
         if total_time > MAX_MD_DURATION:
-             # Just a warning or soft limit? Requirement says "validate compatibility".
-             # Let's check for extremely short runs.
              pass
-        if total_time <= 0:
-             msg = "Total simulation time must be positive."
-             raise ValueError(msg)
         return self
 
     @model_validator(mode="after")
     def validate_otf_settings(self) -> "MDConfig":
         if self.fix_halt and self.check_interval <= 0:
-             msg = "check_interval must be positive when fix_halt is enabled."
-             raise ValueError(msg)
+             raise ValueError("check_interval must be positive when fix_halt is enabled.")
         return self
 
     @model_validator(mode="after")
@@ -215,6 +228,5 @@ class MDConfig(BaseModel):
         if self.temp_dir:
             p = Path(self.temp_dir)
             if not p.exists() or not os.access(p, os.W_OK):
-                msg = f"Temporary directory {p} does not exist or is not writable."
-                raise ValueError(msg)
+                raise ValueError(f"Temporary directory {p} does not exist or is not writable.")
         return self

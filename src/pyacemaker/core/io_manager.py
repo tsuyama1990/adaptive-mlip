@@ -39,44 +39,45 @@ class LammpsFileManager:
         """
         # RAM disk usage optimization via config
         temp_dir_ctx = tempfile.TemporaryDirectory(dir=self.config.temp_dir)
-        temp_dir = Path(temp_dir_ctx.name)
+        try:
+            temp_dir = Path(temp_dir_ctx.name)
 
-        run_id = uuid.uuid4().hex[:8]
-        data_file = temp_dir / f"data_{run_id}.lmp"
+            run_id = uuid.uuid4().hex[:8]
+            data_file = temp_dir / f"data_{run_id}.lmp"
 
-        # Persistence: Outputs go to current working directory
-        cwd = Path.cwd()
-        dump_file = cwd / f"dump_{run_id}.lammpstrj"
-        log_file = cwd / f"log_{run_id}.lammps"
+            # Persistence: Outputs go to current working directory
+            cwd = Path.cwd()
+            dump_file = cwd / f"dump_{run_id}.lammpstrj"
+            log_file = cwd / f"log_{run_id}.lammps"
 
-        # Handle different input types
-        if isinstance(structure, (str, Path)):
-            # Load only the first frame to minimize memory usage (O(N_atoms) not O(N_steps*N_atoms))
-            # This addresses the Scalability audit requirement.
-            from ase.io import iread
-            try:
-                # Use iread to stream the file and just get the first frame
-                atoms_iter = iread(str(structure))
-                first_frame = next(atoms_iter)
-                # Explicitly close iterator if possible, though GC handles it.
-                # Ideally, we should close the file handle if iread keeps it open.
-                # However, ase.io.iread generators usually close on StopIteration or GC.
-            except StopIteration:
-                msg = f"Input structure file {structure} is empty."
-                raise ValueError(msg) from None
-            except Exception as e:
-                msg = f"Failed to read structure from {structure}: {e}"
-                raise ValueError(msg) from e
+            # Handle different input types
+            if isinstance(structure, (str, Path)):
+                # Load only the first frame to minimize memory usage
+                from ase.io import iread
+                try:
+                    atoms_iter = iread(str(structure))
+                    first_frame = next(atoms_iter)
+                except StopIteration:
+                    msg = f"Input structure file {structure} is empty."
+                    raise ValueError(msg) from None
+                except Exception as e:
+                    msg = f"Failed to read structure from {structure}: {e}"
+                    raise ValueError(msg) from e
 
-            elements = get_species_order(first_frame)
-            self._write_structure_memory(first_frame, data_file, elements)
+                elements = get_species_order(first_frame)
+                self._write_structure_memory(first_frame, data_file, elements)
 
-        else:
-            # It's an Atoms object.
-            elements = get_species_order(structure)
-            self._write_structure_memory(structure, data_file, elements)
+            else:
+                # It's an Atoms object.
+                elements = get_species_order(structure)
+                self._write_structure_memory(structure, data_file, elements)
 
-        return temp_dir_ctx, data_file, dump_file, log_file, elements
+            return temp_dir_ctx, data_file, dump_file, log_file, elements
+
+        except Exception:
+            # Clean up if setup fails
+            temp_dir_ctx.cleanup()
+            raise
 
     def _write_structure_memory(self, structure: Atoms, output_path: Path, elements: list[str]) -> None:
         """Writes structure to disk using streaming writer if possible."""
@@ -95,7 +96,7 @@ class LammpsFileManager:
             if not streaming_success:
                 if len(structure) > 1000000:
                     logger.warning("Falling back to ASE write for large structure (%d atoms). Memory usage may be high.", len(structure))
-                write(str(output_path), structure, format="lammps-data", specorder=elements, atom_style=self.config.atom_style)
+                write(str(output_path), structure, format="lammps-data", specorder=elements, atom_style=self.config.atom_style.value)
 
         except Exception as e:
             msg = f"Failed to write LAMMPS data file: {e}"

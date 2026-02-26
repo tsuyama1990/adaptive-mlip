@@ -1,5 +1,7 @@
+from functools import lru_cache
 from pathlib import Path
 from typing import TextIO
+import shlex
 
 from ase.data import atomic_numbers
 
@@ -17,58 +19,56 @@ class LammpsScriptGenerator:
 
     def __init__(self, config: MDConfig) -> None:
         self.config = config
-        self._atomic_numbers_cache: dict[str, int] = {}
-        # Cache for validated paths to improve performance
-        self._path_cache: dict[str, str] = {}
+        # Use lru_cache for methods instead of manual dict
+        self._atomic_numbers_cache = {}
 
+    @lru_cache(maxsize=128)
     def _get_atomic_number(self, symbol: str) -> int:
         """Cached atomic number lookup."""
-        # Using dict.get is faster than check and set
-        z = self._atomic_numbers_cache.get(symbol)
-        if z is None:
-            z = atomic_numbers[symbol]
-            self._atomic_numbers_cache[symbol] = z
-        return z
+        return atomic_numbers[symbol]
 
-    def _quote(self, path: Path | str) -> str:
+    @lru_cache(maxsize=128)
+    def _quote(self, path: str) -> str:
         """
         Quotes a path for LAMMPS script safety after validation.
         Uses caching to avoid redundant validation calls.
         """
-        path_str = str(path)
-        if path_str in self._path_cache:
-            return self._path_cache[path_str]
-
         # Sanitize input path
+        # Note: path must be string for lru_cache
         safe_path = validate_path_safe(Path(path))
-        quoted = f'"{safe_path}"'
-        self._path_cache[path_str] = quoted
-        return quoted
+        # Use shlex.quote for shell safety
+        return shlex.quote(str(safe_path))
 
     def _gen_potential_pure(self, buffer: TextIO, potential_path: Path, elements: list[str]) -> None:
         """Generates pure PACE potential commands."""
         species_str = " ".join(elements)
-        quoted_pot = self._quote(potential_path)
+        quoted_pot = self._quote(str(potential_path))
         buffer.write("pair_style pace\n")
         buffer.write(f"pair_coeff * * pace {quoted_pot} {species_str}\n")
 
     def _gen_potential_hybrid(self, buffer: TextIO, potential_path: Path, elements: list[str]) -> None:
         """Generates hybrid PACE + ZBL potential commands."""
         species_str = " ".join(elements)
-        quoted_pot = self._quote(potential_path)
+        quoted_pot = self._quote(str(potential_path))
         params = self.config.hybrid_params
 
         buffer.write(f"pair_style hybrid/overlay pace zbl {params.zbl_cut_inner} {params.zbl_cut_outer}\n")
         buffer.write(f"pair_coeff * * pace {quoted_pot} {species_str}\n")
 
         n_types = len(elements)
+
+        # Optimize loop string concatenation
+        # Use list comprehension for ZBL pairs
+        zbl_lines = []
         for i in range(n_types):
             el_i = elements[i]
             z_i = self._get_atomic_number(el_i)
             for j in range(i, n_types):
                 el_j = elements[j]
                 z_j = self._get_atomic_number(el_j)
-                buffer.write(f"pair_coeff {i+1} {j+1} zbl {z_i} {z_j}\n")
+                zbl_lines.append(f"pair_coeff {i+1} {j+1} zbl {z_i} {z_j}\n")
+
+        buffer.writelines(zbl_lines)
 
     def _gen_potential(self, buffer: TextIO, potential_path: Path, elements: list[str]) -> None:
         """Generates potential definition commands."""
@@ -88,7 +88,7 @@ class LammpsScriptGenerator:
         if not self.config.fix_halt:
             return
 
-        quoted_pot = self._quote(potential_path)
+        quoted_pot = self._quote(str(potential_path))
         buffer.write(f"compute gamma all pace {quoted_pot}\n")
         buffer.write("compute max_gamma all reduce max c_gamma\n")
         buffer.write("variable max_g equal c_max_gamma\n")
@@ -176,7 +176,7 @@ class LammpsScriptGenerator:
         style = " ".join(style_parts)
         dump_cols = " ".join(dump_parts)
 
-        quoted_dump = self._quote(dump_file)
+        quoted_dump = self._quote(str(dump_file))
         buffer.write(f"thermo_style custom {style}\n")
         buffer.write(f"dump traj all custom {self.config.dump_freq} {quoted_dump} {dump_cols}\n")
 
@@ -199,7 +199,7 @@ class LammpsScriptGenerator:
         """
         Writes the LAMMPS input script to the provided buffer.
         """
-        quoted_data = self._quote(data_file)
+        quoted_data = self._quote(str(data_file))
 
         buffer.write("clear\n")
         buffer.write("units metal\n")
@@ -229,7 +229,7 @@ class LammpsScriptGenerator:
         """
         Writes a minimization-only script for relaxation.
         """
-        quoted_data = self._quote(data_file)
+        quoted_data = self._quote(str(data_file))
 
         buffer.write("clear\n")
         buffer.write("units metal\n")

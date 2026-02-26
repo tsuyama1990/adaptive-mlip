@@ -12,7 +12,9 @@ from pyacemaker.domain_models import DFTConfig
 from pyacemaker.domain_models.constants import ERR_ORACLE_FAILED, ERR_ORACLE_ITERATOR
 from pyacemaker.interfaces.qe_driver import QEDriver
 from pyacemaker.utils.embedding import embed_cluster
+import logging
 
+logger = logging.getLogger(__name__)
 
 class DFTManager(BaseOracle):
     """
@@ -78,15 +80,8 @@ class DFTManager(BaseOracle):
         count = 0
         # Use a single root temporary directory for the entire batch stream
         # Optimization: Reuse this directory for calculations to reduce inode thrashing.
-        # QE calculator (in QEDriver) allows specifying 'directory'.
-        # We will clear files if needed by the calculator driver implementation,
-        # but reusing the directory is standard.
         with tempfile.TemporaryDirectory() as work_dir:
             work_path = Path(work_dir)
-
-            # We use a single subdirectory for execution to avoid cluttering root temp if needed
-            # or just use work_path directly.
-            # Using work_path directly is fine.
             calc_dir = work_path
 
             for atoms in structures:
@@ -156,9 +151,12 @@ class DFTManager(BaseOracle):
         strategies = self._get_strategies()
         last_error: Exception | None = None
 
-        for strategy in strategies:
+        for i, strategy in enumerate(strategies):
             if strategy:
                 strategy(current_config)
+                strategy_name = strategy.__name__
+            else:
+                strategy_name = "Initial"
 
             try:
                 self._run_calculator(atoms, current_config, calc_dir)
@@ -167,6 +165,11 @@ class DFTManager(BaseOracle):
                 # to ensure self-healing strategies are attempted.
                 last_error = e
                 atoms.calc = None  # Clean up failed calculator
+
+                # Enhanced Logging for debugging
+                logger.warning(
+                    f"DFT calculation attempt {i+1} ({strategy_name}) failed. Error: {e!s}. Retrying..."
+                )
                 continue
             else:
                 return atoms
