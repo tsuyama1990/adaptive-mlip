@@ -1,11 +1,12 @@
+from itertools import islice
+
 import pytest
 from ase import Atoms
 from ase.neighborlist import neighbor_list
-import numpy as np
-from itertools import islice
 
-from pyacemaker.domain_models.structure import StructureConfig, ExplorationPolicy
+from pyacemaker.domain_models.structure import ExplorationPolicy, StructureConfig
 from pyacemaker.structure_generator.direct import DirectSampler
+
 
 @pytest.fixture
 def structure_config():
@@ -108,5 +109,37 @@ def test_generate_zero_candidates(structure_config):
 def test_invalid_n_candidates(structure_config):
     """Test generate with negative candidates raises ValueError."""
     sampler = DirectSampler(structure_config)
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="n_candidates must be non-negative"):
         next(sampler.generate(n_candidates=-1))
+
+def test_update_config(structure_config):
+    """Test update_config updates the configuration."""
+    sampler = DirectSampler(structure_config)
+    new_config = structure_config.model_copy()
+    new_config.num_structures = 100
+    sampler.update_config(new_config)
+    assert sampler.config.num_structures == 100
+
+def test_update_config_invalid():
+    """Test update_config raises TypeError for invalid config."""
+    config = StructureConfig(elements=["Cu"], supercell_size=[2,2,2])
+    sampler = DirectSampler(config)
+    with pytest.raises(TypeError):
+        sampler.update_config({"invalid": "dict"}) # type: ignore
+
+def test_generate_impossible_packing(structure_config):
+    """Test that generate raises ValueError for impossible packing density."""
+    # Create a scenario where atoms cannot fit
+    # High r_cut, small cell, many atoms
+    structure_config.r_cut = 5.0
+    structure_config.supercell_size = [1, 1, 1]
+    # Cu bulk has a ~ 3.6 A.
+    # With 1.5 scaling -> 5.4 A.
+    # Volume ~ 157.
+    # Atom volume (r=2.5) ~ 65.
+    # 4 atoms (fcc primitive * 1) -> 4 * 65 = 260 > 157.
+    # Packing fraction > 1.0. Should fail.
+
+    sampler = DirectSampler(structure_config)
+    with pytest.raises(ValueError, match="Impossible packing density"):
+        next(sampler.generate(n_candidates=1))

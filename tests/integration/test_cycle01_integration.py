@@ -1,15 +1,18 @@
-import shutil
 from pathlib import Path
 
 import pytest
-import yaml
 
 from pyacemaker.domain_models import PyAceConfig
 from pyacemaker.orchestrator import Orchestrator
 
+
 @pytest.fixture
 def temp_workspace(tmp_path):
-    """Creates a temporary workspace for integration tests."""
+    """
+    Creates a temporary workspace for integration tests.
+    tmp_path is a pytest fixture that provides a temporary directory unique to the test invocation,
+    ensuring isolation and automatic cleanup.
+    """
     work_dir = tmp_path / "work"
     work_dir.mkdir()
 
@@ -92,12 +95,17 @@ def test_run_step1_direct_sampling(minimal_config):
     assert expected_output.exists()
 
     # Verify Content (basic check)
-    with open(expected_output, "r") as f:
+    with expected_output.open("r") as f:
         content = f.read()
         assert "Lammps data file via pyacemaker streaming" not in content # Should be extxyz format from ASE write
         assert "Properties=species:S:1:pos:R:3" in content or "Properties" in content
 
-    from ase.io import read
-    frames = read(expected_output, index=":")
-    assert len(frames) == 5
-    assert all(len(f) > 0 for f in frames)
+    # Scalability: Use streaming read to avoid loading whole file
+    from ase.io import iread
+
+    frame_count = 0
+    for frame in iread(expected_output, index=":"):
+        frame_count += 1
+        assert len(frame) > 0
+
+    assert frame_count == 5

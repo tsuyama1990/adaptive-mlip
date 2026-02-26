@@ -53,6 +53,11 @@ DEFAULT_GEN_MAX_ATTEMPTS_MULTIPLIER: Final[int] = 500
 DEFAULT_FALLBACK_CELL_SIZE: Final[float] = 10.0
 DEFAULT_VOLUME_SCALING_FACTOR: Final[float] = 1.5
 
+# Mock Oracle Constants
+MOCK_ORACLE_SIGMA: Final[float] = 2.5
+MOCK_ORACLE_EPSILON: Final[float] = 1.0
+MOCK_ORACLE_RC: Final[float] = 5.0
+
 # Scenario Constants
 SCENARIO_NAME_FEPT_MGO: Final[str] = "fept_mgo"
 FILE_EXT_XYZ: Final[str] = "xyz"
@@ -115,6 +120,9 @@ __all__ = [
     "LAMMPS_VELOCITY_SEED",
     "MAX_MD_DURATION",
     "MAX_MD_PRESSURE",
+    "MOCK_ORACLE_EPSILON",
+    "MOCK_ORACLE_RC",
+    "MOCK_ORACLE_SIGMA",
     "PACE_DRIVER_TEMPLATE",
     "RECIPROCAL_FACTOR",
     "SCENARIO_NAME_FEPT_MGO",

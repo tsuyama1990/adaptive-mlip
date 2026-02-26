@@ -1,11 +1,15 @@
 from collections.abc import Iterator
 from typing import Any
 
-import numpy as np
 from ase import Atoms
 from ase.calculators.lj import LennardJones
 
 from pyacemaker.core.base import BaseOracle
+from pyacemaker.domain_models.constants import (
+    MOCK_ORACLE_EPSILON,
+    MOCK_ORACLE_RC,
+    MOCK_ORACLE_SIGMA,
+)
 
 
 class MockOracle(BaseOracle):
@@ -13,6 +17,11 @@ class MockOracle(BaseOracle):
     A mock oracle for testing and UAT.
     Uses a simple Lennard-Jones potential to compute energies and forces quickly
     without requiring external DFT codes.
+
+    Limitations:
+    - Assumes all atoms interact with the same generic Lennard-Jones parameters.
+    - Does not support species-dependent parameters in this simplified version.
+    - Not suitable for accurate physics, only for pipeline verification.
     """
 
     def __init__(self, config: Any = None) -> None:
@@ -23,9 +32,9 @@ class MockOracle(BaseOracle):
             config: Optional configuration (ignored for mock).
         """
         # Default LJ parameters for "Generic" element
-        self.sigma = 2.5
-        self.epsilon = 1.0
-        self.rc = 5.0
+        self.sigma = MOCK_ORACLE_SIGMA
+        self.epsilon = MOCK_ORACLE_EPSILON
+        self.rc = MOCK_ORACLE_RC
 
     def compute(self, structures: Iterator[Atoms], batch_size: int = 10) -> Iterator[Atoms]:
         """
@@ -56,4 +65,8 @@ class MockOracle(BaseOracle):
                 # For mock, just skip or yield with None?
                 # BaseOracle contract says yield with properties.
                 # If calc fails, we skip.
+                # Logging is better than silent failure.
+                from logging import getLogger
+                logger = getLogger(__name__)
+                logger.exception("MockOracle computation failed for a structure.")
                 continue

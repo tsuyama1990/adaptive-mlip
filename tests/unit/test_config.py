@@ -1,6 +1,8 @@
 import pytest
 from pydantic import ValidationError
-from pyacemaker.domain_models.structure import StructureConfig, ExplorationPolicy
+
+from pyacemaker.domain_models.structure import ExplorationPolicy, StructureConfig
+
 
 def test_config_r_cut_positive():
     """Test that r_cut must be positive."""

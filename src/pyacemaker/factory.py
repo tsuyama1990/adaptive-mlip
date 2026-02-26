@@ -51,9 +51,20 @@ class ModuleFactory:
 
         try:
             # Oracle
-            if config.dft.code.lower() == "mock":
+            # Security: Validate DFT code against allowlist to prevent arbitrary code execution paths
+            # or unexpected behavior if 'code' is user-controlled.
+            allowed_codes = {"mock", "qe", "vasp", "aims"}
+            code_lower = config.dft.code.lower()
+
+            if code_lower not in allowed_codes:
+                msg = f"Invalid DFT code: {config.dft.code}. Allowed: {allowed_codes}"
+                raise ConfigError(msg)
+
+            if code_lower == "mock":
                 oracle: BaseOracle = MockOracle()
             else:
+                # We implicitly support QE via DFTManager for now if not mock.
+                # In future cycles, dispatch based on code.
                 oracle = DFTManager(config.dft)
 
             # Generator
