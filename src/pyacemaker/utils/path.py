@@ -1,4 +1,5 @@
 import tempfile
+import os
 from pathlib import Path
 
 from pyacemaker.domain_models.constants import DANGEROUS_PATH_CHARS, DEFAULT_RAM_DISK_PATH
@@ -36,11 +37,8 @@ def validate_path_safe(path: Path) -> Path:
         raise ValueError(msg)
 
     try:
-        # Canonicalize path (resolve symlinks, collapse ..)
-        # Audit requires strict=True to prevent traversal to non-existent dangerous paths if possible,
-        # but output files might not exist.
-        # However, resolve(strict=False) resolves ".." even if components don't exist.
-        # The key is checking the resolved path against roots.
+        # Canonicalize path
+        # Use strict=False to allow checking paths for new files that don't exist yet
         resolved = path.resolve(strict=False)
     except Exception as e:
          msg = f"Invalid path resolution: {path}"
@@ -57,10 +55,18 @@ def validate_path_safe(path: Path) -> Path:
 
     is_safe = False
     for root in allowed_roots:
-        # is_relative_to checks if resolved path starts with root
-        if resolved.is_relative_to(root):
-            is_safe = True
-            break
+        # Robust check using os.path.commonpath to ensure resolved path is under root
+        # This handles symlinks correctly because we resolved both path and root.
+        # Python 3.9+ has path.is_relative_to(), but we want max robustness.
+        # commonpath raises ValueError if paths are on different drives (Windows)
+        # or mix absolute/relative. Both are resolved absolute here.
+        try:
+            common = Path(os.path.commonpath([root, resolved]))
+            if common == root:
+                is_safe = True
+                break
+        except ValueError:
+            continue
 
     if not is_safe:
          msg = f"Path traversal detected: {resolved} is outside allowed roots {allowed_roots}"

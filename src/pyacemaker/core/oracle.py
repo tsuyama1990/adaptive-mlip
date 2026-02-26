@@ -75,23 +75,22 @@ class DFTManager(BaseOracle):
         # We do NOT use batched() here to avoid even small batch materialization in memory
         # as per strict audit requirements.
 
-        # We process items as they come. We track if we processed any to warn if empty.
-        # This avoids preemptively consuming the iterator with next(), which can be risky for some streams.
-
         count = 0
         # Use a single root temporary directory for the entire batch stream
-        # This reduces inode thrashing compared to creating one per atom.
-        # We assume strict sequential processing for now.
-        with tempfile.TemporaryDirectory() as root_temp_dir:
-            root_path = Path(root_temp_dir)
+        # Optimization: Reuse this directory for calculations to reduce inode thrashing.
+        # QE calculator (in QEDriver) allows specifying 'directory'.
+        # We will clear files if needed by the calculator driver implementation,
+        # but reusing the directory is standard.
+        with tempfile.TemporaryDirectory() as work_dir:
+            work_path = Path(work_dir)
+
+            # We use a single subdirectory for execution to avoid cluttering root temp if needed
+            # or just use work_path directly.
+            # Using work_path directly is fine.
+            calc_dir = work_path
+
             for atoms in structures:
                 count += 1
-                # Create a unique subdirectory for this calculation within the root temp
-                # to ensure isolation even if artifacts persist briefly.
-                # Just using an incrementing counter or ID is safe here.
-                calc_dir = root_path / f"calc_{count}"
-                calc_dir.mkdir()
-
                 yield self._process_structure(atoms, str(calc_dir))
 
         if count == 0:

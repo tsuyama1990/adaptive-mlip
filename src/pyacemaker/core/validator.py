@@ -12,9 +12,14 @@ from pyacemaker.domain_models.constants import (
     ERR_VAL_POT_NOT_FILE,
     ERR_VAL_POT_OUTSIDE,
     ERR_VAL_REQ_STRUCT,
+    ERR_VAL_STRUCT_DUMMY_ELEM,
     ERR_VAL_STRUCT_EMPTY,
+    ERR_VAL_STRUCT_NAN_POS,
     ERR_VAL_STRUCT_NONE,
     ERR_VAL_STRUCT_TYPE,
+    ERR_VAL_STRUCT_UNKNOWN_SYM,
+    ERR_VAL_STRUCT_VOL_FAIL,
+    ERR_VAL_STRUCT_ZERO_VOL,
 )
 from pyacemaker.domain_models.validation import ValidationConfig, ValidationResult
 from pyacemaker.utils.elastic import ElasticCalculator
@@ -53,28 +58,23 @@ class LammpsInputValidator:
             vol = structure.get_volume()  # type: ignore[no-untyped-call]
         except Exception as e:
             # get_volume might fail if no cell is set
-            msg = f"Failed to compute structure volume: {e}"
-            raise ValueError(msg) from e
+            raise ValueError(ERR_VAL_STRUCT_VOL_FAIL.format(error=e)) from e
 
         if vol <= 1e-9:
-            msg = "Structure has near-zero or negative volume."
-            raise ValueError(msg)
+            raise ValueError(ERR_VAL_STRUCT_ZERO_VOL)
 
         # Validate positions are numeric and finite
         pos = structure.get_positions()  # type: ignore[no-untyped-call]
         if not np.isfinite(pos).all():
-            msg = "Structure contains non-finite atomic positions."
-            raise ValueError(msg)
+            raise ValueError(ERR_VAL_STRUCT_NAN_POS)
 
         # Validate elements against atomic_numbers
         symbols = set(structure.get_chemical_symbols())  # type: ignore[no-untyped-call]
         for s in symbols:
             if s not in atomic_numbers:
-                msg = f"Structure contains unknown chemical symbol: {s}"
-                raise ValueError(msg)
+                raise ValueError(ERR_VAL_STRUCT_UNKNOWN_SYM.format(symbol=s))
             if atomic_numbers[s] == 0:
-                msg = f"Structure contains dummy element: {s} (Z=0)"
-                raise ValueError(msg)
+                raise ValueError(ERR_VAL_STRUCT_DUMMY_ELEM.format(symbol=s))
 
     @staticmethod
     def validate_potential(potential: Any) -> Path:
