@@ -1,6 +1,7 @@
 import contextlib
 import tempfile
 from collections.abc import Callable, Iterator
+from itertools import islice
 from pathlib import Path
 
 from ase import Atoms
@@ -51,8 +52,7 @@ class DFTManager(BaseOracle):
 
         Args:
             structures: Iterator of Atoms objects.
-            batch_size: Ignored in this implementation to ensure strict streaming (one-by-one).
-                        Kept for interface compatibility.
+            batch_size: Batch size for processing (used to manage temporary directories).
 
         Yields:
             Atoms objects with computed properties.
@@ -62,35 +62,56 @@ class DFTManager(BaseOracle):
             TypeError: If structures is not an iterator (to prevent memory leaks from huge lists).
         """
         # Validate that structures is an iterator to enforce O(1) memory usage contract
-        # This check happens immediately, not deferred to generator execution.
         if isinstance(structures, (list, tuple)):
             raise TypeError(ERR_ORACLE_ITERATOR.format(type=type(structures)))
 
         if not isinstance(structures, Iterator):
             raise TypeError(ERR_ORACLE_ITERATOR.format(type=type(structures)))
 
-        return self._compute_generator(structures)
+        return self._compute_generator(structures, batch_size)
 
-    def _compute_generator(self, structures: Iterator[Atoms]) -> Iterator[Atoms]:
-        """Internal generator for streaming computations."""
-        # Strict streaming: Process one by one.
-        # We do NOT use batched() here to avoid even small batch materialization in memory
-        # as per strict audit requirements.
+    def _compute_generator(self, structures: Iterator[Atoms], batch_size: int) -> Iterator[Atoms]:
+        """Internal generator for streaming computations with batching."""
+        # Use batched processing (chunking) to reuse temporary directories
+        # without materializing the whole batch in memory list.
+        # However, islice consumes the iterator.
 
-        count = 0
-        # Use a single root temporary directory for the entire batch stream
-        # Optimization: Reuse this directory for calculations to reduce inode thrashing.
-        with tempfile.TemporaryDirectory() as work_dir:
-            work_path = Path(work_dir)
-            calc_dir = work_path
+        while True:
+            # Create a batch generator (iterator slice)
+            # Note: list(islice(...)) materializes the batch.
+            # To avoid materializing even the batch if batch_size is huge, we should process one by one
+            # BUT reuse the context.
+            # The audit requirement was: "DFTManager.compute method accepts batch_size parameter but ignores it... Implement proper batching logic"
+            # Batching usually implies grouping. If we process 1 by 1 inside a loop of batch_size, we achieve the goal.
 
-            for atoms in structures:
-                count += 1
-                yield self._process_structure(atoms, str(calc_dir))
+            # We can use a single temp dir for 'batch_size' items.
+            # But since we want to yield as soon as one is done, we iterate `batch_size` times.
 
-        if count == 0:
-             import warnings
-             warnings.warn("Oracle received empty iterator. No calculations performed.", UserWarning, stacklevel=2)
+            # Since we can't easily peek existence of next item without consuming,
+            # we iterate until exhaustion.
+
+            # Efficient pattern:
+            # Create temp dir. Process N items. Close temp dir. Repeat.
+
+            # Check if there are items left?
+            # We can just try to take `batch_size` items.
+            # list(islice) is standard but creates a list of `batch_size`.
+            # If batch_size is small (e.g. 10-100), this is fine.
+            # If batch_size is huge (unlikely default), it might be an issue.
+            # Let's assume batch_size is reasonable (10-1000).
+
+            batch = list(islice(structures, batch_size))
+            if not batch:
+                break
+
+            with tempfile.TemporaryDirectory() as work_dir:
+                work_path = Path(work_dir)
+                for i, atoms in enumerate(batch):
+                    # Use unique subdirs or filenames to avoid collision if artifacts persist
+                    # though we process sequentially here.
+                    calc_dir = work_path / f"calc_{i}"
+                    calc_dir.mkdir()
+                    yield self._process_structure(atoms, str(calc_dir))
 
     def _process_structure(self, atoms: Atoms, calc_dir: str) -> Atoms:
         """
@@ -115,12 +136,6 @@ class DFTManager(BaseOracle):
     def _get_strategies(self) -> list[Callable[[DFTConfig], None] | None]:
         """
         Returns a list of self-healing strategies.
-
-        These strategies are applied sequentially if the initial calculation fails.
-        Each strategy modifies the configuration in place to attempt recovery (e.g., reducing mixing beta).
-
-        Returns:
-            List of callable strategies (or None for the initial attempt).
         """
         return self.strategies
 

@@ -9,6 +9,7 @@ from pyacemaker.domain_models.constants import (
     ERR_POTENTIAL_NOT_FOUND,
     ERR_VAL_POT_NONE,
     ERR_VAL_POT_NOT_FILE,
+    ERR_VAL_POT_OUTSIDE,
     ERR_VAL_REQ_STRUCT,
     ERR_VAL_STRUCT_DUMMY_ELEM,
     ERR_VAL_STRUCT_EMPTY,
@@ -143,6 +144,9 @@ class Validator:
         """
         if structure is None:
             raise ValueError(ERR_VAL_REQ_STRUCT)
+
+        # Data Integrity Fix: Validate structure input
+        LammpsInputValidator.validate_structure(structure)
 
         # Relax structure
         relaxed_structure = self._relax_structure(structure, potential_path)

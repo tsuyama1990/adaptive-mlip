@@ -2,7 +2,6 @@ from enum import Enum
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field, PositiveFloat, PositiveInt, model_validator
-from pydantic_core import PydanticCustomError
 import numpy as np
 
 from pyacemaker.domain_models.constants import (
@@ -67,9 +66,6 @@ class MDRampingConfig(BaseModel):
 
     @model_validator(mode="after")
     def validate_ramping(self) -> "MDRampingConfig":
-        # Ensure that if one end is defined, logic holds (though not strictly required for MD engines)
-        # Main check: Positive values enforced by field types.
-        # Logical consistency:
         return self
 
 
@@ -229,4 +225,13 @@ class MDConfig(BaseModel):
             p = Path(self.temp_dir)
             if not p.exists() or not os.access(p, os.W_OK):
                 raise ValueError(f"Temporary directory {p} does not exist or is not writable.")
+        return self
+
+    @model_validator(mode="after")
+    def validate_default_forces(self) -> "MDConfig":
+        for f in self.default_forces:
+            if len(f) != 3:
+                raise ValueError("Default forces must be a list of 3D vectors (list of 3 floats)")
+            if not all(isinstance(x, (int, float)) for x in f):
+                 raise ValueError("Default forces elements must be numeric")
         return self

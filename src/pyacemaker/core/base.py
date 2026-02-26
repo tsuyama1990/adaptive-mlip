@@ -8,6 +8,17 @@ from ase import Atoms
 from pyacemaker.domain_models.md import MDSimulationResult
 
 
+class BasePolicy(ABC):
+    """
+    Abstract base class for exploration policies.
+    """
+    @abstractmethod
+    def generate(self, **kwargs: Any) -> None:
+        """
+        Generates new candidates based on policy logic.
+        """
+
+
 class BaseGenerator(ABC):
     """
     Abstract base class for structure generation.

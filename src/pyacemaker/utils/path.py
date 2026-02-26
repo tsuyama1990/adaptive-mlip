@@ -37,32 +37,21 @@ def validate_path_safe(path: Path) -> Path:
         raise ValueError(msg)
 
     try:
-        # Canonicalize path
-        # Use strict=True to prevent resolving to non-existent paths that could be manipulated later,
-        # unless it's an output file we intend to create?
-        # The audit requirement says "resolve(strict=True)".
-        # If the file is expected to not exist (e.g. output), we must check the parent directory.
-        # But `validate_path_safe` is generic.
-        # Let's assume for existing files (inputs) strict=True is required.
-        # For outputs, the caller might need to check parent.
-        # However, if we enforce strict=True, we break output file path validation if the file doesn't exist yet.
-        # COMPROMISE: If path doesn't exist, we check if parent exists and is safe.
-        # Actually, best practice for anti-traversal is checking the resolved path against root.
-        # If strict=True is used, it raises FileNotFoundError if it doesn't exist.
-
+        # Canonicalize path.
+        # Enforce strict=True if the path exists to catch symlink attacks immediately.
+        # If it doesn't exist (e.g. output file), we must resolve based on parent.
         if path.exists():
             resolved = path.resolve(strict=True)
         else:
-            # If file doesn't exist, resolve parent and check that.
-            # Then resolve full path (non-strict) to get canonical form without following non-existent symlinks (since they don't exist).
-            # But wait, resolve(strict=False) on non-existent path handles ".." purely lexically if components missing?
-            # No, resolve() eliminates ".."
-            resolved = path.resolve(strict=False)
-            # Ensure parent exists so we aren't writing to completely random place
-            if not resolved.parent.exists():
-                 # This might be too strict for nested directory creation?
-                 # Orchestrator creates dirs.
-                 pass
+            # For non-existent files, check parent
+            if path.parent.exists():
+                resolved_parent = path.parent.resolve(strict=True)
+                # Combine resolved parent with filename
+                resolved = resolved_parent / path.name
+            else:
+                # If even parent doesn't exist, this is likely unsafe or too deep
+                # Fallback to loose resolve but we will check containment
+                resolved = path.resolve(strict=False)
 
     except Exception as e:
          msg = f"Invalid path resolution: {path}"
@@ -81,6 +70,7 @@ def validate_path_safe(path: Path) -> Path:
     for root in allowed_roots:
         # Robust check using os.path.commonpath to ensure resolved path is under root
         try:
+            # commonpath resolves mixed relative/absolute issues, but we used absolute resolved paths
             common = Path(os.path.commonpath([root, resolved]))
             if common == root:
                 is_safe = True
