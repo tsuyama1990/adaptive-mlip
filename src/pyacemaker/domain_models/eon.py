@@ -52,3 +52,12 @@ class EONConfig(BaseModel):
             raise ValueError(msg)
 
         return v
+
+    @field_validator("supercell")
+    @classmethod
+    def validate_supercell(cls, v: list[int]) -> list[int]:
+        """Validates supercell dimensions."""
+        if any(x <= 0 for x in v):
+            msg = "Supercell dimensions must be positive integers"
+            raise ValueError(msg)
+        return v

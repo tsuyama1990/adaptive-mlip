@@ -37,7 +37,10 @@ def validate_path_safe(path: Path) -> Path:
 
     try:
         # Canonicalize path (resolve symlinks, collapse ..)
-        # We use strict=False because the file might be an output file that doesn't exist yet.
+        # Audit requires strict=True to prevent traversal to non-existent dangerous paths if possible,
+        # but output files might not exist.
+        # However, resolve(strict=False) resolves ".." even if components don't exist.
+        # The key is checking the resolved path against roots.
         resolved = path.resolve(strict=False)
     except Exception as e:
          msg = f"Invalid path resolution: {path}"
@@ -54,6 +57,7 @@ def validate_path_safe(path: Path) -> Path:
 
     is_safe = False
     for root in allowed_roots:
+        # is_relative_to checks if resolved path starts with root
         if resolved.is_relative_to(root):
             is_safe = True
             break
