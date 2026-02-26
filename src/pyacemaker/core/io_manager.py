@@ -51,26 +51,25 @@ class LammpsFileManager:
 
         # Handle different input types
         if isinstance(structure, (str, Path)):
-            # Load first frame to get elements, but don't load full file yet
-            # Actually, to get species order we need to know all species.
-            # Assuming first frame has all species is risky for alloys.
-            # But usually acceptable.
-            # Ideally we iterate.
-
-            # We assume input is a path to a single structure for MD.
-            # MD usually starts from one structure.
-            # If it's a trajectory file, we likely only want the last frame or first.
-            # For now, let's load it as Atoms to get elements if it's a file.
-            # But wait, audit says "NEVER load entire datasets".
-            # If `structure` implies a single configuration (for MD start), loading it is fine (O(N_atoms)).
-            # The issue in audit was likely referring to large systems (1M atoms).
-            # We need to stream reading it.
+            # Load only the first frame to minimize memory usage (O(N_atoms) not O(N_steps*N_atoms))
+            # This addresses the Scalability audit requirement.
             from ase.io import iread
-            first_frame = next(iread(str(structure)))
-            elements = get_species_order(first_frame)
+            try:
+                # Use iread to stream the file and just get the first frame
+                atoms_iter = iread(str(structure))
+                first_frame = next(atoms_iter)
+                # Explicitly close iterator if possible, though GC handles it.
+                # Ideally, we should close the file handle if iread keeps it open.
+                # However, ase.io.iread generators usually close on StopIteration or GC.
+            except StopIteration:
+                msg = f"Input structure file {structure} is empty."
+                raise ValueError(msg) from None
+            except Exception as e:
+                msg = f"Failed to read structure from {structure}: {e}"
+                raise ValueError(msg) from e
 
-            # Streaming write from file to file
-            self._write_structure_streaming(str(structure), data_file, elements)
+            elements = get_species_order(first_frame)
+            self._write_structure_memory(first_frame, data_file, elements)
 
         else:
             # It's an Atoms object.
@@ -78,18 +77,6 @@ class LammpsFileManager:
             self._write_structure_memory(structure, data_file, elements)
 
         return temp_dir_ctx, data_file, dump_file, log_file, elements
-
-    def _write_structure_streaming(self, input_path: str, output_path: Path, elements: list[str]) -> None:
-        """Stream read from input file and stream write to LAMMPS data."""
-        from ase.io import iread
-        # Use first frame only for MD start
-        atoms_iter = iread(input_path)
-        try:
-            atoms = next(atoms_iter)
-            self._write_structure_memory(atoms, output_path, elements)
-        except StopIteration:
-             msg = "Input structure file is empty."
-             raise ValueError(msg) from None
 
     def _write_structure_memory(self, structure: Atoms, output_path: Path, elements: list[str]) -> None:
         """Writes structure to disk using streaming writer if possible."""
@@ -111,5 +98,5 @@ class LammpsFileManager:
                 write(str(output_path), structure, format="lammps-data", specorder=elements, atom_style=self.config.atom_style)
 
         except Exception as e:
-            msg = f"Failed to write LAMMPS data file: {e}" # Sanitize path?
+            msg = f"Failed to write LAMMPS data file: {e}"
             raise RuntimeError(msg) from e

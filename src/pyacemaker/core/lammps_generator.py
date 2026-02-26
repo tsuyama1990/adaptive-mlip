@@ -45,33 +45,37 @@ class LammpsScriptGenerator:
         self._path_cache[path_str] = quoted
         return quoted
 
-    def _gen_potential(self, buffer: TextIO, potential_path: Path, elements: list[str]) -> None:
-        """Generates potential definition commands."""
+    def _gen_potential_pure(self, buffer: TextIO, potential_path: Path, elements: list[str]) -> None:
+        """Generates pure PACE potential commands."""
         species_str = " ".join(elements)
         quoted_pot = self._quote(potential_path)
+        buffer.write("pair_style pace\n")
+        buffer.write(f"pair_coeff * * pace {quoted_pot} {species_str}\n")
 
-        # Write directly to buffer to avoid list overhead
+    def _gen_potential_hybrid(self, buffer: TextIO, potential_path: Path, elements: list[str]) -> None:
+        """Generates hybrid PACE + ZBL potential commands."""
+        species_str = " ".join(elements)
+        quoted_pot = self._quote(potential_path)
+        params = self.config.hybrid_params
+
+        buffer.write(f"pair_style hybrid/overlay pace zbl {params.zbl_cut_inner} {params.zbl_cut_outer}\n")
+        buffer.write(f"pair_coeff * * pace {quoted_pot} {species_str}\n")
+
+        n_types = len(elements)
+        for i in range(n_types):
+            el_i = elements[i]
+            z_i = self._get_atomic_number(el_i)
+            for j in range(i, n_types):
+                el_j = elements[j]
+                z_j = self._get_atomic_number(el_j)
+                buffer.write(f"pair_coeff {i+1} {j+1} zbl {z_i} {z_j}\n")
+
+    def _gen_potential(self, buffer: TextIO, potential_path: Path, elements: list[str]) -> None:
+        """Generates potential definition commands."""
         if self.config.hybrid_potential:
-            # Hybrid overlay: PACE + ZBL
-            params = self.config.hybrid_params
-            buffer.write(f"pair_style hybrid/overlay pace zbl {params.zbl_cut_inner} {params.zbl_cut_outer}\n")
-
-            # PACE
-            buffer.write(f"pair_coeff * * pace {quoted_pot} {species_str}\n")
-
-            # ZBL
-            n_types = len(elements)
-            for i in range(n_types):
-                el_i = elements[i]
-                z_i = self._get_atomic_number(el_i)
-                for j in range(i, n_types):
-                    el_j = elements[j]
-                    z_j = self._get_atomic_number(el_j)
-                    buffer.write(f"pair_coeff {i+1} {j+1} zbl {z_i} {z_j}\n")
+            self._gen_potential_hybrid(buffer, potential_path, elements)
         else:
-            # Pure PACE
-            buffer.write("pair_style pace\n")
-            buffer.write(f"pair_coeff * * pace {quoted_pot} {species_str}\n")
+            self._gen_potential_pure(buffer, potential_path, elements)
 
     def _gen_settings(self, buffer: TextIO) -> None:
         """Generates general MD settings."""

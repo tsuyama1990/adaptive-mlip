@@ -172,14 +172,9 @@ def test_dft_manager_invalid_input(mock_dft_config: DFTConfig) -> None:
     manager = DFTManager(mock_dft_config)
     atoms_list = [Atoms("H")]
 
-    # Check that it raises TypeError immediately upon calling next()
-    # because generator execution is deferred.
-    # We want to ensure it fails.
-    gen = manager.compute(atoms_list) # type: ignore[arg-type]
-
-    # Updated error message expectation
+    # Check that it raises TypeError immediately upon calling compute (before next)
     with pytest.raises(TypeError, match="Oracle failed to create iterator"):
-        next(gen)
+        manager.compute(atoms_list) # type: ignore[arg-type]
 
 def test_dft_manager_empty_iterator(mock_dft_config: DFTConfig) -> None:
     """Test compute handles empty iterator correctly with warning."""

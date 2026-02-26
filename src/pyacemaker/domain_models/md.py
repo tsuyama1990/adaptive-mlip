@@ -5,12 +5,15 @@ from pathlib import Path
 from pydantic import BaseModel, ConfigDict, Field, PositiveFloat, PositiveInt, model_validator
 
 from pyacemaker.domain_models.constants import (
+    DEFAULT_MC_SEED,
     DEFAULT_MD_MINIMIZE_FTOL,
     DEFAULT_MD_MINIMIZE_TOL,
     DEFAULT_RAM_DISK_PATH,
     LAMMPS_MINIMIZE_MAX_ITER,
     LAMMPS_MINIMIZE_STEPS,
     LAMMPS_VELOCITY_SEED,
+    MAX_MD_DURATION,
+    MAX_MD_PRESSURE,
 )
 from pyacemaker.domain_models.defaults import (
     DEFAULT_MD_ATOM_STYLE,
@@ -73,7 +76,7 @@ class MCConfig(BaseModel):
 
     swap_freq: int = Field(..., gt=0, description="Frequency of MC swaps (steps)")
     swap_prob: float = Field(..., gt=0.0, le=1.0, description="Probability of swapping atoms")
-    seed: int = Field(12345, description="Random seed for MC swaps")
+    seed: int = Field(DEFAULT_MC_SEED, description="Random seed for MC swaps")
 
 
 class MDSimulationResult(BaseModel):
@@ -109,7 +112,7 @@ class MDConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     temperature: float = Field(..., ge=0.0, description="Simulation temperature in Kelvin")
-    pressure: float = Field(..., ge=0.0, le=1.0e6, description="Simulation pressure in Bar (Max 1 MBar)")
+    pressure: float = Field(..., ge=0.0, le=MAX_MD_PRESSURE, description="Simulation pressure in Bar")
     timestep: PositiveFloat = Field(..., description="Timestep in ps")
     n_steps: int = Field(..., gt=0, description="Number of MD steps")
 
@@ -191,7 +194,7 @@ class MDConfig(BaseModel):
     @model_validator(mode="after")
     def validate_simulation_physics(self) -> "MDConfig":
         total_time = self.n_steps * self.timestep
-        if total_time > 1e6: # 1 microsecond is very long for naive MD
+        if total_time > MAX_MD_DURATION:
              # Just a warning or soft limit? Requirement says "validate compatibility".
              # Let's check for extremely short runs.
              pass

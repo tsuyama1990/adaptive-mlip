@@ -422,6 +422,19 @@ class Orchestrator:
         Note: This method is intended to implement the "Adaptive Exploration Policy" described in the Spec.
         Currently, it is a no-op as the complex adaptation logic requires further requirements analysis.
         """
+        pass
+
+    def _execute_iteration_logic(self, iteration: int, paths: dict[str, Path]) -> None:
+        """
+        Core logic for a single iteration.
+        Separated for clarity and testability.
+        """
+        deployed_potential = self._deploy_potential(iteration)
+        result = self._run_md_simulation(iteration, deployed_potential)
+
+        if result:
+            self._adapt_strategy(result)
+            self._handle_md_halt(result, deployed_potential, paths)
 
     def _run_loop_iteration(self) -> None:
         """Executes one iteration of the active learning loop."""
@@ -430,12 +443,7 @@ class Orchestrator:
         self.logger.info(LOG_START_ITERATION.format(iteration=iteration, max_iterations=self.config.workflow.max_iterations))
 
         try:
-            deployed_potential = self._deploy_potential(iteration)
-            result = self._run_md_simulation(iteration, deployed_potential)
-
-            if result:
-                self._adapt_strategy(result)
-                self._handle_md_halt(result, deployed_potential, paths)
+            self._execute_iteration_logic(iteration, paths)
 
             self.state_manager.iteration = iteration
             self.state_manager.save()

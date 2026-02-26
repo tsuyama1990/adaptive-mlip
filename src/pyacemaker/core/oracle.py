@@ -60,16 +60,17 @@ class DFTManager(BaseOracle):
             TypeError: If structures is not an iterator (to prevent memory leaks from huge lists).
         """
         # Validate that structures is an iterator to enforce O(1) memory usage contract
-        # isinstance check against Iterator (from collections.abc) might be tricky with some generators?
-        # But iter(list) returns 'list_iterator' which inherits from Iterator.
-        # However, a list is Iterable but NOT Iterator.
-        # Let's ensure we import Iterator from collections.abc correctly.
+        # This check happens immediately, not deferred to generator execution.
         if isinstance(structures, (list, tuple)):
             raise TypeError(ERR_ORACLE_ITERATOR.format(type=type(structures)))
 
         if not isinstance(structures, Iterator):
             raise TypeError(ERR_ORACLE_ITERATOR.format(type=type(structures)))
 
+        return self._compute_generator(structures)
+
+    def _compute_generator(self, structures: Iterator[Atoms]) -> Iterator[Atoms]:
+        """Internal generator for streaming computations."""
         # Strict streaming: Process one by one.
         # We do NOT use batched() here to avoid even small batch materialization in memory
         # as per strict audit requirements.

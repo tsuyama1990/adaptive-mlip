@@ -110,7 +110,21 @@ class LammpsInputValidator:
             Path("/dev/shm").resolve()  # noqa: S108
         ]
 
-        if not any(str(path).startswith(str(prefix)) for prefix in allowed_prefixes):
+        # Use is_relative_to for secure path checking (Python 3.9+)
+        is_safe = False
+        for prefix in allowed_prefixes:
+            try:
+                if path.is_relative_to(prefix):
+                    is_safe = True
+                    break
+            except ValueError:
+                # is_relative_to raises ValueError on some versions if not relative?
+                # Python 3.9+ definition: True if path is relative to other, else False.
+                # Actually it doesn't raise, it just returns False (in 3.9 it was added).
+                # But to be safe against older python if environment is mixed (though requirement is 3.12)
+                continue
+
+        if not is_safe:
             raise ValueError(ERR_VAL_POT_OUTSIDE.format(path=path))
 
         return path
@@ -136,7 +150,6 @@ class Validator:
     def _relax_structure(self, structure: Atoms, potential_path: Path) -> Atoms:
         """
         Relaxes the structure using the engine provided in calculators.
-        Assuming both calculators use the same engine instance.
         """
         # Use engine from elastic_calc (arbitrary choice, they should share engine)
         engine = self.elastic_calc.engine
@@ -149,10 +162,6 @@ class Validator:
         Runs validation checks and generates report.
         """
         if structure is None:
-            # TODO: In future, generate a structure based on elements?
-            # For now, require it.
-            # But Orchestrator might call it without structure if we didn't update it.
-            # I'll raise error.
             raise ValueError(ERR_VAL_REQ_STRUCT)
 
         # Relax structure

@@ -99,6 +99,11 @@ DEFAULT_MD_BASE_ENERGY = -100.0
 DEFAULT_MD_CHECK_INTERVAL = 10
 DEFAULT_MD_HYBRID_ZBL_INNER = 2.0
 DEFAULT_MD_HYBRID_ZBL_OUTER = 2.5
+MAX_MD_PRESSURE = 1.0e6
+MAX_MD_DURATION = 1.0e6  # ps
+
+# MC Defaults
+DEFAULT_MC_SEED = 12345
 
 # Validation Defaults
 DEFAULT_VALIDATION_PHONON_SUPERCELL = [2, 2, 2]
@@ -108,20 +113,10 @@ DEFAULT_VALIDATION_ELASTIC_STRAIN = 0.01
 DEFAULT_VALIDATION_ELASTIC_STEPS = 5
 
 # Security constants
+# Audit fix: Expanded list of dangerous characters
 DANGEROUS_PATH_CHARS: Final[set[str]] = {
-    ";",
-    "&",
-    "|",
-    "`",
-    "$",
-    "(",
-    ")",
-    "<",
-    ">",
-    "\n",
-    "\r",
-    "\t",
-    "?",
+    ";", "&", "|", "`", "$", "(", ")", "<", ">", "\n", "\r", "\t", "?",
+    "*", "[", "]", "{", "}", "'", '"', "!", "#",
 }
 
 # RAM Disk logic
@@ -178,6 +173,7 @@ DEFAULT_STRAIN_RANGE: Final[tuple[float, float]] = (-0.05, 0.05)
 PACE_DRIVER_TEMPLATE = """
 import sys
 import os
+import re
 import numpy as np
 from ase.io import read
 from ase.calculators.lammpsrun import LAMMPS
@@ -186,6 +182,12 @@ from ase.calculators.lammpsrun import LAMMPS
 POTENTIAL_PATH = os.environ.get("PACE_POTENTIAL_PATH")
 if not POTENTIAL_PATH:
     sys.stderr.write("Error: PACE_POTENTIAL_PATH not set\\n")
+    sys.exit(1)
+
+# Security: Validate POTENTIAL_PATH to prevent injection in pair_coeff
+# Allow alphanumeric, dot, underscore, dash, slash.
+if not re.match(r"^[a-zA-Z0-9_\\-\\.\\/]+$", POTENTIAL_PATH):
+    sys.stderr.write("Error: Invalid characters in potential path\\n")
     sys.exit(1)
 
 if not os.path.exists(POTENTIAL_PATH):

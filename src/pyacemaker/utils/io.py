@@ -1,8 +1,7 @@
 import json
 import logging
-import re
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 import numpy as np
 import yaml
@@ -10,6 +9,9 @@ from ase import Atoms
 from ase.io import iread
 
 logger = logging.getLogger(__name__)
+
+# Cache atomic masses to avoid repeated imports/lookups in inner loops
+_ATOMIC_MASSES_CACHE: dict[str, float] = {}
 
 
 def load_yaml(filepath: Path) -> dict[str, Any]:
@@ -67,6 +69,14 @@ def dump_yaml(data: Any, filepath: Path) -> None:
         yaml.safe_dump(data, f)
 
 
+def _get_atomic_mass(symbol: str) -> float:
+    """Helper to get atomic mass with caching."""
+    if symbol not in _ATOMIC_MASSES_CACHE:
+        from ase.data import atomic_masses, atomic_numbers
+        _ATOMIC_MASSES_CACHE[symbol] = atomic_masses[atomic_numbers[symbol]]
+    return _ATOMIC_MASSES_CACHE[symbol]
+
+
 def write_lammps_streaming(
     fileobj: Any,
     atoms: Atoms,
@@ -115,14 +125,10 @@ def write_lammps_streaming(
 
     # 3. Masses
     fileobj.write("Masses\n\n")
-    # We need atomic masses. Create a temporary atoms object for each species to get mass
-    # or just use the first atom of that type found.
-    # A robust way is using ase.data
-    from ase.data import atomic_masses, atomic_numbers
 
     for s in species:
         type_id = type_map[s]
-        mass = atomic_masses[atomic_numbers[s]]
+        mass = _get_atomic_mass(s)
         fileobj.write(f"{type_id} {mass:.4f} # {s}\n")
 
     fileobj.write("\n")
