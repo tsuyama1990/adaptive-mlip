@@ -2,13 +2,13 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
-import yaml
+import yaml # type: ignore[import-untyped]
 
 from pyacemaker.main import main
 
 
 @pytest.fixture
-def mock_config(tmp_path: Path):
+def mock_config(tmp_path: Path) -> Path:
     config = {
         "project_name": "TestProject",
         "structure": {"elements": ["Al"], "supercell_size": [1, 1, 1], "r_cut": 2.0},
@@ -25,7 +25,7 @@ def mock_config(tmp_path: Path):
         yaml.dump(config, f)
     return p
 
-def test_main_init_success(mock_config: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+def test_main_init_success(mock_config: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """Test 'init' command successfully initializes workspace."""
     monkeypatch.setattr("sys.argv", ["pyacemaker", "init", "--config", str(mock_config)])
 
@@ -47,14 +47,14 @@ def test_main_init_success(mock_config: Path, monkeypatch: pytest.MonkeyPatch, t
          main()
          mock_init.assert_called_once()
 
-def test_main_init_file_not_found():
+def test_main_init_file_not_found() -> None:
     """Test 'init' command with missing config file."""
     with patch("sys.argv", ["pyacemaker", "init", "--config", "non_existent.yaml"]):
         with pytest.raises(SystemExit) as exc:
             main()
         assert exc.value.code == 1
 
-def test_main_run_step1(mock_config: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+def test_main_run_step1(mock_config: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """Test 'run' command calls run_step1."""
     monkeypatch.setattr("sys.argv", ["pyacemaker", "run", "--step", "1", "--config", str(mock_config)])
 
@@ -74,7 +74,7 @@ def test_main_run_step1(mock_config: Path, monkeypatch: pytest.MonkeyPatch, tmp_
          main()
          mock_run1.assert_called_once()
 
-def test_main_run_no_config(monkeypatch: pytest.MonkeyPatch):
+def test_main_run_no_config(monkeypatch: pytest.MonkeyPatch) -> None:
     """Test 'run' without config argument (fails if default not found)."""
     # Assuming local config.yaml doesn't exist in CWD (which is set by pytest usually)
     monkeypatch.setattr("sys.argv", ["pyacemaker", "run", "--step", "1"])

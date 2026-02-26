@@ -140,38 +140,38 @@ class MDConfig(BaseModel):
 
     # Output Control
     thermo_freq: PositiveInt = Field(
-        DEFAULT_MD_THERMO_FREQ, description="Frequency of thermodynamic output (steps)"
+        default=DEFAULT_MD_THERMO_FREQ, description="Frequency of thermodynamic output (steps)"
     )
     dump_freq: PositiveInt = Field(
-        DEFAULT_MD_DUMP_FREQ, description="Frequency of trajectory dump (steps)"
+        default=DEFAULT_MD_DUMP_FREQ, description="Frequency of trajectory dump (steps)"
     )
-    minimize: bool = Field(False, description="Perform energy minimization before MD")
+    minimize: bool = Field(default=False, description="Perform energy minimization before MD")
     neighbor_skin: PositiveFloat = Field(
-        DEFAULT_MD_NEIGHBOR_SKIN, description="Neighbor list skin distance (Angstrom)"
+        default=DEFAULT_MD_NEIGHBOR_SKIN, description="Neighbor list skin distance (Angstrom)"
     )
     atom_style: AtomStyle = Field(
-        AtomStyle(DEFAULT_MD_ATOM_STYLE), description="LAMMPS atom style"
+        default=AtomStyle(DEFAULT_MD_ATOM_STYLE), description="LAMMPS atom style"
     )
 
     # Configurable LAMMPS Parameters (No Hardcoding)
     velocity_seed: int = Field(
-        LAMMPS_VELOCITY_SEED, description="Random seed for velocity initialization"
+        default=LAMMPS_VELOCITY_SEED, description="Random seed for velocity initialization"
     )
     minimize_steps: int = Field(
-        LAMMPS_MINIMIZE_STEPS, description="Max iterations for minimization (steps)"
+        default=LAMMPS_MINIMIZE_STEPS, description="Max iterations for minimization (steps)"
     )
     minimize_max_iter: int = Field(
-        LAMMPS_MINIMIZE_MAX_ITER, description="Max force evaluations for minimization"
+        default=LAMMPS_MINIMIZE_MAX_ITER, description="Max force evaluations for minimization"
     )
     minimize_tol: float = Field(
-        DEFAULT_MD_MINIMIZE_TOL, description="Energy tolerance for minimization"
+        default=DEFAULT_MD_MINIMIZE_TOL, description="Energy tolerance for minimization"
     )
     minimize_ftol: float = Field(
-        DEFAULT_MD_MINIMIZE_FTOL, description="Force tolerance for minimization"
+        default=DEFAULT_MD_MINIMIZE_FTOL, description="Force tolerance for minimization"
     )
     # Use constant as default for min_style
     minimize_style: str = Field(
-        LAMMPS_MIN_STYLE_CG, description="Minimization algorithm (e.g., cg, hftn, sd)"
+        default=LAMMPS_MIN_STYLE_CG, description="Minimization algorithm (e.g., cg, hftn, sd)"
     )
 
     # Advanced Settings
@@ -180,15 +180,15 @@ class MDConfig(BaseModel):
         description="Directory for temporary files (e.g., /dev/shm for RAM disk)"
     )
     tdamp_factor: float = Field(
-        DEFAULT_MD_TDAMP_FACTOR, gt=0.0, description="Temperature damping factor (multiplies timestep)"
+        default=DEFAULT_MD_TDAMP_FACTOR, gt=0.0, description="Temperature damping factor (multiplies timestep)"
     )
     pdamp_factor: float = Field(
-        DEFAULT_MD_PDAMP_FACTOR, gt=0.0, description="Pressure damping factor (multiplies timestep)"
+        default=DEFAULT_MD_PDAMP_FACTOR, gt=0.0, description="Pressure damping factor (multiplies timestep)"
     )
 
     # Mocking Parameters (Audit Requirement)
     base_energy: float = Field(
-        DEFAULT_MD_BASE_ENERGY, description="Baseline energy for mock simulation"
+        default=DEFAULT_MD_BASE_ENERGY, description="Baseline energy for mock simulation"
     )
     default_forces: list[list[float]] = Field(
         default=[[0.0, 0.0, 0.0]], description="Default forces for mock simulation"
@@ -196,7 +196,7 @@ class MDConfig(BaseModel):
 
     # Spec Section 3.4 (Hybrid Potential & OTF)
     hybrid_potential: bool = Field(
-        False, description="Use hybrid potential (ACE + LJ/ZBL)"
+        default=False, description="Use hybrid potential (ACE + LJ/ZBL)"
     )
     hybrid_params: HybridParams = Field(
         default_factory=HybridParams, description="Parameters for hybrid potential baseline"
@@ -204,18 +204,18 @@ class MDConfig(BaseModel):
 
     # Spec Section 3.4 (OTF)
     fix_halt: bool = Field(
-        False, description="Enable OTF halting based on uncertainty"
+        default=False, description="Enable OTF halting based on uncertainty"
     )
     uncertainty_threshold: float = Field(
-        DEFAULT_OTF_UNCERTAINTY_THRESHOLD, gt=0.0, description="Gamma threshold for halting simulation"
+        default=DEFAULT_OTF_UNCERTAINTY_THRESHOLD, gt=0.0, description="Gamma threshold for halting simulation"
     )
     check_interval: int = Field(
-        DEFAULT_MD_CHECK_INTERVAL, gt=0, description="Step interval for uncertainty check"
+        default=DEFAULT_MD_CHECK_INTERVAL, gt=0, description="Step interval for uncertainty check"
     )
 
     # Spec Section 3.1: Ramping and MC
-    ramping: MDRampingConfig | None = Field(None, description="Configuration for T/P ramping")
-    mc: MCConfig | None = Field(None, description="Configuration for Monte Carlo atom swapping")
+    ramping: MDRampingConfig | None = Field(default=None, description="Configuration for T/P ramping")
+    mc: MCConfig | None = Field(default=None, description="Configuration for Monte Carlo atom swapping")
 
     @model_validator(mode="after")
     def validate_simulation_physics(self) -> "MDConfig":

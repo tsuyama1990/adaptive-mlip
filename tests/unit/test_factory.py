@@ -7,7 +7,7 @@ import pytest
 from pyacemaker.core.engine import LammpsEngine
 from pyacemaker.core.exceptions import ConfigError
 from pyacemaker.core.trainer import PacemakerTrainer
-from pyacemaker.domain_models import PyAceConfig
+from pyacemaker.domain_models import PyAceConfig, WorkflowConfig
 from pyacemaker.factory import ModuleFactory
 from pyacemaker.structure_generator.direct import DirectSampler
 from tests.conftest import create_dummy_pseudopotentials
@@ -35,7 +35,7 @@ def mock_config(
         dft=mock_dft_config,
         training=mock_training_config,
         md=mock_md_config,
-        workflow={"max_iterations": 1},
+        workflow=WorkflowConfig(max_iterations=1),
     )
 
 

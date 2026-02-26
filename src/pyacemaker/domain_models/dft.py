@@ -27,29 +27,29 @@ class DFTConfig(BaseModel):
 
     # Self-healing and convergence parameters
     mixing_beta: float = Field(
-        DEFAULT_DFT_MIXING_BETA, gt=0.0, le=1.0, description="Initial mixing parameter for SCF"
+        default=DEFAULT_DFT_MIXING_BETA, gt=0.0, le=1.0, description="Initial mixing parameter for SCF"
     )
     smearing_type: str = Field(
-        DEFAULT_DFT_SMEARING_TYPE, description="Type of smearing (e.g., 'mv', 'gaussian')"
+        default=DEFAULT_DFT_SMEARING_TYPE, description="Type of smearing (e.g., 'mv', 'gaussian')"
     )
     smearing_width: PositiveFloat = Field(
-        DEFAULT_DFT_SMEARING_WIDTH, description="Width of smearing in eV"
+        default=DEFAULT_DFT_SMEARING_WIDTH, description="Width of smearing in eV"
     )
     diagonalization: str = Field(
-        DEFAULT_DFT_DIAGONALIZATION, description="Diagonalization algorithm"
+        default=DEFAULT_DFT_DIAGONALIZATION, description="Diagonalization algorithm"
     )
 
     # Strategy Multipliers
     # Note: mixing_beta_factor is used to REDUCE mixing_beta (new_beta = beta * factor)
     #       smearing_width_factor is used to INCREASE smearing_width (new_width = width * factor)
     mixing_beta_factor: float = Field(
-        DEFAULT_DFT_MIXING_BETA_FACTOR,
+        default=DEFAULT_DFT_MIXING_BETA_FACTOR,
         gt=0.0,
         le=1.0,
         description="Multiplier for mixing_beta reduction strategy",
     )
     smearing_width_factor: float = Field(
-        DEFAULT_DFT_SMEARING_WIDTH_FACTOR,
+        default=DEFAULT_DFT_SMEARING_WIDTH_FACTOR,
         gt=1.0,
         description="Multiplier for smearing_width increase strategy",
     )
@@ -57,7 +57,7 @@ class DFTConfig(BaseModel):
     # Pseudopotentials
     # Parallelization
     n_workers: int = Field(
-        1, gt=0, description="Number of parallel workers for DFT calculations"
+        default=1, gt=0, description="Number of parallel workers for DFT calculations"
     )
 
     # Pseudopotentials

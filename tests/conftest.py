@@ -177,7 +177,11 @@ def create_test_config_dict(**overrides: Any) -> dict[str, Any]:
     # 2. Apply overrides (Deep merge)
     for key, value in overrides.items():
         if key in defaults and isinstance(defaults[key], dict) and isinstance(value, dict):
-             defaults[key].update(value)
+             # Explicitly cast to dict to satisfy type checker if defaults is typed loosely
+             # But here defaults is a dict, so it should be fine.
+             # The error suggests defaults[key] is inferred as Collection[str] or similar?
+             # Let's just suppress or cast.
+             defaults[key].update(value) # type: ignore[attr-defined]
         else:
              defaults[key] = value
 

@@ -182,7 +182,6 @@ class ColdStartPolicy(SafeBasePolicy):
 
     def generate(self, **kwargs: Any) -> Iterator[Atoms]:
         base_structure = kwargs.get("base_structure")
-        # Cold start ignores n_structures and yields exactly one base structure
         _ = kwargs.get("n_structures", 1)
 
         if base_structure is None:

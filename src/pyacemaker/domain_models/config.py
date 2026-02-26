@@ -27,5 +27,5 @@ class PyAceConfig(BaseModel):
     logging: LoggingConfig = Field(
         default_factory=LoggingConfig, description="Logging configuration"
     )
-    eon: EONConfig | None = Field(None, description="EON configuration")
-    scenario: ScenarioConfig | None = Field(None, description="Scenario configuration")
+    eon: EONConfig | None = Field(default=None, description="EON configuration")
+    scenario: ScenarioConfig | None = Field(default=None, description="Scenario configuration")
