@@ -37,6 +37,13 @@ def _(mo):
         r"""
         ## 1. Environment Setup
         We first check if the `pyacemaker` package is installed. If not, we fall back to a **Pure Demo Mode** using internal mocks.
+
+        ### Modes of Operation: What to Expect
+        *   **Real Mode**: If `pyacemaker` and external binaries (`eonclient`, `lmp`) are installed, the tutorial will run the full scientific workflow (or parts of it).
+        *   **Mock Mode (Pure Demo)**: If dependencies are missing, the tutorial uses simplified Python-based "Mocks".
+            *   **Physics**: Instead of solving Schrödinger's equation (DFT), we use a simple **Harmonic Potential** (springs) calculated instantly in Python.
+            *   **Speed**: Steps that usually take hours (Training, MD) will complete in seconds.
+            *   **Accuracy**: The results (energies, trajectories) are illustrative only and not scientifically accurate. The L10 ordering plot will show idealized dummy data.
         """
     )
     return
@@ -49,6 +56,7 @@ def _(mo):
     import shutil
     import tempfile
     import random
+    import atexit
     from pathlib import Path
     import logging
     from typing import Any, Iterable
@@ -70,8 +78,6 @@ def _(mo):
         sys.path.append(str(repo_root / "src"))
 
     # --- Pure Demo Mode Fallbacks ---
-    # Define these mock classes first so they are available if import fails
-
     class ConfigMock:
         def __init__(self, **kwargs):
             self.__dict__.update(kwargs)
@@ -117,6 +123,7 @@ def _(mo):
                 structure.append(Atoms(el, positions=[[x_rand, y_rand, z_max + self.params.deposition_height]])[0])
 
                 # Relax using the engine
+                # Note: MockLammpsEngine.relax handles the potential argument (even if dummy/mock)
                 if self.engine:
                     structure = self.engine.relax(structure, self.potential_path)
             return structure
@@ -210,6 +217,16 @@ def _(mo):
     WORK_DIR = Path(WORK_DIR_OBJ.name)
     logger.info(f"📂 Working Directory: {WORK_DIR}")
 
+    # Register Cleanup
+    def cleanup_workspace():
+        try:
+            WORK_DIR_OBJ.cleanup()
+            logger.info("🧹 Workspace cleaned up.")
+        except Exception as e:
+            logger.warning(f"Failed to cleanup workspace: {e}")
+
+    atexit.register(cleanup_workspace)
+
     # Notify User about Mode
     if not HAS_PYACEMAKER:
         mo.output.append(
@@ -255,7 +272,9 @@ def _(mo):
         WORK_DIR_OBJ,
         WorkflowConfig,
         all_changes,
+        atexit,
         bulk,
+        cleanup_workspace,
         logger,
         logging,
         np,
@@ -301,7 +320,7 @@ def _(mo):
         *   **MockCalculator**: A simplified force field (harmonic potential) that runs instantly in Python. It replaces the heavy physics engines.
         *   **MockOracle**: Simulates the DFT calculation step. Instead of solving the Schrödinger equation, it uses `MockCalculator` to return consistent energies and forces.
         *   **MockTrainer**: Simulates the Machine Learning training step. It generates a dummy potential file.
-        *   **MockLammpsEngine**: Simulates the Molecular Dynamics engine. It uses ASE's optimization algorithms with `MockCalculator` to relax structures, mimicking a real MD relaxation.
+        *   **MockLammpsEngine**: Simulates the Molecular Dynamics engine. It ignores the input potential file (which might be a dummy mock file) and uses the internal `MockCalculator` to relax structures, ensuring compatibility even without a real potential.
         """
     )
     return
@@ -357,6 +376,7 @@ def _(BaseGenerator, BaseOracle, BaseTrainer, Calculator, LammpsEngine, Path, al
         """Simulates MD Engine using ASE's pure python calculator."""
         def run(self, structure, potential):
             # Just relax with MockCalculator
+            # 'potential' argument is ignored in Mock Mode, ensuring compatibility
             from ase.optimize import BFGS
             structure.calc = MockCalculator()
             dyn = BFGS(structure, logfile=None)
@@ -375,6 +395,7 @@ def _(BaseGenerator, BaseOracle, BaseTrainer, Calculator, LammpsEngine, Path, al
             return MockResult()
 
         def relax(self, structure, potential):
+            # 'potential' argument is ignored in Mock Mode
             structure.calc = MockCalculator()
             from ase.optimize import BFGS
             dyn = BFGS(structure, logfile=None)
@@ -627,6 +648,7 @@ def _(EONConfig, EONWrapper, WORK_DIR, mo, plt, shutil):
     mo.output.append(mo.md(f"**Step 5 (Ordering)**: aKMC Simulation complete. Results: {results}"))
     mo.output.append(fig_order)
     return (
+        WrapperClass,
         ax_order,
         eon_wrapper,
         fig_order,
@@ -634,16 +656,20 @@ def _(EONConfig, EONWrapper, WORK_DIR, mo, plt, shutil):
         order,
         results,
         t,
+        use_mock_eon,
         work_dir,
     )
 
 
 @app.cell
-def _(WORK_DIR_OBJ, mo):
+def _(WORK_DIR_OBJ, cleanup_workspace, mo):
     # Cleanup
-    # WORK_DIR_OBJ is the TemporaryDirectory object managing our workspace.
-    # Calling cleanup() removes the directory and its contents.
-    WORK_DIR_OBJ.cleanup()
+    # Ensure temporary files are removed.
+    # We use a try-finally block conceptual wrapper via explicit call here
+    try:
+        cleanup_workspace()
+    except Exception as e:
+        print(f"Cleanup error: {e}")
 
     mo.md(
         r"""
