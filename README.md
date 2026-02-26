@@ -117,6 +117,21 @@ uv sync
     uv run pyacemaker --config config.yaml --scenario fept_mgo
     ```
 
+### Tutorials & Validation
+
+To run the interactive **User Acceptance Test (UAT)** and learn the workflow step-by-step, use the included Marimo notebook. It supports a "Mock Mode" for quick verification without heavy physics codes.
+
+```bash
+# Install dependencies
+uv sync --group dev
+
+# Run the tutorial (interactive UI)
+uv run marimo edit tutorials/UAT_AND_TUTORIAL.py
+
+# Run as a headless test script (CI Mode)
+uv run marimo run tutorials/UAT_AND_TUTORIAL.py
+```
+
 ## Architecture
 
 ```
