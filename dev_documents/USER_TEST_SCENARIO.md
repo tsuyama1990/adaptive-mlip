@@ -1,7 +1,7 @@
 # User Acceptance Testing (UAT) & Tutorial Master Plan
 
 ## 1. Overview
-This document outlines the strategy for User Acceptance Testing (UAT) and the creation of executable tutorials for the **PYACEMAKER** system. The primary goal is to verify the efficacy of the **MACE Knowledge Distillation & Delta Learning** workflow (Cycles 01-06).
+This document outlines the strategy for User Acceptance Testing (UAT) and the creation of executable tutorials for the **PyAceMaker** system. The primary goal is to verify the efficacy of the **MACE Knowledge Distillation & Delta Learning** workflow (Cycles 01-06).
 
 ## 2. Tutorial Strategy
 
@@ -31,11 +31,12 @@ A **SINGLE** executable file named `tutorials/UAT_AND_TUTORIAL.py` (formatted as
 ### 3.1. File Structure
 The script will be structured into the following sections:
 1.  **Setup & Configuration**: Importing libraries, setting up the `config.yaml`, and detecting the execution mode (Mock/Real).
-2.  **Step 1-2: Active Learning**: Visualizing the selection of high-uncertainty structures.
-3.  **Step 3-4: Surrogate Generation**: Displaying the MACE fine-tuning loss and MD trajectories.
-4.  **Step 5-6: Base Training**: Showing the initial ACE potential's performance.
-5.  **Step 7: Delta Learning**: Demonstrating the accuracy improvement after fine-tuning with DFT data.
-6.  **Analysis**: Plotting the Energy Barrier (NEB) comparison between DFT, MACE, and the final ACE potential.
+2.  **Step 1: DIRECT Sampling**: Visualizing the generated initial structures.
+3.  **Step 2: Active Learning**: Visualizing the selection of high-uncertainty structures.
+4.  **Step 3 & 4: Surrogate Loop**: Displaying the MACE fine-tuning loss and MD trajectories.
+5.  **Step 5 & 6: Base Training**: Labeling the surrogate data and showing the initial ACE potential's performance.
+6.  **Step 7: Delta Learning**: Demonstrating the accuracy improvement after fine-tuning with DFT data.
+7.  **Analysis**: Plotting the Energy Barrier (NEB) comparison between DFT, MACE, and the final ACE potential.
 
 ## 4. Test Scenario: SN2 Reaction (Transition State)
 
