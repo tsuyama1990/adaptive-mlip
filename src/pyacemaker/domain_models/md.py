@@ -10,6 +10,7 @@ from pyacemaker.domain_models.constants import (
     DEFAULT_MD_MINIMIZE_FTOL,
     DEFAULT_MD_MINIMIZE_TOL,
     DEFAULT_RAM_DISK_PATH,
+    LAMMPS_MIN_STYLE_CG,
     LAMMPS_MINIMIZE_MAX_ITER,
     LAMMPS_MINIMIZE_STEPS,
     LAMMPS_VELOCITY_SEED,
@@ -167,6 +168,10 @@ class MDConfig(BaseModel):
     )
     minimize_ftol: float = Field(
         DEFAULT_MD_MINIMIZE_FTOL, description="Force tolerance for minimization"
+    )
+    # Use constant as default for min_style
+    minimize_style: str = Field(
+        LAMMPS_MIN_STYLE_CG, description="Minimization algorithm (e.g., cg, hftn, sd)"
     )
 
     # Advanced Settings

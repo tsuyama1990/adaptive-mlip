@@ -12,7 +12,8 @@ class SafeBasePolicy(BasePolicy):
         allowed_args = {"n_candidates", "engine", "potential", "structure", "exploration_config"}
         unknown = set(kwargs.keys()) - allowed_args
         if unknown:
-            raise ValueError(f"Unknown arguments passed to Policy.generate: {unknown}")
+            msg = f"Unknown arguments passed to Policy.generate: {unknown}"
+            raise ValueError(msg)
 
 # Re-implement ColdStartPolicy and others that might have been overwritten or missing
 class ColdStartPolicy(SafeBasePolicy):

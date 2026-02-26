@@ -7,7 +7,10 @@ from ase.build import bulk
 from ase.neighborlist import neighbor_list
 
 from pyacemaker.core.base import BaseGenerator
-from pyacemaker.domain_models.constants import DEFAULT_GEN_MAX_ATTEMPTS_MULTIPLIER
+from pyacemaker.domain_models.constants import (
+    DEFAULT_FALLBACK_CELL_SIZE,
+    DEFAULT_GEN_MAX_ATTEMPTS_MULTIPLIER,
+)
 from pyacemaker.domain_models.structure import StructureConfig
 
 
@@ -67,7 +70,13 @@ class DirectSampler(BaseGenerator):
             # Fallback to a 10x10x10 box if bulk fails
             # Log this if logging was available in this scope, for now proceed
             atoms_template = Atoms(
-                self.config.elements[0], cell=[10.0, 10.0, 10.0], pbc=True
+                self.config.elements[0],
+                cell=[
+                    DEFAULT_FALLBACK_CELL_SIZE,
+                    DEFAULT_FALLBACK_CELL_SIZE,
+                    DEFAULT_FALLBACK_CELL_SIZE,
+                ],
+                pbc=True,
             )
             # Scale supercell
             atoms_template = atoms_template.repeat(self.config.supercell_size)  # type: ignore[no-untyped-call]

@@ -55,6 +55,12 @@ class DFTConfig(BaseModel):
     )
 
     # Pseudopotentials
+    # Parallelization
+    n_workers: int = Field(
+        1, gt=0, description="Number of parallel workers for DFT calculations"
+    )
+
+    # Pseudopotentials
     pseudopotentials: dict[str, str] = Field(
         ..., description="Mapping of element symbols to pseudopotential filenames"
     )

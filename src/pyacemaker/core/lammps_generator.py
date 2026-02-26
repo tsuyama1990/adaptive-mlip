@@ -5,7 +5,6 @@ from typing import TextIO
 
 from ase.data import atomic_numbers
 
-from pyacemaker.domain_models.constants import LAMMPS_MIN_STYLE_CG
 from pyacemaker.domain_models.md import MDConfig
 from pyacemaker.utils.path import validate_path_safe
 
@@ -261,7 +260,7 @@ class LammpsScriptGenerator:
 
         buffer.write(f"neighbor {self.config.neighbor_skin} bin\n")
         buffer.write("neigh_modify delay 0 every 1 check yes\n")
-        buffer.write(f"min_style {LAMMPS_MIN_STYLE_CG}\n")
+        buffer.write(f"min_style {self.config.minimize_style}\n")
         buffer.write(
             f"minimize {self.config.minimize_tol} {self.config.minimize_ftol} "
             f"{self.config.minimize_steps} {self.config.minimize_max_iter}\n"
