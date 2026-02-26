@@ -10,6 +10,7 @@ from pyacemaker.core.base import BaseGenerator
 from pyacemaker.domain_models.constants import (
     DEFAULT_FALLBACK_CELL_SIZE,
     DEFAULT_GEN_MAX_ATTEMPTS_MULTIPLIER,
+    DEFAULT_VOLUME_SCALING_FACTOR,
 )
 from pyacemaker.domain_models.structure import StructureConfig
 
@@ -24,7 +25,7 @@ class DirectSampler(BaseGenerator):
         self.config = config
         self._rng = np.random.default_rng()
 
-    def update_config(self, config: Any) -> None:
+    def update_config(self, config: StructureConfig) -> None:
         if not isinstance(config, StructureConfig):
             msg = "Expected StructureConfig"
             raise TypeError(msg)
@@ -80,7 +81,7 @@ class DirectSampler(BaseGenerator):
             # to make it easier, unless density is critical (but this is DIRECT sampling).
 
             cell = atoms_template.get_cell()
-            atoms_template.set_cell(cell * 1.5, scale_atoms=False) # Expand box to ease packing
+            atoms_template.set_cell(cell * DEFAULT_VOLUME_SCALING_FACTOR, scale_atoms=False) # Expand box to ease packing
 
         except Exception:
             # Fallback to a 10x10x10 box if bulk fails

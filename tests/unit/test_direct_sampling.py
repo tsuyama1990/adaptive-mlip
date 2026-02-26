@@ -2,6 +2,7 @@ import pytest
 from ase import Atoms
 from ase.neighborlist import neighbor_list
 import numpy as np
+from itertools import islice
 
 from pyacemaker.domain_models.structure import StructureConfig, ExplorationPolicy
 from pyacemaker.structure_generator.direct import DirectSampler
@@ -31,7 +32,10 @@ def test_direct_sampler_initialization(structure_config):
 def test_generate_returns_iterator(structure_config):
     """Test generate method returns an iterator of Atoms."""
     sampler = DirectSampler(structure_config)
-    structures = list(sampler.generate(n_candidates=3))
+    # Use islice to avoid consuming potential infinite streams (though direct is finite)
+    # and to verify it works as an iterator
+    gen = sampler.generate(n_candidates=3)
+    structures = list(islice(gen, 3))
     assert len(structures) == 3, f"Expected 3 structures, got {len(structures)}"
     assert all(isinstance(s, Atoms) for s in structures)
 
@@ -54,10 +58,10 @@ def test_no_overlaps(structure_config):
     structure_config.r_cut = 1.8
     sampler = DirectSampler(structure_config)
 
-    generated = list(sampler.generate(n_candidates=3))
-    assert len(generated) == 3, "Failed to generate structures for overlap test"
-
-    for structure in generated:
+    # Use explicit loop to avoid list() OOM risk on large datasets (though here N=3 is small)
+    count = 0
+    for structure in sampler.generate(n_candidates=3):
+        count += 1
         # neighbor_list("d", ...) returns distances < r_cut
         # Since we enforce d >= r_cut, this list should be empty (or only self-interactions if any)
         # neighbor_list typically excludes self-interaction unless configured otherwise.
@@ -65,6 +69,8 @@ def test_no_overlaps(structure_config):
         # Check strict inequality used in generator
         distances = neighbor_list("d", structure, structure_config.r_cut - 0.001)
         assert len(distances) == 0, f"Found atoms closer than {structure_config.r_cut}"
+
+    assert count == 3, "Failed to generate structures for overlap test"
 
 def test_multi_element_generation():
     """Test generation with multiple elements."""
@@ -95,6 +101,7 @@ def test_generate_respects_n_candidates(structure_config):
 def test_generate_zero_candidates(structure_config):
     """Test generate with 0 candidates."""
     sampler = DirectSampler(structure_config)
+    # Using list() on 0 items is safe and correct way to verify emptiness
     structures = list(sampler.generate(n_candidates=0))
     assert len(structures) == 0
 
