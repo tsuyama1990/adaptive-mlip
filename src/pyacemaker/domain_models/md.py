@@ -223,6 +223,18 @@ class MDConfig(BaseModel):
         if total_time > MAX_MD_DURATION:
              msg = f"Total simulation time {total_time} ps exceeds maximum allowed {MAX_MD_DURATION} ps"
              raise ValueError(msg)
+        if self.timestep <= 0:
+            msg = "Timestep must be positive"
+            raise ValueError(msg)
+        if self.n_steps <= 0:
+            msg = "Number of steps must be positive"
+            raise ValueError(msg)
+        if self.temperature < 0:
+            msg = "Temperature cannot be negative"
+            raise ValueError(msg)
+        if self.pressure < 0:
+            msg = "Pressure cannot be negative"
+            raise ValueError(msg)
         return self
 
     @model_validator(mode="after")

@@ -27,7 +27,8 @@ class LammpsScriptGenerator:
         return atomic_numbers[symbol]
 
     @lru_cache(maxsize=128)
-    def _quote(self, path: str) -> str:
+    @lru_cache(maxsize=128)
+    def _quote(self, path: str, check_exists: bool = False) -> str:
         """
         Quotes a path for LAMMPS script safety after validation.
         Uses caching to avoid redundant validation calls.
@@ -56,23 +57,17 @@ class LammpsScriptGenerator:
 
     def _gen_potential_pure(self, buffer: TextIO, potential_path: Path, elements: list[str]) -> None:
         """Generates pure PACE potential commands."""
-        # Check existence here as per audit requirements
-        if not potential_path.exists():
-            raise FileNotFoundError(f"Potential file not found: {potential_path}")
-
         species_str = " ".join(elements)
-        quoted_pot = self._quote(str(potential_path))
+        # Use batch check_exists=True for potential files
+        quoted_pot = self._quote(str(potential_path), check_exists=True)
         buffer.write("pair_style pace\n")
         buffer.write(f"pair_coeff * * pace {quoted_pot} {species_str}\n")
 
     def _gen_potential_hybrid(self, buffer: TextIO, potential_path: Path, elements: list[str]) -> None:
         """Generates hybrid PACE + ZBL potential commands."""
-        # Check existence here as per audit requirements
-        if not potential_path.exists():
-            raise FileNotFoundError(f"Potential file not found: {potential_path}")
-
         species_str = " ".join(elements)
-        quoted_pot = self._quote(str(potential_path))
+        # Use batch check_exists=True for potential files
+        quoted_pot = self._quote(str(potential_path), check_exists=True)
         params = self.config.hybrid_params
 
         buffer.write(f"pair_style hybrid/overlay pace zbl {params.zbl_cut_inner} {params.zbl_cut_outer}\n")

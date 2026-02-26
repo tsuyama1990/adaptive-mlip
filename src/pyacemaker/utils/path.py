@@ -83,14 +83,23 @@ def validate_path_safe(path: Path) -> Path:
 
     # Strict check for non-existent files: Ensure parent exists and is safe
     if not resolved.exists():
-        # Parent safety was implicitly checked via containment in root,
-        # but let's be explicit about the parent's existence to prevent
-        # creation in non-existent nested directories unless that is intended behavior.
-        # Usually, applications ensure mkdirs.
-        # But for 'validate_path_safe', we should ensure that if we write to this path,
-        # we aren't exploiting some race condition or weird filesystem state.
+        if not resolved.parent.exists():
+            msg = f"Parent directory does not exist for path: {resolved}"
+            raise ValueError(msg)
 
-        # We already resolved parent in the try block if file didn't exist.
-        pass
+        # Check parent containment explicitly
+        parent_safe = False
+        for root in allowed_roots:
+            try:
+                parent_common = Path(os.path.commonpath([root, resolved.parent.resolve(strict=True)]))
+                if parent_common == root:
+                    parent_safe = True
+                    break
+            except ValueError:
+                continue
+
+        if not parent_safe:
+            msg = f"Parent directory traversal detected: {resolved.parent} is outside allowed roots {allowed_roots}"
+            raise ValueError(msg)
 
     return resolved

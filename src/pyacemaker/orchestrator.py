@@ -443,7 +443,13 @@ class Orchestrator:
              return None
 
         if self.engine:
-            return self.engine.run(structure=initial_structure, potential=deployed_potential)
+            try:
+                return self.engine.run(structure=initial_structure, potential=deployed_potential)
+            except Exception as e:
+                self.logger.exception(f"MD Simulation failed: {e}")
+                # Consider raising or returning None depending on policy.
+                # Returning None effectively skips this iteration logic.
+                return None
         return None
 
     def _handle_md_halt(self, result: MDSimulationResult, deployed_potential: Path, paths: dict[str, Path]) -> None:

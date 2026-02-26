@@ -8,6 +8,8 @@ import yaml
 from ase import Atoms
 from ase.io import iread
 
+from pyacemaker.utils.yaml import load_yaml_file
+
 logger = logging.getLogger(__name__)
 
 # Cache atomic masses to avoid repeated imports/lookups in inner loops
@@ -24,11 +26,7 @@ def load_yaml(filepath: Path) -> dict[str, Any]:
     Returns:
         Dictionary containing configuration.
     """
-    if not filepath.exists():
-        raise FileNotFoundError(f"Configuration file not found: {filepath}")
-
-    with filepath.open("r") as f:
-        return yaml.safe_load(f) or {}
+    return load_yaml_file(filepath)
 
 # Alias for backward compatibility
 load_config = load_yaml
@@ -44,14 +42,14 @@ def detect_elements(data_path: Path, max_frames: int = 10) -> list[str]:
     Returns:
         List of chemical symbols (sorted alphabetically).
     """
-    symbols = set()
+    symbols: set[str] = set()
     try:
         # Optimization: Use iread to peek. Stop if we have 'enough' frames or symbols stabilize?
         # Difficult to know if symbols stabilize. Just read max_frames.
         gen = iread(str(data_path), index=f":{max_frames}")
         for atoms in gen:
             if isinstance(atoms, Atoms):
-                new_syms = set(atoms.get_chemical_symbols())
+                new_syms = set(atoms.get_chemical_symbols())  # type: ignore[no-untyped-call]
                 # If we found new symbols, update.
                 if not new_syms.issubset(symbols):
                     symbols.update(new_syms)
@@ -102,7 +100,7 @@ def write_lammps_streaming(
         msg = "Cannot write empty structure to LAMMPS data file"
         raise ValueError(msg)
 
-    positions = atoms.get_positions()
+    positions = atoms.get_positions()  # type: ignore[no-untyped-call]
     if not np.isfinite(positions).all():
         msg = "Structure contains non-finite atomic positions"
         raise ValueError(msg)
@@ -115,7 +113,7 @@ def write_lammps_streaming(
     fileobj.write(f"{len(species)} atom types\n\n")
 
     # 2. Box
-    cell = atoms.get_cell()
+    cell = atoms.get_cell()  # type: ignore[no-untyped-call]
     if not np.allclose(cell, np.diag(np.diag(cell))):
         raise ValueError("Streaming write currently only supports orthogonal cells")
 
@@ -147,14 +145,14 @@ def write_lammps_streaming(
     # Use direct array access and iterators to avoid creating large intermediate lists/arrays if possible.
     # But atoms.get_positions() returns a copy anyway.
 
-    pos = atoms.get_positions() # (N, 3)
-    symbols = atoms.get_chemical_symbols() # List of strings (N)
+    pos = atoms.get_positions()  # type: ignore[no-untyped-call]
+    symbols_list = atoms.get_chemical_symbols()  # type: ignore[no-untyped-call]
 
     # Generator for lines to keep memory usage O(1) per line (after pos array overhead)
     # This avoids creating a huge string buffer or list of strings.
     def line_generator() -> Iterable[str]:
         for i in range(natoms):
-            s = symbols[i]
+            s = symbols_list[i]
             try:
                 t = type_map[s]
             except KeyError:
