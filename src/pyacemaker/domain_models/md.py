@@ -55,10 +55,17 @@ class HybridParams(BaseModel):
 class MDRampingConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    temp_start: PositiveFloat | None = Field(None, description="Starting temperature (K)")
-    temp_end: PositiveFloat | None = Field(None, description="Ending temperature (K)")
+    temp_start: float | None = Field(None, ge=0.0, description="Starting temperature (K)")
+    temp_end: float | None = Field(None, ge=0.0, description="Ending temperature (K)")
     press_start: float | None = Field(None, ge=0.0, description="Starting pressure (Bar)")
     press_end: float | None = Field(None, ge=0.0, description="Ending pressure (Bar)")
+
+    @model_validator(mode="after")
+    def validate_ramping(self) -> "MDRampingConfig":
+        # Check temperature logic if both are provided (e.g. usually end > start for heating)
+        # But cooling is valid too.
+        # Just ensure non-negative (covered by ge=0.0)
+        return self
 
 
 class MCConfig(BaseModel):
@@ -101,7 +108,7 @@ class MDSimulationResult(BaseModel):
 class MDConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    temperature: PositiveFloat = Field(..., description="Simulation temperature in Kelvin")
+    temperature: float = Field(..., ge=0.0, description="Simulation temperature in Kelvin")
     pressure: float = Field(..., ge=0.0, le=1.0e6, description="Simulation pressure in Bar (Max 1 MBar)")
     timestep: PositiveFloat = Field(..., description="Timestep in ps")
     n_steps: int = Field(..., gt=0, description="Number of MD steps")

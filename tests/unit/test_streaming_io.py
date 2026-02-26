@@ -3,6 +3,7 @@ from io import StringIO
 from unittest.mock import MagicMock, patch
 
 import numpy as np
+import pytest
 from ase import Atoms
 
 from pyacemaker.utils.io import write_lammps_streaming
@@ -69,3 +70,24 @@ def test_write_lammps_streaming_large_structure_mock() -> None:
          # Header writes + 1000 atom lines + mass lines + box lines
          # 1000 atoms -> 1000 calls for atoms
          assert mock_file.write.call_count > 1000
+
+def test_write_lammps_streaming_invalid_elements() -> None:
+    """Test validation of missing elements."""
+    buffer = StringIO()
+    structure = Atoms("LiH", positions=[[0, 0, 0], [0.5, 0.5, 0.5]], cell=[4.0, 4.0, 4.0], pbc=True)
+    # Missing Li in elements list
+    elements = ["H"]
+
+    with pytest.raises(ValueError, match="not found in species list"):
+        write_lammps_streaming(buffer, structure, elements)
+
+def test_write_lammps_streaming_non_orthogonal() -> None:
+    """Test validation of non-orthogonal cells (not supported by simple streaming yet)."""
+    buffer = StringIO()
+    # Non-orthogonal cell
+    cell = [[10, 0, 0], [5, 8.66, 0], [0, 0, 10]]
+    structure = Atoms("H", positions=[[0, 0, 0]], cell=cell, pbc=True)
+    elements = ["H"]
+
+    with pytest.raises(ValueError, match="Only orthogonal simulation boxes are supported by streaming writer."):
+        write_lammps_streaming(buffer, structure, elements)

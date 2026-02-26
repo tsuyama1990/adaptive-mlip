@@ -18,18 +18,32 @@ class LammpsScriptGenerator:
     def __init__(self, config: MDConfig) -> None:
         self.config = config
         self._atomic_numbers_cache: dict[str, int] = {}
+        # Cache for validated paths to improve performance
+        self._path_cache: dict[str, str] = {}
 
     def _get_atomic_number(self, symbol: str) -> int:
         """Cached atomic number lookup."""
-        if symbol not in self._atomic_numbers_cache:
-            self._atomic_numbers_cache[symbol] = atomic_numbers[symbol]
-        return self._atomic_numbers_cache[symbol]
+        # Using dict.get is faster than check and set
+        z = self._atomic_numbers_cache.get(symbol)
+        if z is None:
+            z = atomic_numbers[symbol]
+            self._atomic_numbers_cache[symbol] = z
+        return z
 
     def _quote(self, path: Path | str) -> str:
-        """Quotes a path for LAMMPS script safety after validation."""
+        """
+        Quotes a path for LAMMPS script safety after validation.
+        Uses caching to avoid redundant validation calls.
+        """
+        path_str = str(path)
+        if path_str in self._path_cache:
+            return self._path_cache[path_str]
+
         # Sanitize input path
         safe_path = validate_path_safe(Path(path))
-        return f'"{safe_path}"'
+        quoted = f'"{safe_path}"'
+        self._path_cache[path_str] = quoted
+        return quoted
 
     def _gen_potential(self, buffer: TextIO, potential_path: Path, elements: list[str]) -> None:
         """Generates potential definition commands."""

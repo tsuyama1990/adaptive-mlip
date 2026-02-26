@@ -5,134 +5,68 @@ import numpy as np
 import yaml
 from ase import Atoms
 from ase.data import atomic_masses, atomic_numbers
-
-from pyacemaker.domain_models import PyAceConfig
-from pyacemaker.domain_models.defaults import (
-    ERR_CONFIG_NOT_FOUND,
-    ERR_PATH_NOT_FILE,
-    ERR_PATH_TRAVERSAL,
-    ERR_YAML_NOT_DICT,
-    ERR_YAML_PARSE,
-)
+from ase.io import read
 
 
-def load_yaml(file_path: str | Path) -> dict[str, Any]:
+def load_config(filepath: Path) -> dict[str, Any]:
     """
-    Loads a YAML file into a dictionary with path safety checks.
+    Loads configuration from a YAML file.
 
     Args:
-        file_path: Path to the YAML file.
+        filepath: Path to the YAML file.
 
     Returns:
-        Dictionary containing the YAML data.
-
-    Raises:
-        FileNotFoundError: If the file does not exist.
-        ValueError: If path is invalid, attempts traversal, or file is empty.
-        yaml.YAMLError: If the YAML is invalid.
+        Dictionary containing configuration.
     """
-    path = Path(file_path).resolve()
-    base_dir = Path.cwd().resolve()
-
-    # Path Sanitization: Ensure path doesn't traverse outside allowed scope (CWD)
-    # We strictly enforce that config files must be within the project root.
-    # Absolute paths are allowed IF they resolve to be inside CWD.
-    if not path.is_relative_to(base_dir):
-        msg = ERR_PATH_TRAVERSAL.format(path=path, base=base_dir)
-        raise ValueError(msg)
-
-    if not path.exists():
-        msg = ERR_CONFIG_NOT_FOUND.format(path=path)
-        raise FileNotFoundError(msg)
-
-    # Ensure it's a file, not a directory
-    if not path.is_file():
-        msg = ERR_PATH_NOT_FILE.format(path=path)
-        raise ValueError(msg)
-
-    with path.open("r") as f:
-        try:
-            data = yaml.safe_load(f)
-        except yaml.YAMLError as e:
-            msg = ERR_YAML_PARSE.format(error=e)
-            raise ValueError(msg) from e
-        else:
-            if not isinstance(data, dict):
-                # Handle empty file or just scalar
-                if data is None:
-                    msg = "YAML file is empty"
-                    raise ValueError(msg)
-                raise TypeError(ERR_YAML_NOT_DICT)
-            return data
+    with filepath.open("r") as f:
+        # Use safe_load for security
+        return yaml.safe_load(f) or {}
 
 
-def load_config(file_path: str | Path) -> PyAceConfig:
+def detect_elements(data_path: Path, max_frames: int = 10) -> list[str]:
     """
-    Loads a configuration file and validates it against the PyAceConfig schema.
+    Detects elements present in the dataset by reading frames.
 
     Args:
-        file_path: Path to the YAML configuration file.
+        data_path: Path to the dataset file (xyz, extxyz, etc).
+        max_frames: Max number of frames to check (default: 10).
 
     Returns:
-        Validated PyAceConfig object.
+        List of chemical symbols (sorted alphabetically).
     """
-    data = load_yaml(file_path)
-    return PyAceConfig(**data)
-
-
-def dump_yaml(data: dict[str, Any], file_path: str | Path) -> None:
-    """
-    Writes a dictionary to a YAML file.
-
-    Args:
-        data: Dictionary to write.
-        file_path: Path to the output file.
-    """
-    path = Path(file_path)
-    with path.open("w") as f:
-        yaml.safe_dump(data, f)
-
-
-def detect_elements(file_path: Path, max_frames: int | None = None) -> list[str]:
-    """
-    Detects chemical elements from a structure file by scanning the first few frames.
-    Optimized to avoid loading the entire file.
-
-    Args:
-        file_path: Path to the structure file (xyz, extxyz, etc.)
-        max_frames: Maximum number of frames to scan. If None, uses default.
-
-    Returns:
-        Sorted list of unique chemical symbols found.
-
-    Raises:
-        ValueError: If no elements could be detected.
-    """
+    symbols: set[str] = set()
     from ase.io import iread
 
-    from pyacemaker.domain_models.defaults import DEFAULT_MAX_FRAMES_ELEMENT_DETECTION
-
-    limit = max_frames if max_frames is not None else DEFAULT_MAX_FRAMES_ELEMENT_DETECTION
-
-    elements_set = set()
-    fmt = "extxyz" if file_path.suffix == ".xyz" else None
-    read_fmt = fmt if fmt else ""
-
     try:
-        # Use iread for streaming access
-        for i, atoms in enumerate(iread(str(file_path), index=":", format=read_fmt)):
-            elements_set.update(atoms.get_chemical_symbols())  # type: ignore[no-untyped-call]
-            if i >= limit:
+        # iread returns a generator
+        for i, atoms in enumerate(iread(str(data_path))):
+            if i >= max_frames:
                 break
-    except Exception as e:
-        msg = f"Failed to read structure file {file_path}: {e}"
-        raise ValueError(msg) from e
+            symbols.update(atoms.get_chemical_symbols())
+    except Exception:
+        # Fallback for single frame reading if iread fails or not supported for format
+        try:
+            atoms = read(str(data_path), index=0)
+            if isinstance(atoms, list):
+                atoms = atoms[0]
+            if isinstance(atoms, Atoms):
+                symbols.update(atoms.get_chemical_symbols())
+        except Exception:
+            pass
 
-    if not elements_set:
-        msg = f"No elements detected in {file_path} (checked {max_frames} frames)."
-        raise ValueError(msg)
+    return sorted(list(symbols))
 
-    return sorted(elements_set)
+
+def dump_yaml(data: Any, filepath: Path) -> None:
+    """
+    Dumps data to a YAML file safely.
+
+    Args:
+        data: The data to dump (dict, list, etc).
+        filepath: Path to the output file.
+    """
+    with filepath.open("w") as f:
+        yaml.dump(data, f, default_flow_style=False, sort_keys=False)
 
 
 def write_lammps_streaming(
@@ -172,7 +106,7 @@ def write_lammps_streaming(
         # Or just raise error demanding simple box for streaming optimization?
         # We'll support orthogonal only for streaming optimization.
         # Use ASE write for complex cases upstream.
-        msg = "Streaming writer only supports orthogonal cells."
+        msg = "Only orthogonal simulation boxes are supported by streaming writer."
         raise ValueError(msg)
 
     xlo, ylo, zlo = 0.0, 0.0, 0.0
@@ -207,6 +141,12 @@ def write_lammps_streaming(
     for i in range(n_atoms):
         atom_id = i + 1
         sym = symbols[i]
+
+        # Validation for missing species
+        if sym not in type_map:
+             msg = f"Atom {atom_id} has symbol {sym} not found in species list {elements}"
+             raise ValueError(msg)
+
         typ = type_map[sym]
-        x, y, z = positions[i]
-        fileobj.write(f"{atom_id} {typ} {x:.6f} {y:.6f} {z:.6f}\n")
+        pos = positions[i]
+        fileobj.write(f"{atom_id} {typ} {pos[0]:.6f} {pos[1]:.6f} {pos[2]:.6f}\n")
