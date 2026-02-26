@@ -2,12 +2,12 @@ from pyacemaker.core.active_set import ActiveSetSelector
 from pyacemaker.core.base import BaseEngine, BaseGenerator, BaseOracle, BaseTrainer
 from pyacemaker.core.engine import LammpsEngine
 from pyacemaker.core.exceptions import ConfigError
-from pyacemaker.core.generator import StructureGenerator
 from pyacemaker.core.oracle import DFTManager
 from pyacemaker.core.report import ReportGenerator
 from pyacemaker.core.trainer import PacemakerTrainer
 from pyacemaker.core.validator import Validator
 from pyacemaker.domain_models import PyAceConfig
+from pyacemaker.structure_generator.direct import DirectSampler
 from pyacemaker.utils.elastic import ElasticCalculator
 from pyacemaker.utils.phonons import PhononCalculator
 
@@ -53,7 +53,7 @@ class ModuleFactory:
             oracle = DFTManager(config.dft)
 
             # Generator
-            generator = StructureGenerator(config.structure)
+            generator = DirectSampler(config.structure)
 
             # Trainer
             trainer = PacemakerTrainer(config.training)

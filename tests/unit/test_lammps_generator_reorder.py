@@ -5,7 +5,7 @@ from pyacemaker.core.lammps_generator import LammpsScriptGenerator
 from pyacemaker.domain_models.md import MDConfig
 
 
-def test_lammps_generator_order() -> None:
+def test_lammps_generator_order(tmp_path: Path) -> None:
     config = MDConfig(
         temperature=300,
         pressure=0,
@@ -15,13 +15,18 @@ def test_lammps_generator_order() -> None:
     )
     generator = LammpsScriptGenerator(config)
 
+    # Create dummy files
+    pot_path = tmp_path / "pot.yace"
+    pot_path.touch()
+    data_file = tmp_path / "data.lmp"
+
     # Use StringIO as buffer
     buffer = StringIO()
     generator.write_script(
         buffer,
-        potential_path=Path("pot.yace"),
-        data_file=Path("data.lmp"),
-        dump_file=Path("dump.lammps"),
+        potential_path=pot_path,
+        data_file=data_file,
+        dump_file=tmp_path / "dump.lammps",
         elements=["Fe"]
     )
 
@@ -48,7 +53,8 @@ def test_lammps_generator_order() -> None:
     assert dump_idx < run_idx, f"dump command is after run: dump={dump_idx}, run={run_idx}"
     assert thermo_idx < run_idx, f"thermo command is after run: thermo={thermo_idx}, run={run_idx}"
 
-def test_lammps_generator_gamma_column() -> None:
+
+def test_lammps_generator_gamma_column(tmp_path: Path) -> None:
     config = MDConfig(
         temperature=300,
         pressure=0,
@@ -58,12 +64,17 @@ def test_lammps_generator_gamma_column() -> None:
     )
     generator = LammpsScriptGenerator(config)
 
+    # Create dummy files
+    pot_path = tmp_path / "pot.yace"
+    pot_path.touch()
+    data_file = tmp_path / "data.lmp"
+
     buffer = StringIO()
     generator.write_script(
         buffer,
-        potential_path=Path("pot.yace"),
-        data_file=Path("data.lmp"),
-        dump_file=Path("dump.lammps"),
+        potential_path=pot_path,
+        data_file=data_file,
+        dump_file=tmp_path / "dump.lammps",
         elements=["Fe"]
     )
     script = buffer.getvalue()

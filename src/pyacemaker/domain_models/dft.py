@@ -27,37 +27,56 @@ class DFTConfig(BaseModel):
 
     # Self-healing and convergence parameters
     mixing_beta: float = Field(
-        DEFAULT_DFT_MIXING_BETA, gt=0.0, le=1.0, description="Initial mixing parameter for SCF"
+        default=DEFAULT_DFT_MIXING_BETA, gt=0.0, le=1.0, description="Initial mixing parameter for SCF"
     )
     smearing_type: str = Field(
-        DEFAULT_DFT_SMEARING_TYPE, description="Type of smearing (e.g., 'mv', 'gaussian')"
+        default=DEFAULT_DFT_SMEARING_TYPE, description="Type of smearing (e.g., 'mv', 'gaussian')"
     )
     smearing_width: PositiveFloat = Field(
-        DEFAULT_DFT_SMEARING_WIDTH, description="Width of smearing in eV"
+        default=DEFAULT_DFT_SMEARING_WIDTH, description="Width of smearing in eV"
     )
     diagonalization: str = Field(
-        DEFAULT_DFT_DIAGONALIZATION, description="Diagonalization algorithm"
+        default=DEFAULT_DFT_DIAGONALIZATION, description="Diagonalization algorithm"
     )
 
     # Strategy Multipliers
     # Note: mixing_beta_factor is used to REDUCE mixing_beta (new_beta = beta * factor)
     #       smearing_width_factor is used to INCREASE smearing_width (new_width = width * factor)
     mixing_beta_factor: float = Field(
-        DEFAULT_DFT_MIXING_BETA_FACTOR,
+        default=DEFAULT_DFT_MIXING_BETA_FACTOR,
         gt=0.0,
         le=1.0,
         description="Multiplier for mixing_beta reduction strategy",
     )
     smearing_width_factor: float = Field(
-        DEFAULT_DFT_SMEARING_WIDTH_FACTOR,
+        default=DEFAULT_DFT_SMEARING_WIDTH_FACTOR,
         gt=1.0,
         description="Multiplier for smearing_width increase strategy",
+    )
+
+    # Pseudopotentials
+    # Parallelization
+    n_workers: int = Field(
+        default=1, gt=0, description="Number of parallel workers for DFT calculations"
     )
 
     # Pseudopotentials
     pseudopotentials: dict[str, str] = Field(
         ..., description="Mapping of element symbols to pseudopotential filenames"
     )
+
+    @field_validator("pseudopotentials")
+    @classmethod
+    def validate_pseudopotentials_structure(cls, v: dict[str, str]) -> dict[str, str]:
+        """Validates that keys are strings and values are non-empty strings."""
+        for elem, path_str in v.items():
+            if not isinstance(elem, str) or not elem:
+                msg = "Pseudopotential keys must be non-empty element symbols"
+                raise ValueError(msg)
+            if not isinstance(path_str, str) or not path_str:
+                msg = f"Pseudopotential path for {elem} must be a non-empty string"
+                raise ValueError(msg)
+        return v
 
     @staticmethod
     def _validate_single_path(elem: str, path_str: str) -> Path:

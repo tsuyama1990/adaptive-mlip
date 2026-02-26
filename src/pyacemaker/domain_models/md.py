@@ -1,14 +1,16 @@
-from enum import Enum
+import os
+from enum import StrEnum
 from pathlib import Path
 
-from pydantic import BaseModel, ConfigDict, Field, PositiveFloat, PositiveInt, model_validator
 import numpy as np
+from pydantic import BaseModel, ConfigDict, Field, PositiveFloat, PositiveInt, model_validator
 
 from pyacemaker.domain_models.constants import (
     DEFAULT_MC_SEED,
     DEFAULT_MD_MINIMIZE_FTOL,
     DEFAULT_MD_MINIMIZE_TOL,
     DEFAULT_RAM_DISK_PATH,
+    LAMMPS_MIN_STYLE_CG,
     LAMMPS_MINIMIZE_MAX_ITER,
     LAMMPS_MINIMIZE_STEPS,
     LAMMPS_VELOCITY_SEED,
@@ -28,7 +30,7 @@ from pyacemaker.domain_models.defaults import (
     DEFAULT_MD_THERMO_FREQ,
     DEFAULT_OTF_UNCERTAINTY_THRESHOLD,
 )
-import os
+from pyacemaker.utils.path import validate_path_safe
 
 
 def _get_default_temp_dir() -> str | None:
@@ -39,7 +41,7 @@ def _get_default_temp_dir() -> str | None:
     return None
 
 
-class AtomStyle(str, Enum):
+class AtomStyle(StrEnum):
     ATOMIC = "atomic"
     CHARGE = "charge"
     FULL = "full"
@@ -101,20 +103,25 @@ class MDSimulationResult(BaseModel):
     def validate_physical_values(self) -> "MDSimulationResult":
         # Validate energy is finite
         if not np.isfinite(self.energy):
-            raise ValueError("Energy must be a finite number")
+            msg = "Energy must be a finite number"
+            raise ValueError(msg)
 
         # Validate forces shape and values
         for f in self.forces:
             if len(f) != 3:
-                raise ValueError("Forces must be 3D vectors (list of 3 floats)")
+                msg = "Forces must be 3D vectors (list of 3 floats)"
+                raise ValueError(msg)
             if not np.isfinite(f).all():
-                raise ValueError("Forces must contain finite numbers")
+                msg = "Forces must contain finite numbers"
+                raise ValueError(msg)
 
         # Validate stress
         if len(self.stress) != 6:
-             raise ValueError("Stress must be a 6-element list (Voigt notation)")
+             msg = "Stress must be a 6-element list (Voigt notation)"
+             raise ValueError(msg)
         if not np.isfinite(self.stress).all():
-             raise ValueError("Stress must contain finite numbers")
+             msg = "Stress must contain finite numbers"
+             raise ValueError(msg)
 
         return self
 
@@ -133,34 +140,38 @@ class MDConfig(BaseModel):
 
     # Output Control
     thermo_freq: PositiveInt = Field(
-        DEFAULT_MD_THERMO_FREQ, description="Frequency of thermodynamic output (steps)"
+        default=DEFAULT_MD_THERMO_FREQ, description="Frequency of thermodynamic output (steps)"
     )
     dump_freq: PositiveInt = Field(
-        DEFAULT_MD_DUMP_FREQ, description="Frequency of trajectory dump (steps)"
+        default=DEFAULT_MD_DUMP_FREQ, description="Frequency of trajectory dump (steps)"
     )
-    minimize: bool = Field(False, description="Perform energy minimization before MD")
+    minimize: bool = Field(default=False, description="Perform energy minimization before MD")
     neighbor_skin: PositiveFloat = Field(
-        DEFAULT_MD_NEIGHBOR_SKIN, description="Neighbor list skin distance (Angstrom)"
+        default=DEFAULT_MD_NEIGHBOR_SKIN, description="Neighbor list skin distance (Angstrom)"
     )
     atom_style: AtomStyle = Field(
-        AtomStyle(DEFAULT_MD_ATOM_STYLE), description="LAMMPS atom style"
+        default=AtomStyle(DEFAULT_MD_ATOM_STYLE), description="LAMMPS atom style"
     )
 
     # Configurable LAMMPS Parameters (No Hardcoding)
     velocity_seed: int = Field(
-        LAMMPS_VELOCITY_SEED, description="Random seed for velocity initialization"
+        default=LAMMPS_VELOCITY_SEED, description="Random seed for velocity initialization"
     )
     minimize_steps: int = Field(
-        LAMMPS_MINIMIZE_STEPS, description="Max iterations for minimization (steps)"
+        default=LAMMPS_MINIMIZE_STEPS, description="Max iterations for minimization (steps)"
     )
     minimize_max_iter: int = Field(
-        LAMMPS_MINIMIZE_MAX_ITER, description="Max force evaluations for minimization"
+        default=LAMMPS_MINIMIZE_MAX_ITER, description="Max force evaluations for minimization"
     )
     minimize_tol: float = Field(
-        DEFAULT_MD_MINIMIZE_TOL, description="Energy tolerance for minimization"
+        default=DEFAULT_MD_MINIMIZE_TOL, description="Energy tolerance for minimization"
     )
     minimize_ftol: float = Field(
-        DEFAULT_MD_MINIMIZE_FTOL, description="Force tolerance for minimization"
+        default=DEFAULT_MD_MINIMIZE_FTOL, description="Force tolerance for minimization"
+    )
+    # Use constant as default for min_style
+    minimize_style: str = Field(
+        default=LAMMPS_MIN_STYLE_CG, description="Minimization algorithm (e.g., cg, hftn, sd)"
     )
 
     # Advanced Settings
@@ -169,15 +180,15 @@ class MDConfig(BaseModel):
         description="Directory for temporary files (e.g., /dev/shm for RAM disk)"
     )
     tdamp_factor: float = Field(
-        DEFAULT_MD_TDAMP_FACTOR, gt=0.0, description="Temperature damping factor (multiplies timestep)"
+        default=DEFAULT_MD_TDAMP_FACTOR, gt=0.0, description="Temperature damping factor (multiplies timestep)"
     )
     pdamp_factor: float = Field(
-        DEFAULT_MD_PDAMP_FACTOR, gt=0.0, description="Pressure damping factor (multiplies timestep)"
+        default=DEFAULT_MD_PDAMP_FACTOR, gt=0.0, description="Pressure damping factor (multiplies timestep)"
     )
 
     # Mocking Parameters (Audit Requirement)
     base_energy: float = Field(
-        DEFAULT_MD_BASE_ENERGY, description="Baseline energy for mock simulation"
+        default=DEFAULT_MD_BASE_ENERGY, description="Baseline energy for mock simulation"
     )
     default_forces: list[list[float]] = Field(
         default=[[0.0, 0.0, 0.0]], description="Default forces for mock simulation"
@@ -185,7 +196,7 @@ class MDConfig(BaseModel):
 
     # Spec Section 3.4 (Hybrid Potential & OTF)
     hybrid_potential: bool = Field(
-        False, description="Use hybrid potential (ACE + LJ/ZBL)"
+        default=False, description="Use hybrid potential (ACE + LJ/ZBL)"
     )
     hybrid_params: HybridParams = Field(
         default_factory=HybridParams, description="Parameters for hybrid potential baseline"
@@ -193,45 +204,72 @@ class MDConfig(BaseModel):
 
     # Spec Section 3.4 (OTF)
     fix_halt: bool = Field(
-        False, description="Enable OTF halting based on uncertainty"
+        default=False, description="Enable OTF halting based on uncertainty"
     )
     uncertainty_threshold: float = Field(
-        DEFAULT_OTF_UNCERTAINTY_THRESHOLD, gt=0.0, description="Gamma threshold for halting simulation"
+        default=DEFAULT_OTF_UNCERTAINTY_THRESHOLD, gt=0.0, description="Gamma threshold for halting simulation"
     )
     check_interval: int = Field(
-        DEFAULT_MD_CHECK_INTERVAL, gt=0, description="Step interval for uncertainty check"
+        default=DEFAULT_MD_CHECK_INTERVAL, gt=0, description="Step interval for uncertainty check"
     )
 
     # Spec Section 3.1: Ramping and MC
-    ramping: MDRampingConfig | None = Field(None, description="Configuration for T/P ramping")
-    mc: MCConfig | None = Field(None, description="Configuration for Monte Carlo atom swapping")
+    ramping: MDRampingConfig | None = Field(default=None, description="Configuration for T/P ramping")
+    mc: MCConfig | None = Field(default=None, description="Configuration for Monte Carlo atom swapping")
 
     @model_validator(mode="after")
     def validate_simulation_physics(self) -> "MDConfig":
         total_time = self.n_steps * self.timestep
         if total_time > MAX_MD_DURATION:
-             pass
+             msg = f"Total simulation time {total_time} ps exceeds maximum allowed {MAX_MD_DURATION} ps"
+             raise ValueError(msg)
+        if self.timestep <= 0:
+            msg = "Timestep must be positive"
+            raise ValueError(msg)
+        if self.n_steps <= 0:
+            msg = "Number of steps must be positive"
+            raise ValueError(msg)
+        if self.temperature < 0:
+            msg = "Temperature cannot be negative"
+            raise ValueError(msg)
+        if self.pressure < 0:
+            msg = "Pressure cannot be negative"
+            raise ValueError(msg)
         return self
 
     @model_validator(mode="after")
     def validate_otf_settings(self) -> "MDConfig":
         if self.fix_halt and self.check_interval <= 0:
-             raise ValueError("check_interval must be positive when fix_halt is enabled.")
+             msg = "check_interval must be positive when fix_halt is enabled."
+             raise ValueError(msg)
         return self
 
     @model_validator(mode="after")
     def validate_temp_dir(self) -> "MDConfig":
         if self.temp_dir:
+            try:
+                # Use secure validation logic
+                validate_path_safe(Path(self.temp_dir))
+            except Exception as e:
+                self._raise_invalid_temp_dir(e)
+
             p = Path(self.temp_dir)
             if not p.exists() or not os.access(p, os.W_OK):
-                raise ValueError(f"Temporary directory {p} does not exist or is not writable.")
+                msg = f"Temporary directory {p} does not exist or is not writable."
+                raise ValueError(msg)
         return self
+
+    def _raise_invalid_temp_dir(self, e: Exception) -> None:
+        msg = f"Invalid temporary directory: {e}"
+        raise ValueError(msg) from e
 
     @model_validator(mode="after")
     def validate_default_forces(self) -> "MDConfig":
         for f in self.default_forces:
             if len(f) != 3:
-                raise ValueError("Default forces must be a list of 3D vectors (list of 3 floats)")
+                msg = "Default forces must be a list of 3D vectors (list of 3 floats)"
+                raise ValueError(msg)
             if not all(isinstance(x, (int, float)) for x in f):
-                 raise ValueError("Default forces elements must be numeric")
+                 msg = "Default forces elements must be numeric"
+                 raise ValueError(msg)
         return self

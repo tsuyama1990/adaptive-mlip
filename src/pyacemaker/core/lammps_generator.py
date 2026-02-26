@@ -1,11 +1,10 @@
+import shlex
 from functools import lru_cache
 from pathlib import Path
 from typing import TextIO
-import shlex
 
 from ase.data import atomic_numbers
 
-from pyacemaker.domain_models.constants import LAMMPS_MIN_STYLE_CG
 from pyacemaker.domain_models.md import MDConfig
 from pyacemaker.utils.path import validate_path_safe
 
@@ -22,34 +21,45 @@ class LammpsScriptGenerator:
         # Use lru_cache for methods instead of manual dict
         self._atomic_numbers_cache = {}
 
+    @staticmethod
     @lru_cache(maxsize=128)
-    def _get_atomic_number(self, symbol: str) -> int:
+    def _get_atomic_number(symbol: str) -> int:
         """Cached atomic number lookup."""
         return atomic_numbers[symbol]
 
+    @staticmethod
     @lru_cache(maxsize=128)
-    def _quote(self, path: str) -> str:
+    def _quote(path: str, check_exists: bool = False) -> str:
         """
         Quotes a path for LAMMPS script safety after validation.
         Uses caching to avoid redundant validation calls.
         """
         # Sanitize input path
         # Note: path must be string for lru_cache
-        safe_path = validate_path_safe(Path(path))
+        path_obj = Path(path)
+        safe_path = validate_path_safe(path_obj)
+
+        if check_exists and not safe_path.exists():
+            # If explicit check requested (e.g. potentials), fail hard
+            msg = f"File required for LAMMPS script not found: {safe_path}"
+            raise FileNotFoundError(msg)
+
         # Use shlex.quote for shell safety
         return shlex.quote(str(safe_path))
 
     def _gen_potential_pure(self, buffer: TextIO, potential_path: Path, elements: list[str]) -> None:
         """Generates pure PACE potential commands."""
         species_str = " ".join(elements)
-        quoted_pot = self._quote(str(potential_path))
+        # Use batch check_exists=True for potential files
+        quoted_pot = self._quote(str(potential_path), check_exists=True)
         buffer.write("pair_style pace\n")
         buffer.write(f"pair_coeff * * pace {quoted_pot} {species_str}\n")
 
     def _gen_potential_hybrid(self, buffer: TextIO, potential_path: Path, elements: list[str]) -> None:
         """Generates hybrid PACE + ZBL potential commands."""
         species_str = " ".join(elements)
-        quoted_pot = self._quote(str(potential_path))
+        # Use batch check_exists=True for potential files
+        quoted_pot = self._quote(str(potential_path), check_exists=True)
         params = self.config.hybrid_params
 
         buffer.write(f"pair_style hybrid/overlay pace zbl {params.zbl_cut_inner} {params.zbl_cut_outer}\n")
@@ -57,16 +67,12 @@ class LammpsScriptGenerator:
 
         n_types = len(elements)
 
-        # Optimize loop string concatenation
-        # Use list comprehension for ZBL pairs
-        zbl_lines = []
-        for i in range(n_types):
-            el_i = elements[i]
-            z_i = self._get_atomic_number(el_i)
-            for j in range(i, n_types):
-                el_j = elements[j]
-                z_j = self._get_atomic_number(el_j)
-                zbl_lines.append(f"pair_coeff {i+1} {j+1} zbl {z_i} {z_j}\n")
+        # Optimize nested loop using list comprehension as requested
+        zbl_lines = [
+            f"pair_coeff {i+1} {j+1} zbl {LammpsScriptGenerator._get_atomic_number(elements[i])} {LammpsScriptGenerator._get_atomic_number(elements[j])}\n"
+            for i in range(n_types)
+            for j in range(i, n_types)
+        ]
 
         buffer.writelines(zbl_lines)
 
@@ -241,7 +247,7 @@ class LammpsScriptGenerator:
 
         buffer.write(f"neighbor {self.config.neighbor_skin} bin\n")
         buffer.write("neigh_modify delay 0 every 1 check yes\n")
-        buffer.write(f"min_style {LAMMPS_MIN_STYLE_CG}\n")
+        buffer.write(f"min_style {self.config.minimize_style}\n")
         buffer.write(
             f"minimize {self.config.minimize_tol} {self.config.minimize_ftol} "
             f"{self.config.minimize_steps} {self.config.minimize_max_iter}\n"

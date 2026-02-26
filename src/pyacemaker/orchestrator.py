@@ -81,6 +81,48 @@ class Orchestrator:
         # Expose loop_state for tests
         return self.state_manager.state
 
+    def initialize_workspace(self) -> None:
+        """
+        Initializes the workspace directories and state.
+        Requirement for Cycle 01.
+        """
+        # Ensure base directories exist
+        self.data_dir.mkdir(exist_ok=True, parents=True)
+        self.potentials_dir.mkdir(exist_ok=True, parents=True)
+
+        # Initialize state file if not exists
+        if not self.state_manager.state_file.exists():
+            self.state_manager.save()
+
+        self.logger.info("Workspace initialized.")
+
+    def run_step1(self) -> None:
+        """
+        Executes Step 1: DIRECT Sampling.
+        Requirement for Cycle 01.
+        """
+        self.initialize_modules()
+
+        self.logger.info("Starting Step 1: DIRECT Sampling...")
+
+        try:
+            # Use num_structures from StructureConfig for Cycle 01
+            n_structures = self.config.structure.num_structures
+            # Cycle 01 requires specific output file in data directory
+            candidates_file = self.data_dir / "step1_initial.xyz"
+
+            # Generate
+            if self.generator:
+                stream = self.generator.generate(n_candidates=n_structures)
+                total = self._stream_write(stream, candidates_file, append=False)
+                self.logger.info(f"Step 1 Completed Successfully. Generated {total} structures.")
+            else:
+                self.logger.error("Generator not initialized.")
+
+        except Exception:
+            self.logger.exception("Step 1 Failed")
+            raise
+
     def initialize_modules(self) -> None:
         """
         Initializes the core modules (Generator, Oracle, Trainer, Engine).
@@ -397,7 +439,13 @@ class Orchestrator:
              return None
 
         if self.engine:
-            return self.engine.run(structure=initial_structure, potential=deployed_potential)
+            try:
+                return self.engine.run(structure=initial_structure, potential=deployed_potential)
+            except Exception:
+                self.logger.exception("MD Simulation failed")
+                # Consider raising or returning None depending on policy.
+                # Returning None effectively skips this iteration logic.
+                return None
         return None
 
     def _handle_md_halt(self, result: MDSimulationResult, deployed_potential: Path, paths: dict[str, Path]) -> None:
@@ -422,7 +470,6 @@ class Orchestrator:
         Note: This method is intended to implement the "Adaptive Exploration Policy" described in the Spec.
         Currently, it is a no-op as the complex adaptation logic requires further requirements analysis.
         """
-        pass
 
     def _execute_iteration_logic(self, iteration: int, paths: dict[str, Path]) -> None:
         """

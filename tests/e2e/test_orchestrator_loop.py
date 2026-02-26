@@ -100,9 +100,8 @@ def orchestrator(mock_config: PyAceConfig, tmp_path: Path) -> Orchestrator:
 
 
 def test_cold_start(orchestrator: Orchestrator, tmp_path: Path) -> None:
-    # Inject loop_state
-    if not hasattr(orchestrator, "loop_state"):
-        orchestrator.loop_state = LoopState()
+    # Manually set state if needed, using state_manager (not the property)
+    # Actually, Orchestrator initializes state_manager.state on init.
 
     # Setup mocks
     assert orchestrator.oracle is not None
@@ -122,7 +121,7 @@ def test_cold_start(orchestrator: Orchestrator, tmp_path: Path) -> None:
     orchestrator._check_initial_potential()
 
     # Verify
-    assert orchestrator.loop_state.current_potential == initial_pot
+    assert orchestrator.state_manager.state.current_potential == initial_pot
     # generator.generate called internally
     orchestrator.oracle.compute.assert_called_once()
     orchestrator.trainer.train.assert_called_once()
@@ -142,20 +141,15 @@ def test_resume_capability(mock_config: PyAceConfig, tmp_path: Path) -> None:
         mp.setattr("pyacemaker.orchestrator.setup_logger", lambda **kwargs: MagicMock())
         new_orch = Orchestrator(mock_config)
 
-    if hasattr(new_orch, "loop_state"):
-        assert new_orch.loop_state.iteration == 1
-        assert new_orch.loop_state.current_potential == pot_path
-    else:
-        pytest.fail("Orchestrator does not have loop_state attribute")
+    assert new_orch.state_manager.state.iteration == 1
+    assert new_orch.state_manager.state.current_potential == pot_path
 
 
 def test_run_loop_iteration_halt(orchestrator: Orchestrator, tmp_path: Path) -> None:
-    # Inject loop_state
-    if not hasattr(orchestrator, "loop_state"):
-        orchestrator.loop_state = LoopState()
-
-    orchestrator.loop_state.current_potential = tmp_path / "current.yace"
-    orchestrator.loop_state.current_potential.touch()
+    # Set state via state_manager
+    pot_path = tmp_path / "current.yace"
+    pot_path.touch()
+    orchestrator.state_manager.state.current_potential = pot_path
 
     # Mock MD halt
     halt_path = tmp_path / "halt.xyz"
@@ -195,7 +189,7 @@ def test_run_loop_iteration_halt(orchestrator: Orchestrator, tmp_path: Path) -> 
     orchestrator._run_loop_iteration()
 
     # Verify
-    assert orchestrator.loop_state.iteration == 1
-    assert orchestrator.loop_state.current_potential == refined_pot
+    assert orchestrator.state_manager.state.iteration == 1
+    assert orchestrator.state_manager.state.current_potential == refined_pot
     orchestrator.engine.run.assert_called()
     orchestrator.trainer.train.assert_called()

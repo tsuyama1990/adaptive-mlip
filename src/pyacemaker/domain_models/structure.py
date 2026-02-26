@@ -62,6 +62,9 @@ class StructureConfig(BaseModel):
     num_structures: int = Field(
         default=1, ge=1, description="Number of structures to generate per policy"
     )
+    r_cut: float = Field(
+        default=2.0, gt=0.0, description="Cutoff radius for hard-sphere check (Angstrom)"
+    )
 
     # Local Active Learning Settings
     local_generation_strategy: LocalGenerationStrategy = Field(

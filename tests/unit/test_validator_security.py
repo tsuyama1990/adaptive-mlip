@@ -1,5 +1,6 @@
-from pathlib import Path
 import tempfile
+from pathlib import Path
+
 import pytest
 
 from pyacemaker.core.validator import LammpsInputValidator
@@ -39,8 +40,9 @@ class TestLammpsInputValidator:
     def test_validate_potential_outside_allowed(self):
         """Test rejection of file outside allowed dirs."""
         forbidden_file = Path("/etc/passwd")
-        if not forbidden_file.exists():
-            pass
+        if forbidden_file.exists():
+             with pytest.raises(ValueError, match="Path traversal detected"):
+                  LammpsInputValidator.validate_potential(forbidden_file)
 
     def test_validate_potential_allowed_cwd(self, tmp_path, monkeypatch):
         """Test validation within CWD."""
@@ -53,12 +55,9 @@ class TestLammpsInputValidator:
 
     def test_validate_potential_allowed_tmp(self):
         """Test validation within /tmp."""
-        try:
-            with tempfile.NamedTemporaryFile() as f:
-                # This file exists in temp, should be valid
-                LammpsInputValidator.validate_potential(f.name)
-        except Exception:
-            pass
+        with tempfile.NamedTemporaryFile() as f:
+            # This file exists in temp, should be valid
+            LammpsInputValidator.validate_potential(f.name)
 
     def test_validate_potential_symlink_traversal(self, tmp_path):
         """Test symlink resolving to outside (should fail)."""

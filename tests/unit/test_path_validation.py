@@ -1,6 +1,9 @@
 from pathlib import Path
+
 import pytest
+
 from pyacemaker.utils.path import validate_path_safe
+
 
 def test_validate_path_safe_valid(tmp_path):
     p = tmp_path / "valid.txt"

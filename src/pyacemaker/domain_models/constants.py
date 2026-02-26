@@ -48,6 +48,10 @@ from .defaults import (
     RECIPROCAL_FACTOR,
 )
 
+# Generator Constants
+DEFAULT_GEN_MAX_ATTEMPTS_MULTIPLIER: Final[int] = 500
+DEFAULT_FALLBACK_CELL_SIZE: Final[float] = 10.0
+
 # Scenario Constants
 SCENARIO_NAME_FEPT_MGO: Final[str] = "fept_mgo"
 FILE_EXT_XYZ: Final[str] = "xyz"
@@ -61,6 +65,9 @@ __all__ = [
     "DANGEROUS_PATH_CHARS",
     "DEFAULT_EON_EXECUTABLE",
     "DEFAULT_EON_SEED",
+    "DEFAULT_FALLBACK_CELL_SIZE",
+    "DEFAULT_FALLBACK_CELL_SIZE",
+    "DEFAULT_GEN_MAX_ATTEMPTS_MULTIPLIER",
     "DEFAULT_LJ_PARAMS",
     "DEFAULT_MC_SEED",
     "DEFAULT_MD_MINIMIZE_FTOL",

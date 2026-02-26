@@ -1,4 +1,5 @@
 import contextlib
+import logging
 import tempfile
 from collections.abc import Callable, Iterator
 from itertools import islice
@@ -13,7 +14,6 @@ from pyacemaker.domain_models import DFTConfig
 from pyacemaker.domain_models.constants import ERR_ORACLE_FAILED, ERR_ORACLE_ITERATOR
 from pyacemaker.interfaces.qe_driver import QEDriver
 from pyacemaker.utils.embedding import embed_cluster
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -65,53 +65,51 @@ class DFTManager(BaseOracle):
         if isinstance(structures, (list, tuple)):
             raise TypeError(ERR_ORACLE_ITERATOR.format(type=type(structures)))
 
-        if not isinstance(structures, Iterator):
+        # Robust check for iterator protocol
+        if (
+            not hasattr(structures, "__next__") or not hasattr(structures, "__iter__")
+        ) and not isinstance(structures, Iterator):
             raise TypeError(ERR_ORACLE_ITERATOR.format(type=type(structures)))
 
         return self._compute_generator(structures, batch_size)
 
     def _compute_generator(self, structures: Iterator[Atoms], batch_size: int) -> Iterator[Atoms]:
         """Internal generator for streaming computations with batching."""
-        # Use batched processing (chunking) to reuse temporary directories
-        # without materializing the whole batch in memory list.
-        # However, islice consumes the iterator.
+        # Use parallel processing via ThreadPoolExecutor
+        from concurrent.futures import ThreadPoolExecutor, as_completed
 
         while True:
-            # Create a batch generator (iterator slice)
-            # Note: list(islice(...)) materializes the batch.
-            # To avoid materializing even the batch if batch_size is huge, we should process one by one
-            # BUT reuse the context.
-            # The audit requirement was: "DFTManager.compute method accepts batch_size parameter but ignores it... Implement proper batching logic"
-            # Batching usually implies grouping. If we process 1 by 1 inside a loop of batch_size, we achieve the goal.
-
-            # We can use a single temp dir for 'batch_size' items.
-            # But since we want to yield as soon as one is done, we iterate `batch_size` times.
-
-            # Since we can't easily peek existence of next item without consuming,
-            # we iterate until exhaustion.
-
-            # Efficient pattern:
-            # Create temp dir. Process N items. Close temp dir. Repeat.
-
-            # Check if there are items left?
-            # We can just try to take `batch_size` items.
-            # list(islice) is standard but creates a list of `batch_size`.
-            # If batch_size is small (e.g. 10-100), this is fine.
-            # If batch_size is huge (unlikely default), it might be an issue.
-            # Let's assume batch_size is reasonable (10-1000).
-
+            # Materialize a small batch
             batch = list(islice(structures, batch_size))
             if not batch:
                 break
 
             with tempfile.TemporaryDirectory() as work_dir:
                 work_path = Path(work_dir)
-                for i, atoms in enumerate(batch):
-                    # Use unique subdirs or filenames to avoid collision if artifacts persist
-                    # though we process sequentially here.
-                    calc_dir = work_path / f"calc_{i}"
-                    calc_dir.mkdir()
-                    yield self._process_structure(atoms, str(calc_dir))
+
+                # Setup parallel execution
+                max_workers = self.config.n_workers
+                with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                    future_to_idx = {}
+
+                    for i, atoms in enumerate(batch):
+                        calc_dir = work_path / f"calc_{i}"
+                        calc_dir.mkdir()
+                        # Submit task
+                        future = executor.submit(self._process_structure, atoms, str(calc_dir))
+                        future_to_idx[future] = i
+
+                    # Yield results as they complete
+                    for future in as_completed(future_to_idx):
+                        try:
+                            result_atoms = future.result()
+                            yield result_atoms
+                        except Exception:
+                            logger.exception("One structure in batch failed fatally.")
+                            # Depending on requirements, we might want to continue or stop.
+                            # For active learning, losing one structure might be acceptable,
+                            # but we should log it.
+                            continue
 
     def _process_structure(self, atoms: Atoms, calc_dir: str) -> Atoms:
         """
