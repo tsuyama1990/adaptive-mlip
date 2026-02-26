@@ -1,23 +1,16 @@
 [project]
 name = "pyacemaker"
 version = "0.1.0"
-description = "Adaptive machine learning interatomic potentials"
+description = "Automated MLIP generation pipeline using MACE Knowledge Distillation"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-    "mypy>=1.19.1",
-    "ruff>=0.15.2",
-    "pydantic>=2.0",
+    "ase>=3.22.1",
+    "numpy>=1.26.0",
+    "mace-torch>=0.3.3",
     "pyyaml>=6.0",
-    "ase>=3.27.0",
-    "numpy>=2.4.2",
-    "lammps>=2025.7.22.2.0",
-    "phonopy>=2.20.0",
-    "matplotlib>=3.7.0",
-    "jinja2>=3.1.0",
-]
-authors = [
-    { name = "Tomoyuki Tsuyama", email = "tomoyuki.tsuyaman@gmail.com" }
+    "pacemaker>=0.1.0",  # Placeholder version
+    "pydantic>=2.0",
 ]
 
 [project.scripts]
@@ -29,7 +22,8 @@ dev = [
     "mypy",
     "pytest",
     "pytest-cov",
-    "types-pyyaml>=6.0.12.20250915",
+    "marimo",
+    "matplotlib",
 ]
 
 [tool.ruff]
@@ -38,6 +32,7 @@ line-length = 100
 fix = true
 
 [tool.ruff.lint]
+# E/F/I: Basic, B: Bugbear, S: Bandit, UP: pyupgrade
 select = [
     "F",    # Pyflakes (basic errors)
     "E", "W", # pycodestyle (style)
@@ -106,11 +101,9 @@ max-complexity = 10  # Exceeding this prompts function splitting (prevent AI lon
 suppress-dummy-args = true  # Arguments starting with _ do not require type hints
 
 [tool.pytest.ini_options]
+addopts = "--cov=dev_src --cov=src --cov-report=term-missing"
 testpaths = ["tests"]
-pythonpath = ["src"]
 
 [tool.mypy]
 strict = true
 ignore_missing_imports = true
-exclude = ["build/"]
-plugins = ["pydantic.mypy"]
