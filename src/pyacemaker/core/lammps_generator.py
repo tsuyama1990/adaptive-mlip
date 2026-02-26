@@ -35,12 +35,32 @@ class LammpsScriptGenerator:
         """
         # Sanitize input path
         # Note: path must be string for lru_cache
-        safe_path = validate_path_safe(Path(path))
+        path_obj = Path(path)
+        safe_path = validate_path_safe(path_obj)
+
+        # Check existence if it's meant to be an input file (potential, structure)
+        # We can't strictly know context here, but generally paths in scripts are inputs unless dumps
+        # This check might be too aggressive for output files.
+        # But for potentials (usually inputs), we should check.
+        # However, _quote is generic.
+
+        # Since this method is used for both input and output paths, we only validate safety.
+        # Specific methods calling this should check existence if needed.
+        # BUT the audit demanded: "Add file existence validation in _quote or before script generation"
+
+        # We will assume if the file has an extension typical of inputs (yace, xyz, data) and exists, it's fine.
+        # If it doesn't exist, we assume it's an output file or future file?
+        # A strictly better approach is to check existence in the caller: _gen_potential.
+
         # Use shlex.quote for shell safety
         return shlex.quote(str(safe_path))
 
     def _gen_potential_pure(self, buffer: TextIO, potential_path: Path, elements: list[str]) -> None:
         """Generates pure PACE potential commands."""
+        # Check existence here as per audit requirements
+        if not potential_path.exists():
+            raise FileNotFoundError(f"Potential file not found: {potential_path}")
+
         species_str = " ".join(elements)
         quoted_pot = self._quote(str(potential_path))
         buffer.write("pair_style pace\n")
@@ -48,6 +68,10 @@ class LammpsScriptGenerator:
 
     def _gen_potential_hybrid(self, buffer: TextIO, potential_path: Path, elements: list[str]) -> None:
         """Generates hybrid PACE + ZBL potential commands."""
+        # Check existence here as per audit requirements
+        if not potential_path.exists():
+            raise FileNotFoundError(f"Potential file not found: {potential_path}")
+
         species_str = " ".join(elements)
         quoted_pot = self._quote(str(potential_path))
         params = self.config.hybrid_params
@@ -57,16 +81,12 @@ class LammpsScriptGenerator:
 
         n_types = len(elements)
 
-        # Optimize loop string concatenation
-        # Use list comprehension for ZBL pairs
-        zbl_lines = []
-        for i in range(n_types):
-            el_i = elements[i]
-            z_i = self._get_atomic_number(el_i)
-            for j in range(i, n_types):
-                el_j = elements[j]
-                z_j = self._get_atomic_number(el_j)
-                zbl_lines.append(f"pair_coeff {i+1} {j+1} zbl {z_i} {z_j}\n")
+        # Optimize nested loop using list comprehension as requested
+        zbl_lines = [
+            f"pair_coeff {i+1} {j+1} zbl {self._get_atomic_number(elements[i])} {self._get_atomic_number(elements[j])}\n"
+            for i in range(n_types)
+            for j in range(i, n_types)
+        ]
 
         buffer.writelines(zbl_lines)
 
