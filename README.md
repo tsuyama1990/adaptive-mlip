@@ -1,120 +1,71 @@
 # PyAceMaker
+![License](https://img.shields.io/badge/license-MIT-blue) ![Python](https://img.shields.io/badge/python-3.11%2B-blue)
 
-**Automated Machine Learning Interatomic Potential Generation Pipeline**
-
-> **Minimal DFT Cost. Maximum ACE Accuracy.**
-
-![Build Status](https://img.shields.io/badge/build-passing-brightgreen)
-![Python Version](https://img.shields.io/badge/python-3.11%2B-blue)
-![License](https://img.shields.io/badge/license-MIT-green)
+**Automated MLIP generation pipeline using MACE Knowledge Distillation.**
 
 ## Overview
+**PyAceMaker** is an orchestration framework designed to automate the lifecycle of Machine Learning Interatomic Potential (MLIP) development. It streamlines the complex process of data generation, active learning, and potential training into a robust, self-healing pipeline.
 
-**PyAceMaker** is a state-of-the-art framework designed to automate the construction of high-accuracy Machine Learning Interatomic Potentials (MLIPs). By leveraging **Knowledge Distillation** from large foundation models (MACE), PyAceMaker drastically reduces the number of expensive DFT calculations required to train a robust potential.
+**Why?** Developing MLIPs typically involves manual, error-prone steps: running DFT, training potentials, running MD, checking for failure, and repeating. PyAceMaker automates this "Knowledge Distillation" loop, significantly reducing time-to-solution for materials discovery.
 
-The system orchestrates a 7-step workflow that starts from zero knowledge, explores the chemical space using uncertainty-driven active learning, creates a massive surrogate dataset via MACE-driven MD, and finally distills this knowledge into a fast, lightweight ACE (Atomic Cluster Expansion) potential with Delta Learning corrections.
+## Features
+*   **Automated Workflow Orchestration**: Manages the 7-step active learning cycle autonomously.
+*   **DIRECT Sampling (Step 1)**:  Generates diverse initial structures using entropy maximization (Random Packing) to jumpstart the learning process without manual selection.
+*   **Robust Configuration**: Uses strict schema validation (Pydantic) to prevent runtime errors due to invalid settings.
+*   **Self-Healing Oracle**: (Planned) DFT interface with automatic error recovery.
+*   **Mock Oracle**: Includes a built-in mock oracle (Lennard-Jones) for rapid testing and pipeline verification without expensive DFT calculations.
 
-## Key Features
-
-*   **Foundation Model Distillation**: Uses pre-trained MACE models as a "Surrogate Oracle" to guide exploration.
-*   **Direct Sampling**: Robust random structure generation with hard-sphere constraints to initiate the active learning loop (Cycle 01).
-*   **Uncertainty-Based Active Learning**: Automatically identifies and calculates only the most informative structures.
-*   **Delta Learning**: Fine-tunes the final ACE potential on sparse DFT data.
-*   **Zero-Config Automation**: Run end-to-end with a validated YAML configuration file.
-*   **Resilient Orchestration**: Supports state persistence and job resumption.
-
-## Prerequisites
-
-*   **Python**: 3.12 or higher
-*   **Package Manager**: `uv` (Recommended) or `pip`
-*   **Dependencies**: `mace-torch`, `pacemaker`, `ase`, `numpy`, `torch`
+## Requirements
+*   Python 3.11+
+*   `uv` (Universal Python Package Manager) recommended for dependency management.
+*   External Dependencies (Optional for Cycle 01):
+    *   LAMMPS (for MD engine)
+    *   Pacemaker (for training)
+    *   Quantum Espresso (for DFT)
 
 ## Installation
 
-1.  **Clone the repository**:
-    ```bash
-    git clone https://github.com/your-org/pyacemaker.git
-    cd pyacemaker
-    ```
-
-2.  **Install dependencies**:
-    We use `uv` for fast, reliable dependency management.
-    ```bash
-    uv sync
-    ```
-
-3.  **Activate the environment**:
-    ```bash
-    source .venv/bin/activate
-    ```
+```bash
+git clone https://github.com/your-org/pyacemaker.git
+cd pyacemaker
+uv sync
+```
 
 ## Usage
 
-### 1. Initialization
-
-Initialize a new project workspace. This creates the necessary directory structure and state files.
-
-```bash
-pyacemaker init --config config.yaml
-```
-
-### 2. Run Workflow Steps
-
-Execute specific steps of the pipeline.
-
-**Step 1: Direct Sampling**
-Generates initial candidate structures (Random Packing).
+### 1. Initialize Workspace
+Create a new workspace from a configuration file.
 
 ```bash
-pyacemaker run --step 1 --config config.yaml
+# Create a sample config (or use existing)
+# Edit config.yaml to set your parameters
+uv run pyacemaker init --config config.yaml
 ```
 
-### Example Configuration (`config.yaml`)
+### 2. Run DIRECT Sampling (Step 1)
+Execute the first step of the pipeline to generate initial structures.
 
-```yaml
-project_name: "Si_Testing"
-structure:
-  elements: ["Si"]
-  supercell_size: [2, 2, 2]
-  num_structures: 10
-  r_cut: 2.0
-workflow:
-  max_iterations: 5
-  data_dir: "./data"
-  potentials_dir: "./potentials"
-  active_learning_dir: "./active_learning"
-logging:
-  level: "INFO"
-# ... (see config.py for full schema)
+```bash
+uv run pyacemaker run --step 1
 ```
 
 ## Architecture
-
-PyAceMaker follows a "Hub-and-Spoke" architecture centered around an `Orchestrator`.
-
-```mermaid
-graph TD
-    User[User / Config] -->|1. Initialize| Orch[Orchestrator]
-    Orch -->|2. Request Sampling| Gen[Structure Generator]
-    Gen -->|Direct/Random| Candidates[Candidate Structures]
-```
-
-## Project Structure
-
 ```text
 pyacemaker/
-├── config.yaml                 # Default configuration
-├── pyproject.toml              # Dependencies and Tool Config
 ├── src/
 │   └── pyacemaker/
-│       ├── main.py             # CLI Entry point
-│       ├── orchestrator.py     # Main workflow controller
-│       ├── domain_models/      # Pydantic Data Models (Config, State, Data)
-│       ├── structure_generator/# Sampling Logic (DirectSampler)
-│       └── ...
-└── tests/                      # Unit and Integration Tests
+│       ├── core/           # Core logic (Engine, Oracle, Trainer)
+│       ├── domain_models/  # Pydantic data schemas
+│       ├── structure_generator/ # Sampling algorithms
+│       ├── orchestrator.py # Main workflow controller
+│       └── main.py         # CLI entry point
+├── tests/                  # Unit and Integration tests
+└── config.yaml             # Configuration template
 ```
 
-## License
-
-MIT License.
+## Roadmap
+*   **Cycle 02**: Active Learning Loop (MD Exploration & Labeling).
+*   **Cycle 03**: Training Integration (Pacemaker).
+*   **Cycle 04**: Advanced Validation (Phonons, Elasticity).
+*   **Cycle 05**: Adaptive Strategies.
+*   **Cycle 06**: Production Hardening.

@@ -64,8 +64,24 @@ class DirectSampler(BaseGenerator):
         try:
             # Try to get a reasonable cell from the first element
             prim = bulk(self.config.elements[0])
-            # Scale supercell
+
+            # Use supercell logic:
+            # If user provided supercell_size, use it to scale the bulk.
+            # But here we want a random gas.
+            # If we repeat, we get N atoms.
+            # We will use this number of atoms for random packing.
+
             atoms_template = prim.repeat(self.config.supercell_size)  # type: ignore[no-untyped-call]
+
+            # Scale cell volume to ensure reasonable density for random packing?
+            # Random packing is inefficient. If density is high (bulk density), we will fail.
+            # We should probably scale the cell up significantly to allow packing.
+            # Let's scale volume by factor of 8 (2x in each dim) just for random gas generation
+            # to make it easier, unless density is critical (but this is DIRECT sampling).
+
+            cell = atoms_template.get_cell()
+            atoms_template.set_cell(cell * 1.5, scale_atoms=False) # Expand box to ease packing
+
         except Exception:
             # Fallback to a 10x10x10 box if bulk fails
             # Log this if logging was available in this scope, for now proceed
@@ -130,14 +146,45 @@ class DirectSampler(BaseGenerator):
 
             # Note: For very high density, this loop might hang. max_attempts handles that.
 
-            distances = neighbor_list("d", candidate, r_cut)
+            # neighbor_list("d", ...) returns distances.
+            # However, for pure random packing, we can just use Atoms.get_all_distances() if N is small,
+            # but neighbor_list is better for PBC.
 
-            # Filter out self interactions if any (usually dist > 0 check covers it since self dist is 0)
-            # neighbor_list might return 0.0 for self?
-            # "i" and "j" indices can be checked.
-            # Standard ASE neighbor_list does not return self-interaction unless specified.
+            # Critical Fix: neighbor_list returns distances for ALL pairs within cutoff.
+            # This includes self-interaction ONLY if self_interaction=True (default False).
+            # So if len(distances) > 0, we have an overlap.
 
-            if len(distances) == 0:  # type: ignore[arg-type] # distances is array
+            # ISSUE: If r_cut is too large for the cell, neighbor_list might find periodic images.
+            # That IS an overlap in PBC terms, so we should reject it.
+
+            # HOWEVER, for random packing, maybe we just want to ensure atoms don't sit on top of each other.
+            # If the density is too high, this loop will fail indefinitely.
+
+            # Let's reduce r_cut slightly to allow packing or check if r_cut is realistic for the volume.
+            # For now, we trust the config.
+
+            # Fix: neighbor_list returns a tuple if we ask for more than one thing, but here we ask for "d".
+            # It returns a single array.
+
+            # Check for overlaps
+            # Since r_cut is hard sphere diameter, we want d_ij > r_cut for all pairs.
+            # neighbor_list("d", ...) returns all distances < r_cut.
+            # So if len(distances) > 0, we have an overlap.
+
+            # neighbor_list implementation detail:
+            # It returns i, j, d. We just requested d.
+
+            # To be absolutely robust against self-interaction (though neighbor_list usually handles it),
+            # we can check indices.
+
+            # Let's request indices too.
+            indices_i, indices_j, dists = neighbor_list("ijd", candidate, r_cut)
+
+            # Filter out self-interactions (i == j)
+            mask = indices_i != indices_j
+            real_overlaps = dists[mask]
+
+            if len(real_overlaps) == 0:
                 # Add metadata (Provenance)
                 candidate.info["provenance"] = "DIRECT_SAMPLING"
                 candidate.info["method"] = "random_packing"

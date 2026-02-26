@@ -2,6 +2,7 @@ from pyacemaker.core.active_set import ActiveSetSelector
 from pyacemaker.core.base import BaseEngine, BaseGenerator, BaseOracle, BaseTrainer
 from pyacemaker.core.engine import LammpsEngine
 from pyacemaker.core.exceptions import ConfigError
+from pyacemaker.core.mock_oracle import MockOracle
 from pyacemaker.core.oracle import DFTManager
 from pyacemaker.core.report import ReportGenerator
 from pyacemaker.core.trainer import PacemakerTrainer
@@ -50,7 +51,10 @@ class ModuleFactory:
 
         try:
             # Oracle
-            oracle = DFTManager(config.dft)
+            if config.dft.code.lower() == "mock":
+                oracle: BaseOracle = MockOracle()
+            else:
+                oracle = DFTManager(config.dft)
 
             # Generator
             generator = DirectSampler(config.structure)
