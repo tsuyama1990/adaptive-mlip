@@ -69,10 +69,78 @@ def _(mo):
     if (repo_root / "src").exists():
         sys.path.append(str(repo_root / "src"))
 
-    # Define Mocks first (Fallback)
+    # --- Pure Demo Mode Fallbacks ---
+    # Define these mock classes first so they are available if import fails
+
     class ConfigMock:
         def __init__(self, **kwargs):
             self.__dict__.update(kwargs)
+
+    class BaseGenerator: pass
+    class BaseOracle: pass
+    class BaseTrainer: pass
+    class BaseEngine: pass
+    class LammpsEngine: pass
+    class Orchestrator: pass
+    class FePtMgoScenario: pass
+
+    # Mocking Domain Models
+    class FePtMgoParameters(ConfigMock):
+        """Mock parameters for the deposition scenario."""
+        def __init__(self, num_depositions=10, fe_pt_ratio=0.5, deposition_height=2.5, max_retries=3, **kwargs):
+            super().__init__(
+                num_depositions=num_depositions,
+                fe_pt_ratio=fe_pt_ratio,
+                deposition_height=deposition_height,
+                max_retries=max_retries,
+                **kwargs
+            )
+
+    # Mocking Deposition Manager (Functional)
+    class DepositionManager:
+        """Mock manager that performs simplified deposition."""
+        def __init__(self, engine, params, potential_path):
+            self.engine = engine
+            self.params = params
+            self.potential_path = potential_path
+
+        def deposit(self, slab):
+            """Simulates deposition by adding atoms and relaxing."""
+            structure = slab.copy()
+            for _ in range(self.params.num_depositions):
+                # Add random atom
+                el = "Fe" if random.random() < self.params.fe_pt_ratio else "Pt"
+                pos = structure.get_positions()
+                z_max = np.max(pos[:, 2]) if len(pos) > 0 else 0.0
+                x_rand = random.uniform(0, structure.cell[0, 0])
+                y_rand = random.uniform(0, structure.cell[1, 1])
+                structure.append(Atoms(el, positions=[[x_rand, y_rand, z_max + self.params.deposition_height]])[0])
+
+                # Relax using the engine
+                if self.engine:
+                    structure = self.engine.relax(structure, self.potential_path)
+            return structure
+
+    # Mocking EON Wrapper (Functional)
+    class EONWrapper:
+        """Mock wrapper for EON client."""
+        def __init__(self, config):
+            self.config = config
+
+        def generate_config(self, path):
+            pass
+
+        def run(self, work_dir):
+            """Simulates running aKMC."""
+            print(f"Mocking EON run in {work_dir}")
+            # Create fake results file
+            res_file = work_dir / "results.dat"
+            if not res_file.parent.exists():
+                res_file.parent.mkdir(parents=True)
+            res_file.write_text("Time,Energy\n0,0.0\n1,-1.0\n")
+
+        def parse_results(self, work_dir):
+            return {"steps": 100, "final_energy": -100.0}
 
     # Initialize variables with Mock values by default
     PyAceConfig = ConfigMock
@@ -82,17 +150,6 @@ def _(mo):
     DFTConfig = ConfigMock
     TrainingConfig = ConfigMock
     MDConfig = ConfigMock
-    FePtMgoParameters = ConfigMock
-
-    class BaseGenerator: pass
-    class BaseOracle: pass
-    class BaseTrainer: pass
-    class BaseEngine: pass
-    class LammpsEngine: pass
-    class DepositionManager: pass
-    class EONWrapper: pass
-    class Orchestrator: pass
-    class FePtMgoScenario: pass
 
     DEFAULT_ACTIVE_LEARNING_DIR = "active_learning"
     HAS_PYACEMAKER = False
@@ -157,7 +214,7 @@ def _(mo):
     if not HAS_PYACEMAKER:
         mo.output.append(
             mo.callout(
-                "**Running in Pure Demo Mode**: `pyacemaker` package was not found. Using internal mocks for demonstration.",
+                "**Running in Pure Demo Mode**: `pyacemaker` package was not found. Using internal functional mocks for demonstration.",
                 kind="warn"
             )
         )
@@ -219,7 +276,7 @@ def _(mo):
     mo.md(
         r"""
         ## 2. Interactive Configuration
-        Adjust the simulation parameters below.
+        Here you can adjust the simulation parameters.
         """
     )
     return
@@ -235,8 +292,24 @@ def _(mo):
 
 
 @app.cell
+def _(mo):
+    mo.md(
+        r"""
+        ## 3. Mock Components Definition
+        In this tutorial, we define **Mock Components** to simulate the behavior of external physics codes (like Quantum Espresso and LAMMPS) which are computationally expensive and require complex installation.
+
+        *   **MockCalculator**: A simplified force field (harmonic potential) that runs instantly in Python. It replaces the heavy physics engines.
+        *   **MockOracle**: Simulates the DFT calculation step. Instead of solving the Schrödinger equation, it uses `MockCalculator` to return consistent energies and forces.
+        *   **MockTrainer**: Simulates the Machine Learning training step. It generates a dummy potential file.
+        *   **MockLammpsEngine**: Simulates the Molecular Dynamics engine. It uses ASE's optimization algorithms with `MockCalculator` to relax structures, mimicking a real MD relaxation.
+        """
+    )
+    return
+
+
+@app.cell
 def _(BaseGenerator, BaseOracle, BaseTrainer, Calculator, LammpsEngine, Path, all_changes, bulk, np):
-    # --- Mocks for Tutorial Mode ---
+    # --- Shared Mocks for Tutorial Mode ---
 
     # 1. Mock Calculator (Physics Engine)
     class MockCalculator(Calculator):
@@ -255,7 +328,7 @@ def _(BaseGenerator, BaseOracle, BaseTrainer, Calculator, LammpsEngine, Path, al
             self.results["forces"] = forces
             self.results["stress"] = np.zeros(6)
 
-    # 2. Mock Components
+    # 2. Mock Components using the Shared MockCalculator
     class MockOracle(BaseOracle):
         """Simulates DFT calculations."""
         def __init__(self, config=None):
@@ -290,7 +363,6 @@ def _(BaseGenerator, BaseOracle, BaseTrainer, Calculator, LammpsEngine, Path, al
             dyn.run(fmax=0.1, steps=10)
 
             # Return a mock result object matching MDSimulationResult structure
-            # We construct a simple dict-like object if pyacemaker is missing
             class MockResult:
                 def __init__(self):
                     self.trajectory_path="mock_traj.xyz"
@@ -309,7 +381,6 @@ def _(BaseGenerator, BaseOracle, BaseTrainer, Calculator, LammpsEngine, Path, al
             dyn.run(fmax=0.1, steps=5)
             return structure
 
-    # MockGenerator logic to handle inheritance properly if BaseGenerator is Mock or Real
     class MockGenerator(BaseGenerator):
         def __init__(self, config=None):
             self.config = config
@@ -338,7 +409,7 @@ def _(BaseGenerator, BaseOracle, BaseTrainer, Calculator, LammpsEngine, Path, al
 def _(mo):
     mo.md(
         r"""
-        ## 3. Phase 1: Training the Potential
+        ## 4. Phase 1: Training the Potential
         In this phase, we bootstrap the potential.
 
         **Steps**:
@@ -356,8 +427,6 @@ def _(DFTConfig, MDConfig, MockGenerator, MockOracle, MockTrainer, PyAceConfig, 
 
     # NOTE: In Mock Mode, we bypass strict file validation for Pseudopotentials
     # by using strings that look like paths but aren't checked by our Mock Configs.
-    # If running with real PyAceConfig, we would need real files.
-    # Here we rely on the fact that MockOracle ignores the config content mostly.
 
     config = PyAceConfig(
         project_name="FePt_Tutorial",
@@ -427,9 +496,13 @@ def _(WORK_DIR, generator, mo, oracle, trainer):
 def _(mo):
     mo.md(
         r"""
-        ## 4. Phase 2: Dynamic Deposition (Simulation)
+        ## 5. Phase 2: Dynamic Deposition (Simulation)
         Now we simulate the physical process of depositing atoms onto the MgO substrate.
         The system uses the trained potential to relax the structure after each deposition.
+
+        **Components**:
+        *   **DepositionManager**: Handles the sequential addition of atoms and calls the engine for relaxation.
+        *   **LammpsEngine (Mock)**: Relaxes the structure to minimize energy.
         """
     )
     return
@@ -443,6 +516,7 @@ def _(DepositionManager, FePtMgoParameters, MockLammpsEngine, bulk, config, depo
     mgo_surface = surface(mgo, (0, 0, 1), layers=2, vacuum=10.0)
 
     # Setup Deposition Manager
+    # FePtMgoParameters defines the scenario constraints (ratio, height, retries)
     params = FePtMgoParameters(
         num_depositions=depositions_slider.value,
         fe_pt_ratio=0.5,
@@ -454,15 +528,8 @@ def _(DepositionManager, FePtMgoParameters, MockLammpsEngine, bulk, config, depo
     manager = DepositionManager(engine, params, potential_path)
 
     # Run Deposition
-    # Note: DepositionManager might not be fully mock-compatible if using real imports,
-    # so we wrap the deposit call or ensure the manager uses our mock engine.
-    try:
-        final_structure = manager.deposit(mgo_surface)
-        status_msg = f"**Step 4 (Deposition)**: Deposited {params.num_depositions} atoms on MgO surface."
-    except AttributeError:
-        # Fallback if DepositionManager logic fails due to mock engine mismatch
-        final_structure = mgo_surface.copy()
-        status_msg = "**Step 4 (Deposition)**: Skipped (Mock mismatch)."
+    final_structure = manager.deposit(mgo_surface)
+    status_msg = f"**Step 4 (Deposition)**: Deposited {params.num_depositions} atoms on MgO surface."
 
     # Visualization
     fig_dep, ax_dep = plt.subplots()
@@ -490,10 +557,10 @@ def _(DepositionManager, FePtMgoParameters, MockLammpsEngine, bulk, config, depo
 def _(mo):
     mo.md(
         r"""
-        ## 5. Phase 3: Validation & Ordering
-        In the final phase, we use **Adaptive Kinetic Monte Carlo (aKMC)** via the EON software interface to simulate long-timescale ordering of the L10 phase.
+        ## 6. Phase 3: Validation & Ordering
+        In the final phase, we use **Adaptive Kinetic Monte Carlo (aKMC)** via the `EONWrapper` to simulate long-timescale ordering of the L10 phase.
 
-        *Note: EON is an external binary. In this tutorial, we mock its execution and return a simulated trajectory.*
+        *   **EONWrapper**: An interface to the EON software (or a functional mock in this tutorial) that runs saddle-point searches to find transition pathways over long timescales.
         """
     )
     return
@@ -501,34 +568,44 @@ def _(mo):
 
 @app.cell
 def _(EONConfig, EONWrapper, WORK_DIR, mo, plt, shutil):
-    # EON aKMC Step (Mocked)
-
-    class MockEONWrapper(EONWrapper):
-        def __init__(self, config=None):
-            self.config = config
-
-        def generate_config(self, path):
-            pass
-
-        def run(self, work_dir):
-            print(f"Mocking EON run in {work_dir}")
-            # Create fake results
-            result_file = work_dir / "results.dat"
-            # Ensure parent exists
-            work_dir.mkdir(parents=True, exist_ok=True)
-            if not result_file.exists():
-                with open(result_file, "w") as f:
-                    f.write("Time,Energy\n0,0.0\n1,-1.0\n")
-
-        def parse_results(self, work_dir):
-            return {"steps": 100, "final_energy": -100.0}
+    # EON aKMC Step
+    # We use EONWrapper (which might be the real one or our functional mock)
 
     # Use string path for potential to be safe if config object is strict
     mock_pot = WORK_DIR / "mock.yace"
     if not mock_pot.exists():
         mock_pot.write_text("MOCK")
 
-    eon_wrapper = MockEONWrapper(EONConfig(enabled=True, potential_path=str(mock_pot)))
+    # Check if eonclient exists, if not use MockEONWrapper
+    # In Pure Demo Mode, EONWrapper is already the Mock class.
+    # In Real Mode, EONWrapper is the real class, so we need to check binary.
+
+    use_mock_eon = False
+    if hasattr(EONWrapper, "__module__") and "pyacemaker" in EONWrapper.__module__:
+        # It's the real class
+        if not shutil.which("eonclient"):
+            use_mock_eon = True
+
+    if use_mock_eon:
+        # Define MockEONWrapper locally if needed (re-using the logic from pure demo mode)
+        class MockEONWrapper:
+            def __init__(self, config):
+                self.config = config
+            def generate_config(self, path): pass
+            def run(self, work_dir):
+                print(f"Mocking EON run in {work_dir}")
+                res_file = work_dir / "results.dat"
+                if not res_file.parent.exists(): res_file.parent.mkdir(parents=True)
+                res_file.write_text("Time,Energy\n0,0.0\n1,-1.0\n")
+            def parse_results(self, work_dir):
+                return {"steps": 100, "final_energy": -100.0}
+
+        WrapperClass = MockEONWrapper
+        print("⚠️ eonclient not found. Falling back to MockEONWrapper.")
+    else:
+        WrapperClass = EONWrapper
+
+    eon_wrapper = WrapperClass(EONConfig(enabled=True, potential_path=str(mock_pot)))
 
     work_dir = WORK_DIR / "eon_work"
     if work_dir.exists():
@@ -550,7 +627,6 @@ def _(EONConfig, EONWrapper, WORK_DIR, mo, plt, shutil):
     mo.output.append(mo.md(f"**Step 5 (Ordering)**: aKMC Simulation complete. Results: {results}"))
     mo.output.append(fig_order)
     return (
-        MockEONWrapper,
         ax_order,
         eon_wrapper,
         fig_order,
@@ -565,6 +641,8 @@ def _(EONConfig, EONWrapper, WORK_DIR, mo, plt, shutil):
 @app.cell
 def _(WORK_DIR_OBJ, mo):
     # Cleanup
+    # WORK_DIR_OBJ is the TemporaryDirectory object managing our workspace.
+    # Calling cleanup() removes the directory and its contents.
     WORK_DIR_OBJ.cleanup()
 
     mo.md(
@@ -572,7 +650,7 @@ def _(WORK_DIR_OBJ, mo):
         ## Conclusion
         The tutorial has successfully demonstrated the full pipeline:
         1.  **Training**: Generating and labeling data.
-        2.  **Deposition**: Simulating growth.
+        2.  **Deposition**: Simulating growth using the `DepositionManager`.
         3.  **Ordering**: Simulating long-timescale evolution.
 
         The temporary workspace has been cleaned up.
