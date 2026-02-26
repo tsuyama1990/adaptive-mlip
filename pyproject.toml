@@ -11,6 +11,7 @@ dependencies = [
     "pyyaml>=6.0",
     "pacemaker>=0.1.0",  # Placeholder version
     "pydantic>=2.0",
+    "phonopy>=2.48.0",
 ]
 
 [project.scripts]

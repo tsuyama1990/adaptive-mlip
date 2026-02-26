@@ -1,75 +1,77 @@
 import argparse
-import logging
 import sys
 from pathlib import Path
 
+import yaml
+
 from pyacemaker.domain_models.config import PyAceConfig
-from pyacemaker.domain_models.defaults import (
-    LOG_CONFIG_LOADED,
-    LOG_DRY_RUN_COMPLETE,
-    LOG_PROJECT_INIT,
-)
-from pyacemaker.logger import setup_logger
 from pyacemaker.orchestrator import Orchestrator
-from pyacemaker.scenarios.base_scenario import BaseScenario
-from pyacemaker.scenarios.fept_mgo import FePtMgoScenario
-from pyacemaker.utils.io import load_config
-
-
-def get_scenario_runner(name: str, config: PyAceConfig) -> BaseScenario:
-    """Factory method to get the appropriate scenario runner."""
-    if name == "fept_mgo":
-        return FePtMgoScenario(config)
-    msg = f"Unknown scenario: {name}"
-    raise ValueError(msg)
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Adaptive MLIP construction orchestrator")
-    parser.add_argument("--config", type=str, required=True, help="Path to configuration file")
-    parser.add_argument(
-        "--dry-run", action="store_true", help="Validate config and exit without running"
+    parser = argparse.ArgumentParser(description="PyAceMaker CLI")
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    # Init command
+    init_parser = subparsers.add_parser("init", help="Initialize workspace")
+    init_parser.add_argument("--config", "-c", type=Path, required=True, help="Path to config.yaml")
+
+    # Run command
+    run_parser = subparsers.add_parser("run", help="Run workflow step")
+    run_parser.add_argument(
+        "--config",
+        "-c",
+        type=Path,
+        required=False,
+        help="Path to config.yaml (optional if state exists)",
     )
-    parser.add_argument(
-        "--scenario", type=str, help="Run a specific scenario (e.g., fept_mgo)"
+    run_parser.add_argument(
+        "--step", "-s", type=int, required=True, choices=[1], help="Step to run (1=DIRECT)"
     )
 
     args = parser.parse_args()
-    config_path = Path(args.config)
 
-    try:
-        config_dict = load_config(config_path)
-        # Validate config using Pydantic model
-        config = PyAceConfig(**config_dict)
+    if args.command == "init":
+        config_path = args.config
+        if not config_path.exists():
+            print(f"Error: Config file not found at {config_path}")  # noqa: T201
+            sys.exit(1)
 
-        # Initialize Logger
-        logger = setup_logger(config.logging, config.project_name)
-        logger.info(LOG_CONFIG_LOADED)
+        try:
+            with config_path.open("r") as f:
+                config_data = yaml.safe_load(f)
+            config = PyAceConfig(**config_data)
+            orch = Orchestrator(config)
+            orch.initialize_workspace()
+            print("Workspace initialized successfully.")  # noqa: T201
+        except Exception as e:
+            print(f"Initialization failed: {e}")  # noqa: T201
+            sys.exit(1)
 
-        if args.dry_run:
-            if args.scenario:
-                get_scenario_runner(args.scenario, config)  # Validate scenario name
-                logger.info("Scenario '%s' selected for dry-run.", args.scenario)
+    elif args.command == "run":
+        config_path = args.config
+        if not config_path:
+            # Try local config.yaml
+            config_path = Path("config.yaml")
+
+        if not config_path.exists():
+            print("Error: Config file not found. Please provide --config.")  # noqa: T201
+            sys.exit(1)
+
+        try:
+            with config_path.open("r") as f:
+                config_data = yaml.safe_load(f)
+            config = PyAceConfig(**config_data)
+            orch = Orchestrator(config)
+
+            if args.step == 1:
+                orch.run_step1()
+                print("Step 1 completed.")  # noqa: T201
             else:
-                Orchestrator(config)  # Verify orchestrator init
-
-            logger.info(LOG_PROJECT_INIT.format(project_name=config.project_name))
-            logger.info(LOG_DRY_RUN_COMPLETE)
-            sys.exit(0)
-
-        if args.scenario:
-            runner = get_scenario_runner(args.scenario, config)
-            runner.run()
-        else:
-            # Run workflow
-            orchestrator = Orchestrator(config)
-            orchestrator.run()
-
-    except Exception:
-        # Fallback logging if logger isn't set up or fails
-        logging.basicConfig(level=logging.ERROR)
-        logging.exception("Fatal error during execution")
-        sys.exit(1)
+                print(f"Step {args.step} not implemented yet.")  # noqa: T201
+        except Exception as e:
+            print(f"Execution failed: {e}")  # noqa: T201
+            sys.exit(1)
 
 
 if __name__ == "__main__":

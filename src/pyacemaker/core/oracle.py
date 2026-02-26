@@ -1,4 +1,5 @@
 import contextlib
+import logging
 import tempfile
 from collections.abc import Callable, Iterator
 from itertools import islice
@@ -13,7 +14,6 @@ from pyacemaker.domain_models import DFTConfig
 from pyacemaker.domain_models.constants import ERR_ORACLE_FAILED, ERR_ORACLE_ITERATOR
 from pyacemaker.interfaces.qe_driver import QEDriver
 from pyacemaker.utils.embedding import embed_cluster
-import logging
 
 logger = logging.getLogger(__name__)
 

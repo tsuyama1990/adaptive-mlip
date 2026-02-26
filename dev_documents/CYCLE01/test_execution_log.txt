@@ -1,0 +1,80 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.12, pytest-9.0.2, pluggy-1.6.0
+rootdir: /app
+configfile: pyproject.toml
+plugins: cov-7.0.0, anyio-4.12.1
+collected 16 items
+
+tests/unit/test_domain_models_data.py ...                                [ 18%]
+tests/unit/test_domain_models_state.py ...                               [ 37%]
+tests/unit/test_structure_generator_direct.py .........                  [ 93%]
+tests/integration/test_cycle01_integration.py .                          [100%]
+
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.12-final-0 _______________
+
+Name                                             Stmts   Miss  Cover   Missing
+------------------------------------------------------------------------------
+src/pyacemaker/__init__.py                           4      0   100%
+src/pyacemaker/core/__init__.py                      7      0   100%
+src/pyacemaker/core/active_set.py                   71     57    20%   45-88, 95-111, 115-130, 134-139, 146-149
+src/pyacemaker/core/base.py                         29      0   100%
+src/pyacemaker/core/config_generator.py             36     22    39%   29-43, 47-60, 64-65, 88-89, 102-103, 111-112
+src/pyacemaker/core/directory_manager.py            20     11    45%   21-44
+src/pyacemaker/core/engine.py                       90     69    23%   49-57, 61-63, 69-81, 87-151, 158-166, 172-194
+src/pyacemaker/core/exceptions.py                    8      0   100%
+src/pyacemaker/core/generator.py                    52     38    27%   21-22, 36-39, 58-117, 133-142
+src/pyacemaker/core/io_manager.py                   60     44    27%   41-80, 84-103
+src/pyacemaker/core/lammps_generator.py            130    103    21%   28, 38-40, 44-47, 51-71, 75-78, 82-84, 88-95, 102-121, 128-163, 167-186, 202-220, 232-245
+src/pyacemaker/core/loop.py                         69     33    52%   28-54, 74-77, 85-92, 96-99
+src/pyacemaker/core/m3gnet_wrapper.py               16     11    31%   24-28, 31-47
+src/pyacemaker/core/oracle.py                       75     46    39%   65-71, 79-114, 129-134, 140, 143, 146, 149, 165-193, 199-208
+src/pyacemaker/core/policy.py                       29     11    62%   12-15, 24, 32, 39, 46, 53, 60, 67
+src/pyacemaker/core/policy_factory.py               27     20    26%   36-59, 72-83
+src/pyacemaker/core/report.py                       12      2    83%   81, 85
+src/pyacemaker/core/state_manager.py                34      9    74%   28-30, 37-38, 42, 46, 50, 54
+src/pyacemaker/core/trainer.py                      54     38    30%   47-88, 92-103
+src/pyacemaker/core/validator.py                    65     42    35%   46-76, 94-110, 135-136, 144-176
+src/pyacemaker/domain_models/__init__.py            13      0   100%
+src/pyacemaker/domain_models/config.py              22      0   100%
+src/pyacemaker/domain_models/constants.py           10      0   100%
+src/pyacemaker/domain_models/data.py                11      0   100%
+src/pyacemaker/domain_models/defaults.py           127      0   100%
+src/pyacemaker/domain_models/dft.py                 69     23    67%   72-73, 76-77, 80-81, 90-91, 95-103, 118-124
+src/pyacemaker/domain_models/eon.py                 33      9    73%   50-57, 63-66
+src/pyacemaker/domain_models/logging.py             31     20    35%   21-53
+src/pyacemaker/domain_models/md.py                 115     19    83%   39, 69, 103-119, 213, 219, 227, 234, 236
+src/pyacemaker/domain_models/scenario.py             7      0   100%
+src/pyacemaker/domain_models/state.py               22      0   100%
+src/pyacemaker/domain_models/structure.py           62      9    85%   91-92, 96-97, 102-103, 110-111, 120
+src/pyacemaker/domain_models/training.py            46      6    87%   110-113, 128-129
+src/pyacemaker/domain_models/validation.py          17      0   100%
+src/pyacemaker/domain_models/workflow.py            21      0   100%
+src/pyacemaker/factory.py                           32      5    84%   48-49, 84-86
+src/pyacemaker/interfaces/__init__.py                5      0   100%
+src/pyacemaker/interfaces/eon_driver.py             74     55    26%   24-25, 32-40, 50, 60-88, 97-142, 154-164
+src/pyacemaker/interfaces/lammps_driver.py          89     71    20%   33-39, 43-50, 62-70, 80-108, 120-121, 133-161, 170-176, 183-193
+src/pyacemaker/interfaces/process.py                14      5    64%   12, 21-28
+src/pyacemaker/interfaces/qe_driver.py              48     35    27%   35-80, 104-141
+src/pyacemaker/logger.py                            22      2    91%   26, 42
+src/pyacemaker/main.py                              51     51     0%   1-78
+src/pyacemaker/orchestrator.py                     264    178    33%   82, 124-128, 149-152, 202-221, 228-256, 260-271, 275-295, 299-314, 318-323, 329-344, 356-390, 402-422, 426-436, 440-447, 451-461, 477-482, 486-499, 503-526, 532-546
+src/pyacemaker/scenarios/__init__.py                 3      3     0%   1-4
+src/pyacemaker/scenarios/base_scenario.py           12     12     0%   1-23
+src/pyacemaker/scenarios/fept_mgo.py               148    148     0%   1-272
+src/pyacemaker/structure_generator/__init__.py       0      0   100%
+src/pyacemaker/structure_generator/direct.py        50      1    98%   39
+src/pyacemaker/utils/delta.py                       17     12    29%   18, 33-59
+src/pyacemaker/utils/elastic.py                     80     61    24%   34-35, 46-137, 141-146, 150-154
+src/pyacemaker/utils/embedding.py                   36     31    14%   32-87
+src/pyacemaker/utils/extraction.py                  31     26    16%   33-115
+src/pyacemaker/utils/io.py                          70     54    23%   27-31, 47-61, 72-73, 78-81, 100-158
+src/pyacemaker/utils/path.py                        40     35    12%   23-84
+src/pyacemaker/utils/phonons.py                     51     32    37%   33, 47-51, 63-118
+src/pyacemaker/utils/process.py                     25     21    16%   34-74
+src/pyacemaker/utils/structure.py                    6      4    33%   18-22
+------------------------------------------------------------------------------
+TOTAL                                             2662   1484    44%
+============================== 16 passed in 2.38s ==============================
+/app/.venv/lib/python3.12/site-packages/coverage/inorout.py:561: CoverageWarning: Module dev_src was never imported. (module-not-imported); see https://coverage.readthedocs.io/en/7.13.4/messages.html#warning-module-not-imported
+  self.warn(f"Module {pkg} was never imported.", slug="module-not-imported")

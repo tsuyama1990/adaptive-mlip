@@ -1,7 +1,7 @@
+import shlex
 from functools import lru_cache
 from pathlib import Path
 from typing import TextIO
-import shlex
 
 from ase.data import atomic_numbers
 
