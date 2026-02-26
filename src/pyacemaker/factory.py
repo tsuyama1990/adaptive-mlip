@@ -2,6 +2,7 @@ from pyacemaker.core.active_set import ActiveSetSelector
 from pyacemaker.core.base import BaseEngine, BaseGenerator, BaseOracle, BaseTrainer
 from pyacemaker.core.engine import LammpsEngine
 from pyacemaker.core.exceptions import ConfigError
+from pyacemaker.core.mock_oracle import MockOracle
 from pyacemaker.core.oracle import DFTManager
 from pyacemaker.core.report import ReportGenerator
 from pyacemaker.core.trainer import PacemakerTrainer
@@ -50,7 +51,21 @@ class ModuleFactory:
 
         try:
             # Oracle
-            oracle = DFTManager(config.dft)
+            # Security: Validate DFT code against allowlist to prevent arbitrary code execution paths
+            # or unexpected behavior if 'code' is user-controlled.
+            allowed_codes = {"mock", "qe", "vasp", "aims"}
+            code_lower = config.dft.code.lower()
+
+            if code_lower not in allowed_codes:
+                msg = f"Invalid DFT code: {config.dft.code}. Allowed: {allowed_codes}"
+                raise ConfigError(msg)
+
+            if code_lower == "mock":
+                oracle: BaseOracle = MockOracle()
+            else:
+                # We implicitly support QE via DFTManager for now if not mock.
+                # In future cycles, dispatch based on code.
+                oracle = DFTManager(config.dft)
 
             # Generator
             generator = DirectSampler(config.structure)
@@ -83,6 +98,9 @@ class ModuleFactory:
 
         except Exception as e:
             msg = f"Failed to create modules: {e}"
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.exception(msg)
             raise RuntimeError(msg) from e
 
         return (

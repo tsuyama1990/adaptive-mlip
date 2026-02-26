@@ -1,5 +1,148 @@
-ImportError while loading conftest '/app/tests/conftest.py'.
-tests/conftest.py:8: in <module>
-    import numpy as np  # noqa: E402
-    ^^^^^^^^^^^^^^^^^^
-E   ModuleNotFoundError: No module named 'numpy'
+============================= test session starts ==============================
+platform linux -- Python 3.12.12, pytest-9.0.2, pluggy-1.6.0
+rootdir: /app
+configfile: pyproject.toml
+testpaths: tests
+plugins: cov-7.0.0, anyio-4.12.1
+collected 279 items
+
+tests/e2e/test_engine_integration.py ..                                  [  0%]
+tests/e2e/test_orchestrator.py .......                                   [  3%]
+tests/e2e/test_orchestrator_loop.py ...                                  [  4%]
+tests/e2e/test_orchestrator_refinement.py ..                             [  5%]
+tests/integration/test_cycle01_integration.py ..                         [  5%]
+tests/integration/test_pacemaker_integration.py ..                       [  6%]
+tests/integration/test_scenarios.py .                                    [  6%]
+tests/uat/test_cycle01_uat.py ...                                        [  7%]
+tests/uat/test_cycle02_uat.py ..                                         [  8%]
+tests/uat/test_cycle03_uat.py ..                                         [  9%]
+tests/uat/test_cycle04_uat.py ...                                        [ 10%]
+tests/uat/test_cycle06_uat.py ..                                         [ 11%]
+tests/uat/test_cycle07_uat.py ..                                         [ 11%]
+tests/unit/test_active_set.py .....                                      [ 13%]
+tests/unit/test_active_set_anchor.py ....                                [ 15%]
+tests/unit/test_config.py .....                                          [ 16%]
+tests/unit/test_delta.py ....                                            [ 18%]
+tests/unit/test_direct_sampling.py ........                              [ 21%]
+tests/unit/test_domain_models.py ............                            [ 25%]
+tests/unit/test_domain_models_data.py ...                                [ 26%]
+tests/unit/test_domain_models_dft.py .............                       [ 31%]
+tests/unit/test_domain_models_eon.py ....                                [ 32%]
+tests/unit/test_domain_models_md.py ...........                          [ 36%]
+tests/unit/test_domain_models_md_new.py ..                               [ 37%]
+tests/unit/test_domain_models_scenario.py ..                             [ 37%]
+tests/unit/test_domain_models_state.py ...                               [ 39%]
+tests/unit/test_domain_models_training.py .......                        [ 41%]
+tests/unit/test_domain_models_validation.py ....                         [ 43%]
+tests/unit/test_elastic.py ....                                          [ 44%]
+tests/unit/test_embedding.py .......                                     [ 46%]
+tests/unit/test_engine.py .......                                        [ 49%]
+tests/unit/test_engine_halt_step.py ..                                   [ 50%]
+tests/unit/test_engine_relax.py ...                                      [ 51%]
+tests/unit/test_eon_driver.py .....                                      [ 53%]
+tests/unit/test_extraction.py ..                                         [ 53%]
+tests/unit/test_factory.py ..                                            [ 54%]
+tests/unit/test_generator.py ......                                      [ 56%]
+tests/unit/test_generator_local.py ..                                    [ 57%]
+tests/unit/test_io.py ........                                           [ 60%]
+tests/unit/test_io_manager.py ..                                         [ 60%]
+tests/unit/test_lammps_driver.py ...........                             [ 64%]
+tests/unit/test_lammps_driver_security.py ...                            [ 65%]
+tests/unit/test_lammps_generator.py ...                                  [ 67%]
+tests/unit/test_lammps_generator_reorder.py ..                           [ 67%]
+tests/unit/test_loop.py .......                                          [ 70%]
+tests/unit/test_main.py ....                                             [ 71%]
+tests/unit/test_oracle.py ........                                       [ 74%]
+tests/unit/test_oracle_streaming.py .                                    [ 74%]
+tests/unit/test_path_validation.py .....                                 [ 76%]
+tests/unit/test_perturbations.py ...                                     [ 77%]
+tests/unit/test_phonons.py ..                                            [ 78%]
+tests/unit/test_policies_new.py ....                                     [ 79%]
+tests/unit/test_policy_factory.py ...                                    [ 81%]
+tests/unit/test_qe_driver.py .......                                     [ 83%]
+tests/unit/test_report.py ..                                             [ 84%]
+tests/unit/test_scenarios_fept_mgo.py ......                             [ 86%]
+tests/unit/test_streaming_io.py ...                                      [ 87%]
+tests/unit/test_structure_generator_direct.py ...........                [ 91%]
+tests/unit/test_trainer_pacemaker.py ......                              [ 93%]
+tests/unit/test_validator.py ....                                        [ 94%]
+tests/unit/test_validator_security.py ...........                        [ 98%]
+tests/unit/test_validator_security_file.py ...                           [100%]
+
+=============================== warnings summary ===============================
+tests/unit/test_io.py::test_write_lammps_streaming_basic
+  /app/.venv/lib/python3.12/site-packages/ase/io/lammpsdata.py:72: FutureWarning: "style" is deprecated; please use "atom_style".
+    warnings.warn(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.12-final-0 _______________
+
+Name                                             Stmts   Miss  Cover   Missing
+------------------------------------------------------------------------------
+src/pyacemaker/__init__.py                           4      0   100%
+src/pyacemaker/core/__init__.py                      7      0   100%
+src/pyacemaker/core/active_set.py                   71     10    86%   46-47, 60-61, 71, 77-78, 86-88
+src/pyacemaker/core/base.py                         29      0   100%
+src/pyacemaker/core/config_generator.py             36      3    92%   58-60
+src/pyacemaker/core/directory_manager.py            20      0   100%
+src/pyacemaker/core/engine.py                       90     18    80%   50, 62-63, 75, 77, 80-81, 116-121, 127-128, 158-166
+src/pyacemaker/core/exceptions.py                    8      0   100%
+src/pyacemaker/core/generator.py                    52     11    79%   36-39, 59, 62, 95, 107, 113, 115, 136
+src/pyacemaker/core/io_manager.py                   60     23    62%   56-68, 75-78, 93-94, 97-103
+src/pyacemaker/core/lammps_generator.py            128     19    85%   44-45, 111-127, 135, 154-161
+src/pyacemaker/core/loop.py                         69      3    96%   74-77
+src/pyacemaker/core/m3gnet_wrapper.py               16      4    75%   26-28, 45-47
+src/pyacemaker/core/mock_oracle.py                  25     13    48%   34-59
+src/pyacemaker/core/oracle.py                       87      1    99%   72
+src/pyacemaker/core/policy.py                       98     16    84%   23-36, 61, 79, 101, 123, 150-160, 188, 207
+src/pyacemaker/core/policy_factory.py               27      5    81%   46, 52-53, 80-81
+src/pyacemaker/core/report.py                       12      1    92%   85
+src/pyacemaker/core/state_manager.py                34      2    94%   37-38
+src/pyacemaker/core/trainer.py                      54      9    83%   79-82, 85-86, 93-94, 97-98
+src/pyacemaker/core/validator.py                    65      5    92%   63, 68, 74, 108, 145
+src/pyacemaker/domain_models/__init__.py            13      0   100%
+src/pyacemaker/domain_models/config.py              22      0   100%
+src/pyacemaker/domain_models/constants.py           12      0   100%
+src/pyacemaker/domain_models/data.py                11      0   100%
+src/pyacemaker/domain_models/defaults.py           127      0   100%
+src/pyacemaker/domain_models/dft.py                 81     16    80%   74-75, 95-96, 99-100, 114-115, 121-122, 138-143
+src/pyacemaker/domain_models/eon.py                 33      4    88%   63-66
+src/pyacemaker/domain_models/logging.py             31      9    71%   24-25, 31, 39, 45-47, 50-51
+src/pyacemaker/domain_models/md.py                 146     33    77%   41, 106-107, 112-113, 115-116, 120-121, 123-124, 224-225, 227-228, 230-231, 233-234, 236-237, 243-244, 253-254, 258-259, 263-264, 270-271, 273-274
+src/pyacemaker/domain_models/scenario.py             7      0   100%
+src/pyacemaker/domain_models/state.py               22      0   100%
+src/pyacemaker/domain_models/structure.py           62      2    97%   91-92
+src/pyacemaker/domain_models/training.py            46      0   100%
+src/pyacemaker/domain_models/validation.py          17      0   100%
+src/pyacemaker/domain_models/workflow.py            21      0   100%
+src/pyacemaker/factory.py                           35      3    91%   88-90
+src/pyacemaker/interfaces/__init__.py                5      0   100%
+src/pyacemaker/interfaces/eon_driver.py             74     12    84%   86, 133-142, 158, 162
+src/pyacemaker/interfaces/lammps_driver.py          89      8    91%   82-83, 102, 135, 172, 191-193
+src/pyacemaker/interfaces/process.py                14      5    64%   12, 21-28
+src/pyacemaker/interfaces/qe_driver.py              48      2    96%   111-112
+src/pyacemaker/logger.py                            22      1    95%   42
+src/pyacemaker/main.py                              51      8    84%   47-49, 71-74, 78
+src/pyacemaker/orchestrator.py                     268     42    84%   120-124, 145-148, 199, 225, 229-230, 257, 261-262, 290-291, 296, 308-310, 328, 353, 399, 403, 416-418, 429-430, 438-439, 444-449, 458, 498-501, 528
+src/pyacemaker/scenarios/__init__.py                 3      0   100%
+src/pyacemaker/scenarios/base_scenario.py           12      1    92%   20
+src/pyacemaker/scenarios/fept_mgo.py               148     28    81%   80, 162-165, 170-172, 181-182, 195-196, 203, 216, 221-222, 225-226, 233, 237, 245-258, 266-268
+src/pyacemaker/structure_generator/__init__.py       0      0   100%
+src/pyacemaker/structure_generator/direct.py        66      2    97%   35, 49
+src/pyacemaker/utils/delta.py                       17      2    88%   34-35
+src/pyacemaker/utils/elastic.py                     80     52    35%   34-35, 46-137, 146, 154
+src/pyacemaker/utils/embedding.py                   36      6    83%   41-42, 49-50, 61-62
+src/pyacemaker/utils/extraction.py                  31      0   100%
+src/pyacemaker/utils/io.py                          77      4    95%   100-101, 105-106
+src/pyacemaker/utils/path.py                        51     10    80%   31-34, 43-44, 80-81, 86-87
+src/pyacemaker/utils/perturbations.py               43      1    98%   77
+src/pyacemaker/utils/phonons.py                     51      2    96%   51, 69
+src/pyacemaker/utils/process.py                     25     21    16%   34-74
+src/pyacemaker/utils/structure.py                    6      2    67%   19-20
+src/pyacemaker/utils/yaml.py                        19      5    74%   14-16, 19-20
+------------------------------------------------------------------------------
+TOTAL                                             2914    424    85%
+======================== 279 passed, 1 warning in 7.10s ========================
+/app/.venv/lib/python3.12/site-packages/coverage/inorout.py:561: CoverageWarning: Module dev_src was never imported. (module-not-imported); see https://coverage.readthedocs.io/en/7.13.4/messages.html#warning-module-not-imported
+  self.warn(f"Module {pkg} was never imported.", slug="module-not-imported")

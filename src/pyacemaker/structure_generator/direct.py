@@ -10,6 +10,7 @@ from pyacemaker.core.base import BaseGenerator
 from pyacemaker.domain_models.constants import (
     DEFAULT_FALLBACK_CELL_SIZE,
     DEFAULT_GEN_MAX_ATTEMPTS_MULTIPLIER,
+    DEFAULT_VOLUME_SCALING_FACTOR,
 )
 from pyacemaker.domain_models.structure import StructureConfig
 
@@ -24,7 +25,7 @@ class DirectSampler(BaseGenerator):
         self.config = config
         self._rng = np.random.default_rng()
 
-    def update_config(self, config: Any) -> None:
+    def update_config(self, config: StructureConfig) -> None:
         if not isinstance(config, StructureConfig):
             msg = "Expected StructureConfig"
             raise TypeError(msg)
@@ -34,6 +35,50 @@ class DirectSampler(BaseGenerator):
         """Sets random seed for reproducibility."""
         self._rng = np.random.default_rng(seed)
 
+    def _create_template(self) -> Atoms:
+        """Creates the template atoms object and validates feasibility."""
+        r_cut = self.config.r_cut
+        try:
+            prim = bulk(self.config.elements[0])
+            atoms_template = prim.repeat(self.config.supercell_size) # type: ignore[no-untyped-call]
+            cell = atoms_template.get_cell()
+            atoms_template.set_cell(cell * DEFAULT_VOLUME_SCALING_FACTOR, scale_atoms=False)
+
+            # Validation
+            vol = atoms_template.get_volume() # type: ignore[no-untyped-call]
+            n_atoms_check = len(atoms_template)
+            sphere_vol = (4/3) * np.pi * ((r_cut / 2.0) ** 3)
+            packing_fraction = (n_atoms_check * sphere_vol) / vol
+
+            if packing_fraction > 0.55:
+                msg = f"Impossible packing density: {packing_fraction:.2f} > 0.55. Increase supercell size or decrease r_cut."
+                raise ValueError(msg)
+
+        except ValueError:
+             # Reraise ValueError from packing check
+             raise
+        except Exception as e:
+            # Fallback for ASE build errors (e.g. crystal structure generation fail)
+            # Only if it's NOT our packing density error
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Failed to create template from bulk: {e}. Using fallback cubic cell.")
+
+            atoms_template = Atoms(
+                self.config.elements[0],
+                cell=[DEFAULT_FALLBACK_CELL_SIZE, DEFAULT_FALLBACK_CELL_SIZE, DEFAULT_FALLBACK_CELL_SIZE],
+                pbc=True,
+            )
+            # Ensure cell is properly set before repeating
+            if not np.any(atoms_template.get_cell()):
+                 # If cell is 0, something went wrong with init.
+                 # Force set cell.
+                 atoms_template.set_cell([DEFAULT_FALLBACK_CELL_SIZE]*3)
+
+            atoms_template = atoms_template.repeat(self.config.supercell_size) # type: ignore[no-untyped-call]
+
+        return atoms_template
+
     def generate(self, n_candidates: int) -> Iterator[Atoms]:
         """
         Generates n_candidates valid structures.
@@ -42,45 +87,27 @@ class DirectSampler(BaseGenerator):
             msg = "n_candidates must be non-negative"
             raise ValueError(msg)
 
-        if n_candidates == 0:
+        if n_candidates == 0 or not self.config.elements:
             return
 
-        if not self.config.elements:
-            return
-
-        # Validate elements uniqueness (Best Practice)
         if len(self.config.elements) != len(set(self.config.elements)):
-            # This should be caught by Pydantic, but double check
             msg = "Duplicate elements found in configuration"
             raise ValueError(msg)
 
-        # Validate r_cut (Best Practice)
+        # Validate chemical symbols
+        from ase.data import chemical_symbols
+        valid_set = set(chemical_symbols)
+        for el in self.config.elements:
+            if el not in valid_set:
+                msg = f"Invalid chemical symbol: {el}"
+                raise ValueError(msg)
+
         r_cut = getattr(self.config, "r_cut", 2.0)
         if r_cut <= 0:
             msg = "r_cut must be positive"
             raise ValueError(msg)
 
-        # Create base template (cell definition)
-        try:
-            # Try to get a reasonable cell from the first element
-            prim = bulk(self.config.elements[0])
-            # Scale supercell
-            atoms_template = prim.repeat(self.config.supercell_size)  # type: ignore[no-untyped-call]
-        except Exception:
-            # Fallback to a 10x10x10 box if bulk fails
-            # Log this if logging was available in this scope, for now proceed
-            atoms_template = Atoms(
-                self.config.elements[0],
-                cell=[
-                    DEFAULT_FALLBACK_CELL_SIZE,
-                    DEFAULT_FALLBACK_CELL_SIZE,
-                    DEFAULT_FALLBACK_CELL_SIZE,
-                ],
-                pbc=True,
-            )
-            # Scale supercell
-            atoms_template = atoms_template.repeat(self.config.supercell_size)  # type: ignore[no-untyped-call]
-
+        atoms_template = self._create_template()
         n_atoms = len(atoms_template)
 
         count = 0
@@ -89,61 +116,28 @@ class DirectSampler(BaseGenerator):
 
         while count < n_candidates and attempts < max_attempts:
             attempts += 1
-            candidate = atoms_template.copy()  # type: ignore[no-untyped-call]
 
-            # Randomize positions (Uniform distribution in cell)
-            # Use fractional coordinates [0, 1)
             scaled_pos = self._rng.uniform(0.0, 1.0, (n_atoms, 3))
-            candidate.set_scaled_positions(scaled_pos)
+            atoms_template.set_scaled_positions(scaled_pos)
 
-            # Assign random elements if multiple are present
             if len(self.config.elements) > 1:
                 symbols = self._rng.choice(self.config.elements, size=n_atoms)
-                candidate.set_chemical_symbols(symbols)
+                atoms_template.set_chemical_symbols(symbols)
 
-            # Efficient Hard-Sphere Constraint (Scalability Fix)
-            # Use ase.neighborlist.neighbor_list to find pairs within r_cut
-            # "d" returns distances. If any distance is < r_cut (and > 0 for self), reject.
-            # O(N) complexity for reasonable cutoffs.
+            indices_i, indices_j, dists = neighbor_list("ijd", atoms_template, r_cut)
+            mask = indices_i != indices_j
 
-            # Since neighbor_list returns all pairs (i, j) within cutoff,
-            # if the list is not empty (excluding self-interaction if handled, but neighbor_list handles it),
-            # then there is a clash.
-            # We strictly want NO distance < r_cut.
-
-            # Note: neighbor_list usually double counts (i-j and j-i).
-            # If we find ANY pair with distance < r_cut, it's a clash.
-            # However, for pure random packing, checking min distance via neighbor list is faster than all-pairs matrix for large N.
-
-            # neighbor_list("d", atoms, cutoff) returns distances of neighbors.
-            # If len(d) > 0, we have overlaps (since cutoff is r_cut).
-            # Wait, neighbor_list excludes self-interaction by default? No, it depends.
-            # But usually it returns actual neighbors.
-
-            # Optimization:
-            # If we request cutoff=r_cut/2 for sphere overlap? No, hard sphere means d_ij >= r_cut.
-            # So if any d_ij < r_cut, fail.
-
-            # For random gas, many atoms will overlap.
-            # We check if *any* distance is less than r_cut.
-            # Using neighbor_list with cutoff=r_cut
-
-            # Note: For very high density, this loop might hang. max_attempts handles that.
-
-            distances = neighbor_list("d", candidate, r_cut)
-
-            # Filter out self interactions if any (usually dist > 0 check covers it since self dist is 0)
-            # neighbor_list might return 0.0 for self?
-            # "i" and "j" indices can be checked.
-            # Standard ASE neighbor_list does not return self-interaction unless specified.
-
-            if len(distances) == 0:  # type: ignore[arg-type] # distances is array
-                # Add metadata (Provenance)
+            if len(dists[mask]) == 0:
+                # IMPORTANT: We must yield a copy because atoms_template is mutated in the next iteration.
+                # To minimize memory churn, we could conceptually yield the arrays and let consumer construct,
+                # but BaseGenerator contract requires yielding Atoms objects.
+                # We stick to copy() for safety, but ensure we don't hold references to it internally.
+                candidate = atoms_template.copy() # type: ignore[no-untyped-call]
                 candidate.info["provenance"] = "DIRECT_SAMPLING"
                 candidate.info["method"] = "random_packing"
                 yield candidate
                 count += 1
-                attempts = 0  # Reset attempts on success
+                attempts = 0
 
     def generate_local(
         self, base_structure: Atoms, n_candidates: int, **kwargs: Any

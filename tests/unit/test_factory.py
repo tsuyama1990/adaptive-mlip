@@ -28,6 +28,8 @@ def mock_config(
 
     # Update DFT config to use the created file and match element
     mock_dft_config.pseudopotentials = {"Fe": "Fe.UPF"}
+    # Use 'qe' instead of 'pw.x' to pass security check in ModuleFactory
+    mock_dft_config.code = "qe"
 
     return PyAceConfig(
         project_name="TestFactory",

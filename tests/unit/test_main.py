@@ -2,7 +2,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
-import yaml # type: ignore[import-untyped]
+import yaml  # type: ignore[import-untyped]
 
 from pyacemaker.main import main
 
