@@ -88,6 +88,14 @@ class DirectSampler(BaseGenerator):
             msg = "Duplicate elements found in configuration"
             raise ValueError(msg)
 
+        # Validate chemical symbols
+        from ase.data import chemical_symbols
+        valid_set = set(chemical_symbols)
+        for el in self.config.elements:
+            if el not in valid_set:
+                msg = f"Invalid chemical symbol: {el}"
+                raise ValueError(msg)
+
         r_cut = getattr(self.config, "r_cut", 2.0)
         if r_cut <= 0:
             msg = "r_cut must be positive"

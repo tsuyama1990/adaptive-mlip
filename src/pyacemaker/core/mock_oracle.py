@@ -24,7 +24,7 @@ class MockOracle(BaseOracle):
     - Not suitable for accurate physics, only for pipeline verification.
     """
 
-    def __init__(self, config: Any = None) -> None:
+    def __init__(self, config: Any | None = None) -> None:
         """
         Initialize the MockOracle.
 

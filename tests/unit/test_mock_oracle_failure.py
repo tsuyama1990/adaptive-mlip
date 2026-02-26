@@ -27,6 +27,9 @@ def test_mock_oracle_compute_failure():
 
     # We patch ase.calculators.lj.LennardJones.get_potential_energy to raise
     with patch("ase.calculators.lj.LennardJones.get_potential_energy", side_effect=ValueError("Test Failure")):
-        results = list(oracle.compute(iter([atoms])))
+        # Use simple iteration to verify 0 yields
+        count = 0
+        for _ in oracle.compute(iter([atoms])):
+            count += 1
         # Should be skipped
-        assert len(results) == 0
+        assert count == 0
