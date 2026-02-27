@@ -20,7 +20,22 @@ def load_project_config(config_path: str | Path) -> PyAceConfig:
         yaml.YAMLError: If the file is not valid YAML.
     """
     path = Path(config_path)
-    config_dict = load_yaml(path)
+
+    if not path.exists():
+        raise FileNotFoundError(f"Configuration file not found: {path}")
+
+    if not path.is_file():
+        # Could be a directory
+        raise FileNotFoundError(f"Configuration path is not a file: {path}")
+
+    try:
+        config_dict = load_yaml(path)
+    except Exception as e:
+        # Re-raise with user friendly message if it's a parsing error
+        raise ValueError(f"Failed to parse configuration file {path}: {e}") from e
+
+    if not isinstance(config_dict, dict):
+        raise ValueError(f"Configuration file {path} must contain a dictionary")
 
     # Pydantic validation
     return PyAceConfig(**config_dict)

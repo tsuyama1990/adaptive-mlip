@@ -35,7 +35,17 @@ class MockOracle(BaseOracle):
         Yields:
             AtomStructure objects with energy, forces, and stress populated.
         """
+        # Validate input type strictly
+        if not isinstance(structures, Iterator):
+             msg = f"Expected Iterator[AtomStructure], got {type(structures)}"
+             raise TypeError(msg)
+
         for structure in structures:
+            # Validate item type
+            if not isinstance(structure, AtomStructure):
+                 msg = f"Expected AtomStructure, got {type(structure)}"
+                 raise TypeError(msg)
+
             atoms = structure.atoms.copy() # type: ignore[no-untyped-call]
             atoms.calc = self.calc
 

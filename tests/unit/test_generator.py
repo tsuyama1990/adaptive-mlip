@@ -1,3 +1,4 @@
+from collections.abc import Iterator
 
 import numpy as np
 import pytest
@@ -48,11 +49,11 @@ def test_rattle_policy() -> None:
     assert structures[0] is not structures[1]
 
     # Verify positions are different between generated structures
-    pos0 = structures[0].atoms.positions.copy()
-    pos1 = structures[1].atoms.positions.copy()
+    pos0 = structures[0].atoms.get_positions()
+    pos1 = structures[1].atoms.get_positions()
 
     # Verify they are different from base
-    assert not np.allclose(pos0, base_atoms.positions)
+    assert not np.allclose(pos0, base_atoms.get_positions())
 
     # Verify they are different from each other
     assert not np.allclose(pos0, pos1)
@@ -138,6 +139,6 @@ def test_generate_local() -> None:
         assert isinstance(c, AtomStructure)
         assert len(c.atoms) == 2
         # Check positions are slightly different
-        assert not np.allclose(c.atoms.positions, base.positions)
+        assert not np.allclose(c.atoms.get_positions(), base.get_positions())
         # But cell is same
-        assert np.allclose(c.atoms.cell, base.cell)
+        assert np.allclose(c.atoms.get_cell(), base.get_cell())

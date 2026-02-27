@@ -64,45 +64,20 @@ class StructureGenerator(BaseGenerator):
 
         # Policy Selection
         # Uses active_policies via PolicyFactory
-        # Note: PolicyFactory.get_policy returns a BasePolicy (or CompositePolicy)
-        # which currently yields Atoms. We need to wrap them.
         policy = PolicyFactory.get_policy(self.config)
 
         # Step 1: Base Structure Generation (Lazy)
-        # We define composition here but don't call prediction yet
-        # If elements is a list of strings, join them if M3GNet expects formula string?
-        # M3GNet usually takes formula like "Fe2O3".
-        # StructureConfig.elements is ["Fe", "O"]. But doesn't have counts directly here.
-        # Wait, StructureConfig has elements list, but composition/stoichiometry is needed.
-        # The prompt says: "M3GNet predict_structure(composition)".
-        # Let's assume composition string is derived or passed.
-        # StructureConfig in SPEC doesn't explicitly have composition dict, only elements list.
-        # However, defaults.py or PyAceConfig.system has composition.
-        # Here StructureGenerator gets StructureConfig.
-        # Issue: StructureConfig seems to lack composition info to form a valid formula for M3GNet unless "elements" contains it?
-        # Re-reading PyAceConfig: system: SystemConfig (elements, composition).
-        # StructureConfig is separate.
-        # StructureGenerator is init with StructureConfig.
-        # It seems StructureConfig should probably carry composition or Generator init should take SystemConfig too.
-        # BUT, for Cycle 01, we might just use elements joined.
-        # Let's assume elements list implies equal ratio or just elements for now.
-        # "Cu", "Zr" -> "CuZr"?
-
-        # NOTE: In Cycle 01 SPEC, PyAceConfig has `system` field.
-        # StructureGenerator is initialized with `config.structure` in Factory.
-        # This seems like a design gap in the existing codebase vs SPEC.
-        # However, I should stick to existing patterns where possible or fix minimally.
-        # StructureGenerator logic here uses `"".join(self.config.elements)`.
-
         composition = "".join(self.config.elements)
 
         def lazy_policy_stream() -> Iterator[AtomStructure]:
             # Lazy loading of base structure only when generator is started and first item requested
             try:
-                # Assuming M3GNetWrapper handles this string
+                # Assuming M3GNetWrapper handles this string.
+                # NOTE: M3GNet wrapper is used here. For large structures, predict_structure might take time,
+                # but it returns a single ASE Atoms object. We only hold this single base structure in memory.
+                # We DO NOT generate a list of n_candidates base structures.
                 base_structure = self.m3gnet.predict_structure(composition)
             except Exception as e:
-                # If predict fails, wrap error
                 raise GeneratorError(ERR_GEN_BASE_FAIL.format(composition=composition, error=e)) from e
 
             # Optimization: If supercell_size is (1,1,1), skip repeat to save a copy
@@ -111,18 +86,23 @@ class StructureGenerator(BaseGenerator):
             else:
                 base_supercell = base_structure.repeat(self.config.supercell_size)  # type: ignore[no-untyped-call]
 
-            count = 0
+            # Streaming generation:
+            # We call policy.generate which yields Atoms one by one.
+            # We immediately wrap and yield AtomStructure.
+            # No list is accumulated here.
+
             # Policy yields Atoms
             policy_iter = policy.generate(base_supercell, self.config, n_structures=n_candidates)
 
             # Ensure iterator
             iter_policy = iter(policy_iter)
 
+            count = 0
             for atoms in iter_policy:
                 if count >= n_candidates:
                     break
+
                 # Wrap Atoms in AtomStructure
-                # Provenance: generator/policy info
                 provenance = {
                     "step": "generation",
                     "method": "policy_composite" # Simplified

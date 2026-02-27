@@ -56,6 +56,32 @@ def validate_path_safe(path: Path) -> Path:
          msg = f"Invalid path resolution: {path}"
          raise ValueError(msg) from e
 
+    # SECURITY FIX: Check if resolved path is a symlink or points to one (handled by resolve(strict=True))
+    # However, if we resolved a non-existent file, we need to ensure parent isn't a symlink to restricted area.
+    # Python's resolve() follows symlinks. We want to ensure the *final destination* is allowed.
+    # We also explicitly reject symlinks if they are the path itself to be strict (optional but safer).
+    # But often users symlink data dirs. The Requirement says "validate_path_safe() allows symlinks that resolve to allowed directories but may still be dangerous."
+    # The fix is: "Add symlink resolution check and canonical path verification."
+    # We already do canonical path verification via `resolve()`.
+    # To be extra safe, we can ban symlinks entirely if desired, but resolving them and checking root is standard.
+    # If the user provides a symlink `/tmp/safe_link -> /etc/passwd`, `resolve()` returns `/etc/passwd`.
+    # Our root check will fail because `/etc/passwd` is not in allowed roots.
+    # So `resolve()` + root containment check IS the fix.
+
+    # What if the symlink is inside allowed root but points outside?
+    # `resolve()` handles that.
+
+    # What if the symlink is outside but points inside?
+    # `resolve()` returns inside. That is technically safe (accessing allowed data via external link).
+
+    # The Audit feedback says: "validate_path_safe() allows symlinks that resolve to allowed directories but may still be dangerous."
+    # Maybe race conditions (TOCTOU)?
+    # To be safe, we can assert `path.is_symlink()` is False if it exists.
+
+    if path.is_symlink():
+        msg = f"Symlinks are not allowed: {path}"
+        raise ValueError(msg)
+
     base_dir = Path.cwd().resolve()
 
     # Allowed roots: CWD, System Temp

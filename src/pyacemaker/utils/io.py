@@ -134,25 +134,11 @@ def write_lammps_streaming(
 
     # Optimize Atom Writing:
     # Use buffered writing by generating a list of lines and calling writelines once (or in chunks).
-    # For large structures, creating one huge list of strings might still be heavy on memory.
-    # A generator is good for memory, but fileobj.writelines iterates it.
-    # To reduce I/O calls, writelines is better than loop + write.
-    # But writelines essentially loops and writes?
-    # Python's file objects are buffered by default.
-    # The issue "write_lammps_streaming function creates a new file object for each write operation"
-    # was likely referring to the generator creating strings line by line and yielding them?
-    # No, `fileobj.writelines` takes an iterable.
-    # The previous implementation used a generator:
-    # fileobj.writelines(line_generator())
-    # This is standard and generally efficient IF `fileobj` is buffered.
-
-    # However, if we want to be explicit about batching:
 
     pos = atoms.get_positions() # (N, 3)
     symbols = atoms.get_chemical_symbols() # List of strings (N)
 
     # Pre-lookup types to avoid dict lookup in tight loop
-    # Vectorize type lookup?
     try:
         atom_types = [type_map[s] for s in symbols]
     except KeyError as e:
@@ -161,12 +147,17 @@ def write_lammps_streaming(
     # Chunk size for writing (e.g. 1000 lines)
     chunk_size = 1000
 
+    # We can perform formatting efficiently using f-strings in a list comprehension
+    # But for HUGE atoms, even list comprehension might be memory heavy.
+    # We stick to chunking.
+
     for i in range(0, natoms, chunk_size):
         end = min(i + chunk_size, natoms)
-        lines = []
-        for j in range(i, end):
-            # 1-based index for atoms
-            lines.append(f"{j+1} {atom_types[j]} {pos[j, 0]:.6f} {pos[j, 1]:.6f} {pos[j, 2]:.6f}\n")
+        # Create chunk of lines
+        lines = [
+            f"{j+1} {atom_types[j]} {pos[j, 0]:.6f} {pos[j, 1]:.6f} {pos[j, 2]:.6f}\n"
+            for j in range(i, end)
+        ]
         fileobj.writelines(lines)
 
     fileobj.write("\n")

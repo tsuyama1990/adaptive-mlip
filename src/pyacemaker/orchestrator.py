@@ -135,10 +135,15 @@ class Orchestrator:
 
         mode = "a" if append else "w"
 
-        # Open file once
+        # Explicit buffering is managed by Python's open().
+        # We can optimize further by manual batching if needed, but ASE's write often opens/closes handles if used with filename.
+        # Here we pass the file handle `f`, so ASE writes to the open stream.
+        # This is already efficient for streaming.
+
+        # NOTE: ASE `write` with a file object appends frames correctly for extended XYZ.
+        # The key is passing the file handle, not the filename, inside the loop.
+
         with filepath.open(mode) as f:
-            # Optimization: Buffering is handled by file object.
-            # We just iterate and write.
             for structure in generator:
                 # Convert to ASE Atoms with metadata
                 atoms = structure.to_ase()
@@ -159,8 +164,11 @@ class Orchestrator:
         candidates_file = paths["candidates"] / FILENAME_CANDIDATES
 
         try:
+            # Get iterator from generator
             candidate_stream = self.generator.generate(n_candidates=n_candidates)
-            # Use explicit chunked streaming
+
+            # _stream_write consumes the iterator one by one, writing to file stream.
+            # No list materialization happens here.
             total = self._stream_write(
                 candidate_stream,
                 candidates_file,
