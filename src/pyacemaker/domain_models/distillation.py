@@ -64,4 +64,11 @@ class DistillationConfig(BaseModel):
             if self.step1_direct_sampling.target_points < 10:
                 msg = "Step 1 target points must be at least 10."
                 raise ValueError(msg)
+
+            # Validate DFT calculator
+            valid_calculators = {"VASP", "QE", "MOCK"}
+            calc = self.step2_active_learning.dft_calculator.upper()
+            if calc not in valid_calculators:
+                msg = f"Invalid DFT calculator: {calc}. Must be one of {valid_calculators}"
+                raise ValueError(msg)
         return self

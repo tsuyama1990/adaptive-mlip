@@ -11,6 +11,7 @@ from pyacemaker.core.active_set import ActiveSetSelector
 from pyacemaker.core.base import BaseEngine, BaseGenerator, BaseOracle, BaseTrainer
 from pyacemaker.core.directory_manager import DirectoryManager
 from pyacemaker.core.exceptions import OrchestratorError
+from pyacemaker.core.loop import LoopStatus
 from pyacemaker.core.state_manager import StateManager
 from pyacemaker.core.validator import Validator
 from pyacemaker.domain_models import PyAceConfig
@@ -631,6 +632,8 @@ class Orchestrator:
                 step_func()
             except Exception as e:
                 self.logger.error(f"Failed at step {step_enum}: {e}")
+                self.state_manager.state.status = LoopStatus.HALTED
+                self.state_manager.save()
                 raise
 
     def run(self) -> None:

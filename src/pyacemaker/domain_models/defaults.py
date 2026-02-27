@@ -121,10 +121,16 @@ DANGEROUS_PATH_CHARS: Final[set[str]] = {
 }
 
 # RAM Disk logic
-_ram_disk_candidate = os.environ.get("PYACE_RAM_DISK", "/dev/shm")
-DEFAULT_RAM_DISK_PATH = (
-    _ram_disk_candidate if Path(_ram_disk_candidate).exists() else tempfile.gettempdir()
-)
+def get_ram_disk_path() -> Path:
+    """Returns a valid RAM disk path or falls back to tempdir."""
+    candidate = os.environ.get("PYACE_RAM_DISK", "/dev/shm")
+    path = Path(candidate)
+    if path.exists() and path.is_dir() and os.access(path, os.W_OK):
+        return path
+    return Path(tempfile.gettempdir())
+
+
+DEFAULT_RAM_DISK_PATH = get_ram_disk_path()
 
 # MD Minimize defaults
 DEFAULT_MD_MINIMIZE_FTOL = 1e-6
