@@ -3,29 +3,41 @@ from pathlib import Path
 from typing import Any
 
 from pyacemaker.core.loop import LoopState
-from pyacemaker.domain_models.workflow import WorkflowStep
 from pyacemaker.domain_models.defaults import (
     LOG_STATE_LOAD_FAIL,
     LOG_STATE_LOAD_SUCCESS,
     LOG_STATE_SAVE_FAIL,
     LOG_STATE_SAVED,
 )
+from pyacemaker.utils.path import validate_path_safe
 
 
 class StateManager:
     """
-    Manages persistence of the active learning loop state.
+    Manages persistence of the active learning loop state safely to JSON configuration files.
     """
 
     def __init__(self, state_file: Path, logger: Logger, checkpoint_interval: int = 1) -> None:
-        self.state_file = state_file
+        """
+        Initializes StateManager and enforces security path checks on instantiation.
+
+        Args:
+            state_file: Destination relative or absolute Path target.
+            logger: Runtime instantiated logging handle.
+            checkpoint_interval: Controls periodic write interval throttle for `save`.
+        """
+        self.state_file = validate_path_safe(state_file)
         self.logger = logger
         self.state = LoopState()
         self.checkpoint_interval = checkpoint_interval
         self._last_saved_state_dump: dict[str, Any] | None = None
 
     def load(self) -> None:
-        """Loads the iteration state."""
+        """
+        Loads the iteration state safely overriding memory parameters with the contents
+        of JSON persistent models. Handles missing or malformed states smoothly by returning
+        defaults and issuing warnings.
+        """
         try:
             self.state = LoopState.load(self.state_file)
             self._last_saved_state_dump = self.state.model_dump(mode="json")
@@ -37,20 +49,16 @@ class StateManager:
 
     def save(self, force: bool = False) -> None:
         """
-        Saves the current iteration state.
+        Saves the current iteration state tracking object dynamically into storage via atomic operations.
 
         Args:
-            force: If True, bypasses dirty check and checkpoint interval (but still respects
-                   duplicate save check if state hasn't changed, unless we want to force disk write).
-                   Actually, dirty check logic: if state matches last saved dump, we skip.
+            force: Bypass standard dirty memory validation mapping and explicitly perform I/O write overrides.
         """
         try:
             current_dump = self.state.model_dump(mode="json")
             if current_dump == self._last_saved_state_dump:
                 return
 
-            # Throttling: Only save if interval met or forced
-            # iteration 0 always saves (0 % N == 0).
             if not force and self.state.iteration > 0 and self.state.iteration % self.checkpoint_interval != 0:
                 return
 
@@ -61,41 +69,12 @@ class StateManager:
             self.logger.warning(LOG_STATE_SAVE_FAIL.format(error=e))
 
     def rollback(self) -> None:
-        """Restores the state from the last saved dump in memory."""
+        """
+        Restores the state variable object from the last verified active serialized dict in the system caching memory block.
+        Prevents full corruption from failed step execution processes inside distillation configurations.
+        """
         if self._last_saved_state_dump:
             self.state = LoopState.model_validate(self._last_saved_state_dump)
             self.logger.info("Rolled back to last saved state.")
         else:
             self.logger.warning("No previous state to rollback to.")
-
-    @property
-    def iteration(self) -> int:
-        return self.state.iteration
-
-    @iteration.setter
-    def iteration(self, value: int) -> None:
-        self.state.iteration = value
-
-    @property
-    def current_potential(self) -> Path | None:
-        return self.state.current_potential
-
-    @current_potential.setter
-    def current_potential(self, value: Path | None) -> None:
-        self.state.current_potential = value
-
-    @property
-    def current_step(self) -> WorkflowStep | None:
-        return self.state.current_step
-
-    @current_step.setter
-    def current_step(self, value: WorkflowStep | None) -> None:
-        self.state.current_step = value
-
-    @property
-    def mode(self) -> str:
-        return self.state.mode
-
-    @mode.setter
-    def mode(self, value: str) -> None:
-        self.state.mode = value

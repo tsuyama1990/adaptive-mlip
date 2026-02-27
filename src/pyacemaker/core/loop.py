@@ -8,6 +8,7 @@ from typing import Self
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from pyacemaker.domain_models.workflow import WorkflowStep
+from pyacemaker.utils.path import validate_path_safe
 
 
 class LoopStatus(StrEnum):
@@ -32,7 +33,10 @@ class LoopState(BaseModel):
     @field_validator("mode")
     @classmethod
     def validate_mode(cls, v: str) -> str:
-        from pyacemaker.domain_models.defaults import WORKFLOW_MODE_DISTILLATION, WORKFLOW_MODE_LEGACY
+        from pyacemaker.domain_models.defaults import (
+            WORKFLOW_MODE_DISTILLATION,
+            WORKFLOW_MODE_LEGACY,
+        )
         if v not in (WORKFLOW_MODE_LEGACY, WORKFLOW_MODE_DISTILLATION):
              msg = f"Invalid mode: {v}. Must be one of: {WORKFLOW_MODE_LEGACY}, {WORKFLOW_MODE_DISTILLATION}"
              raise ValueError(msg)
@@ -43,63 +47,28 @@ class LoopState(BaseModel):
     def validate_potential_path(cls, v: Path | None) -> Path | None:
         """
         Ensures that if a potential path is set, it exists, is a file, and is safe.
-
-        Security:
-        - Strictly disallows symbolic links to prevent aliasing/masking of targets.
-        - Resolves path to canonical absolute form.
-        - Verifies that the resolved path is within the allowed project boundaries (CWD or Temp).
-
-        Args:
-            v: The path to validate.
-
-        Returns:
-            The validated, resolved Path object, or None.
-
-        Raises:
-            ValueError: If path is invalid, unsafe, or a symlink.
+        Uses centralized path validation utility.
         """
         if v is not None:
-            # Strict security: Disallow symbolic links to prevent potential ambiguity or traversal tricks
-            # even before resolution.
-            if Path(v).is_symlink():
-                msg = f"Potential path cannot be a symbolic link: {v}"
+            # The centralized utility handles symlink prevention, bounds checking, etc.
+            # However, LoopState requires it to exist as a file if it's set.
+            # validate_path_safe just ensures the path is safe to use.
+            safe_path = validate_path_safe(Path(v))
+
+            if not safe_path.is_file():
+                msg = f"Potential path is not a file: {safe_path}"
                 raise ValueError(msg)
 
-            # Resolve to absolute path to prevent traversal/ambiguity
-            try:
-                path = Path(v).resolve(strict=True)
-            except (FileNotFoundError, RuntimeError) as e:
-                # strict=True raises FileNotFoundError if it doesn't exist
-                msg = f"Potential path does not exist or is invalid: {v}"
-                raise ValueError(msg) from e
-
-            if not path.is_file():
-                msg = f"Potential path is not a file: {path}"
-                raise ValueError(msg)
-
-            # Security: Ensure path is within safe boundaries
-            try:
-                cwd = Path.cwd().resolve()
-                if not path.is_relative_to(cwd):
-                    # Exception: Allow /tmp or temp directories for testing/runtime
-                    temp_dir = Path(tempfile.gettempdir()).resolve()
-                    if not path.is_relative_to(temp_dir):
-                         _raise_traversal_error(path, cwd)
-            except ValueError as e:
-                # is_relative_to raises ValueError if not relative
-                _raise_traversal_error(path, cwd, e)
-
-            return path
+            return safe_path
         return v
 
     def save(self, path: Path) -> None:
         """Saves the state to a JSON file using atomic write."""
-        path = path.resolve()
+        path = validate_path_safe(path)
         directory = path.parent
         directory.mkdir(parents=True, exist_ok=True)
 
         # LoopState is small, so loading into memory for dump is acceptable.
-        # For larger datasets, we would stream.
         data = self.model_dump(mode="json")
 
         # Use a temporary file in the same directory to ensure atomic move
@@ -122,22 +91,15 @@ class LoopState(BaseModel):
     @classmethod
     def load(cls, path: Path) -> Self:
         """Loads the state from a JSON file."""
-        if not path.exists():
+        safe_path = validate_path_safe(path)
+        if not safe_path.exists():
             return cls()
 
         try:
-            with path.open("r") as f:
+            with safe_path.open("r") as f:
                 # Streaming load is automatic with json.load(f)
                 data = json.load(f)
             return cls.model_validate(data)
         except (json.JSONDecodeError, ValueError) as e:
-            msg = f"Failed to load loop state from {path}: {e}"
+            msg = f"Failed to load loop state from {safe_path}: {e}"
             raise ValueError(msg) from e
-
-
-def _raise_traversal_error(path: Path, base: Path, cause: Exception | None = None) -> None:
-    """Raises a ValueError indicating path traversal attempt. Inputs should be resolved."""
-    msg = f"Potential path {path} is outside the allowed directory {base}"
-    if cause:
-        raise ValueError(msg) from cause
-    raise ValueError(msg)

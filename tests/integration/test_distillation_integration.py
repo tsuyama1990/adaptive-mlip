@@ -1,9 +1,9 @@
-import pytest
 from unittest.mock import MagicMock, patch
-from pyacemaker.orchestrator import Orchestrator
+
 from pyacemaker.domain_models.config import PyAceConfig
 from pyacemaker.domain_models.workflow import WorkflowStep
-from pyacemaker.core.loop import LoopStatus
+from pyacemaker.orchestrator import Orchestrator
+
 
 def test_integration_full_distillation_flow(
     mock_dft_config, mock_structure_config, mock_training_config, mock_md_config, tmp_path

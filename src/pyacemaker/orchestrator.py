@@ -1,4 +1,6 @@
+import heapq
 import shutil
+import time
 from collections.abc import Iterable, Iterator
 from pathlib import Path
 from typing import Any
@@ -16,7 +18,6 @@ from pyacemaker.core.state_manager import StateManager
 from pyacemaker.core.validator import Validator
 from pyacemaker.domain_models import PyAceConfig
 from pyacemaker.domain_models.data import AtomStructure
-from pyacemaker.domain_models.workflow import WorkflowStep
 from pyacemaker.domain_models.defaults import (
     DEFAULT_PRODUCTION_DIR,
     FILENAME_CANDIDATES,
@@ -45,8 +46,10 @@ from pyacemaker.domain_models.defaults import (
     WORKFLOW_MODE_DISTILLATION,
 )
 from pyacemaker.domain_models.md import MDSimulationResult
+from pyacemaker.domain_models.workflow import WorkflowStep
 from pyacemaker.factory import ModuleFactory
 from pyacemaker.logger import setup_logger
+from pyacemaker.modules.sampling import DirectSampler
 from pyacemaker.utils.extraction import extract_local_region
 
 
@@ -185,10 +188,14 @@ class Orchestrator:
 
         return count
 
-    def _explore(self, paths: dict[str, Path]) -> None:
+    def _explore(self, paths: dict[str, Path], retries: int = 3) -> None:
         """
         Step 1: Exploration (Cold Start).
         Generates initial candidate structures and writes them to disk using efficient streaming.
+
+        Args:
+            paths: Dictionary of directory paths.
+            retries: Number of retry attempts on failure.
         """
         if not self.generator:
             return
@@ -196,27 +203,36 @@ class Orchestrator:
         n_candidates = self.config.workflow.n_candidates
         candidates_file = paths["candidates"] / FILENAME_CANDIDATES
 
-        try:
-            # Get iterator from generator
-            candidate_stream = self.generator.generate(n_candidates=n_candidates)
+        for attempt in range(retries):
+            try:
+                # Get iterator from generator
+                candidate_stream = self.generator.generate(n_candidates=n_candidates)
 
-            # _stream_write consumes the iterator, buffering in chunks.
-            total = self._stream_write(
-                candidate_stream,
-                candidates_file,
-                batch_size=self.config.workflow.batch_size,
-                append=True
-            )
+                # _stream_write consumes the iterator, buffering in chunks.
+                total = self._stream_write(
+                    candidate_stream,
+                    candidates_file,
+                    batch_size=self.config.workflow.batch_size,
+                    append=True
+                )
 
-            self.logger.info(LOG_GENERATED_CANDIDATES.format(count=total))
-        except Exception as e:
-            msg = f"Exploration failed: {e}"
-            raise OrchestratorError(msg) from e
+                self.logger.info(LOG_GENERATED_CANDIDATES.format(count=total))
+                return
+            except Exception as e:
+                self.logger.warning(f"Exploration attempt {attempt + 1}/{retries} failed: {e}")
+                if attempt == retries - 1:
+                    msg = f"Exploration failed after {retries} attempts: {e}"
+                    raise OrchestratorError(msg) from e
+                time.sleep(2) # Brief pause before retry
 
-    def _label(self, paths: dict[str, Path]) -> None:
+    def _label(self, paths: dict[str, Path], retries: int = 3) -> None:
         """
         Step 2: Labeling (Oracle).
         Computes properties for candidates and writes labelled data to training set.
+
+        Args:
+            paths: Dictionary of directory paths.
+            retries: Number of retry attempts on failure.
         """
         if not self.oracle:
             return
@@ -229,34 +245,35 @@ class Orchestrator:
         batch_size = self.config.workflow.batch_size
         training_file = paths["training"] / FILENAME_TRAINING
 
-        try:
-            # Lazy read of candidates
-            # Note: iread returns Iterator[Atoms]
-            # We need to wrap them into Iterator[AtomStructure] for the Oracle
+        for attempt in range(retries):
+            try:
+                # Lazy read of candidates
+                def atom_structure_generator(file_path: str) -> Iterator[AtomStructure]:
+                    for atoms in iread(file_path, index=":", format="extxyz"):
+                        if isinstance(atoms, Atoms):
+                            yield AtomStructure.from_ase(atoms)
 
-            def atom_structure_generator(file_path: str) -> Iterator[AtomStructure]:
-                for atoms in iread(file_path, index=":", format="extxyz"):
-                    if isinstance(atoms, Atoms):
-                        yield AtomStructure.from_ase(atoms)
+                candidate_stream = atom_structure_generator(str(candidates_file))
 
-            candidate_stream = atom_structure_generator(str(candidates_file))
+                # Streaming computation
+                labelled_stream = self.oracle.compute(candidate_stream, batch_size=batch_size)
 
-            # Streaming computation
-            # Oracle now returns Iterator[AtomStructure]
-            labelled_stream = self.oracle.compute(candidate_stream, batch_size=batch_size)
+                # _stream_write now accepts Iterator[AtomStructure]
+                total = self._stream_write(
+                    labelled_stream,
+                    training_file,
+                    batch_size=batch_size,
+                    append=True
+                )
 
-            # _stream_write now accepts Iterator[AtomStructure]
-            total = self._stream_write(
-                labelled_stream,
-                training_file,
-                batch_size=batch_size,
-                append=True
-            )
-
-            self.logger.info(LOG_COMPUTED_PROPERTIES.format(count=total))
-        except Exception as e:
-            msg = f"Labeling failed: {e}"
-            raise OrchestratorError(msg) from e
+                self.logger.info(LOG_COMPUTED_PROPERTIES.format(count=total))
+                return
+            except Exception as e:
+                self.logger.warning(f"Labeling attempt {attempt + 1}/{retries} failed: {e}")
+                if attempt == retries - 1:
+                    msg = f"Labeling failed after {retries} attempts: {e}"
+                    raise OrchestratorError(msg) from e
+                time.sleep(2)
 
     def _train(self, paths: dict[str, Path], initial_potential: Path | None = None) -> Path | None:
         """Step 3: Training"""
@@ -268,15 +285,18 @@ class Orchestrator:
             self.logger.warning("No training data found, skipping training.")
             return None
 
-        result = self.trainer.train(training_data_path=training_file, initial_potential=initial_potential)
-        self.logger.info(LOG_POTENTIAL_TRAINED)
-
-        return Path(result) if isinstance(result, (str, Path)) else None
+        try:
+            result = self.trainer.train(training_data_path=training_file, initial_potential=initial_potential)
+            self.logger.info(LOG_POTENTIAL_TRAINED)
+            return Path(result) if isinstance(result, (str, Path)) else None
+        except Exception as e:
+            msg = f"Training failed: {e}"
+            raise OrchestratorError(msg) from e
 
     def _check_initial_potential(self) -> None:
         """Checks if initial potential exists, if not generates one (Cold Start)."""
-        if self.state_manager.current_potential and self.state_manager.current_potential.exists():
-            self.logger.info(f"Using existing potential: {self.state_manager.current_potential}")
+        if self.state_manager.state.current_potential and self.state_manager.state.current_potential.exists():
+            self.logger.info(f"Using existing potential: {self.state_manager.state.current_potential}")
             return
 
         self.logger.info("No initial potential found. Starting Cold Start procedure.")
@@ -289,8 +309,8 @@ class Orchestrator:
         potential_path = self._train(paths)
 
         if potential_path:
-            self.state_manager.current_potential = potential_path
-            self.state_manager.iteration = 0
+            self.state_manager.state.current_potential = potential_path
+            self.state_manager.state.iteration = 0
             self.state_manager.save()
             self.logger.info(f"Cold start completed. Initial potential: {potential_path}")
         else:
@@ -444,18 +464,19 @@ class Orchestrator:
             # Fine-tune
             return self._train(paths, initial_potential=potential_path)
 
-        except Exception:
-            self.logger.exception("Refinement failed")
-            return None
+        except Exception as e:
+            msg = f"Refinement failed: {e}"
+            self.logger.exception(msg)
+            raise OrchestratorError(msg) from e
 
     def _deploy_potential(self, iteration: int) -> Path:
         """Deploys the current potential to the potentials directory."""
         potential_filename = TEMPLATE_POTENTIAL_FILE.format(iteration=iteration)
         deployed_potential = self.potentials_dir / potential_filename
 
-        if self.state_manager.current_potential:
-             if self.state_manager.current_potential != deployed_potential:
-                shutil.copy(self.state_manager.current_potential, deployed_potential)
+        if self.state_manager.state.current_potential:
+             if self.state_manager.state.current_potential != deployed_potential:
+                shutil.copy(self.state_manager.state.current_potential, deployed_potential)
         else:
             msg = "No current potential to deploy."
             raise OrchestratorError(msg)
@@ -470,7 +491,10 @@ class Orchestrator:
              return None
 
         if self.engine:
-            return self.engine.run(structure=initial_structure, potential=deployed_potential)
+            try:
+                return self.engine.run(structure=initial_structure, potential=deployed_potential)
+            except Exception as e:
+                raise OrchestratorError(f"MD Simulation failed: {e}") from e
         return None
 
     def _handle_md_halt(self, result: MDSimulationResult, deployed_potential: Path, paths: dict[str, Path]) -> None:
@@ -482,10 +506,10 @@ class Orchestrator:
                 if not new_potential.exists():
                     self.logger.error(f"Refined potential path {new_potential} does not exist!")
                 else:
-                    self.state_manager.current_potential = new_potential
+                    self.state_manager.state.current_potential = new_potential
                     self.logger.info(f"Potential refined to: {new_potential}")
         else:
-             self.logger.info(LOG_ITERATION_COMPLETED.format(iteration=self.state_manager.iteration + 1))
+             self.logger.info(LOG_ITERATION_COMPLETED.format(iteration=self.state_manager.state.iteration + 1))
 
     def _adapt_strategy(self, result: MDSimulationResult) -> None:
         """
@@ -510,14 +534,14 @@ class Orchestrator:
 
     def _run_loop_iteration(self) -> None:
         """Executes one iteration of the active learning loop."""
-        iteration = self.state_manager.iteration + 1
+        iteration = self.state_manager.state.iteration + 1
         paths = self.dir_manager.setup_iteration(iteration)
         self.logger.info(LOG_START_ITERATION.format(iteration=iteration, max_iterations=self.config.workflow.max_iterations))
 
         try:
             self._execute_iteration_logic(iteration, paths)
 
-            self.state_manager.iteration = iteration
+            self.state_manager.state.iteration = iteration
             self.state_manager.save()
 
         except Exception as e:
@@ -531,14 +555,14 @@ class Orchestrator:
         production_dir.mkdir(exist_ok=True)
         potential_target = production_dir / FILENAME_POTENTIAL
 
-        if self.state_manager.current_potential:
-            shutil.copy(self.state_manager.current_potential, potential_target)
+        if self.state_manager.state.current_potential:
+            shutil.copy(self.state_manager.state.current_potential, potential_target)
             self.logger.info(f"Deployed best potential to {potential_target}")
 
             if self.validator:
                 report_path = production_dir / "validation_report.html"
                 # Get a structure for validation. Use initial structure of last iteration.
-                structure = self._get_initial_structure(self.state_manager.iteration)
+                structure = self._get_initial_structure(self.state_manager.state.iteration)
 
                 if structure:
                     self.logger.info("Running final validation...")
@@ -556,7 +580,7 @@ class Orchestrator:
         """Executes the legacy active learning loop."""
         self._check_initial_potential()
 
-        while self.state_manager.iteration < self.config.workflow.max_iterations:
+        while self.state_manager.state.iteration < self.config.workflow.max_iterations:
             self._run_loop_iteration()
 
     def _step1_direct_sampling(self) -> None:
@@ -564,15 +588,25 @@ class Orchestrator:
         if not self.generator:
             raise OrchestratorError("Generator not initialized")
 
-        target = self.config.distillation.step1_direct_sampling.target_points
+        # Refactor: Ensure step 1 config is accessed safely
+        if not self.config.distillation.step1_direct_sampling:
+             raise OrchestratorError("Step 1 configuration missing")
+
+        config = self.config.distillation.step1_direct_sampling
+
         step_dir = self.dir_manager.base_dir / "step1_direct_sampling"
         step_dir.mkdir(parents=True, exist_ok=True)
         candidates_file = step_dir / FILENAME_CANDIDATES
 
         try:
-            stream = self.generator.generate(n_candidates=target)
+            # Instantiate DirectSampler with the underlying generator
+            sampler = DirectSampler(config, self.generator)
+
+            # Use sampler to generate selected structures
+            stream = sampler.generate()
+
             count = self._stream_write(
-                stream, candidates_file, batch_size=self.config.workflow.batch_size
+                stream, candidates_file, batch_size=config.batch_size
             )
             self.logger.info(LOG_GENERATED_CANDIDATES.format(count=count))
         except Exception as e:
@@ -582,37 +616,108 @@ class Orchestrator:
         self.logger.info(LOG_STEP_2)
         if not self.oracle:
             raise OrchestratorError("Oracle not initialized")
-        # Placeholder for Active Learning logic (MACE Uncertainty)
-        # In Cycle 01, we just verify oracle is present.
-        pass
+
+        config = self.config.distillation.step2_active_learning
+        if config is None:
+            raise OrchestratorError("Step 2 configuration missing")
+
+        # Paths
+        step1_dir = self.dir_manager.base_dir / "step1_direct_sampling"
+        candidates_file = step1_dir / FILENAME_CANDIDATES
+
+        step2_dir = self.dir_manager.base_dir / "step2_active_learning"
+        step2_dir.mkdir(parents=True, exist_ok=True)
+
+        if not candidates_file.exists():
+             raise OrchestratorError(f"Step 1 output not found: {candidates_file}")
+
+        try:
+            # 1. Read candidates from Step 1
+            def atom_structure_generator(file_path: str) -> Iterator[AtomStructure]:
+                # Using iread to potentially stream, though here we need sorting
+                for atoms in iread(file_path, index=":", format="extxyz"):
+                    if isinstance(atoms, Atoms):
+                        yield AtomStructure.from_ase(atoms)
+
+            # 2. Compute Uncertainty using MaceOracle
+            candidates_iter = atom_structure_generator(str(candidates_file))
+
+            # Using configurable batch size
+            scored_candidates = list(self.oracle.compute(candidates_iter, batch_size=config.batch_size))
+
+            if not scored_candidates:
+                self.logger.warning("No candidates scored by Oracle.")
+                return
+
+            # 3. Filter based on uncertainty (Memory Efficient Top-K)
+            # Instead of sorting the entire list (which is O(N log N) and memory heavy),
+            # we use heapq.nlargest to find the top k elements in O(N log k).
+
+            # Wrapper class for heapq to handle None uncertainties and reverse ordering
+            class ScoredItem:
+                def __init__(self, struct: AtomStructure) -> None:
+                    self.struct = struct
+                    # Default to -inf if None to place at bottom
+                    self.score = struct.uncertainty if struct.uncertainty is not None else -float('inf')
+
+                def __lt__(self, other: "ScoredItem") -> bool:
+                    return self.score < other.score
+
+            top_k_items = heapq.nlargest(
+                config.n_active,
+                [ScoredItem(c) for c in scored_candidates]
+            )
+
+            active_set: list[AtomStructure] = []
+            for item in top_k_items:
+                cand = item.struct
+                if cand.uncertainty is not None and cand.uncertainty >= config.uncertainty_threshold:
+                     active_set.append(cand)
+                else:
+                     # Prioritize threshold but fill up to n_active if needed
+                     active_set.append(cand)
+
+            if not active_set:
+                self.logger.warning("No candidates met active set selection criteria.")
+                return
+
+            # 4. Save Active Set
+            active_set_file = step2_dir / "active_set.xyz"
+
+            self._stream_write(
+                iter(active_set),
+                active_set_file,
+                batch_size=len(active_set)
+            )
+
+            self.logger.info(f"Selected {len(active_set)} structures for active set. Saved to {active_set_file}")
+
+        except Exception as e:
+            raise OrchestratorError(f"Step 2 failed: {e}") from e
 
     def _step3_mace_finetune(self) -> None:
         self.logger.info(LOG_STEP_3)
         if not self.trainer:
             raise OrchestratorError("Trainer not initialized")
         # Placeholder for MACE Fine-tuning
-        pass
 
     def _step4_surrogate_sampling(self) -> None:
         self.logger.info(LOG_STEP_4)
         if not self.generator:
             raise OrchestratorError("Generator not initialized")
         # Placeholder for Surrogate Data Generation
-        pass
 
     def _step5_surrogate_labeling(self) -> None:
         self.logger.info(LOG_STEP_5)
         if not self.oracle:
             raise OrchestratorError("Oracle not initialized")
         # Placeholder for Surrogate Labeling
-        pass
 
     def _step6_pacemaker_base(self) -> None:
         self.logger.info(LOG_STEP_6)
         if not self.trainer:
             raise OrchestratorError("Trainer not initialized")
         # Placeholder for Pacemaker Base Training
-        pass
 
     def _step7_delta_learning(self) -> None:
         self.logger.info(LOG_STEP_7)
@@ -624,7 +729,6 @@ class Orchestrator:
         # For now, we simulate success.
         step_dir = self.dir_manager.base_dir / "step7_delta_learning"
         step_dir.mkdir(parents=True, exist_ok=True)
-        pass
 
     def _run_distillation_workflow(self) -> None:
         """Executes the 7-step MACE Distillation workflow."""
@@ -638,20 +742,20 @@ class Orchestrator:
             (WorkflowStep.DELTA_LEARNING, self._step7_delta_learning),
         ]
 
-        self.state_manager.mode = WORKFLOW_MODE_DISTILLATION
+        self.state_manager.state.mode = WORKFLOW_MODE_DISTILLATION
 
         # Determine start index based on current step in state
         start_index = 0
-        if self.state_manager.current_step:
+        if self.state_manager.state.current_step:
             for i, (step_enum, _) in enumerate(steps):
-                if step_enum == self.state_manager.current_step:
+                if step_enum == self.state_manager.state.current_step:
                     # Resume from the found step
                     start_index = i
                     break
 
         for i in range(start_index, len(steps)):
             step_enum, step_func = steps[i]
-            self.state_manager.current_step = step_enum
+            self.state_manager.state.current_step = step_enum
             self.state_manager.save(force=True)
 
             try:
@@ -662,7 +766,7 @@ class Orchestrator:
                 self.state_manager.rollback()
                 self.state_manager.state.status = LoopStatus.HALTED
                 self.state_manager.save(force=True)
-                raise
+                raise OrchestratorError(f"Workflow halted due to error in {step_enum}: {e}") from e
 
     def run(self) -> None:
         """
@@ -683,4 +787,4 @@ class Orchestrator:
 
         except Exception as e:
             self.logger.critical(LOG_WORKFLOW_CRASHED.format(error=e))
-            raise
+            raise OrchestratorError(f"Run failed: {e}") from e

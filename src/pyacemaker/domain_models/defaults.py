@@ -29,8 +29,6 @@ DEFAULT_CHECKPOINT_INTERVAL = 1
 
 # EON Defaults
 DEFAULT_EON_EXECUTABLE = "eonclient"
-# Use environment variable for seed if available, otherwise None (to let random module decide or user override)
-DEFAULT_EON_SEED = 12345
 
 # File names
 FILENAME_CANDIDATES = "candidates.xyz"
@@ -117,9 +115,6 @@ DEFAULT_MD_HYBRID_ZBL_OUTER = 2.5
 MAX_MD_PRESSURE = 1.0e6
 MAX_MD_DURATION = 1.0e6  # ps
 
-# MC Defaults
-DEFAULT_MC_SEED = 12345
-
 # Validation Defaults
 DEFAULT_VALIDATION_PHONON_SUPERCELL = [2, 2, 2]
 DEFAULT_VALIDATION_PHONON_DISPLACEMENT = 0.01
@@ -151,7 +146,7 @@ DEFAULT_MD_MINIMIZE_FTOL = 1e-6
 DEFAULT_MD_MINIMIZE_TOL = 1e-4
 LAMMPS_MINIMIZE_MAX_ITER = 10000
 LAMMPS_MINIMIZE_STEPS = 10000
-LAMMPS_VELOCITY_SEED = 12345
+
 # Allowed characters in LAMMPS commands: Alphanumeric, space, common punctuation including *
 LAMMPS_SAFE_CMD_PATTERN = r"^[a-zA-Z0-9\s_\-\.\/=\"\*]+$"
 LAMMPS_SCREEN_ARG = "-screen"
@@ -208,3 +203,11 @@ LOG_STEP_4 = "Step 4: Surrogate Data Generation"
 LOG_STEP_5 = "Step 5: Surrogate Labeling"
 LOG_STEP_6 = "Step 6: Pacemaker Base Training"
 LOG_STEP_7 = "Step 7: Delta Learning (Fine-tuning with DFT)"
+
+# Active Learning
+# Limit for descriptor array size in bytes (2GB)
+# 2 * 1024^3
+MAX_DESCRIPTOR_ARRAY_BYTES: Final[int] = 2_147_483_648
+DEFAULT_CANDIDATE_MULTIPLIER: Final[int] = 10
+DEFAULT_DESCRIPTOR_BATCH_SIZE: Final[int] = 100
+MAX_MEMMAP_CHUNK_SIZE: Final[int] = 10000

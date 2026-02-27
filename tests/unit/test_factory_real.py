@@ -1,12 +1,12 @@
-import pytest
-from pyacemaker.factory import ModuleFactory
-from pyacemaker.domain_models import PyAceConfig
+from pyacemaker.core.active_set import ActiveSetSelector
+from pyacemaker.core.engine import LammpsEngine
 from pyacemaker.core.generator import StructureGenerator
 from pyacemaker.core.oracle import DFTManager
 from pyacemaker.core.trainer import PacemakerTrainer
-from pyacemaker.core.engine import LammpsEngine
-from pyacemaker.core.active_set import ActiveSetSelector
 from pyacemaker.core.validator import Validator
+from pyacemaker.domain_models import PyAceConfig
+from pyacemaker.factory import ModuleFactory
+
 
 def test_create_modules_standard(
     mock_dft_config, mock_structure_config, mock_training_config, mock_md_config

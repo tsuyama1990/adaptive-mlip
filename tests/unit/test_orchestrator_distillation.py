@@ -1,15 +1,15 @@
-import pytest
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from pyacemaker.core.loop import LoopStatus
-from pyacemaker.orchestrator import Orchestrator
-from pyacemaker.domain_models.config import PyAceConfig
-from pyacemaker.domain_models.workflow import WorkflowStep
 from pyacemaker.domain_models.defaults import (
-    WORKFLOW_MODE_DISTILLATION,
     LOG_STEP_1,
     LOG_STEP_7,
+    WORKFLOW_MODE_DISTILLATION,
 )
+from pyacemaker.domain_models.workflow import WorkflowStep
+from pyacemaker.orchestrator import Orchestrator
 
 
 @pytest.fixture
