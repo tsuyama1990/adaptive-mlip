@@ -1,13 +1,10 @@
-from collections.abc import Iterable, Iterator
 from io import StringIO
-from pathlib import Path
-from unittest.mock import MagicMock, mock_open, patch
+from unittest.mock import MagicMock
 
 import numpy as np
 import pytest
 from ase import Atoms
 
-from pyacemaker.domain_models.data import AtomStructure
 from pyacemaker.utils.io import write_lammps_streaming
 
 
@@ -33,8 +30,8 @@ def test_write_lammps_streaming_io_failure() -> None:
     # Mock file object that raises IOError on write
     mock_file = MagicMock()
     # Mock both write and writelines as optimized version uses writelines
-    mock_file.write.side_effect = IOError("Disk full")
-    mock_file.writelines.side_effect = IOError("Disk full")
+    mock_file.write.side_effect = OSError("Disk full")
+    mock_file.writelines.side_effect = OSError("Disk full")
 
     with pytest.raises(IOError, match="Disk full"):
         write_lammps_streaming(mock_file, atoms, species=["H"])

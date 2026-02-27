@@ -182,10 +182,12 @@ def test_dft_manager_invalid_element_type(mock_dft_config: DFTConfig) -> None:
     """Test compute raises TypeError for iterator containing invalid elements."""
     manager = DFTManager(mock_dft_config)
     # Iterator of wrong types
+    # Make sure it's an iterator
     wrong_iter = iter(["not an AtomStructure"])
 
     gen = manager.compute(wrong_iter) # type: ignore[arg-type]
 
+    # Validation happens during generation
     with pytest.raises(TypeError, match="Expected AtomStructure"):
         next(gen)
 
