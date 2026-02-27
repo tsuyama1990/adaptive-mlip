@@ -73,43 +73,24 @@ class DFTManager(BaseOracle):
 
     def _compute_generator(self, structures: Iterator[AtomStructure], batch_size: int) -> Iterator[AtomStructure]:
         """Internal generator for streaming computations with batching."""
-        # Use batched processing (chunking) to reuse temporary directories
-        # without materializing the whole batch in memory list.
-        # However, islice consumes the iterator.
 
         while True:
             # Create a batch generator (iterator slice)
-            # Note: list(islice(...)) materializes the batch.
-            # To avoid materializing even the batch if batch_size is huge, we should process one by one
-            # BUT reuse the context.
-            # The audit requirement was: "DFTManager.compute method accepts batch_size parameter but ignores it... Implement proper batching logic"
-            # Batching usually implies grouping. If we process 1 by 1 inside a loop of batch_size, we achieve the goal.
-
-            # We can use a single temp dir for 'batch_size' items.
-            # But since we want to yield as soon as one is done, we iterate `batch_size` times.
-
-            # Since we can't easily peek existence of next item without consuming,
-            # we iterate until exhaustion.
-
-            # Efficient pattern:
-            # Create temp dir. Process N items. Close temp dir. Repeat.
-
-            # Check if there are items left?
-            # We can just try to take `batch_size` items.
-            # list(islice) is standard but creates a list of `batch_size`.
-            # If batch_size is small (e.g. 10-100), this is fine.
-            # If batch_size is huge (unlikely default), it might be an issue.
-            # Let's assume batch_size is reasonable (10-1000).
-
+            # Use list(islice) to get a batch
             batch = list(islice(structures, batch_size))
             if not batch:
                 break
 
+            # Create ONE temporary directory for the entire batch
+            # This reduces filesystem overhead (mkdir/rmdir) significantly for large datasets.
+            # We process sequentially inside the batch to keep memory low,
+            # but reuse the workspace.
             with tempfile.TemporaryDirectory() as work_dir:
                 work_path = Path(work_dir)
+
+                # Process items in the batch
                 for i, structure in enumerate(batch):
-                    # Use unique subdirs or filenames to avoid collision if artifacts persist
-                    # though we process sequentially here.
+                    # Use unique subdirs within the batch temp dir
                     calc_dir = work_path / f"calc_{i}"
                     calc_dir.mkdir()
                     yield self._process_structure(structure, str(calc_dir))
@@ -128,22 +109,8 @@ class DFTManager(BaseOracle):
         """
         # Apply Periodic Embedding if configured
         if self.config.embedding_buffer:
-            # Note: embed_cluster returns ase.Atoms
-            # We need to perform calculation on the embedded atoms,
-            # and then update the AtomStructure with results.
-            # OR return a new AtomStructure with embedded atoms?
-            # Usually embedding is for calculation context, but forces/energy are mapped back.
-            # For simplicity in this cycle, we compute on embedded and return embedded.
-
             atoms_to_compute = embed_cluster(structure.atoms, buffer=self.config.embedding_buffer)
-
-            # Since atoms changed (embedded), we might conceptually have a new structure.
-            # However, mapping forces back to original cluster is complex (forces on buffer atoms).
-            # If we assume we train on what we compute:
-            # We return a new AtomStructure wrapping the embedded atoms.
-
             # Create a temporary AtomStructure for computation
-            # Copy provenance
             structure_to_compute = AtomStructure(
                 atoms=atoms_to_compute,
                 provenance=structure.provenance.copy()
@@ -155,9 +122,6 @@ class DFTManager(BaseOracle):
         computed_atoms = self._compute_single(structure_to_compute.atoms, calc_dir)
 
         # Update AtomStructure with computed properties
-        # Since _compute_single modifies atoms in-place (attaches calculator results),
-        # we can just re-wrap or update.
-
         return AtomStructure.from_ase(computed_atoms)
 
 

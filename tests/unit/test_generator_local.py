@@ -1,9 +1,8 @@
 import numpy as np
-import pytest
 from ase import Atoms
 
 from pyacemaker.core.generator import StructureGenerator
-from pyacemaker.domain_models.structure import ExplorationPolicy, StructureConfig
+from pyacemaker.domain_models.structure import StructureConfig
 
 
 def test_generate_local_rattle() -> None:

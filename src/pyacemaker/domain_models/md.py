@@ -162,6 +162,10 @@ class MDConfig(BaseModel):
     minimize_ftol: float = Field(
         DEFAULT_MD_MINIMIZE_FTOL, description="Force tolerance for minimization"
     )
+    # Added field for minimization style (defaulting to cg)
+    minimize_style: str = Field(
+        "cg", description="LAMMPS minimization style (e.g., 'cg', 'hftn', 'sd')"
+    )
 
     # Advanced Settings
     temp_dir: str | None = Field(

@@ -1,5 +1,4 @@
 import logging
-from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
@@ -134,25 +133,40 @@ def write_lammps_streaming(
     fileobj.write("Atoms # atomic\n\n")
 
     # Optimize Atom Writing:
-    # Use direct array access and iterators to avoid creating large intermediate lists/arrays if possible.
-    # But atoms.get_positions() returns a copy anyway.
+    # Use buffered writing by generating a list of lines and calling writelines once (or in chunks).
+    # For large structures, creating one huge list of strings might still be heavy on memory.
+    # A generator is good for memory, but fileobj.writelines iterates it.
+    # To reduce I/O calls, writelines is better than loop + write.
+    # But writelines essentially loops and writes?
+    # Python's file objects are buffered by default.
+    # The issue "write_lammps_streaming function creates a new file object for each write operation"
+    # was likely referring to the generator creating strings line by line and yielding them?
+    # No, `fileobj.writelines` takes an iterable.
+    # The previous implementation used a generator:
+    # fileobj.writelines(line_generator())
+    # This is standard and generally efficient IF `fileobj` is buffered.
+
+    # However, if we want to be explicit about batching:
 
     pos = atoms.get_positions() # (N, 3)
     symbols = atoms.get_chemical_symbols() # List of strings (N)
 
-    # Generator for lines to keep memory usage O(1) per line (after pos array overhead)
-    # This avoids creating a huge string buffer or list of strings.
-    def line_generator() -> Iterable[str]:
-        for i in range(natoms):
-            s = symbols[i]
-            try:
-                t = type_map[s]
-            except KeyError:
-                 raise KeyError(f"Symbol {s} not in provided species list: {species}")
+    # Pre-lookup types to avoid dict lookup in tight loop
+    # Vectorize type lookup?
+    try:
+        atom_types = [type_map[s] for s in symbols]
+    except KeyError as e:
+         raise KeyError(f"Symbol not in provided species list: {species}") from e
 
-            # 1-based index
-            yield f"{i+1} {t} {pos[i, 0]:.6f} {pos[i, 1]:.6f} {pos[i, 2]:.6f}\n"
+    # Chunk size for writing (e.g. 1000 lines)
+    chunk_size = 1000
 
-    fileobj.writelines(line_generator())
+    for i in range(0, natoms, chunk_size):
+        end = min(i + chunk_size, natoms)
+        lines = []
+        for j in range(i, end):
+            # 1-based index for atoms
+            lines.append(f"{j+1} {atom_types[j]} {pos[j, 0]:.6f} {pos[j, 1]:.6f} {pos[j, 2]:.6f}\n")
+        fileobj.writelines(lines)
 
     fileobj.write("\n")

@@ -1,4 +1,3 @@
-from typing import Any
 
 from pyacemaker.core.base import BasePolicy
 from pyacemaker.core.policy import (
@@ -11,7 +10,11 @@ from pyacemaker.core.policy import (
     RattlePolicy,
     StrainPolicy,
 )
-from pyacemaker.domain_models.structure import ExplorationPolicy, LocalGenerationStrategy, StructureConfig
+from pyacemaker.domain_models.structure import (
+    ExplorationPolicy,
+    LocalGenerationStrategy,
+    StructureConfig,
+)
 
 
 class PolicyFactory:
@@ -56,9 +59,9 @@ class PolicyFactory:
         """
         if strategy == LocalGenerationStrategy.RANDOM_DISPLACEMENT:
             return RandomDisplacementPolicy()
-        elif strategy == LocalGenerationStrategy.NORMAL_MODE:
+        if strategy == LocalGenerationStrategy.NORMAL_MODE:
             return NormalModePolicy()
-        elif strategy == LocalGenerationStrategy.MD_MICRO_BURST:
+        if strategy == LocalGenerationStrategy.MD_MICRO_BURST:
             return MDMicroBurstPolicy()
 
         return RandomDisplacementPolicy()

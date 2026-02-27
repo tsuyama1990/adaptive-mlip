@@ -58,12 +58,16 @@ def validate_path_safe(path: Path) -> Path:
 
     base_dir = Path.cwd().resolve()
 
-    # Allowed roots: CWD, System Temp, RAM Disk
+    # Allowed roots: CWD, System Temp
     allowed_roots = [
         base_dir,
         Path(tempfile.gettempdir()).resolve(),
-        Path(DEFAULT_RAM_DISK_PATH).resolve()
     ]
+
+    # Add RAM Disk if it exists
+    ram_disk_path = Path(DEFAULT_RAM_DISK_PATH).resolve()
+    if ram_disk_path.exists() and ram_disk_path.is_dir():
+        allowed_roots.append(ram_disk_path)
 
     is_safe = False
     for root in allowed_roots:

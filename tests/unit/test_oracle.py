@@ -225,3 +225,62 @@ def test_dft_manager_embedding(mock_dft_config: DFTConfig, monkeypatch: pytest.M
     # The result should be an AtomStructure wrapping the embedded atoms
     assert isinstance(result, AtomStructure)
     assert result.atoms == embedded_atoms
+
+def test_dft_manager_sequential_failures_apply_strategies(mock_dft_config: DFTConfig) -> None:
+    """
+    Test that self-healing strategies are applied sequentially upon failures.
+    We mock a calculator that fails 2 times (Initial, Strategy 1) and succeeds on 3rd attempt (Strategy 2).
+    """
+    atoms = Atoms("H", cell=[10, 10, 10], pbc=True)
+    input_structure = AtomStructure(atoms=atoms)
+
+    mock_driver = MagicMock()
+
+    # 1. Fail (Initial attempt)
+    # 2. Fail (Strategy 1: Reduce Beta)
+    # 3. Succeed (Strategy 2: Increase Smearing)
+
+    mock_driver.get_calculator.side_effect = [
+        MockCalculator(fail_count=1),
+        MockCalculator(fail_count=1),
+        MockCalculator(fail_count=0)
+    ]
+
+    manager = DFTManager(mock_dft_config, driver=mock_driver)
+
+    gen = manager.compute(iter([input_structure]))
+    result = next(gen)
+
+    assert result.energy == TEST_ENERGY_GENERIC
+
+    # Verify we called driver 3 times
+    assert mock_driver.get_calculator.call_count == 3
+
+    # Check args for each call
+    calls = mock_driver.get_calculator.call_args_list
+
+    # Call 1: Default config
+    config1 = calls[0][0][1]
+    assert config1.mixing_beta == 0.7
+    assert config1.smearing_width == 0.1
+
+    # Call 2: Reduced Beta
+    config2 = calls[1][0][1]
+    assert config2.mixing_beta != 0.7 # Modified
+    assert config2.smearing_width == 0.1 # Unmodified
+
+    # Call 3: Reduced Beta (from prev) AND Increased Smearing?
+    # NO, implementation copies `self.config` fresh for each strategy in loop?
+    # Let's check `_compute_single` logic:
+    # `current_config = self.config.model_copy()` is OUTSIDE the loop in `_compute_single`.
+    # Wait, `current_config = self.config.model_copy()` is at the start of `_compute_single`.
+    # Strategies are applied cumulatively?
+    # Loop: `for i, strategy in enumerate(strategies):`
+    #   if strategy: strategy(current_config)
+
+    # Yes, `current_config` is modified in-place by each strategy sequentially.
+    # So Strategy 2 applies ON TOP of Strategy 1 modifications.
+
+    config3 = calls[2][0][1]
+    assert config3.mixing_beta != 0.7 # Retains Strategy 1 change
+    assert config3.smearing_width != 0.1 # Has Strategy 2 change

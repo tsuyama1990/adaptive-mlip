@@ -2,6 +2,7 @@ import contextlib
 
 import numpy as np
 from ase import Atoms
+from ase.calculators.calculator import PropertyNotImplementedError
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -76,11 +77,12 @@ class AtomStructure(BaseModel):
 
         # 1. Try to get from Calculator (High Priority)
         if atoms.calc:
-            with contextlib.suppress(Exception):
+            # Catch specific errors instead of bare Exception
+            with contextlib.suppress(PropertyNotImplementedError, RuntimeError):
                 energy = atoms.get_potential_energy() # type: ignore[no-untyped-call]
-            with contextlib.suppress(Exception):
+            with contextlib.suppress(PropertyNotImplementedError, RuntimeError):
                 forces = atoms.get_forces() # type: ignore[no-untyped-call]
-            with contextlib.suppress(Exception):
+            with contextlib.suppress(PropertyNotImplementedError, RuntimeError):
                 stress = atoms.get_stress() # type: ignore[no-untyped-call]
 
         # 2. Try to get from info/arrays (Low Priority / Override if Calc missing)

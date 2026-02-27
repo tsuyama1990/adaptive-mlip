@@ -55,8 +55,8 @@ class LammpsInputValidator:
         # Validate structure physical properties
         try:
             vol = structure.get_volume()  # type: ignore[no-untyped-call]
-        except Exception as e:
-            # get_volume might fail if no cell is set
+        except (ValueError, AttributeError, RuntimeError) as e:
+            # Catch specific errors (e.g. no cell, or numpy error)
             raise ValueError(ERR_VAL_STRUCT_VOL_FAIL.format(error=e)) from e
 
         if vol <= 1e-9:

@@ -1,4 +1,3 @@
-from unittest.mock import MagicMock
 
 from pyacemaker.core.policy import (
     ColdStartPolicy,

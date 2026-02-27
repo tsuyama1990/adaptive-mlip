@@ -136,7 +136,6 @@ class CompositePolicy(BasePolicy):
 # Local Policies
 class RandomDisplacementPolicy(RattlePolicy):
     """Alias for RattlePolicy used in local generation."""
-    pass
 
 class NormalModePolicy(BasePolicy):
     """Placeholder for Normal Mode sampling."""
