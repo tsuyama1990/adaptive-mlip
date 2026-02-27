@@ -7,6 +7,8 @@ import yaml
 from ase import Atoms
 from ase.io import iread
 
+from pyacemaker.domain_models.constants import STREAMING_CHUNK_SIZE
+
 logger = logging.getLogger(__name__)
 
 # Cache atomic masses to avoid repeated imports/lookups in inner loops
@@ -144,12 +146,8 @@ def write_lammps_streaming(
     except KeyError as e:
          raise KeyError(f"Symbol not in provided species list: {species}") from e
 
-    # Chunk size for writing (e.g. 1000 lines)
-    chunk_size = 1000
-
-    # We can perform formatting efficiently using f-strings in a list comprehension
-    # But for HUGE atoms, even list comprehension might be memory heavy.
-    # We stick to chunking.
+    # Chunk size for writing (from constants)
+    chunk_size = STREAMING_CHUNK_SIZE
 
     for i in range(0, natoms, chunk_size):
         end = min(i + chunk_size, natoms)

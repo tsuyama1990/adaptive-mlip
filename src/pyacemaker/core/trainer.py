@@ -44,18 +44,6 @@ class PacemakerTrainer(BaseTrainer):
             TrainerError: If the training data file does not exist or format is invalid.
         """
         # Ensure pace_train is installed
-        # Note: In cycle 01, we might not have pace_train installed in the environment.
-        # But for logic implementation, we check.
-        # If running in mock mode or similar, this might fail.
-        # However, the class is PacemakerTrainer, specifically for the real tool.
-
-        # Check if we should mock execution for Cycle 01 if tool is missing?
-        # The prompt implies "MockOracle" for DFT. Does it imply MockTrainer?
-        # SPEC says "Implement Mock: Create modules/mock_oracle.py". It doesn't explicitly say MockTrainer.
-        # But if we want to run UAT end-to-end without Pace, we might need one.
-        # However, Orchestrator uses whatever Factory returns.
-        # For now, implemented as real trainer wrapper.
-
         if not shutil.which("pace_train"):
              # For Cycle 01 testing without external tools, maybe we should warn instead of crash if not found?
              # But strictly, it should raise.
@@ -67,8 +55,8 @@ class PacemakerTrainer(BaseTrainer):
 
         # Determine output directory (same as data file)
         output_dir = data_path.parent
-        # Ensure filename from config or default
-        potential_filename = "potential.yace" # or self.config.output_filename if available
+        # Use filename from config (FIX: No hardcoding)
+        potential_filename = self.config.output_filename
 
         # We need a YAML config for pacemaker.
         # Pacemaker expects input.yaml usually.

@@ -39,8 +39,9 @@ class PolicyFactory:
             elif policy_name == ExplorationPolicy.DEFECTS:
                 policies.append(DefectPolicy())
             else:
-                # Should be caught by Pydantic validation
-                pass
+                # Should be caught by Pydantic validation, but explicit check requested
+                msg = f"Unknown exploration policy: {policy_name}"
+                raise ValueError(msg)
 
         if not policies:
             # Default to ColdStart if empty? Pydantic ensures non-empty default list or validation?
@@ -64,4 +65,6 @@ class PolicyFactory:
         if strategy == LocalGenerationStrategy.MD_MICRO_BURST:
             return MDMicroBurstPolicy()
 
-        return RandomDisplacementPolicy()
+        # Explicitly raise for unknown, though Enum prevents it mostly
+        msg = f"Unknown local generation strategy: {strategy}"
+        raise ValueError(msg)

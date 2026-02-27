@@ -90,6 +90,11 @@ class DFTManager(BaseOracle):
 
                 # Process items in the batch
                 for i, structure in enumerate(batch):
+                    # Strict Type Validation per element to fail fast
+                    if not isinstance(structure, AtomStructure):
+                        msg = f"Expected AtomStructure, got {type(structure)}"
+                        raise TypeError(msg)
+
                     # Use unique subdirs within the batch temp dir
                     calc_dir = work_path / f"calc_{i}"
                     calc_dir.mkdir()

@@ -63,6 +63,8 @@ def test_mock_oracle_compute_logic() -> None:
 
     # Forces should be near zero at equilibrium
     forces = result.forces
+    if forces is None:
+        pytest.fail("Forces are None")
     assert np.all(np.abs(forces) < 0.2)
 
     # Test repulsion (r < r_eq)
@@ -72,11 +74,17 @@ def test_mock_oracle_compute_logic() -> None:
     res_short = next(oracle.compute(iter([structure_short])))
 
     # Energy should be higher than min
+    if res_short.energy is None:
+        pytest.fail("Energy is None")
     assert res_short.energy > -1.0
 
     # Forces should be repulsive (positive on 2nd atom along z?)
     # Force F = -dV/dr.
     # Repulsive force pushes atoms apart.
     # Atom 1 (z=0) pushed to -z, Atom 2 (z=r) pushed to +z.
-    f_z_atom2 = res_short.forces[1][2]
+    forces_short = res_short.forces
+    if forces_short is None:
+        pytest.fail("Forces are None")
+
+    f_z_atom2 = forces_short[1][2]
     assert f_z_atom2 > 0.0

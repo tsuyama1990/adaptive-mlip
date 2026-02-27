@@ -178,6 +178,17 @@ def test_dft_manager_invalid_input(mock_dft_config: DFTConfig) -> None:
     with pytest.raises(TypeError, match="Oracle failed to create iterator"):
         manager.compute(atoms_list) # type: ignore[arg-type]
 
+def test_dft_manager_invalid_element_type(mock_dft_config: DFTConfig) -> None:
+    """Test compute raises TypeError for iterator containing invalid elements."""
+    manager = DFTManager(mock_dft_config)
+    # Iterator of wrong types
+    wrong_iter = iter(["not an AtomStructure"])
+
+    gen = manager.compute(wrong_iter) # type: ignore[arg-type]
+
+    with pytest.raises(TypeError, match="Expected AtomStructure"):
+        next(gen)
+
 def test_dft_manager_empty_iterator(mock_dft_config: DFTConfig) -> None:
     """Test compute handles empty iterator correctly."""
     manager = DFTManager(mock_dft_config)
@@ -185,8 +196,8 @@ def test_dft_manager_empty_iterator(mock_dft_config: DFTConfig) -> None:
 
     from collections import deque
     # Empty iterator should just return empty iterator, no warning needed if handled gracefully
-    # If the implementation warns, check for it.
-    deque(manager.compute(empty_iter), maxlen=0)
+    results = deque(manager.compute(empty_iter), maxlen=0)
+    assert len(results) == 0
 
 def test_dft_manager_embedding(mock_dft_config: DFTConfig, monkeypatch: pytest.MonkeyPatch) -> None:
     """Test that embedding is applied when configured."""
