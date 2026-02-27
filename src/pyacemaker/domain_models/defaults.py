@@ -3,6 +3,10 @@ import tempfile
 from pathlib import Path
 from typing import Final
 
+# Source of Truth for Configuration Defaults
+# These constants are imported by domain models (e.g. WorkflowConfig)
+# to populate Pydantic default values.
+
 # Configuration Defaults
 DEFAULT_STATE_FILE = "state.json"
 DEFAULT_DATA_DIR = "data"

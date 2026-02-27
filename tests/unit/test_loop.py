@@ -90,3 +90,32 @@ def test_loop_state_corrupted_load(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="Failed to load loop state"):
         LoopState.load(state_file)
+
+
+def test_loop_state_concurrent_save(tmp_path: Path) -> None:
+    """Test thread safety of LoopState save (atomic write)."""
+    import threading
+
+    state_file = tmp_path / "concurrent_state.json"
+
+    def save_worker(i: int) -> None:
+        local_state = LoopState(iteration=i)
+        try:
+            local_state.save(state_file)
+        except OSError:
+            # OS might lock file during rename on Windows, but atomic rename should handle it
+            pass
+
+    threads = []
+    for i in range(20):
+        t = threading.Thread(target=save_worker, args=(i,))
+        threads.append(t)
+        t.start()
+
+    for t in threads:
+        t.join()
+
+    # Verify file is valid JSON and contains one of the iterations
+    # Atomic write via temp file + replace ensures no partial writes.
+    loaded = LoopState.load(state_file)
+    assert 0 <= loaded.iteration < 20

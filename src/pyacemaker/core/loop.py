@@ -41,7 +41,23 @@ class LoopState(BaseModel):
     @field_validator("current_potential")
     @classmethod
     def validate_potential_path(cls, v: Path | None) -> Path | None:
-        """Ensures that if a potential path is set, it exists, is a file, and is safe."""
+        """
+        Ensures that if a potential path is set, it exists, is a file, and is safe.
+
+        Security:
+        - Strictly disallows symbolic links to prevent aliasing/masking of targets.
+        - Resolves path to canonical absolute form.
+        - Verifies that the resolved path is within the allowed project boundaries (CWD or Temp).
+
+        Args:
+            v: The path to validate.
+
+        Returns:
+            The validated, resolved Path object, or None.
+
+        Raises:
+            ValueError: If path is invalid, unsafe, or a symlink.
+        """
         if v is not None:
             # Strict security: Disallow symbolic links to prevent potential ambiguity or traversal tricks
             # even before resolution.
