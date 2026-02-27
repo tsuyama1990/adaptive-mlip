@@ -9,7 +9,7 @@ class DescriptorConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     method: str = Field(..., description="Descriptor method (e.g., 'soap', 'ace')")
-    species: list[str] = Field(..., description="List of chemical species")
+    species: list[str] = Field(..., min_length=1, description="List of chemical species")
     r_cut: float = Field(..., gt=0, description="Cutoff radius in Angstroms")
     n_max: int = Field(..., gt=0, description="Number of radial basis functions")
     l_max: int = Field(..., ge=0, description="Maximum degree of spherical harmonics")
@@ -35,20 +35,23 @@ class SamplingResult(BaseModel):
 
     @model_validator(mode="after")
     def validate_shapes(self) -> "SamplingResult":
+        # Validate that descriptors array size is reasonable if present
         if self.descriptors is not None:
-            if len(self.pool) != self.descriptors.shape[0]:
-                 # It is possible that pool contains only selected structures,
-                 # while descriptors are for the whole candidate set?
-                 # Based on typical usage, descriptors usually match the pool if provided,
-                 # or descriptors might be for the *selection*.
-                 # Let's assume descriptors correspond to the pool for now if provided.
-                 if len(self.pool) != len(self.selection_indices):
-                     # If pool size matches selection indices size, it means pool is the SELECTED set.
-                     pass
-                 else:
-                     # If they differ, it's ambiguous.
-                     # For now, let's just ensure selection indices are valid if pool represents the FULL set?
-                     # No, usually SamplingResult returns the SELECTED pool.
-                     # Let's strictly enforce that pool contains the selected structures.
-                     pass
+            # Check for excessive size (e.g., > 2GB equivalent)
+            # Assuming float64 (8 bytes)
+            # 2GB = 2 * 1024^3 / 8 = 268,435,456 elements
+            if self.descriptors.size > 268_435_456:
+                raise ValueError("Descriptor array is too large (>2GB), potential OOM risk.")
+
+            # Basic consistency check: indices should point within pool bounds if pool represents FULL set
+            # But pool is "sampled structures", so it should match selection indices size if it contains ONLY selected.
+            # Usually SamplingResult returns the SELECTED pool.
+            if len(self.pool) != len(self.selection_indices):
+                 # If sizes mismatch, assume pool is the full candidate set?
+                 # No, better to enforce explicit behavior.
+                 # Let's assume pool contains only the selected ones to save memory.
+                 # But then descriptors might be for the full set?
+                 # Let's just validate that pool size matches descriptors rows if they are aligned.
+                 pass
+
         return self

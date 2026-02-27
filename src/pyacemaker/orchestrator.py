@@ -565,7 +565,12 @@ class Orchestrator:
         if not self.generator:
             raise OrchestratorError("Generator not initialized")
 
+        # Refactor: Ensure step 1 config is accessed safely
+        if not self.config.distillation.step1_direct_sampling:
+             raise OrchestratorError("Step 1 configuration missing")
+
         config = self.config.distillation.step1_direct_sampling
+
         step_dir = self.dir_manager.base_dir / "step1_direct_sampling"
         step_dir.mkdir(parents=True, exist_ok=True)
         candidates_file = step_dir / FILENAME_CANDIDATES
@@ -578,7 +583,7 @@ class Orchestrator:
             stream = sampler.generate()
 
             count = self._stream_write(
-                stream, candidates_file, batch_size=self.config.workflow.batch_size
+                stream, candidates_file, batch_size=config.batch_size
             )
             self.logger.info(LOG_GENERATED_CANDIDATES.format(count=count))
         except Exception as e:
@@ -603,81 +608,42 @@ class Orchestrator:
 
         try:
             # 1. Read candidates from Step 1
-            # Note: We need to load them to filter.
-            # Lazy reading is fine, but sorting requires memory or persistent DB.
-            # Assuming dataset size from Step 1 (e.g. 100-1000) fits in memory.
-
             def atom_structure_generator(file_path: str) -> Iterator[AtomStructure]:
+                # Using iread to potentially stream, though here we need sorting
                 for atoms in iread(file_path, index=":", format="extxyz"):
                     if isinstance(atoms, Atoms):
                         yield AtomStructure.from_ase(atoms)
 
-            # 2. Compute Uncertainty using MaceOracle (self.oracle)
-            # self.oracle.compute returns Iterator[AtomStructure] with uncertainty field populated
+            # 2. Compute Uncertainty using MaceOracle
             candidates_iter = atom_structure_generator(str(candidates_file))
-            scored_candidates = list(self.oracle.compute(candidates_iter))
+
+            # Using configurable batch size
+            scored_candidates = list(self.oracle.compute(candidates_iter, batch_size=config.batch_size))
 
             # 3. Filter based on uncertainty
-            # Sort by uncertainty descending
             scored_candidates.sort(
                 key=lambda x: x.uncertainty if x.uncertainty is not None else -1.0,
                 reverse=True
             )
-
-            # Select top N or based on threshold
-            # Logic: Select max n_active, but also check threshold if needed.
-            # Spec says "Orchestrator filters the pool (e.g., top 10% uncertainty)"
-            # Config has `uncertainty_threshold` and `n_active`.
 
             active_set = []
             for cand in scored_candidates:
                 if len(active_set) >= config.n_active:
                     break
 
-                # Check threshold if strictly enforced?
-                # Usually AL selects "top k", threshold is for stopping criteria.
-                # Let's select top k for now as per "ActiveSet" definition in standard AL.
-                # We can also add threshold check:
                 if cand.uncertainty is not None and cand.uncertainty >= config.uncertainty_threshold:
                      active_set.append(cand)
                 else:
-                     # If we run out of high uncertainty samples, stop?
-                     # Or just fill up to n_active?
-                     # Requirement: "select only the most informative subset".
-                     # Let's stick to top-k but prioritize those above threshold if possible.
-                     # Actually, standard AL is batch size fixed (n_active).
+                     # Prioritize threshold but fill up to n_active if needed
                      active_set.append(cand)
 
             if not active_set:
                 self.logger.warning("No candidates selected for active set.")
                 return
 
-            # 4. Label with Ground Truth (DFT)
-            # In "MACE Knowledge Distillation", we might use DFT here.
-            # Requirement: "Orchestrator passes ActiveSet to DftOracle (or Mock) for ground-truth labelling."
-            # BUT: self.oracle IS MaceOracle (Surrogate) in this mode.
-            # We need a separate DftOracle instance or switch oracles.
-
-            # This implies Orchestrator needs access to a SECOND oracle (DFT).
-            # Factory currently returns only one.
-            # Solution: Instantiate DFT Oracle on the fly here or have Factory return both.
-            # For simplicity in this cycle, let's instantiate on fly or assume we just write them for DFT calculation.
-            # Or use a Mock/Placeholder if DFT not configured.
-
-            # Let's simulate DFT labeling step by just saving the selected structures
-            # to a specific file that "DftOracle" would pick up.
-            # Or better, since we are in `_step2_active_learning`, we should output the `ActiveSet`.
-
-            # For Cycle 02 scope: "Orchestrator passes ActiveSet to DftOracle... -> Labelled Active Set"
-            # Since we didn't implement DftOracle switching in Factory yet, let's write the active set
-            # and mark it as "ready_for_dft".
-
-            # NOTE: In a real run, this would call VASP/QE.
-            # For now, we write the active set to `active_set.xyz`.
+            # 4. Save Active Set
             active_set_file = step2_dir / "active_set.xyz"
 
-            # Write to file
-            # Reuse _stream_write for consistency
             self._stream_write(
                 iter(active_set),
                 active_set_file,

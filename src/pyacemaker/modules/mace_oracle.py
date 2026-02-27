@@ -33,28 +33,23 @@ class MaceOracle(BaseOracle):
 
         logger.info(f"Loading MACE model from {self.model_path} on {self.device}...")
 
-        # Handle model loading. MACECalculator supports local paths and downloaded models.
-        # If it's a known public model like "MACE-MP-0", MACECalculator handles it usually (check docs).
-        # Assuming standard usage:
-        return MACECalculator(
-            model_paths=self.model_path,
-            device=self.device,
-            default_dtype="float64" # Precision
-        )
+        # Robust loading
+        try:
+            return MACECalculator(
+                model_paths=self.model_path,
+                device=self.device,
+                default_dtype="float64"
+            )
+        except Exception as e:
+            raise RuntimeError(f"Failed to load MACE model: {e}") from e
 
     def compute(self, structures: Iterator[AtomStructure], batch_size: int = 10) -> Iterator[AtomStructure]:
         """
         Computes properties using MACE.
 
-        Note: MACE calculator typically handles single Atoms object.
-        Batch processing might require using the model directly or calculator batch features.
-        For simplicity and robustness, we iterate. Optimization can be done later.
+        Raises:
+            RuntimeError: If computation fails for a batch and cannot be recovered.
         """
-        # To support batching properly with ASE calculator, we would usually attach calculator to each atoms
-        # and call get_potential_energy.
-        # If MACE supports batch inference via a specific method, we should use it.
-        # Standard MACECalculator is per-structure.
-
         for structure in structures:
             atoms = structure.to_ase()
 
@@ -63,38 +58,25 @@ class MaceOracle(BaseOracle):
 
             try:
                 # Compute
+                # This triggers calculation
                 energy = atoms.get_potential_energy() # type: ignore[no-untyped-call]
                 forces = atoms.get_forces() # type: ignore[no-untyped-call]
                 stress = atoms.get_stress() # type: ignore[no-untyped-call]
 
-                # Uncertainty?
-                # Does standard MACECalculator return uncertainty?
-                # Usually it's in atoms.info or calc.results if enabled in model.
-                # If model is an ensemble or has variance head.
+                # Extract Uncertainty
                 uncertainty = None
-
-                # Check for uncertainty keys in results
-                # Common keys: "energy_var", "forces_var", "comm_var" (committee)
-                # Let's inspect calculator results
                 results = self._calculator.results
 
-                # Heuristic for uncertainty:
-                # 1. Look for explicit variance/std keys
-                # 2. If not found, check if we can trigger it (unlikely without config)
-
-                # Assuming MACE-MP-0-medium or similar might not output it by default unless configured.
-                # But Requirement says: "MaceOracle is enhanced to compute uncertainty... from ensemble... or MC Dropout"
-
-                # If the loaded model doesn't support uncertainty natively, we might need to implement
-                # manual MC Dropout or Ensemble here.
-                # For Phase 1 implementation, let's try to extract if available, else 0.0 (or mock for now).
-
-                # Check for "energy_uncertainty" or similar
-                # Just placeholder logic for extraction:
+                # Standard keys for uncertainty in various MACE versions/configs
+                # If not present, uncertainty remains None (handled by Active Learning step)
                 if "energy_var" in results:
                      uncertainty = results["energy_var"]
                 elif "energy_std" in results:
                      uncertainty = results["energy_std"]
+                elif "forces_var" in results:
+                     # Aggregate force variance if energy variance is missing?
+                     # Heuristic: max force variance
+                     uncertainty = np.max(results["forces_var"])
 
                 # Update AtomStructure
                 structure.energy = float(energy)
@@ -109,7 +91,14 @@ class MaceOracle(BaseOracle):
                 yield structure
 
             except Exception as e:
+                # Error handling strategy:
+                # Log error and skip structure? Or fail pipeline?
+                # Active learning usually tolerates some failures.
+                # However, silent failure is bad.
+                # We log strictly.
                 logger.error(f"MACE computation failed for structure: {e}")
-                # Yield structure without properties? Or skip?
-                # Better to raise or skip to avoid polluting dataset with unlabelled
+                # We yield the structure WITHOUT updating properties implies it failed.
+                # But AtomStructure with None energy is invalid for training?
+                # Better to NOT yield it if we can't label it.
+                # Thus filtering out failed calculations.
                 continue

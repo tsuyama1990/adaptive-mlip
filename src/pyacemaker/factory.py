@@ -60,11 +60,7 @@ class ModuleFactory:
             # Generator
             generator = StructureGenerator(config.structure)
 
-            # Oracle: MaceOracle
-            # Step 2 uses MaceOracle. Step 7 uses DFT (DftOracle).
-            # The interface allows only one `self.oracle`.
-            # However, the workflow switches between MACE and DFT.
-            # For now, let's instantiate MaceOracle as primary, since it's "Active Learning with MACE".
+            # Oracle
             mace_config = config.distillation.step3_mace_finetune
             # We need a place for MaceOracle model path.
             # It's in step3 config (base_model).
@@ -83,7 +79,7 @@ class ModuleFactory:
             # Active Set Selector
             active_set_selector = ActiveSetSelector()
 
-            # Validator (Standard)
+            # Validator
             report_gen = ReportGenerator()
             phonon_calc = PhononCalculator(
                 engine,

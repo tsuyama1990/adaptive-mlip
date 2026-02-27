@@ -1,23 +1,23 @@
-from pydantic import BaseModel, ConfigDict, Field, PositiveInt, model_validator
+from pydantic import BaseModel, ConfigDict, Field, PositiveInt, field_validator, model_validator
 
 from pyacemaker.domain_models.active_learning import DescriptorConfig
+from pyacemaker.domain_models.defaults import DEFAULT_BATCH_SIZE
 
 
 class Step1DirectSamplingConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
     target_points: PositiveInt = Field(default=100, description="Number of structures to generate")
     objective: str = Field(default="maximize_entropy", description="Objective function for sampling")
-    descriptor: DescriptorConfig = Field(
-        default_factory=lambda: DescriptorConfig(
-            method="soap",
-            species=["H"], # Default placeholder, should be overwritten by user
-            r_cut=5.0,
-            n_max=8,
-            l_max=6,
-            sigma=0.5
-        ),
-        description="Descriptor configuration for sampling"
-    )
+    batch_size: PositiveInt = Field(default=DEFAULT_BATCH_SIZE, description="Batch size for processing")
+    descriptor: DescriptorConfig = Field(..., description="Descriptor configuration for sampling")
+
+    @field_validator("objective")
+    @classmethod
+    def validate_objective(cls, v: str) -> str:
+        allowed = {"maximize_entropy", "random"}
+        if v not in allowed:
+            raise ValueError(f"Objective must be one of {allowed}")
+        return v
 
 
 class Step2ActiveLearningConfig(BaseModel):
@@ -25,6 +25,7 @@ class Step2ActiveLearningConfig(BaseModel):
     uncertainty_threshold: float = Field(default=0.8, gt=0.0, description="Uncertainty threshold for DFT calculation")
     n_active: PositiveInt = Field(default=10, description="Maximum number of structures to select for DFT")
     dft_calculator: str = Field(default="VASP", description="DFT code to use")
+    batch_size: PositiveInt = Field(default=DEFAULT_BATCH_SIZE, description="Batch size for processing")
 
 
 class Step3MaceFinetuneConfig(BaseModel):
@@ -51,7 +52,14 @@ class DistillationConfig(BaseModel):
     enable_mace_distillation: bool = Field(default=False, description="Enable the 7-step MACE distillation workflow")
 
     step1_direct_sampling: Step1DirectSamplingConfig = Field(
-        default_factory=Step1DirectSamplingConfig, description="Step 1 configuration"
+        # We cannot use default_factory for 'descriptor' anymore because we removed the hardcoded default.
+        # But DistillationConfig is usually loaded from YAML where 'descriptor' is mandatory if step1 is active.
+        # However, for Pydantic to allow instantiation without providing it (if step 1 is inactive), we need a default or Optional.
+        # Since 'enable_mace_distillation' controls flow, we should make sub-configs Optional or provide sane defaults.
+        # Given "Constitution - No Hardcoding", we should require explicit config for species.
+        # We'll make it Optional with default=None, but validate it's present if enabled.
+        default=None,
+        description="Step 1 configuration"
     )
     step2_active_learning: Step2ActiveLearningConfig = Field(
         default_factory=Step2ActiveLearningConfig, description="Step 2 configuration"
@@ -70,11 +78,12 @@ class DistillationConfig(BaseModel):
     def validate_enabled_config(self) -> "DistillationConfig":
         """
         Validates that necessary configurations are sound when distillation is enabled.
-        Since sub-configs have defaults, they are always present, but we can add
-        cross-field validation here if needed.
         """
         if self.enable_mace_distillation:
-            # Example: Ensure step 1 target points is reasonable
+            if self.step1_direct_sampling is None:
+                 raise ValueError("Step 1 configuration is required when distillation is enabled.")
+
+            # Validate Step 1
             if self.step1_direct_sampling.target_points < 10:
                 msg = "Step 1 target points must be at least 10."
                 raise ValueError(msg)

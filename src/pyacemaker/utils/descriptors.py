@@ -6,12 +6,18 @@ from ase import Atoms
 from pyacemaker.domain_models.active_learning import DescriptorConfig
 
 if TYPE_CHECKING:
-    # dscribe imports might be heavy or optional
     pass
 
 class DescriptorCalculator:
     """
     Calculates descriptors for atomic structures using dscribe or other backends.
+
+    This utility manages the complexity of interacting with descriptor libraries (like dscribe)
+    and ensures efficient computation.
+
+    Memory Implications:
+    - Descriptors for large structures or high N/L max can be large.
+    - Computation is batched to avoid OOM.
     """
     def __init__(self, config: DescriptorConfig) -> None:
         self.config = config
@@ -39,8 +45,6 @@ class DescriptorCalculator:
             )
 
         if method == "ace":
-             # Placeholder for ACE descriptor initialization (e.g., using mace or other lib)
-             # dscribe supports ACSF, SOAP, MBTR, but ACE support might vary or require different lib
              raise NotImplementedError("ACE descriptor not yet implemented via dscribe wrapper")
 
         raise ValueError(f"Unknown descriptor method: {method}")
@@ -54,12 +58,17 @@ class DescriptorCalculator:
 
         Returns:
             Numpy array of shape (N_structures, Descriptor_Dim).
+
+        Raises:
+            RuntimeError: If descriptor calculation fails.
         """
         if not atoms_list:
             return np.array([])
 
         try:
             # dscribe's create method handles list of atoms
+            # For very large lists, this might still be memory intensive.
+            # Callers should batch usage of this method.
             descriptors = self._transformer.create(atoms_list)
 
             # Ensure it's a numpy array

@@ -1,4 +1,5 @@
 from collections.abc import Iterator
+from pathlib import Path
 
 import numpy as np
 
@@ -48,13 +49,7 @@ class DirectSampler:
         selected_indices.append(first_idx)
         remaining_indices.remove(first_idx)
 
-        # Initialize min distances to selected set (initially just first point)
-        # distance from first point to all others
-        # using Euclidean distance
-        # Shape: (N_candidates,)
-
-        # Compute distances from the first selected point to all candidates
-        # Optimization: maintain min_dist array
+        # Initialize min distances
         current_selected = descriptors[first_idx]
         min_dists = np.linalg.norm(descriptors - current_selected, axis=1)
 
@@ -63,21 +58,8 @@ class DirectSampler:
             if not remaining_indices:
                 break
 
-            # Find point in remaining_indices with maximum min_dist
-            # We can just look at min_dists array, but mask out already selected (set to -1)
-            # Or just argmax on remaining
-
-            # Efficient way:
-            # min_dists contains min(d(x, s) for s in selected) for all x
-            # We want x that maximizes this value.
-
-            # Get argmax only among remaining
-            # But argmax over subset is tricky with indices.
-            # Let's just iterate n_select times.
-
-            # Pick candidate with largest minimum distance
-            # Setting selected distances to -1 to ignore them
             valid_min_dists = min_dists.copy()
+            # Mask selected
             valid_min_dists[selected_indices] = -1.0
 
             next_idx = int(np.argmax(valid_min_dists))
@@ -86,7 +68,6 @@ class DirectSampler:
             remaining_indices.remove(next_idx)
 
             # Update min_dists
-            # New min_dist is min(old_min_dist, dist_to_newly_selected)
             new_selected = descriptors[next_idx]
             dists_to_new = np.linalg.norm(descriptors - new_selected, axis=1)
             min_dists = np.minimum(min_dists, dists_to_new)
@@ -95,39 +76,87 @@ class DirectSampler:
 
     def generate(self) -> Iterator[AtomStructure]:
         """
-        Executes the sampling process:
-        1. Generate a large pool of candidates.
-        2. Compute descriptors.
-        3. Select diverse subset.
-        4. Yield selected structures.
+        Executes the sampling process using a batched approach to avoid OOM.
+
+        Strategy:
+        1. Generate candidates in batches.
+        2. Compute descriptors for each batch and accumulate ONLY descriptors (much smaller than Atoms).
+        3. Keep candidates on disk or in temp file?
+           For MaxMin, we need random access to candidates AFTER selection.
+           If N_pool is huge, we cannot hold all candidates in memory.
+
+           Solution:
+           - Pass 1: Generate & Stream candidates to a temp file (e.g. ASE db or extended XYZ).
+                     Simultaneously compute descriptors and store in memory (numpy array).
+           - Pass 2: Perform MaxMin on descriptors to get indices.
+           - Pass 3: Read temp file and yield selected indices.
         """
-        # 1. Generate Candidates
-        # Heuristic: Generate 10x candidates to sample from
+        import tempfile
+
+        from ase.io import iread, write
+
+        # Heuristic: 10x candidates
         n_pool = self.config.target_points * 10
+        batch_size = self.config.batch_size
+
         logger.info(f"Generating candidate pool of size {n_pool} for DIRECT sampling...")
 
-        # Generator returns Iterator, consume it to list for descriptor calc
-        # Note: This loads all candidates into memory. For N=1000 or 10000 this is fine.
-        candidates = list(self.generator.generate(n_candidates=n_pool))
+        all_descriptors = []
 
-        if not candidates:
-            logger.warning("Generator produced no candidates.")
-            return
+        # Use temp file to store candidates
+        with tempfile.NamedTemporaryFile(suffix=".extxyz", delete=False) as tmp_file:
+            tmp_path = Path(tmp_file.name)
 
-        # Extract ASE atoms for descriptor calculation
-        atoms_list = [c.atoms for c in candidates]
+        try:
+            # Pass 1: Generate + Compute Descriptors + Cache Structures
+            gen_iter = self.generator.generate(n_candidates=n_pool)
 
-        # 2. Compute Descriptors
-        logger.info("Computing global descriptors...")
-        descriptors = self.descriptor_calc.compute(atoms_list)
+            current_batch: list[AtomStructure] = []
 
-        # 3. Select Diverse Subset
-        logger.info(f"Selecting {self.config.target_points} most diverse structures...")
-        selected_indices = self._max_min_selection(descriptors, self.config.target_points)
+            # Helper to process batch
+            def process_batch(batch: list[AtomStructure]) -> None:
+                if not batch:
+                    return
+                # Write to temp file
+                atoms_list = [s.to_ase() for s in batch]
+                with tmp_path.open("a") as f:
+                    write(f, atoms_list, format="extxyz")
 
-        # 4. Yield Results
-        for idx in selected_indices:
-            structure = candidates[idx]
-            structure.provenance["sampling_method"] = "direct_maxmin"
-            structure.provenance["descriptor"] = self.config.descriptor.method
-            yield structure
+                # Compute descriptors
+                descs = self.descriptor_calc.compute(atoms_list)
+                all_descriptors.append(descs)
+
+            for struct in gen_iter:
+                current_batch.append(struct)
+                if len(current_batch) >= batch_size:
+                    process_batch(current_batch)
+                    current_batch = []
+
+            # Process remaining
+            process_batch(current_batch)
+
+            if not all_descriptors:
+                logger.warning("No candidates generated.")
+                return
+
+            # Combine descriptors
+            full_descriptor_matrix = np.vstack(all_descriptors)
+
+            # Pass 2: Select Indices
+            logger.info(f"Selecting {self.config.target_points} structures from pool of {full_descriptor_matrix.shape[0]}...")
+            selected_indices = set(self._max_min_selection(full_descriptor_matrix, self.config.target_points))
+
+            # Pass 3: Retrieve selected from temp file
+            # Iterate through file once and yield if index is in selected set.
+            for i, atoms in enumerate(iread(str(tmp_path), format="extxyz")):
+                if i in selected_indices:
+                    structure = AtomStructure.from_ase(atoms) # type: ignore[arg-type]
+
+                    structure.provenance["sampling_method"] = "direct_maxmin"
+                    structure.provenance["descriptor"] = self.config.descriptor.method
+                    yield structure
+
+        finally:
+            # Cleanup temp file
+            if tmp_path.exists():
+                tmp_path.unlink()
