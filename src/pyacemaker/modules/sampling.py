@@ -31,9 +31,10 @@ class DirectSampler:
     def _max_min_selection(self, descriptors: np.ndarray, n_select: int) -> list[int]:
         """
         Selects n_select indices using greedy MaxMin diversity algorithm.
+        Supports memory-mapped arrays to process large datasets without OOM.
 
         Args:
-            descriptors: (N_candidates, D) numpy array.
+            descriptors: (N_candidates, D) numpy array or memmap.
             n_select: Number of points to select.
 
         Returns:
@@ -53,8 +54,25 @@ class DirectSampler:
         remaining_indices.remove(first_idx)
 
         # Initialize min distances
+        # If descriptors is a memmap, slicing it loads the slice into memory.
+        # current_selected is (D,)
         current_selected = descriptors[first_idx]
-        min_dists = np.linalg.norm(descriptors - current_selected, axis=1)
+
+        # Calculate initial distances. For memmap, we should do this in chunks to avoid allocating full (N_candidates,) in RAM?
+        # Actually, a 1D array of float64 for 10M structures is 80MB. This easily fits in RAM.
+        # The OOM risk is loading the (10M, D) descriptor matrix.
+        # But `np.linalg.norm(descriptors - current_selected, axis=1)` creates an intermediate (10M, D) array in memory before reducing.
+        # We MUST chunk the distance calculation to be memory safe.
+
+        chunk_size = 10000
+        min_dists = np.zeros(n_candidates, dtype=np.float64)
+
+        for start_idx in range(0, n_candidates, chunk_size):
+            end_idx = min(start_idx + chunk_size, n_candidates)
+            chunk = descriptors[start_idx:end_idx]
+            # Calculate distance for this chunk
+            chunk_dists = np.linalg.norm(chunk - current_selected, axis=1)
+            min_dists[start_idx:end_idx] = chunk_dists
 
         # 2. Greedy selection
         for _ in range(n_select - 1):
@@ -70,17 +88,27 @@ class DirectSampler:
             selected_indices.append(next_idx)
             remaining_indices.remove(next_idx)
 
-            # Update min_dists
+            # Update min_dists using chunking
             new_selected = descriptors[next_idx]
-            dists_to_new = np.linalg.norm(descriptors - new_selected, axis=1)
-            min_dists = np.minimum(min_dists, dists_to_new)
+
+            for start_idx in range(0, n_candidates, chunk_size):
+                end_idx = min(start_idx + chunk_size, n_candidates)
+                chunk = descriptors[start_idx:end_idx]
+                chunk_dists = np.linalg.norm(chunk - new_selected, axis=1)
+
+                # Update the specific chunk of min_dists
+                min_dists[start_idx:end_idx] = np.minimum(
+                    min_dists[start_idx:end_idx],
+                    chunk_dists
+                )
 
         return selected_indices
 
     def generate(self) -> Iterator[AtomStructure]:
         """
         Executes the sampling process using a batched approach to avoid OOM.
-        Uses ASE SQLite database for efficient out-of-core storage.
+        Uses ASE SQLite database for efficient out-of-core storage of structures
+        and numpy memmap for out-of-core storage of descriptors.
         """
         # Heuristic multiplier from config
         n_pool = self.config.target_points * self.config.candidate_multiplier
@@ -88,33 +116,59 @@ class DirectSampler:
 
         logger.info(f"Generating candidate pool of size {n_pool} for DIRECT sampling...")
 
-        all_descriptors = []
-
         # Use temp sqlite db to store candidates
-        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp_file:
-            tmp_path = Path(tmp_file.name)
+        tmp_db_file = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+        tmp_db_path = Path(tmp_db_file.name)
+        tmp_db_file.close()
+
+        # Use temp file for memory-mapped descriptors
+        tmp_memmap_file = tempfile.NamedTemporaryFile(suffix=".dat", delete=False)
+        tmp_memmap_path = Path(tmp_memmap_file.name)
+        tmp_memmap_file.close()
 
         try:
-            db = ase.db.connect(str(tmp_path)) # type: ignore[no-untyped-call]
+            db = ase.db.connect(str(tmp_db_path)) # type: ignore[no-untyped-call]
 
-            # Pass 1: Generate + Compute Descriptors + Cache Structures in SQLite
+            # Pass 1: Generate + Compute Descriptors + Cache Structures
             gen_iter = self.generator.generate(n_candidates=n_pool)
 
             current_batch: list[AtomStructure] = []
 
+            # Since we stream, we don't know the descriptor dimension until the first batch.
+            # We initialize memmap lazily.
+            memmap_array = None
+            current_row_idx = 0
+
             def process_batch(batch: list[AtomStructure]) -> None:
+                nonlocal memmap_array, current_row_idx
                 if not batch:
                     return
                 # Write to temp db
                 atoms_list = [s.to_ase() for s in batch]
                 for atoms in atoms_list:
-                    # Storing atoms natively in ase.db. Information/provenance might need
-                    # specific mapping or we reconstruct later.
+                    # Storing atoms natively in ase.db.
                     db.write(atoms) # type: ignore[no-untyped-call]
 
                 # Compute descriptors
                 descs = self.descriptor_calc.compute(atoms_list)
-                all_descriptors.append(descs)
+
+                # Initialize memmap if first batch
+                if memmap_array is None:
+                    dim = descs.shape[1]
+                    # Create memmap for the entire expected pool size
+                    # Note: If gen_iter yields exactly n_pool, this perfectly fits.
+                    # If it yields fewer, we'll slice it before MaxMin.
+                    memmap_array = np.memmap(
+                        str(tmp_memmap_path),
+                        dtype='float64',
+                        mode='w+',
+                        shape=(n_pool, dim)
+                    )
+
+                # Write to memmap
+                n_descs = descs.shape[0]
+                memmap_array[current_row_idx:current_row_idx + n_descs] = descs
+                current_row_idx += n_descs
 
             for struct in gen_iter:
                 current_batch.append(struct)
@@ -125,50 +179,32 @@ class DirectSampler:
             # Process remaining
             process_batch(current_batch)
 
-            if not all_descriptors:
+            if current_row_idx == 0 or memmap_array is None:
                 logger.warning("No candidates generated.")
                 return
 
-            # Combine descriptors
-            full_descriptor_matrix = np.vstack(all_descriptors)
+            # Ensure data is flushed
+            memmap_array.flush()
+
+            # If the generator returned fewer than expected, slice the memmap
+            # to avoid trailing zeros. Read-only mode for safety.
+            valid_descriptors = np.memmap(
+                str(tmp_memmap_path),
+                dtype='float64',
+                mode='r',
+                shape=(current_row_idx, memmap_array.shape[1])
+            )
 
             # Pass 2: Select Indices
-            logger.info(f"Selecting {self.config.target_points} structures from pool of {full_descriptor_matrix.shape[0]}...")
-            selected_indices = self._max_min_selection(full_descriptor_matrix, self.config.target_points)
+            logger.info(f"Selecting {self.config.target_points} structures from pool of {valid_descriptors.shape[0]}...")
+            selected_indices = self._max_min_selection(valid_descriptors, self.config.target_points)
 
             # Pass 3: Retrieve selected from DB
-            # ASE db IDs are 1-indexed. Our selected_indices are 0-indexed.
             db_ids = [idx + 1 for idx in selected_indices]
-
-            # Use single bulk query to retrieve all selected structures at once
-            # ase.db.select can accept a list of ids in newer versions, or we can use SQL IN clause
-            # The most robust way without assuming new ase features is via direct SQL on connection
-
-            # Convert list of ints to string for SQL IN clause
-            ids_str = ",".join(map(str, db_ids))
-
-            # ASE DB objects provide access to internal connection
-            # But the row objects need to be reconstructed properly.
-            # Using ase.db's select method with id ranges or simply iterating the whole DB and filtering is O(N)
-            # where N is pool size (e.g. 10,000) which is fast enough in-memory, but SQL is faster.
-            # Let's try `db.select(f"id IN ({ids_str})")` if ASE supports it, but standard ASE select doesn't parse complex SQL.
-            # However, we can just fetch the rows matching the IDs by iterating selected_indices.
-            # Wait, the feedback said "Use single bulk query to retrieve all selected structures at once instead of looping with db.get()".
-            # ASE's SQLite3Database class has `.select` which can yield rows.
-            # Actually, `db.select` can take `id` argument as an int.
-            # To fetch multiple, we must construct a query or use the underlying cursor.
-
-            # Direct SQLite bulk fetch
-            cursor = db.connection.cursor()
-            cursor.execute(f"SELECT id FROM systems WHERE id IN ({ids_str})") # type: ignore[attr-defined]
-            # Well, extracting atoms from raw SQL is hard because ASE serializes positions/cell as blobs.
-            # Better to use ASE's `db.select` with a custom function or just loop `db.select()` with a set of IDs.
-            # If we iterate the whole DB once and keep only matched IDs, it's a single read pass.
 
             selected_set = set(db_ids)
 
             # Iterate through DB once (streaming) and yield matches
-            # This avoids N+1 queries by doing exactly 1 query (SELECT * FROM systems)
             for row in db.select(): # type: ignore[no-untyped-call]
                 if row.id in selected_set: # type: ignore[attr-defined]
                     atoms = row.toatoms() # type: ignore[no-untyped-call]
@@ -178,6 +214,8 @@ class DirectSampler:
                     yield structure
 
         finally:
-            # Cleanup temp file
-            if tmp_path.exists():
-                tmp_path.unlink()
+            # Cleanup temp files
+            if tmp_db_path.exists():
+                tmp_db_path.unlink()
+            if tmp_memmap_path.exists():
+                tmp_memmap_path.unlink()
