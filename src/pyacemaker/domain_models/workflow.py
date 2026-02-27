@@ -1,3 +1,5 @@
+from enum import StrEnum
+
 from pydantic import BaseModel, ConfigDict, Field, PositiveInt
 
 from pyacemaker.domain_models.defaults import (
@@ -13,6 +15,16 @@ from pyacemaker.domain_models.defaults import (
     DEFAULT_POTENTIALS_DIR,
     DEFAULT_STATE_FILE,
 )
+
+
+class WorkflowStep(StrEnum):
+    DIRECT_SAMPLING = "direct_sampling"
+    ACTIVE_LEARNING = "active_learning"
+    MACE_FINETUNE = "mace_finetune"
+    SURROGATE_SAMPLING = "surrogate_sampling"
+    SURROGATE_LABELING = "surrogate_labeling"
+    PACEMAKER_BASE = "pacemaker_base"
+    DELTA_LEARNING = "delta_learning"
 
 
 class OTFConfig(BaseModel):

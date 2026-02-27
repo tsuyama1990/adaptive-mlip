@@ -2,6 +2,7 @@
 from pydantic import BaseModel, ConfigDict, Field
 
 from .dft import DFTConfig
+from .distillation import DistillationConfig
 from .eon import EONConfig
 from .logging import LoggingConfig
 from .md import MDConfig
@@ -29,3 +30,6 @@ class PyAceConfig(BaseModel):
     )
     eon: EONConfig | None = Field(None, description="EON configuration")
     scenario: ScenarioConfig | None = Field(None, description="Scenario configuration")
+    distillation: DistillationConfig = Field(
+        default_factory=DistillationConfig, description="MACE Distillation configuration"
+    )

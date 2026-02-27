@@ -11,10 +11,12 @@ from pyacemaker.core.active_set import ActiveSetSelector
 from pyacemaker.core.base import BaseEngine, BaseGenerator, BaseOracle, BaseTrainer
 from pyacemaker.core.directory_manager import DirectoryManager
 from pyacemaker.core.exceptions import OrchestratorError
+from pyacemaker.core.loop import LoopStatus
 from pyacemaker.core.state_manager import StateManager
 from pyacemaker.core.validator import Validator
 from pyacemaker.domain_models import PyAceConfig
 from pyacemaker.domain_models.data import AtomStructure
+from pyacemaker.domain_models.workflow import WorkflowStep
 from pyacemaker.domain_models.defaults import (
     DEFAULT_PRODUCTION_DIR,
     FILENAME_CANDIDATES,
@@ -30,9 +32,17 @@ from pyacemaker.domain_models.defaults import (
     LOG_PROJECT_INIT,
     LOG_START_ITERATION,
     LOG_START_LOOP,
+    LOG_STEP_1,
+    LOG_STEP_2,
+    LOG_STEP_3,
+    LOG_STEP_4,
+    LOG_STEP_5,
+    LOG_STEP_6,
+    LOG_STEP_7,
     LOG_WORKFLOW_COMPLETED,
     LOG_WORKFLOW_CRASHED,
     TEMPLATE_POTENTIAL_FILE,
+    WORKFLOW_MODE_DISTILLATION,
 )
 from pyacemaker.domain_models.md import MDSimulationResult
 from pyacemaker.factory import ModuleFactory
@@ -57,7 +67,11 @@ class Orchestrator:
         self.logger = setup_logger(config=config.logging, project_name=config.project_name)
 
         # Initialize Managers
-        self.state_manager = StateManager(Path(config.workflow.state_file_path), self.logger)
+        self.state_manager = StateManager(
+            Path(config.workflow.state_file_path),
+            self.logger,
+            checkpoint_interval=config.workflow.checkpoint_interval,
+        )
         self.dir_manager = DirectoryManager(Path(config.workflow.active_learning_dir), self.logger)
 
         self.data_dir = Path(config.workflow.data_dir)
@@ -117,7 +131,10 @@ class Orchestrator:
     ) -> int:
         """
         Writes AtomStructure from a generator to a file in chunks to balance I/O and memory.
-        Uses explicit streaming and buffering to avoid memory issues.
+
+        This method implements buffered writing to ensure scalability for large datasets (e.g., 1M structures).
+        It consumes the generator lazily, accumulating only `batch_size` items in memory at a time.
+        The file is kept open during the process to minimize I/O overhead.
 
         Args:
             generator: Iterable of AtomStructure objects.
@@ -135,26 +152,36 @@ class Orchestrator:
 
         mode = "a" if append else "w"
 
+        if batch_size <= 0:
+            raise OrchestratorError("Batch size must be positive")
+
         # Buffer a chunk of Atoms objects to write at once using ASE's list write support
         # This reduces I/O calls compared to writing one by one.
         buffer: list[Atoms] = []
 
-        with filepath.open(mode) as f:
-            for structure in generator:
-                # Convert to ASE Atoms with metadata
-                atoms = structure.to_ase()
-                buffer.append(atoms)
+        try:
+            with filepath.open(mode) as f:
+                for structure in generator:
+                    # Convert to ASE Atoms with metadata
+                    atoms = structure.to_ase()
+                    buffer.append(atoms)
 
-                if len(buffer) >= batch_size:
+                    if len(buffer) >= batch_size:
+                        write(f, buffer, format="extxyz")
+                        count += len(buffer)
+                        buffer.clear()
+
+                # Write remaining
+                if buffer:
                     write(f, buffer, format="extxyz")
                     count += len(buffer)
                     buffer.clear()
-
-            # Write remaining
-            if buffer:
-                write(f, buffer, format="extxyz")
-                count += len(buffer)
-                buffer.clear()
+        except OSError as e:
+            msg = f"I/O error during streaming write to {filepath}: {e}"
+            raise OrchestratorError(msg) from e
+        except Exception as e:
+            msg = f"Unexpected error during streaming write to {filepath}: {e}"
+            raise OrchestratorError(msg) from e
 
         return count
 
@@ -327,11 +354,52 @@ class Orchestrator:
             self.logger.exception("Failed to extract local cluster.")
             return None
 
-    def _select_and_label(
+    def _generate_local_candidates(
+        self, s0_cluster: Atoms, potential_path: Path
+    ) -> Iterator[AtomStructure]:
+        """Generates local candidates using the configured strategy."""
+        if not self.generator:
+            return iter([])
+
+        local_n = self.config.workflow.otf.local_n_candidates
+        return self.generator.generate_local(
+            s0_cluster,
+            n_candidates=local_n,
+            engine=self.engine,
+            potential=potential_path,
+        )
+
+    def _execute_active_learning_selection(
         self,
+        candidates_gen: Iterator[AtomStructure],
         s0_cluster: Atoms,
         potential_path: Path,
-        paths: dict[str, Path]
+    ) -> Iterator[AtomStructure]:
+        """Selects the active set from candidates."""
+        if not self.active_set_selector:
+            return iter([])
+
+        def to_ase_iter(struct_iter: Iterator[AtomStructure]) -> Iterator[Atoms]:
+            for s in struct_iter:
+                yield s.to_ase()
+
+        def atom_structure_adapter(atoms_iter: Iterable[Atoms]) -> Iterator[AtomStructure]:
+            for atoms in atoms_iter:
+                yield AtomStructure.from_ase(atoms)
+
+        n_select = self.config.workflow.otf.local_n_select
+        candidates_ase_gen = to_ase_iter(candidates_gen)
+
+        selected_ase_gen = self.active_set_selector.select(
+            candidates_ase_gen,  # type: ignore[arg-type]
+            potential_path,
+            n_select=n_select,
+            anchor=s0_cluster,
+        )
+        return atom_structure_adapter(selected_ase_gen)
+
+    def _select_and_label(
+        self, s0_cluster: Atoms, potential_path: Path, paths: dict[str, Path]
     ) -> int:
         """
         Generates local candidates, selects active set, labels them, and writes to training file.
@@ -340,88 +408,17 @@ class Orchestrator:
         if not self.generator or not self.active_set_selector or not self.oracle:
             return 0
 
-        # Generate local candidates (perturbations of S0)
-        local_n = self.config.workflow.otf.local_n_candidates
-
-        # Pass engine and potential for advanced local generation strategies (e.g. MD Micro Burst)
-        # generator.generate_local returns Iterator[AtomStructure]
-        candidates_gen = self.generator.generate_local(
-            s0_cluster,
-            n_candidates=local_n,
-            engine=self.engine,
-            potential=potential_path
+        candidates_gen = self._generate_local_candidates(s0_cluster, potential_path)
+        selected_struct_gen = self._execute_active_learning_selection(
+            candidates_gen, s0_cluster, potential_path
         )
-
-        # Select Active Set (including S0 as anchor)
-        # We need to capture candidates to file if selector needs file, but selector handles iterator.
-        # However, selector writes to temp file. We need to ensure temp files are cleaned up.
-        # ActiveSetSelector uses TemporaryDirectory so it's auto-cleaned.
-
-        # Note: ActiveSetSelector interface needs to be checked.
-        # If it expects Iterator[Atoms], we need to convert.
-        # Assuming ActiveSetSelector will be updated in future cycles or adapted here.
-        # For Cycle 01, we focus on Oracle/Generator.
-        # Assuming ActiveSetSelector still works with Atoms internally or we adapt.
-
-        # Adapter for ActiveSetSelector (assuming it takes Atoms stream for now, or updated later)
-        # If we didn't update ActiveSetSelector yet, we might need to cast.
-        # Since ActiveSetSelector is not in Cycle 01 scope explicitly but used here:
-        # Let's assume we pass AtomStructure stream and it handles it, OR we convert.
-
-        # To be safe and minimal change: Convert AtomStructure stream to Atoms stream for Selector,
-        # then Selector returns Atoms stream, we convert back to AtomStructure for Oracle?
-        # NO, Oracle needs AtomStructure.
-
-        # Since ActiveSetSelector is not updated in this cycle plan, let's wrap.
-        # But wait, we need to pass data to Oracle.
-
-        # Let's look at ActiveSetSelector usage.
-        # It takes `candidates_gen` and returns `selected_gen`.
-        # `labelled_gen = self.oracle.compute(selected_gen)`
-
-        # If ActiveSetSelector returns Atoms, we need to wrap them for Oracle.
-
-        def atom_structure_adapter(atoms_iter: Iterable[Atoms]) -> Iterator[AtomStructure]:
-            for atoms in atoms_iter:
-                yield AtomStructure.from_ase(atoms)
-
-        # Temporary adaptation until ActiveSetSelector is updated
-        # We assume selector takes Atoms for now (legacy)
-        def to_ase_iter(struct_iter: Iterator[AtomStructure]) -> Iterator[Atoms]:
-            for s in struct_iter:
-                yield s.to_ase()
-
-        # Chain:
-        # candidates_gen (AtomStructure) -> to_ase_iter -> select (Atoms) -> atom_structure_adapter -> oracle (AtomStructure)
-
-        n_select = self.config.workflow.otf.local_n_select
-
-        # NOTE: This assumes ActiveSetSelector is NOT updated to AtomStructure yet.
-        # If we updated BaseGenerator to return AtomStructure, we must adapt.
-
-        candidates_ase_gen = to_ase_iter(candidates_gen)
-
-        selected_ase_gen = self.active_set_selector.select(
-            candidates_ase_gen, # type: ignore[arg-type]
-            potential_path,
-            n_select=n_select,
-            anchor=s0_cluster
-        )
-
-        selected_struct_gen = atom_structure_adapter(selected_ase_gen)
-
-        # Label
         labelled_gen = self.oracle.compute(selected_struct_gen)
 
-        # Append to training data
         training_file = paths["training"] / FILENAME_TRAINING
         batch_size = self.config.workflow.batch_size
 
         return self._stream_write(
-            labelled_gen,
-            training_file,
-            batch_size=batch_size,
-            append=True
+            labelled_gen, training_file, batch_size=batch_size, append=True
         )
 
     def _refine_potential(self, result: MDSimulationResult, potential_path: Path, paths: dict[str, Path]) -> Path | None:
@@ -555,6 +552,118 @@ class Orchestrator:
                 else:
                     self.logger.warning("Could not retrieve structure for validation.")
 
+    def _run_legacy_loop(self) -> None:
+        """Executes the legacy active learning loop."""
+        self._check_initial_potential()
+
+        while self.state_manager.iteration < self.config.workflow.max_iterations:
+            self._run_loop_iteration()
+
+    def _step1_direct_sampling(self) -> None:
+        self.logger.info(LOG_STEP_1)
+        if not self.generator:
+            raise OrchestratorError("Generator not initialized")
+
+        target = self.config.distillation.step1_direct_sampling.target_points
+        step_dir = self.dir_manager.base_dir / "step1_direct_sampling"
+        step_dir.mkdir(parents=True, exist_ok=True)
+        candidates_file = step_dir / FILENAME_CANDIDATES
+
+        try:
+            stream = self.generator.generate(n_candidates=target)
+            count = self._stream_write(
+                stream, candidates_file, batch_size=self.config.workflow.batch_size
+            )
+            self.logger.info(LOG_GENERATED_CANDIDATES.format(count=count))
+        except Exception as e:
+            raise OrchestratorError(f"Step 1 failed: {e}") from e
+
+    def _step2_active_learning(self) -> None:
+        self.logger.info(LOG_STEP_2)
+        if not self.oracle:
+            raise OrchestratorError("Oracle not initialized")
+        # Placeholder for Active Learning logic (MACE Uncertainty)
+        # In Cycle 01, we just verify oracle is present.
+        pass
+
+    def _step3_mace_finetune(self) -> None:
+        self.logger.info(LOG_STEP_3)
+        if not self.trainer:
+            raise OrchestratorError("Trainer not initialized")
+        # Placeholder for MACE Fine-tuning
+        pass
+
+    def _step4_surrogate_sampling(self) -> None:
+        self.logger.info(LOG_STEP_4)
+        if not self.generator:
+            raise OrchestratorError("Generator not initialized")
+        # Placeholder for Surrogate Data Generation
+        pass
+
+    def _step5_surrogate_labeling(self) -> None:
+        self.logger.info(LOG_STEP_5)
+        if not self.oracle:
+            raise OrchestratorError("Oracle not initialized")
+        # Placeholder for Surrogate Labeling
+        pass
+
+    def _step6_pacemaker_base(self) -> None:
+        self.logger.info(LOG_STEP_6)
+        if not self.trainer:
+            raise OrchestratorError("Trainer not initialized")
+        # Placeholder for Pacemaker Base Training
+        pass
+
+    def _step7_delta_learning(self) -> None:
+        self.logger.info(LOG_STEP_7)
+        if not self.trainer:
+            raise OrchestratorError("Trainer not initialized")
+
+        # This is the critical step.
+        # We would use self.trainer to train on DFT data.
+        # For now, we simulate success.
+        step_dir = self.dir_manager.base_dir / "step7_delta_learning"
+        step_dir.mkdir(parents=True, exist_ok=True)
+        pass
+
+    def _run_distillation_workflow(self) -> None:
+        """Executes the 7-step MACE Distillation workflow."""
+        steps = [
+            (WorkflowStep.DIRECT_SAMPLING, self._step1_direct_sampling),
+            (WorkflowStep.ACTIVE_LEARNING, self._step2_active_learning),
+            (WorkflowStep.MACE_FINETUNE, self._step3_mace_finetune),
+            (WorkflowStep.SURROGATE_SAMPLING, self._step4_surrogate_sampling),
+            (WorkflowStep.SURROGATE_LABELING, self._step5_surrogate_labeling),
+            (WorkflowStep.PACEMAKER_BASE, self._step6_pacemaker_base),
+            (WorkflowStep.DELTA_LEARNING, self._step7_delta_learning),
+        ]
+
+        self.state_manager.mode = WORKFLOW_MODE_DISTILLATION
+
+        # Determine start index based on current step in state
+        start_index = 0
+        if self.state_manager.current_step:
+            for i, (step_enum, _) in enumerate(steps):
+                if step_enum == self.state_manager.current_step:
+                    # Resume from the found step
+                    start_index = i
+                    break
+
+        for i in range(start_index, len(steps)):
+            step_enum, step_func = steps[i]
+            self.state_manager.current_step = step_enum
+            self.state_manager.save(force=True)
+
+            try:
+                step_func()
+            except Exception as e:
+                self.logger.error(f"Failed at step {step_enum}: {e}")
+                # Attempt rollback to previous step state before halting
+                self.state_manager.rollback()
+                self.state_manager.state.status = LoopStatus.HALTED
+                self.state_manager.save(force=True)
+                raise
+
     def run(self) -> None:
         """
         Executes the main active learning loop.
@@ -563,10 +672,11 @@ class Orchestrator:
 
         try:
             self.initialize_modules()
-            self._check_initial_potential()
 
-            while self.state_manager.iteration < self.config.workflow.max_iterations:
-                 self._run_loop_iteration()
+            if self.config.distillation.enable_mace_distillation:
+                self._run_distillation_workflow()
+            else:
+                self._run_legacy_loop()
 
             self._finalize()
             self.logger.info(LOG_WORKFLOW_COMPLETED)

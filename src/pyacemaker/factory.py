@@ -48,6 +48,19 @@ class ModuleFactory:
             msg = "Project name is required for module initialization"
             raise ConfigError(msg)
 
+        # Distillation support check
+        if config.distillation.enable_mace_distillation:
+            # For now, we reuse the standard modules as placeholders for testing the loop flow.
+            # In future cycles, specific MACE implementations (MaceOracle, etc.) will be instantiated here.
+            return ModuleFactory._create_standard_modules(config)
+
+        return ModuleFactory._create_standard_modules(config)
+
+    @staticmethod
+    def _create_standard_modules(
+        config: PyAceConfig,
+    ) -> tuple[BaseGenerator, BaseOracle, BaseTrainer, BaseEngine, ActiveSetSelector, Validator]:
+        """Creates standard modules for the legacy workflow."""
         try:
             # Oracle
             oracle = DFTManager(config.dft)

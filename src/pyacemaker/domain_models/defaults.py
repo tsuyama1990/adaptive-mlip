@@ -1,6 +1,11 @@
+import os
 import tempfile
 from pathlib import Path
 from typing import Final
+
+# Source of Truth for Configuration Defaults
+# These constants are imported by domain models (e.g. WorkflowConfig)
+# to populate Pydantic default values.
 
 # Configuration Defaults
 DEFAULT_STATE_FILE = "state.json"
@@ -8,8 +13,18 @@ DEFAULT_DATA_DIR = "data"
 DEFAULT_ACTIVE_LEARNING_DIR = "active_learning"
 DEFAULT_POTENTIALS_DIR = "potentials"
 DEFAULT_PRODUCTION_DIR = "production"
+# Default batch size for streaming operations.
+# 5 structures is small enough to avoid memory spikes even with large systems (e.g. 10k atoms * 5 = 50k atoms).
+# It allows frequent enough writes to disk to prevent data loss during long generation steps.
 DEFAULT_BATCH_SIZE = 5
+
+# Default candidates count for legacy loop.
+# 10 provides a reasonable exploration/exploitation balance for initial testing.
 DEFAULT_N_CANDIDATES = 10
+
+# Checkpoint interval: 1 means save every iteration.
+# Since iterations involve expensive MD/DFT, losing progress is costly.
+# Saving every step is recommended.
 DEFAULT_CHECKPOINT_INTERVAL = 1
 
 # EON Defaults
@@ -120,10 +135,16 @@ DANGEROUS_PATH_CHARS: Final[set[str]] = {
 }
 
 # RAM Disk logic
-_ram_disk_candidate = "/dev/shm"  # noqa: S108
-DEFAULT_RAM_DISK_PATH = (
-    _ram_disk_candidate if Path(_ram_disk_candidate).exists() else tempfile.gettempdir()
-)
+def get_ram_disk_path() -> Path:
+    """Returns a valid RAM disk path or falls back to tempdir."""
+    candidate = os.environ.get("PYACE_RAM_DISK", "/dev/shm")
+    path = Path(candidate)
+    if path.exists() and path.is_dir() and os.access(path, os.W_OK):
+        return path
+    return Path(tempfile.gettempdir())
+
+
+DEFAULT_RAM_DISK_PATH = get_ram_disk_path()
 
 # MD Minimize defaults
 DEFAULT_MD_MINIMIZE_FTOL = 1e-6
@@ -175,125 +196,15 @@ RECIPROCAL_FACTOR = 2.0 * 3.141592653589793  # 2*PI approx
 # Policy
 DEFAULT_STRAIN_RANGE: Final[tuple[float, float]] = (-0.05, 0.05)
 
-# PACE Driver script template (uses environment variables for security)
-PACE_DRIVER_TEMPLATE = """
-import sys
-import os
-import re
-import numpy as np
-from ase.io import read
-from ase.calculators.lammpsrun import LAMMPS
+# Workflow modes
+WORKFLOW_MODE_LEGACY = "legacy"
+WORKFLOW_MODE_DISTILLATION = "distillation"
 
-# Read potential path from environment for security
-POTENTIAL_PATH = os.environ.get("PACE_POTENTIAL_PATH")
-if not POTENTIAL_PATH:
-    sys.stderr.write("Error: PACE_POTENTIAL_PATH not set\\n")
-    sys.exit(1)
-
-# Security: Validate POTENTIAL_PATH to prevent injection in pair_coeff
-# Allow alphanumeric, dot, underscore, dash, slash.
-if not re.match(r"^[a-zA-Z0-9_\\-\\.\\/]+$", POTENTIAL_PATH):
-    sys.stderr.write("Error: Invalid characters in potential path\\n")
-    sys.exit(1)
-
-if not os.path.exists(POTENTIAL_PATH):
-    sys.stderr.write(f"Error: Potential file not found at {POTENTIAL_PATH}\\n")
-    sys.exit(1)
-
-def read_input():
-    try:
-        lines = sys.stdin.readlines()
-        if not lines:
-            return None, None, None
-
-        # Parse EON format (assumed based on standard command line potentials)
-        # 1. Number of atoms
-        num_atoms = int(lines[0].strip())
-
-        # 2. Box (3 lines)
-        cell = np.zeros((3, 3))
-        cell[0] = [float(x) for x in lines[1].split()]
-        cell[1] = [float(x) for x in lines[2].split()]
-        cell[2] = [float(x) for x in lines[3].split()]
-
-        # 3. Coordinates (N lines)
-        # EON usually sends only coordinates x y z, not species.
-        # We need to map them to species from a template.
-        coords = []
-        for i in range(num_atoms):
-            coords.append([float(x) for x in lines[4+i].split()])
-
-        return num_atoms, cell, np.array(coords)
-    except Exception as e:
-        sys.stderr.write(f"Error reading input: {e}\\n")
-        sys.exit(1)
-
-def main():
-    try:
-        # 1. Load template structure (pos.con) to get species
-        if not os.path.exists("pos.con"):
-            sys.stderr.write("Error: pos.con not found\\n")
-            sys.exit(1)
-
-        try:
-            # EON uses .con format, ASE supports it
-            template = read("pos.con", format="eon")
-        except Exception:
-            # Fallback if ASE cannot read eon format directly or extension issue
-            # Try reading as 'con' or just assume it works if supported
-            template = read("pos.con")
-
-        # 2. Read current configuration from stdin
-        n, cell, coords = read_input()
-        if n is None:
-            sys.exit(0)
-
-        if n != len(template):
-            sys.stderr.write(f"Error: Atom count mismatch ({n} vs {len(template)})\\n")
-            sys.exit(1)
-
-        # 3. Update structure
-        template.set_cell(cell)
-        template.set_positions(coords)
-
-        # 4. Setup Calculator
-        # Using LAMMPS via ASE is robust.
-        # For speed, one might use lammps python module directly,
-        # but constructing the input script for PACE is complex.
-        # We rely on ASE's LAMMPS calculator or similar.
-        # We need to specify the potential file.
-
-        # We construct a pair_style command for PACE.
-        # Assuming 'pace' pair style is available in the LAMMPS binary.
-        # pair_style pace
-        # pair_coeff * * potential.yace Element1 Element2 ...
-
-        species = sorted(list(set(template.get_chemical_symbols())))
-        species_str = " ".join(species)
-
-        parameters = {
-            "pair_style": "pace",
-            "pair_coeff": [f"* * {POTENTIAL_PATH} {species_str}"]
-        }
-
-        calc = LAMMPS(parameters=parameters, files=[POTENTIAL_PATH])
-        template.calc = calc
-
-        # 5. Compute
-        energy = template.get_potential_energy()
-        forces = template.get_forces()
-
-        # 6. Output results
-        # Format: Energy (1 line)
-        # Forces (N lines, x y z)
-        print(f"{energy:.16f}")
-        for f in forces:
-            print(f"{f[0]:.16f} {f[1]:.16f} {f[2]:.16f}")
-
-    except Exception as e:
-        sys.stderr.write(f"Unexpected error: {e}\\n")
-        sys.exit(1)
-
-if __name__ == "__main__":
-    main()
-"""
+# Distillation steps
+LOG_STEP_1 = "Step 1: DIRECT Sampling (Entropy Maximization)"
+LOG_STEP_2 = "Step 2: MACE Uncertainty-based Active Learning"
+LOG_STEP_3 = "Step 3: MACE Fine-tuning"
+LOG_STEP_4 = "Step 4: Surrogate Data Generation"
+LOG_STEP_5 = "Step 5: Surrogate Labeling"
+LOG_STEP_6 = "Step 6: Pacemaker Base Training"
+LOG_STEP_7 = "Step 7: Delta Learning (Fine-tuning with DFT)"

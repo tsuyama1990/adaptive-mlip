@@ -50,13 +50,18 @@ class MockOracle(BaseOracle):
             atoms.calc = self.calc
 
             try:
-                energy = atoms.get_potential_energy() # type: ignore[no-untyped-call]
-                forces = atoms.get_forces() # type: ignore[no-untyped-call]
-                stress = atoms.get_stress() # type: ignore[no-untyped-call]
+                energy = float(atoms.get_potential_energy())  # type: ignore[no-untyped-call]
             except Exception:
-                # Fallback for numerical instability or non-periodic stress
                 energy = 0.0
+
+            try:
+                forces = atoms.get_forces()  # type: ignore[no-untyped-call]
+            except Exception:
                 forces = np.zeros((len(atoms), 3))
+
+            try:
+                stress = atoms.get_stress()  # type: ignore[no-untyped-call]
+            except Exception:
                 stress = np.zeros(6)
 
             # Update structure with computed properties

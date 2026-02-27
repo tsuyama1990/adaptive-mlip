@@ -7,6 +7,8 @@ from typing import Self
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from pyacemaker.domain_models.workflow import WorkflowStep
+
 
 class LoopStatus(StrEnum):
     RUNNING = "RUNNING"
@@ -18,14 +20,51 @@ class LoopState(BaseModel):
     iteration: int = Field(default=0, ge=0)
     status: LoopStatus = Field(default=LoopStatus.RUNNING)
     current_potential: Path | None = Field(default=None)
+    current_step: WorkflowStep | None = Field(
+        default=None, description="Current step in distillation workflow"
+    )
+    mode: str = Field(
+        default="legacy", description="Workflow mode: 'legacy' or 'distillation'"
+    )
 
     model_config = ConfigDict(extra="forbid")
+
+    @field_validator("mode")
+    @classmethod
+    def validate_mode(cls, v: str) -> str:
+        from pyacemaker.domain_models.defaults import WORKFLOW_MODE_DISTILLATION, WORKFLOW_MODE_LEGACY
+        if v not in (WORKFLOW_MODE_LEGACY, WORKFLOW_MODE_DISTILLATION):
+             msg = f"Invalid mode: {v}. Must be one of: {WORKFLOW_MODE_LEGACY}, {WORKFLOW_MODE_DISTILLATION}"
+             raise ValueError(msg)
+        return v
 
     @field_validator("current_potential")
     @classmethod
     def validate_potential_path(cls, v: Path | None) -> Path | None:
-        """Ensures that if a potential path is set, it exists, is a file, and is safe."""
+        """
+        Ensures that if a potential path is set, it exists, is a file, and is safe.
+
+        Security:
+        - Strictly disallows symbolic links to prevent aliasing/masking of targets.
+        - Resolves path to canonical absolute form.
+        - Verifies that the resolved path is within the allowed project boundaries (CWD or Temp).
+
+        Args:
+            v: The path to validate.
+
+        Returns:
+            The validated, resolved Path object, or None.
+
+        Raises:
+            ValueError: If path is invalid, unsafe, or a symlink.
+        """
         if v is not None:
+            # Strict security: Disallow symbolic links to prevent potential ambiguity or traversal tricks
+            # even before resolution.
+            if Path(v).is_symlink():
+                msg = f"Potential path cannot be a symbolic link: {v}"
+                raise ValueError(msg)
+
             # Resolve to absolute path to prevent traversal/ambiguity
             try:
                 path = Path(v).resolve(strict=True)
@@ -54,14 +93,18 @@ class LoopState(BaseModel):
         return v
 
     def save(self, path: Path) -> None:
-        """Saves the state to a JSON file using atomic write and streaming."""
+        """Saves the state to a JSON file using atomic write."""
         path = path.resolve()
         directory = path.parent
         directory.mkdir(parents=True, exist_ok=True)
 
+        # LoopState is small, so loading into memory for dump is acceptable.
+        # For larger datasets, we would stream.
+        data = self.model_dump(mode="json")
+
         # Use a temporary file in the same directory to ensure atomic move
         with tempfile.NamedTemporaryFile("w", dir=directory, delete=False) as tmp_file:
-            json.dump(self.model_dump(mode="json"), tmp_file, indent=2)
+            json.dump(data, tmp_file, indent=2)
 
             # Ensure data is flushed to disk
             tmp_file.flush()
@@ -92,8 +135,9 @@ class LoopState(BaseModel):
             raise ValueError(msg) from e
 
 
-def _raise_traversal_error(path: Path, cwd: Path, cause: Exception | None = None) -> None:
-    msg = f"Potential path {path} is outside the project directory {cwd}"
+def _raise_traversal_error(path: Path, base: Path, cause: Exception | None = None) -> None:
+    """Raises a ValueError indicating path traversal attempt. Inputs should be resolved."""
+    msg = f"Potential path {path} is outside the allowed directory {base}"
     if cause:
         raise ValueError(msg) from cause
     raise ValueError(msg)
