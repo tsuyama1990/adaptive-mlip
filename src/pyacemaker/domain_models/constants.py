@@ -44,9 +44,9 @@ from .defaults import (
     LAMMPS_VELOCITY_SEED,
     MAX_MD_DURATION,
     MAX_MD_PRESSURE,
-    PACE_DRIVER_TEMPLATE,
     RECIPROCAL_FACTOR,
 )
+from pyacemaker.utils.templates import PACE_DRIVER_TEMPLATE
 
 # Scenario Constants
 SCENARIO_NAME_FEPT_MGO: Final[str] = "fept_mgo"

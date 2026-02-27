@@ -60,6 +60,14 @@ class StateManager:
         except Exception as e:
             self.logger.warning(LOG_STATE_SAVE_FAIL.format(error=e))
 
+    def rollback(self) -> None:
+        """Restores the state from the last saved dump in memory."""
+        if self._last_saved_state_dump:
+            self.state = LoopState.model_validate(self._last_saved_state_dump)
+            self.logger.info("Rolled back to last saved state.")
+        else:
+            self.logger.warning("No previous state to rollback to.")
+
     @property
     def iteration(self) -> int:
         return self.state.iteration

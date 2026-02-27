@@ -73,3 +73,28 @@ def test_dft_manager_streaming_behavior(mock_dft_config: DFTConfig) -> None:
     # If the manager was buffering, it might have called the driver more times
     # than we consumed. Since we consumed 3 items, call_count should be exactly 3.
     # The current assertion already covers this, but adding a comment clarifies the intent.
+
+
+def test_dft_manager_streaming_large_dataset(mock_dft_config: DFTConfig) -> None:
+    """Verify streaming with large dataset (simulated)."""
+    # Generator that yields many items
+    def large_gen() -> Any:
+        for _ in range(1000):
+            yield AtomStructure(atoms=Atoms("H", positions=[[0, 0, 0]]))
+
+    mock_driver = MagicMock()
+    calc = MagicMock()
+    calc.get_stress.return_value = np.zeros(6)
+    calc.get_forces.return_value = np.zeros((1, 3))
+    calc.get_potential_energy.return_value = 0.0
+    mock_driver.get_calculator.return_value = calc
+
+    manager = DFTManager(mock_dft_config, driver=mock_driver)
+    stream = manager.compute(large_gen())
+
+    # Consume 1
+    first = next(stream)
+    assert len(first.atoms) == 1
+
+    # Verify calls == 1 (laziness check)
+    assert mock_driver.get_calculator.call_count == 1

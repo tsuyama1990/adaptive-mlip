@@ -71,4 +71,8 @@ class DistillationConfig(BaseModel):
             if calc not in valid_calculators:
                 msg = f"Invalid DFT calculator: {calc}. Must be one of {valid_calculators}"
                 raise ValueError(msg)
+
+            # Validate MACE model
+            if not self.step3_mace_finetune.base_model.strip():
+                raise ValueError("Step 3 base model cannot be empty.")
         return self

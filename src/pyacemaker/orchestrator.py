@@ -354,11 +354,52 @@ class Orchestrator:
             self.logger.exception("Failed to extract local cluster.")
             return None
 
-    def _select_and_label(
+    def _generate_local_candidates(
+        self, s0_cluster: Atoms, potential_path: Path
+    ) -> Iterator[AtomStructure]:
+        """Generates local candidates using the configured strategy."""
+        if not self.generator:
+            return iter([])
+
+        local_n = self.config.workflow.otf.local_n_candidates
+        return self.generator.generate_local(
+            s0_cluster,
+            n_candidates=local_n,
+            engine=self.engine,
+            potential=potential_path,
+        )
+
+    def _execute_active_learning_selection(
         self,
+        candidates_gen: Iterator[AtomStructure],
         s0_cluster: Atoms,
         potential_path: Path,
-        paths: dict[str, Path]
+    ) -> Iterator[AtomStructure]:
+        """Selects the active set from candidates."""
+        if not self.active_set_selector:
+            return iter([])
+
+        def to_ase_iter(struct_iter: Iterator[AtomStructure]) -> Iterator[Atoms]:
+            for s in struct_iter:
+                yield s.to_ase()
+
+        def atom_structure_adapter(atoms_iter: Iterable[Atoms]) -> Iterator[AtomStructure]:
+            for atoms in atoms_iter:
+                yield AtomStructure.from_ase(atoms)
+
+        n_select = self.config.workflow.otf.local_n_select
+        candidates_ase_gen = to_ase_iter(candidates_gen)
+
+        selected_ase_gen = self.active_set_selector.select(
+            candidates_ase_gen,  # type: ignore[arg-type]
+            potential_path,
+            n_select=n_select,
+            anchor=s0_cluster,
+        )
+        return atom_structure_adapter(selected_ase_gen)
+
+    def _select_and_label(
+        self, s0_cluster: Atoms, potential_path: Path, paths: dict[str, Path]
     ) -> int:
         """
         Generates local candidates, selects active set, labels them, and writes to training file.
@@ -367,88 +408,17 @@ class Orchestrator:
         if not self.generator or not self.active_set_selector or not self.oracle:
             return 0
 
-        # Generate local candidates (perturbations of S0)
-        local_n = self.config.workflow.otf.local_n_candidates
-
-        # Pass engine and potential for advanced local generation strategies (e.g. MD Micro Burst)
-        # generator.generate_local returns Iterator[AtomStructure]
-        candidates_gen = self.generator.generate_local(
-            s0_cluster,
-            n_candidates=local_n,
-            engine=self.engine,
-            potential=potential_path
+        candidates_gen = self._generate_local_candidates(s0_cluster, potential_path)
+        selected_struct_gen = self._execute_active_learning_selection(
+            candidates_gen, s0_cluster, potential_path
         )
-
-        # Select Active Set (including S0 as anchor)
-        # We need to capture candidates to file if selector needs file, but selector handles iterator.
-        # However, selector writes to temp file. We need to ensure temp files are cleaned up.
-        # ActiveSetSelector uses TemporaryDirectory so it's auto-cleaned.
-
-        # Note: ActiveSetSelector interface needs to be checked.
-        # If it expects Iterator[Atoms], we need to convert.
-        # Assuming ActiveSetSelector will be updated in future cycles or adapted here.
-        # For Cycle 01, we focus on Oracle/Generator.
-        # Assuming ActiveSetSelector still works with Atoms internally or we adapt.
-
-        # Adapter for ActiveSetSelector (assuming it takes Atoms stream for now, or updated later)
-        # If we didn't update ActiveSetSelector yet, we might need to cast.
-        # Since ActiveSetSelector is not in Cycle 01 scope explicitly but used here:
-        # Let's assume we pass AtomStructure stream and it handles it, OR we convert.
-
-        # To be safe and minimal change: Convert AtomStructure stream to Atoms stream for Selector,
-        # then Selector returns Atoms stream, we convert back to AtomStructure for Oracle?
-        # NO, Oracle needs AtomStructure.
-
-        # Since ActiveSetSelector is not updated in this cycle plan, let's wrap.
-        # But wait, we need to pass data to Oracle.
-
-        # Let's look at ActiveSetSelector usage.
-        # It takes `candidates_gen` and returns `selected_gen`.
-        # `labelled_gen = self.oracle.compute(selected_gen)`
-
-        # If ActiveSetSelector returns Atoms, we need to wrap them for Oracle.
-
-        def atom_structure_adapter(atoms_iter: Iterable[Atoms]) -> Iterator[AtomStructure]:
-            for atoms in atoms_iter:
-                yield AtomStructure.from_ase(atoms)
-
-        # Temporary adaptation until ActiveSetSelector is updated
-        # We assume selector takes Atoms for now (legacy)
-        def to_ase_iter(struct_iter: Iterator[AtomStructure]) -> Iterator[Atoms]:
-            for s in struct_iter:
-                yield s.to_ase()
-
-        # Chain:
-        # candidates_gen (AtomStructure) -> to_ase_iter -> select (Atoms) -> atom_structure_adapter -> oracle (AtomStructure)
-
-        n_select = self.config.workflow.otf.local_n_select
-
-        # NOTE: This assumes ActiveSetSelector is NOT updated to AtomStructure yet.
-        # If we updated BaseGenerator to return AtomStructure, we must adapt.
-
-        candidates_ase_gen = to_ase_iter(candidates_gen)
-
-        selected_ase_gen = self.active_set_selector.select(
-            candidates_ase_gen, # type: ignore[arg-type]
-            potential_path,
-            n_select=n_select,
-            anchor=s0_cluster
-        )
-
-        selected_struct_gen = atom_structure_adapter(selected_ase_gen)
-
-        # Label
         labelled_gen = self.oracle.compute(selected_struct_gen)
 
-        # Append to training data
         training_file = paths["training"] / FILENAME_TRAINING
         batch_size = self.config.workflow.batch_size
 
         return self._stream_write(
-            labelled_gen,
-            training_file,
-            batch_size=batch_size,
-            append=True
+            labelled_gen, training_file, batch_size=batch_size, append=True
         )
 
     def _refine_potential(self, result: MDSimulationResult, potential_path: Path, paths: dict[str, Path]) -> Path | None:
@@ -596,7 +566,7 @@ class Orchestrator:
 
         target = self.config.distillation.step1_direct_sampling.target_points
         step_dir = self.dir_manager.base_dir / "step1_direct_sampling"
-        step_dir.mkdir(exist_ok=True)
+        step_dir.mkdir(parents=True, exist_ok=True)
         candidates_file = step_dir / FILENAME_CANDIDATES
 
         try:
@@ -653,7 +623,7 @@ class Orchestrator:
         # We would use self.trainer to train on DFT data.
         # For now, we simulate success.
         step_dir = self.dir_manager.base_dir / "step7_delta_learning"
-        step_dir.mkdir(exist_ok=True)
+        step_dir.mkdir(parents=True, exist_ok=True)
         pass
 
     def _run_distillation_workflow(self) -> None:
@@ -688,6 +658,8 @@ class Orchestrator:
                 step_func()
             except Exception as e:
                 self.logger.error(f"Failed at step {step_enum}: {e}")
+                # Attempt rollback to previous step state before halting
+                self.state_manager.rollback()
                 self.state_manager.state.status = LoopStatus.HALTED
                 self.state_manager.save(force=True)
                 raise
