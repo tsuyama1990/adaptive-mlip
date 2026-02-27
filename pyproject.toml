@@ -5,8 +5,6 @@ description = "Adaptive machine learning interatomic potentials"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-    "mypy>=1.19.1",
-    "ruff>=0.15.2",
     "pydantic>=2.0",
     "pyyaml>=6.0",
     "ase>=3.27.0",
@@ -106,6 +104,7 @@ max-complexity = 10  # Exceeding this prompts function splitting (prevent AI lon
 suppress-dummy-args = true  # Arguments starting with _ do not require type hints
 
 [tool.pytest.ini_options]
+addopts = "--cov=dev_src --cov=src --cov-report=term-missing"
 testpaths = ["tests"]
 pythonpath = ["src"]
 

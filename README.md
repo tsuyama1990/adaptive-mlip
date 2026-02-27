@@ -1,132 +1,102 @@
 # PyAceMaker
 
-![Python](https://img.shields.io/badge/python-3.11+-blue.svg)
-![License](https://img.shields.io/badge/license-MIT-green.svg)
-![Status](https://img.shields.io/badge/status-Verified-brightgreen.svg)
+**Adaptive Machine Learning Interatomic Potentials via MACE Knowledge Distillation**
 
-**Adaptive machine learning interatomic potentials construction orchestrator.**
+[![Build Status](https://img.shields.io/badge/build-passing-brightgreen)]()
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/release/python-3110/)
 
 ## Overview
+**PyAceMaker** is an automated pipeline for constructing production-ready Machine Learning Interatomic Potentials (MLIPs). It solves the "data gap" problem by using a large-scale foundation model (MACE-MP-0) as a knowledgeable surrogate. Instead of blindly running thousands of expensive DFT calculations, PyAceMaker intelligently samples the configuration space, distills knowledge from MACE, and applies a final "Delta Learning" correction to achieve DFT-level accuracy with a fraction of the cost.
 
-**PyAceMaker** is an automated workflow tool designed to construct robust Machine Learning Interatomic Potentials (MLIPs). It orchestrates the entire active learning loop: generating candidate structures, running DFT calculations (via Quantum Espresso), training potentials (e.g., ACE), and validating them through MD simulations. It also supports advanced production scenarios like Adaptive Kinetic Monte Carlo (aKMC) for long-timescale phenomena.
+## Key Features
+*   **MACE Knowledge Distillation:** Leverage the power of pre-trained foundation models to guide potential generation.
+*   **Active Learning:** Automatically identifies and labels only the most informative structures (High Uncertainty).
+*   **Delta Learning:** Corrects systematic errors in the surrogate model using sparse DFT data.
+*   **Fully Automated:** From initial structure to final `.yace` file in one command.
+*   **HPC Ready:** Designed for scalability on Slurm/PBS clusters.
 
-### Why PyAceMaker?
-Constructing MLIPs manually is tedious and error-prone. PyAceMaker automates the "Active Learning" cycle, ensuring that your potential is trained on the most relevant structures—those where the current model is uncertain—thereby maximizing accuracy while minimizing expensive DFT calls.
+## Architecture
 
-## Features
+```mermaid
+graph TD
+    User[User Config] --> Orch[Orchestrator]
+    Orch --> Gen[Generator]
+    Orch --> Oracle[Oracle: MACE/DFT]
+    Orch --> Train[Trainer: Pacemaker]
 
-*   **Automated Workflow Orchestration**: Manages the loop of exploration, labeling, training, and validation.
-*   **Structure Exploration**:
-    *   **Cold Start**: Initial structure generation using M3GNet (or database lookup).
-    *   **Perturbation Policies**:
-        *   **Random Rattle**: Displaces atoms to sample local energy minima.
-        *   **Strain**: Applies volume and shear strain to sample elastic response.
-        *   **Defects**: Introduces vacancies to train for off-stoichiometry robustness.
-*   **DFT Management**:
-    *   Automated Quantum Espresso execution via ASE.
-    *   **Self-Healing**: Automatically retries failed calculations with adjusted parameters (e.g., mixing beta, smearing).
-    *   **Security**: Prevents path traversal and validates input configuration.
-*   **Potential Training (Pacemaker)**:
-    *   **Delta Learning**: Fits the difference between DFT and a physics-based baseline (LJ/ZBL) for robustness.
-    *   **Active Set Optimization**: Uses D-optimality (MaxVol) to select the most informative structures, reducing training costs.
-    *   **Automated Configuration**: Generates optimal `input.yaml` for Pacemaker based on dataset composition.
-*   **Molecular Dynamics (MD) Engine**:
-    *   Integrated LAMMPS driver for NPT/NVT simulations.
-    *   **Hybrid Potentials**: Overlays ACE with ZBL/LJ for safety during high-energy events.
-    *   **Uncertainty Watchdog**: Automatically halts simulations when the extrapolation grade ($\gamma$) exceeds a safe threshold.
-*   **Advanced Simulation (EON & Scenarios)**:
-    *   **Adaptive Kinetic Monte Carlo (aKMC)**: Integrated EON interface for exploring long-timescale events and saddle point searches.
-    *   **Production Scenarios**: Built-in workflows for complex "Grand Challenges", such as Fe/Pt deposition on MgO surfaces and subsequent L10 ordering.
-*   **Scalability**:
-    *   **Streaming Data Processing**: Handles large datasets with O(1) memory usage.
-    *   **Resume Capability**: Checkpoints state to `state.json`, allowing workflows to pause and resume.
+    subgraph Pipeline
+        Gen -->|Step 1: Direct Sampling| Pool
+        Pool -->|Step 2: Uncertainty Check| Oracle
+        Oracle -->|Step 3-4: Surrogate MD| Data
+        Data -->|Step 5-6: Distillation| BaseModel
+        BaseModel -->|Step 7: Delta Learning| FinalModel
+    end
+```
 
-## Requirements
-
-*   **Python**: >= 3.11
-*   **DFT Code**: Quantum Espresso (`pw.x` executable in PATH)
-*   **MLIP Trainer**: Pacemaker (`pace_train`, `pace_activeset` executables in PATH)
-*   **MD Engine**: LAMMPS Python Interface (`lammps` package, with `USER-PACE` support)
-*   **aKMC Code**: EON (`eonclient` executable in PATH, for aKMC scenarios)
+## Prerequisites
+*   **Python 3.11+**
+*   **uv** (Recommended for dependency management)
+*   **LAMMPS** (Optional, for MD validation)
+*   **VASP/QuantumEspresso** (Optional, for Real Mode DFT calculations)
 
 ## Installation
 
 ```bash
+# 1. Clone the repository
 git clone https://github.com/your-org/pyacemaker.git
 cd pyacemaker
+
+# 2. Install dependencies using uv
 uv sync
+
+# 3. Activate the environment
+source .venv/bin/activate
 ```
 
 ## Usage
 
-1.  **Prepare Configuration**:
-    Create a `config.yaml` file defining your project parameters.
+### Quick Start (Mock Mode)
+To test the pipeline without external DFT codes or GPUs, use the Mock Mode. This runs the full logic using internal surrogate potentials.
 
-    ```yaml
-    project_name: "FePt_Alloy"
-    structure:
-        elements: ["Fe", "Pt"]
-        supercell_size: [2, 2, 2]
-        policy_name: "random_rattle"
-        rattle_stdev: 0.1
-    dft:
-        code: "quantum_espresso"
-        functional: "PBE"
-        kpoints_density: 0.04
-        encut: 500.0
-        pseudopotentials:
-            Fe: "Fe.pbe-n-kjpaw_psl.1.0.0.UPF"
-            Pt: "Pt.pbe-n-kjpaw_psl.1.0.0.UPF"
-    training:
-        potential_type: "ace"
-        cutoff_radius: 5.0
-        max_basis_size: 500
-        delta_learning: true
-        active_set_optimization: true
-        active_set_size: 100
-    md:
-        temperature: 1000.0
-        pressure: 0.0
-        timestep: 0.001
-        n_steps: 5000
-    workflow:
-        max_iterations: 10
-        checkpoint_interval: 1
-    # Optional: Scenario Configuration
-    scenario:
-        name: "fept_mgo"
-        enabled: false
-        parameters:
-            num_depositions: 50
-    eon:
-        enabled: false
-        eon_executable: "eonclient"
-        potential_path: "potentials/current.yace"
-    ```
-
-2.  **Run PyAceMaker**:
-
-    ```bash
-    # Dry run to validate config
-    uv run pyacemaker --config config.yaml --dry-run
-
-    # Start the active learning loop (Standard Mode)
-    uv run pyacemaker --config config.yaml
-
-    # Run a specific scenario (e.g., FePt on MgO)
-    uv run pyacemaker --config config.yaml --scenario fept_mgo
-    ```
-
-## Architecture
-
+```bash
+# Run the tutorial script
+export PYACEMAKER_MODE=MOCK
+uv run pyacemaker run --config examples/sn2_reaction.yaml
 ```
-src/pyacemaker/
-├── core/               # Core business logic (Generator, Oracle, Trainer, Engines)
-├── domain_models/      # Pydantic data schemas and validation
-├── interfaces/         # External code drivers (Quantum Espresso, EON, LAMMPS)
-├── scenarios/          # Specialized production workflows (e.g., FePt/MgO)
-├── utils/              # Helper functions (I/O, perturbations)
-├── factory.py          # Dependency injection
-├── orchestrator.py     # Workflow state machine
-└── main.py             # CLI entry point
+
+### Production Run
+For scientific production, configure your `config.yaml` with valid DFT settings.
+
+```bash
+# Run the full pipeline
+uv run pyacemaker run --config my_system_config.yaml
 ```
+
+## Development Workflow
+
+We use a strict cycle-based development process.
+
+### Running Tests
+```bash
+uv run pytest
+```
+
+### Linting
+```bash
+uv run ruff check .
+uv run mypy .
+```
+
+## Project Structure
+```text
+.
+├── src/pyacemaker/       # Source code
+├── tests/                # Unit and Integration tests
+├── dev_documents/        # System specifications and plans
+├── tutorials/            # Interactive Marimo notebooks
+└── pyproject.toml        # Project configuration
+```
+
+## License
+MIT License
