@@ -276,8 +276,8 @@ class Orchestrator:
 
     def _check_initial_potential(self) -> None:
         """Checks if initial potential exists, if not generates one (Cold Start)."""
-        if self.state_manager.current_potential and self.state_manager.current_potential.exists():
-            self.logger.info(f"Using existing potential: {self.state_manager.current_potential}")
+        if self.state_manager.state.current_potential and self.state_manager.state.current_potential.exists():
+            self.logger.info(f"Using existing potential: {self.state_manager.state.current_potential}")
             return
 
         self.logger.info("No initial potential found. Starting Cold Start procedure.")
@@ -290,8 +290,8 @@ class Orchestrator:
         potential_path = self._train(paths)
 
         if potential_path:
-            self.state_manager.current_potential = potential_path
-            self.state_manager.iteration = 0
+            self.state_manager.state.current_potential = potential_path
+            self.state_manager.state.iteration = 0
             self.state_manager.save()
             self.logger.info(f"Cold start completed. Initial potential: {potential_path}")
         else:
@@ -454,9 +454,9 @@ class Orchestrator:
         potential_filename = TEMPLATE_POTENTIAL_FILE.format(iteration=iteration)
         deployed_potential = self.potentials_dir / potential_filename
 
-        if self.state_manager.current_potential:
-             if self.state_manager.current_potential != deployed_potential:
-                shutil.copy(self.state_manager.current_potential, deployed_potential)
+        if self.state_manager.state.current_potential:
+             if self.state_manager.state.current_potential != deployed_potential:
+                shutil.copy(self.state_manager.state.current_potential, deployed_potential)
         else:
             msg = "No current potential to deploy."
             raise OrchestratorError(msg)
@@ -483,10 +483,10 @@ class Orchestrator:
                 if not new_potential.exists():
                     self.logger.error(f"Refined potential path {new_potential} does not exist!")
                 else:
-                    self.state_manager.current_potential = new_potential
+                    self.state_manager.state.current_potential = new_potential
                     self.logger.info(f"Potential refined to: {new_potential}")
         else:
-             self.logger.info(LOG_ITERATION_COMPLETED.format(iteration=self.state_manager.iteration + 1))
+             self.logger.info(LOG_ITERATION_COMPLETED.format(iteration=self.state_manager.state.iteration + 1))
 
     def _adapt_strategy(self, result: MDSimulationResult) -> None:
         """
@@ -511,14 +511,14 @@ class Orchestrator:
 
     def _run_loop_iteration(self) -> None:
         """Executes one iteration of the active learning loop."""
-        iteration = self.state_manager.iteration + 1
+        iteration = self.state_manager.state.iteration + 1
         paths = self.dir_manager.setup_iteration(iteration)
         self.logger.info(LOG_START_ITERATION.format(iteration=iteration, max_iterations=self.config.workflow.max_iterations))
 
         try:
             self._execute_iteration_logic(iteration, paths)
 
-            self.state_manager.iteration = iteration
+            self.state_manager.state.iteration = iteration
             self.state_manager.save()
 
         except Exception as e:
@@ -532,14 +532,14 @@ class Orchestrator:
         production_dir.mkdir(exist_ok=True)
         potential_target = production_dir / FILENAME_POTENTIAL
 
-        if self.state_manager.current_potential:
-            shutil.copy(self.state_manager.current_potential, potential_target)
+        if self.state_manager.state.current_potential:
+            shutil.copy(self.state_manager.state.current_potential, potential_target)
             self.logger.info(f"Deployed best potential to {potential_target}")
 
             if self.validator:
                 report_path = production_dir / "validation_report.html"
                 # Get a structure for validation. Use initial structure of last iteration.
-                structure = self._get_initial_structure(self.state_manager.iteration)
+                structure = self._get_initial_structure(self.state_manager.state.iteration)
 
                 if structure:
                     self.logger.info("Running final validation...")
@@ -557,7 +557,7 @@ class Orchestrator:
         """Executes the legacy active learning loop."""
         self._check_initial_potential()
 
-        while self.state_manager.iteration < self.config.workflow.max_iterations:
+        while self.state_manager.state.iteration < self.config.workflow.max_iterations:
             self._run_loop_iteration()
 
     def _step1_direct_sampling(self) -> None:
@@ -595,6 +595,8 @@ class Orchestrator:
             raise OrchestratorError("Oracle not initialized")
 
         config = self.config.distillation.step2_active_learning
+        if config is None:
+            raise OrchestratorError("Step 2 configuration missing")
 
         # Paths
         step1_dir = self.dir_manager.base_dir / "step1_direct_sampling"
@@ -626,7 +628,7 @@ class Orchestrator:
                 reverse=True
             )
 
-            active_set = []
+            active_set: list[AtomStructure] = []
             for cand in scored_candidates:
                 if len(active_set) >= config.n_active:
                     break
@@ -702,20 +704,20 @@ class Orchestrator:
             (WorkflowStep.DELTA_LEARNING, self._step7_delta_learning),
         ]
 
-        self.state_manager.mode = WORKFLOW_MODE_DISTILLATION
+        self.state_manager.state.mode = WORKFLOW_MODE_DISTILLATION
 
         # Determine start index based on current step in state
         start_index = 0
-        if self.state_manager.current_step:
+        if self.state_manager.state.current_step:
             for i, (step_enum, _) in enumerate(steps):
-                if step_enum == self.state_manager.current_step:
+                if step_enum == self.state_manager.state.current_step:
                     # Resume from the found step
                     start_index = i
                     break
 
         for i in range(start_index, len(steps)):
             step_enum, step_func = steps[i]
-            self.state_manager.current_step = step_enum
+            self.state_manager.state.current_step = step_enum
             self.state_manager.save(force=True)
 
             try:

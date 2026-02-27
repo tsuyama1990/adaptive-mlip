@@ -9,7 +9,7 @@ from pyacemaker.domain_models.defaults import (
     LOG_STATE_SAVE_FAIL,
     LOG_STATE_SAVED,
 )
-from pyacemaker.domain_models.workflow import WorkflowStep
+from pyacemaker.utils.path import validate_path_safe
 
 
 class StateManager:
@@ -18,7 +18,7 @@ class StateManager:
     """
 
     def __init__(self, state_file: Path, logger: Logger, checkpoint_interval: int = 1) -> None:
-        self.state_file = state_file
+        self.state_file = validate_path_safe(state_file)
         self.logger = logger
         self.state = LoopState()
         self.checkpoint_interval = checkpoint_interval
@@ -68,34 +68,5 @@ class StateManager:
         else:
             self.logger.warning("No previous state to rollback to.")
 
-    @property
-    def iteration(self) -> int:
-        return self.state.iteration
-
-    @iteration.setter
-    def iteration(self, value: int) -> None:
-        self.state.iteration = value
-
-    @property
-    def current_potential(self) -> Path | None:
-        return self.state.current_potential
-
-    @current_potential.setter
-    def current_potential(self, value: Path | None) -> None:
-        self.state.current_potential = value
-
-    @property
-    def current_step(self) -> WorkflowStep | None:
-        return self.state.current_step
-
-    @current_step.setter
-    def current_step(self, value: WorkflowStep | None) -> None:
-        self.state.current_step = value
-
-    @property
-    def mode(self) -> str:
-        return self.state.mode
-
-    @mode.setter
-    def mode(self, value: str) -> None:
-        self.state.mode = value
+    # Property wrappers removed to simplify indirection.
+    # Callers should access self.state directly (e.g. self.state_manager.state.iteration)

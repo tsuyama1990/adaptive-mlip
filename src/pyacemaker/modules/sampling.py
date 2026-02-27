@@ -1,6 +1,8 @@
+import tempfile
 from collections.abc import Iterator
 from pathlib import Path
 
+import ase.db
 import numpy as np
 
 from pyacemaker.core.base import BaseGenerator
@@ -77,24 +79,8 @@ class DirectSampler:
     def generate(self) -> Iterator[AtomStructure]:
         """
         Executes the sampling process using a batched approach to avoid OOM.
-
-        Strategy:
-        1. Generate candidates in batches.
-        2. Compute descriptors for each batch and accumulate ONLY descriptors (much smaller than Atoms).
-        3. Keep candidates on disk or in temp file?
-           For MaxMin, we need random access to candidates AFTER selection.
-           If N_pool is huge, we cannot hold all candidates in memory.
-
-           Solution:
-           - Pass 1: Generate & Stream candidates to a temp file (e.g. ASE db or extended XYZ).
-                     Simultaneously compute descriptors and store in memory (numpy array).
-           - Pass 2: Perform MaxMin on descriptors to get indices.
-           - Pass 3: Read temp file and yield selected indices.
+        Uses ASE SQLite database for efficient out-of-core storage.
         """
-        import tempfile
-
-        from ase.io import iread, write
-
         # Heuristic: 10x candidates
         n_pool = self.config.target_points * 10
         batch_size = self.config.batch_size
@@ -103,24 +89,27 @@ class DirectSampler:
 
         all_descriptors = []
 
-        # Use temp file to store candidates
-        with tempfile.NamedTemporaryFile(suffix=".extxyz", delete=False) as tmp_file:
+        # Use temp sqlite db to store candidates
+        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp_file:
             tmp_path = Path(tmp_file.name)
 
         try:
-            # Pass 1: Generate + Compute Descriptors + Cache Structures
+            db = ase.db.connect(str(tmp_path)) # type: ignore[no-untyped-call]
+
+            # Pass 1: Generate + Compute Descriptors + Cache Structures in SQLite
             gen_iter = self.generator.generate(n_candidates=n_pool)
 
             current_batch: list[AtomStructure] = []
 
-            # Helper to process batch
             def process_batch(batch: list[AtomStructure]) -> None:
                 if not batch:
                     return
-                # Write to temp file
+                # Write to temp db
                 atoms_list = [s.to_ase() for s in batch]
-                with tmp_path.open("a") as f:
-                    write(f, atoms_list, format="extxyz")
+                for atoms in atoms_list:
+                    # Storing atoms natively in ase.db. Information/provenance might need
+                    # specific mapping or we reconstruct later.
+                    db.write(atoms) # type: ignore[no-untyped-call]
 
                 # Compute descriptors
                 descs = self.descriptor_calc.compute(atoms_list)
@@ -146,15 +135,19 @@ class DirectSampler:
             logger.info(f"Selecting {self.config.target_points} structures from pool of {full_descriptor_matrix.shape[0]}...")
             selected_indices = set(self._max_min_selection(full_descriptor_matrix, self.config.target_points))
 
-            # Pass 3: Retrieve selected from temp file
-            # Iterate through file once and yield if index is in selected set.
-            for i, atoms in enumerate(iread(str(tmp_path), format="extxyz")):
-                if i in selected_indices:
-                    structure = AtomStructure.from_ase(atoms) # type: ignore[arg-type]
+            # Pass 3: Retrieve selected from DB
+            # ASE db IDs are 1-indexed. Our selected_indices are 0-indexed.
+            for idx in selected_indices:
+                db_id = idx + 1
+                row = db.get(id=db_id) # type: ignore[no-untyped-call]
+                atoms = row.toatoms() # type: ignore[no-untyped-call]
 
-                    structure.provenance["sampling_method"] = "direct_maxmin"
-                    structure.provenance["descriptor"] = self.config.descriptor.method
-                    yield structure
+                # Reconstruct AtomStructure
+                structure = AtomStructure.from_ase(atoms)
+
+                structure.provenance["sampling_method"] = "direct_maxmin"
+                structure.provenance["descriptor"] = self.config.descriptor.method
+                yield structure
 
         finally:
             # Cleanup temp file

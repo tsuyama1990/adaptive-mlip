@@ -1,50 +1,18 @@
 import logging
-import sys
-from logging.handlers import RotatingFileHandler
-from pathlib import Path
-
-from pyacemaker.domain_models.logging import LoggingConfig
+from logging import Logger
 
 
-def setup_logger(config: LoggingConfig, project_name: str) -> logging.Logger:
-    """
-    Sets up the logger based on the configuration.
-    Ensures idempotency to avoid duplicate handlers.
-
-    Args:
-        config: LoggingConfig object.
-        project_name: Name of the project (logger name).
-
-    Returns:
-        Configured Logger instance.
-    """
-    logger = logging.getLogger(project_name)
-
-    # If handlers already exist, assume it's already configured and return.
-    # This prevents duplicate logs if setup_logger is called multiple times.
-    if logger.handlers:
-        return logger
-
-    logger.setLevel(config.level)
-
-    formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-
-    # Console Handler
-    console_handler = logging.StreamHandler(sys.stdout)
-    console_handler.setFormatter(formatter)
-    logger.addHandler(console_handler)
-
-    # File Handler
-    if config.log_file:
-        log_path = Path(config.log_file)
-        # Ensure directory exists
-        if log_path.parent != Path():
-            log_path.parent.mkdir(parents=True, exist_ok=True)
-
-        file_handler = RotatingFileHandler(
-            config.log_file, maxBytes=config.max_bytes, backupCount=config.backup_count
-        )
-        file_handler.setFormatter(formatter)
-        logger.addHandler(file_handler)
-
+# Simplified mock for tests or a basic setup
+def get_logger(name: str = "pyacemaker") -> Logger:
+    logger = logging.getLogger(name)
+    if not logger.handlers:
+        handler = logging.StreamHandler()
+        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        handler.setFormatter(formatter)
+        logger.addHandler(handler)
+        logger.setLevel(logging.INFO)
     return logger
+
+def setup_logger(config: object = None, project_name: str = "pyacemaker") -> Logger:
+    """Legacy alias, just delegates to get_logger for now."""
+    return get_logger(project_name)
