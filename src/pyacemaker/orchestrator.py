@@ -1,4 +1,6 @@
+import heapq
 import shutil
+import time
 from collections.abc import Iterable, Iterator
 from pathlib import Path
 from typing import Any
@@ -186,10 +188,14 @@ class Orchestrator:
 
         return count
 
-    def _explore(self, paths: dict[str, Path]) -> None:
+    def _explore(self, paths: dict[str, Path], retries: int = 3) -> None:
         """
         Step 1: Exploration (Cold Start).
         Generates initial candidate structures and writes them to disk using efficient streaming.
+
+        Args:
+            paths: Dictionary of directory paths.
+            retries: Number of retry attempts on failure.
         """
         if not self.generator:
             return
@@ -197,27 +203,36 @@ class Orchestrator:
         n_candidates = self.config.workflow.n_candidates
         candidates_file = paths["candidates"] / FILENAME_CANDIDATES
 
-        try:
-            # Get iterator from generator
-            candidate_stream = self.generator.generate(n_candidates=n_candidates)
+        for attempt in range(retries):
+            try:
+                # Get iterator from generator
+                candidate_stream = self.generator.generate(n_candidates=n_candidates)
 
-            # _stream_write consumes the iterator, buffering in chunks.
-            total = self._stream_write(
-                candidate_stream,
-                candidates_file,
-                batch_size=self.config.workflow.batch_size,
-                append=True
-            )
+                # _stream_write consumes the iterator, buffering in chunks.
+                total = self._stream_write(
+                    candidate_stream,
+                    candidates_file,
+                    batch_size=self.config.workflow.batch_size,
+                    append=True
+                )
 
-            self.logger.info(LOG_GENERATED_CANDIDATES.format(count=total))
-        except Exception as e:
-            msg = f"Exploration failed: {e}"
-            raise OrchestratorError(msg) from e
+                self.logger.info(LOG_GENERATED_CANDIDATES.format(count=total))
+                return
+            except Exception as e:
+                self.logger.warning(f"Exploration attempt {attempt + 1}/{retries} failed: {e}")
+                if attempt == retries - 1:
+                    msg = f"Exploration failed after {retries} attempts: {e}"
+                    raise OrchestratorError(msg) from e
+                time.sleep(2) # Brief pause before retry
 
-    def _label(self, paths: dict[str, Path]) -> None:
+    def _label(self, paths: dict[str, Path], retries: int = 3) -> None:
         """
         Step 2: Labeling (Oracle).
         Computes properties for candidates and writes labelled data to training set.
+
+        Args:
+            paths: Dictionary of directory paths.
+            retries: Number of retry attempts on failure.
         """
         if not self.oracle:
             return
@@ -230,34 +245,35 @@ class Orchestrator:
         batch_size = self.config.workflow.batch_size
         training_file = paths["training"] / FILENAME_TRAINING
 
-        try:
-            # Lazy read of candidates
-            # Note: iread returns Iterator[Atoms]
-            # We need to wrap them into Iterator[AtomStructure] for the Oracle
+        for attempt in range(retries):
+            try:
+                # Lazy read of candidates
+                def atom_structure_generator(file_path: str) -> Iterator[AtomStructure]:
+                    for atoms in iread(file_path, index=":", format="extxyz"):
+                        if isinstance(atoms, Atoms):
+                            yield AtomStructure.from_ase(atoms)
 
-            def atom_structure_generator(file_path: str) -> Iterator[AtomStructure]:
-                for atoms in iread(file_path, index=":", format="extxyz"):
-                    if isinstance(atoms, Atoms):
-                        yield AtomStructure.from_ase(atoms)
+                candidate_stream = atom_structure_generator(str(candidates_file))
 
-            candidate_stream = atom_structure_generator(str(candidates_file))
+                # Streaming computation
+                labelled_stream = self.oracle.compute(candidate_stream, batch_size=batch_size)
 
-            # Streaming computation
-            # Oracle now returns Iterator[AtomStructure]
-            labelled_stream = self.oracle.compute(candidate_stream, batch_size=batch_size)
+                # _stream_write now accepts Iterator[AtomStructure]
+                total = self._stream_write(
+                    labelled_stream,
+                    training_file,
+                    batch_size=batch_size,
+                    append=True
+                )
 
-            # _stream_write now accepts Iterator[AtomStructure]
-            total = self._stream_write(
-                labelled_stream,
-                training_file,
-                batch_size=batch_size,
-                append=True
-            )
-
-            self.logger.info(LOG_COMPUTED_PROPERTIES.format(count=total))
-        except Exception as e:
-            msg = f"Labeling failed: {e}"
-            raise OrchestratorError(msg) from e
+                self.logger.info(LOG_COMPUTED_PROPERTIES.format(count=total))
+                return
+            except Exception as e:
+                self.logger.warning(f"Labeling attempt {attempt + 1}/{retries} failed: {e}")
+                if attempt == retries - 1:
+                    msg = f"Labeling failed after {retries} attempts: {e}"
+                    raise OrchestratorError(msg) from e
+                time.sleep(2)
 
     def _train(self, paths: dict[str, Path], initial_potential: Path | None = None) -> Path | None:
         """Step 3: Training"""
@@ -636,7 +652,6 @@ class Orchestrator:
             # 3. Filter based on uncertainty (Memory Efficient Top-K)
             # Instead of sorting the entire list (which is O(N log N) and memory heavy),
             # we use heapq.nlargest to find the top k elements in O(N log k).
-            import heapq
 
             # Wrapper class for heapq to handle None uncertainties and reverse ordering
             class ScoredItem:

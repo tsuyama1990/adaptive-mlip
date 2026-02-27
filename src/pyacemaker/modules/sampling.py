@@ -34,6 +34,9 @@ class DirectSampler:
         Selects n_select indices using greedy MaxMin diversity algorithm.
         Supports memory-mapped arrays to process large datasets without OOM.
 
+        For very large N (e.g., > 100k), MaxMin is approximated by sub-sampling
+        to ensure reasonable execution time, as O(k*N) can be slow for large D and N.
+
         Args:
             descriptors: (N_candidates, D) numpy array or memmap.
             n_select: Number of points to select.
@@ -46,57 +49,84 @@ class DirectSampler:
             logger.warning(f"Requested {n_select} samples but only {n_candidates} available. Selecting all.")
             return list(range(n_candidates))
 
-        selected_indices: list[int] = []
-        remaining_indices = list(range(n_candidates))
+        # Approximation for very large datasets to bound execution time
+        MAX_EXACT_CANDIDATES = 100_000
+        if n_candidates > MAX_EXACT_CANDIDATES:
+            logger.info(f"Dataset too large for exact MaxMin ({n_candidates} > {MAX_EXACT_CANDIDATES}). Subsampling...")
+            # Randomly select a subset to perform MaxMin on
+            # This is a standard fast approximation for Farthest Point Sampling
+            subset_indices = np.random.choice(n_candidates, MAX_EXACT_CANDIDATES, replace=False)
+            # Create a new memmap or just in-memory if D is small enough
+            # But to be safe with OOM, we just map indices
+            active_indices = list(subset_indices)
+        else:
+            active_indices = list(range(n_candidates))
+
+        n_active = len(active_indices)
+
+        # We need a mapping from active_index position -> actual descriptor index
+        # active_indices[i] = real_index
+
+        selected_real_indices: list[int] = []
 
         # 1. Select first point randomly
-        first_idx = int(np.random.choice(remaining_indices))
-        selected_indices.append(first_idx)
-        remaining_indices.remove(first_idx)
+        first_active_pos = int(np.random.choice(n_active))
+        first_real_idx = active_indices[first_active_pos]
+        selected_real_indices.append(first_real_idx)
+
+        # Remove from active pool (swap with last for O(1) removal, or just use boolean mask)
+        # Using a boolean mask is faster for large arrays
+        is_active = np.ones(n_active, dtype=bool)
+        is_active[first_active_pos] = False
 
         # Initialize min distances
-        current_selected = descriptors[first_idx]
+        current_selected = descriptors[first_real_idx]
 
         # Calculate initial squared distances to avoid intermediate array allocation overhead
         chunk_size = MAX_MEMMAP_CHUNK_SIZE
-        min_dists = np.zeros(n_candidates, dtype=np.float64)
+        # We store min_dists only for the active_indices subset
+        min_dists = np.zeros(n_active, dtype=np.float64)
 
-        for start_idx in range(0, n_candidates, chunk_size):
-            end_idx = min(start_idx + chunk_size, n_candidates)
-            chunk = descriptors[start_idx:end_idx]
-            # Use squared distance per audit feedback: np.sum((chunk - current_selected)**2, axis=1)
+        # Compute initial distances in chunks over the active subset
+        for start_pos in range(0, n_active, chunk_size):
+            end_pos = min(start_pos + chunk_size, n_active)
+            # Get real indices for this chunk
+            chunk_real_indices = active_indices[start_pos:end_pos]
+            # Fetch from memmap (fancy indexing on memmap might load into memory, but it's bounded by chunk_size)
+            chunk = descriptors[chunk_real_indices]
+            # Use squared distance
             chunk_dists = np.sum((chunk - current_selected)**2, axis=1)
-            min_dists[start_idx:end_idx] = chunk_dists
+            min_dists[start_pos:end_pos] = chunk_dists
 
         # 2. Greedy selection
         for _ in range(n_select - 1):
-            if not remaining_indices:
-                break
-
+            # Mask out already selected
             valid_min_dists = min_dists.copy()
-            # Mask selected
-            valid_min_dists[selected_indices] = -1.0
+            valid_min_dists[~is_active] = -1.0
 
-            next_idx = int(np.argmax(valid_min_dists))
+            # Find next point
+            next_active_pos = int(np.argmax(valid_min_dists))
+            next_real_idx = active_indices[next_active_pos]
 
-            selected_indices.append(next_idx)
-            remaining_indices.remove(next_idx)
+            selected_real_indices.append(next_real_idx)
+            is_active[next_active_pos] = False
 
             # Update min_dists using chunking
-            new_selected = descriptors[next_idx]
+            new_selected = descriptors[next_real_idx]
 
-            for start_idx in range(0, n_candidates, chunk_size):
-                end_idx = min(start_idx + chunk_size, n_candidates)
-                chunk = descriptors[start_idx:end_idx]
+            for start_pos in range(0, n_active, chunk_size):
+                end_pos = min(start_pos + chunk_size, n_active)
+                chunk_real_indices = active_indices[start_pos:end_pos]
+                chunk = descriptors[chunk_real_indices]
                 chunk_dists = np.sum((chunk - new_selected)**2, axis=1)
 
                 # Update the specific chunk of min_dists
-                min_dists[start_idx:end_idx] = np.minimum(
-                    min_dists[start_idx:end_idx],
+                min_dists[start_pos:end_pos] = np.minimum(
+                    min_dists[start_pos:end_pos],
                     chunk_dists
                 )
 
-        return selected_indices
+        return selected_real_indices
 
     def generate(self) -> Iterator[AtomStructure]:
         """
@@ -143,14 +173,12 @@ class DirectSampler:
                     db.write(atoms) # type: ignore[no-untyped-call]
 
                 # Compute descriptors
-                descs = self.descriptor_calc.compute(atoms_list)
+                descs = self.descriptor_calc.compute(atoms_list, batch_size=batch_size)
 
                 # Initialize memmap if first batch
                 if memmap_array is None:
                     dim = descs.shape[1]
                     # Create memmap for the entire expected pool size
-                    # Note: If gen_iter yields exactly n_pool, this perfectly fits.
-                    # If it yields fewer, we'll slice it before MaxMin.
                     memmap_array = np.memmap(
                         str(tmp_memmap_path),
                         dtype='float64',

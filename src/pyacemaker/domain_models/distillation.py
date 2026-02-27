@@ -1,4 +1,6 @@
-from pydantic import BaseModel, ConfigDict, Field, PositiveInt, field_validator, model_validator
+from typing import Literal
+
+from pydantic import BaseModel, ConfigDict, Field, PositiveInt, model_validator
 
 from pyacemaker.domain_models.active_learning import DescriptorConfig
 from pyacemaker.domain_models.defaults import DEFAULT_BATCH_SIZE, DEFAULT_CANDIDATE_MULTIPLIER
@@ -11,17 +13,13 @@ class Step1DirectSamplingConfig(BaseModel):
         default=DEFAULT_CANDIDATE_MULTIPLIER,
         description="Multiplier for initial candidate pool size"
     )
-    objective: str = Field(default="maximize_entropy", description="Objective function for sampling")
+    # Replaced loose str validation with Literal string to enforce Type Safety / Enum natively via Pydantic
+    objective: Literal["maximize_entropy", "random"] = Field(
+        default="maximize_entropy",
+        description="Objective function for sampling"
+    )
     batch_size: PositiveInt = Field(default=DEFAULT_BATCH_SIZE, description="Batch size for processing")
     descriptor: DescriptorConfig = Field(..., description="Descriptor configuration for sampling")
-
-    @field_validator("objective")
-    @classmethod
-    def validate_objective(cls, v: str) -> str:
-        allowed = {"maximize_entropy", "random"}
-        if v not in allowed:
-            raise ValueError(f"Objective must be one of {allowed}")
-        return v
 
 
 class Step2ActiveLearningConfig(BaseModel):
@@ -76,6 +74,7 @@ class DistillationConfig(BaseModel):
     def validate_enabled_config(self) -> "DistillationConfig":
         """
         Validates that necessary configurations are sound when distillation is enabled.
+        Also validates that when disabled, optional fields aren't inexplicably provided.
         """
         if self.enable_mace_distillation:
             if self.step1_direct_sampling is None:
@@ -100,4 +99,14 @@ class DistillationConfig(BaseModel):
             # Validate MACE model
             if not self.step3_mace_finetune.base_model.strip():
                 raise ValueError("Step 3 base model cannot be empty.")
+        # If distillation is disabled, prevent setting these configurations to avoid confusion.
+        elif any(step is not None for step in [
+            self.step1_direct_sampling,
+            self.step2_active_learning,
+            self.step3_mace_finetune,
+            self.step4_surrogate_sampling,
+            self.step7_pacemaker_finetune
+        ]):
+             raise ValueError("Distillation step configs must be None when enable_mace_distillation is False")
+
         return self

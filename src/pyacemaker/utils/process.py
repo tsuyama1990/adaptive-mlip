@@ -17,7 +17,10 @@ ALLOWED_COMMANDS = {
     "mpiexec",
     "vasp_std",
     "vasp_gam",
-    "pw.x"
+    "vasp_ncl",
+    "pw.x",
+    "cp.x",
+    "ph.x"
 }
 
 def run_command(

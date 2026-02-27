@@ -1,3 +1,4 @@
+from collections.abc import Iterator
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -21,7 +22,7 @@ class DescriptorCalculator:
 
     Memory Implications:
     - Descriptors for large structures or high N/L max can be large.
-    - Computation should be streamed using compute_stream to avoid OOM for large N.
+    - Use `compute_stream` to yield batches and avoid OOM for large datasets.
     """
     def __init__(self, config: DescriptorConfig) -> None:
         self.config = config
@@ -86,7 +87,7 @@ class DescriptorCalculator:
         # OOM Prevention Check BEFORE computation
         estimated_total_bytes = n_structures * self._dim * 8
         if estimated_total_bytes > MAX_DESCRIPTOR_ARRAY_BYTES:
-            msg = f"Requested descriptor calculation total size exceeds safe memory limits ({estimated_total_bytes} > {MAX_DESCRIPTOR_ARRAY_BYTES} bytes)."
+            msg = f"Requested descriptor calculation total size exceeds safe memory limits ({estimated_total_bytes} > {MAX_DESCRIPTOR_ARRAY_BYTES} bytes). Use compute_stream instead."
             raise ValueError(msg)
 
         all_descriptors = []
@@ -112,3 +113,36 @@ class DescriptorCalculator:
 
         except Exception as e:
             raise RuntimeError(f"Descriptor calculation failed: {e}") from e
+
+    def compute_stream(self, atoms_iter: Iterator[Atoms], batch_size: int = DEFAULT_DESCRIPTOR_BATCH_SIZE) -> Iterator[np.ndarray]:
+        """
+        Streams descriptor computation. Ideal for massive datasets to prevent OOM.
+        Takes an iterator of Atoms and yields batches of descriptors as numpy arrays.
+
+        Args:
+            atoms_iter: Iterator yielding ASE Atoms objects.
+            batch_size: Number of structures per batch.
+
+        Yields:
+            Numpy array of shape (batch_size, Descriptor_Dim).
+        """
+        batch: list[Atoms] = []
+        try:
+            for atoms in atoms_iter:
+                batch.append(atoms)
+                if len(batch) >= batch_size:
+                    descriptors = self._transformer.create(batch) # type: ignore[attr-defined]
+                    if not isinstance(descriptors, np.ndarray):
+                        descriptors = descriptors.toarray()
+                    yield descriptors
+                    batch.clear()
+
+            # Yield remaining
+            if batch:
+                descriptors = self._transformer.create(batch) # type: ignore[attr-defined]
+                if not isinstance(descriptors, np.ndarray):
+                    descriptors = descriptors.toarray()
+                yield descriptors
+
+        except Exception as e:
+            raise RuntimeError(f"Streamed descriptor calculation failed: {e}") from e
