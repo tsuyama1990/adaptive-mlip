@@ -213,3 +213,8 @@ dev_documents/project_state.json
 dev_documents/project_state_local.json
 .DS_Store
 .env.local
+
+# Models
+*.model
+*.pth
+*.pt

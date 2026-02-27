@@ -58,7 +58,7 @@ def run_command(
     logger.debug(f"Running command: {safe_cmd_str}")
 
     try:
-        return subprocess.run(  # noqa: S603
+        return subprocess.run(
             cmd,
             cwd=cwd,
             check=check,

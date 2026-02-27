@@ -1,15 +1,29 @@
 from pydantic import BaseModel, ConfigDict, Field, PositiveInt, model_validator
 
+from pyacemaker.domain_models.active_learning import DescriptorConfig
+
 
 class Step1DirectSamplingConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
     target_points: PositiveInt = Field(default=100, description="Number of structures to generate")
     objective: str = Field(default="maximize_entropy", description="Objective function for sampling")
+    descriptor: DescriptorConfig = Field(
+        default_factory=lambda: DescriptorConfig(
+            method="soap",
+            species=["H"], # Default placeholder, should be overwritten by user
+            r_cut=5.0,
+            n_max=8,
+            l_max=6,
+            sigma=0.5
+        ),
+        description="Descriptor configuration for sampling"
+    )
 
 
 class Step2ActiveLearningConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
     uncertainty_threshold: float = Field(default=0.8, gt=0.0, description="Uncertainty threshold for DFT calculation")
+    n_active: PositiveInt = Field(default=10, description="Maximum number of structures to select for DFT")
     dft_calculator: str = Field(default="VASP", description="DFT code to use")
 
 

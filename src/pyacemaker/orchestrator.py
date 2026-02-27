@@ -16,7 +16,6 @@ from pyacemaker.core.state_manager import StateManager
 from pyacemaker.core.validator import Validator
 from pyacemaker.domain_models import PyAceConfig
 from pyacemaker.domain_models.data import AtomStructure
-from pyacemaker.domain_models.workflow import WorkflowStep
 from pyacemaker.domain_models.defaults import (
     DEFAULT_PRODUCTION_DIR,
     FILENAME_CANDIDATES,
@@ -45,8 +44,10 @@ from pyacemaker.domain_models.defaults import (
     WORKFLOW_MODE_DISTILLATION,
 )
 from pyacemaker.domain_models.md import MDSimulationResult
+from pyacemaker.domain_models.workflow import WorkflowStep
 from pyacemaker.factory import ModuleFactory
 from pyacemaker.logger import setup_logger
+from pyacemaker.modules.sampling import DirectSampler
 from pyacemaker.utils.extraction import extract_local_region
 
 
@@ -564,13 +565,18 @@ class Orchestrator:
         if not self.generator:
             raise OrchestratorError("Generator not initialized")
 
-        target = self.config.distillation.step1_direct_sampling.target_points
+        config = self.config.distillation.step1_direct_sampling
         step_dir = self.dir_manager.base_dir / "step1_direct_sampling"
         step_dir.mkdir(parents=True, exist_ok=True)
         candidates_file = step_dir / FILENAME_CANDIDATES
 
         try:
-            stream = self.generator.generate(n_candidates=target)
+            # Instantiate DirectSampler with the underlying generator
+            sampler = DirectSampler(config, self.generator)
+
+            # Use sampler to generate selected structures
+            stream = sampler.generate()
+
             count = self._stream_write(
                 stream, candidates_file, batch_size=self.config.workflow.batch_size
             )
@@ -582,37 +588,130 @@ class Orchestrator:
         self.logger.info(LOG_STEP_2)
         if not self.oracle:
             raise OrchestratorError("Oracle not initialized")
-        # Placeholder for Active Learning logic (MACE Uncertainty)
-        # In Cycle 01, we just verify oracle is present.
-        pass
+
+        config = self.config.distillation.step2_active_learning
+
+        # Paths
+        step1_dir = self.dir_manager.base_dir / "step1_direct_sampling"
+        candidates_file = step1_dir / FILENAME_CANDIDATES
+
+        step2_dir = self.dir_manager.base_dir / "step2_active_learning"
+        step2_dir.mkdir(parents=True, exist_ok=True)
+
+        if not candidates_file.exists():
+             raise OrchestratorError(f"Step 1 output not found: {candidates_file}")
+
+        try:
+            # 1. Read candidates from Step 1
+            # Note: We need to load them to filter.
+            # Lazy reading is fine, but sorting requires memory or persistent DB.
+            # Assuming dataset size from Step 1 (e.g. 100-1000) fits in memory.
+
+            def atom_structure_generator(file_path: str) -> Iterator[AtomStructure]:
+                for atoms in iread(file_path, index=":", format="extxyz"):
+                    if isinstance(atoms, Atoms):
+                        yield AtomStructure.from_ase(atoms)
+
+            # 2. Compute Uncertainty using MaceOracle (self.oracle)
+            # self.oracle.compute returns Iterator[AtomStructure] with uncertainty field populated
+            candidates_iter = atom_structure_generator(str(candidates_file))
+            scored_candidates = list(self.oracle.compute(candidates_iter))
+
+            # 3. Filter based on uncertainty
+            # Sort by uncertainty descending
+            scored_candidates.sort(
+                key=lambda x: x.uncertainty if x.uncertainty is not None else -1.0,
+                reverse=True
+            )
+
+            # Select top N or based on threshold
+            # Logic: Select max n_active, but also check threshold if needed.
+            # Spec says "Orchestrator filters the pool (e.g., top 10% uncertainty)"
+            # Config has `uncertainty_threshold` and `n_active`.
+
+            active_set = []
+            for cand in scored_candidates:
+                if len(active_set) >= config.n_active:
+                    break
+
+                # Check threshold if strictly enforced?
+                # Usually AL selects "top k", threshold is for stopping criteria.
+                # Let's select top k for now as per "ActiveSet" definition in standard AL.
+                # We can also add threshold check:
+                if cand.uncertainty is not None and cand.uncertainty >= config.uncertainty_threshold:
+                     active_set.append(cand)
+                else:
+                     # If we run out of high uncertainty samples, stop?
+                     # Or just fill up to n_active?
+                     # Requirement: "select only the most informative subset".
+                     # Let's stick to top-k but prioritize those above threshold if possible.
+                     # Actually, standard AL is batch size fixed (n_active).
+                     active_set.append(cand)
+
+            if not active_set:
+                self.logger.warning("No candidates selected for active set.")
+                return
+
+            # 4. Label with Ground Truth (DFT)
+            # In "MACE Knowledge Distillation", we might use DFT here.
+            # Requirement: "Orchestrator passes ActiveSet to DftOracle (or Mock) for ground-truth labelling."
+            # BUT: self.oracle IS MaceOracle (Surrogate) in this mode.
+            # We need a separate DftOracle instance or switch oracles.
+
+            # This implies Orchestrator needs access to a SECOND oracle (DFT).
+            # Factory currently returns only one.
+            # Solution: Instantiate DFT Oracle on the fly here or have Factory return both.
+            # For simplicity in this cycle, let's instantiate on fly or assume we just write them for DFT calculation.
+            # Or use a Mock/Placeholder if DFT not configured.
+
+            # Let's simulate DFT labeling step by just saving the selected structures
+            # to a specific file that "DftOracle" would pick up.
+            # Or better, since we are in `_step2_active_learning`, we should output the `ActiveSet`.
+
+            # For Cycle 02 scope: "Orchestrator passes ActiveSet to DftOracle... -> Labelled Active Set"
+            # Since we didn't implement DftOracle switching in Factory yet, let's write the active set
+            # and mark it as "ready_for_dft".
+
+            # NOTE: In a real run, this would call VASP/QE.
+            # For now, we write the active set to `active_set.xyz`.
+            active_set_file = step2_dir / "active_set.xyz"
+
+            # Write to file
+            # Reuse _stream_write for consistency
+            self._stream_write(
+                iter(active_set),
+                active_set_file,
+                batch_size=len(active_set)
+            )
+
+            self.logger.info(f"Selected {len(active_set)} structures for active set. Saved to {active_set_file}")
+
+        except Exception as e:
+            raise OrchestratorError(f"Step 2 failed: {e}") from e
 
     def _step3_mace_finetune(self) -> None:
         self.logger.info(LOG_STEP_3)
         if not self.trainer:
             raise OrchestratorError("Trainer not initialized")
         # Placeholder for MACE Fine-tuning
-        pass
 
     def _step4_surrogate_sampling(self) -> None:
         self.logger.info(LOG_STEP_4)
         if not self.generator:
             raise OrchestratorError("Generator not initialized")
         # Placeholder for Surrogate Data Generation
-        pass
 
     def _step5_surrogate_labeling(self) -> None:
         self.logger.info(LOG_STEP_5)
         if not self.oracle:
             raise OrchestratorError("Oracle not initialized")
         # Placeholder for Surrogate Labeling
-        pass
 
     def _step6_pacemaker_base(self) -> None:
         self.logger.info(LOG_STEP_6)
         if not self.trainer:
             raise OrchestratorError("Trainer not initialized")
         # Placeholder for Pacemaker Base Training
-        pass
 
     def _step7_delta_learning(self) -> None:
         self.logger.info(LOG_STEP_7)
@@ -624,7 +723,6 @@ class Orchestrator:
         # For now, we simulate success.
         step_dir = self.dir_manager.base_dir / "step7_delta_learning"
         step_dir.mkdir(parents=True, exist_ok=True)
-        pass
 
     def _run_distillation_workflow(self) -> None:
         """Executes the 7-step MACE Distillation workflow."""

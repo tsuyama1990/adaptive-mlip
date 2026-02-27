@@ -32,7 +32,10 @@ class LoopState(BaseModel):
     @field_validator("mode")
     @classmethod
     def validate_mode(cls, v: str) -> str:
-        from pyacemaker.domain_models.defaults import WORKFLOW_MODE_DISTILLATION, WORKFLOW_MODE_LEGACY
+        from pyacemaker.domain_models.defaults import (
+            WORKFLOW_MODE_DISTILLATION,
+            WORKFLOW_MODE_LEGACY,
+        )
         if v not in (WORKFLOW_MODE_LEGACY, WORKFLOW_MODE_DISTILLATION):
              msg = f"Invalid mode: {v}. Must be one of: {WORKFLOW_MODE_LEGACY}, {WORKFLOW_MODE_DISTILLATION}"
              raise ValueError(msg)

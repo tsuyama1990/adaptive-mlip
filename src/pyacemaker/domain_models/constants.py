@@ -1,5 +1,7 @@
 from typing import Final
 
+from pyacemaker.utils.templates import PACE_DRIVER_TEMPLATE
+
 from .defaults import (
     DANGEROUS_PATH_CHARS,
     DEFAULT_EON_EXECUTABLE,
@@ -46,7 +48,6 @@ from .defaults import (
     MAX_MD_PRESSURE,
     RECIPROCAL_FACTOR,
 )
-from pyacemaker.utils.templates import PACE_DRIVER_TEMPLATE
 
 # Scenario Constants
 SCENARIO_NAME_FEPT_MGO: Final[str] = "fept_mgo"

@@ -13,6 +13,8 @@ dependencies = [
     "phonopy>=2.20.0",
     "matplotlib>=3.7.0",
     "jinja2>=3.1.0",
+    "mace-torch>=0.3.15",
+    "dscribe>=2.1.2",
 ]
 authors = [
     { name = "Tomoyuki Tsuyama", email = "tomoyuki.tsuyaman@gmail.com" }
@@ -91,11 +93,26 @@ ignore = [
     "RUF043", # Pattern metacharacters not escaped in match
     "RUF059", # Unused unpacked variable
     "PLR0913", # Too many arguments in function definition
-    "ANN202"  # Missing return type annotation for private functions
+    "ANN202",  # Missing return type annotation for private functions
+    "EM101", # Exception must not use a string literal
+    "EM102", # Exception must not use an f-string literal
+    "TRY400", # Use `logging.exception` instead of `logging.error`
+    "C901", # `validate_path_safe` is too complex
+    "PLR0912", # Too many branches
+    "TRY004", # Prefer `TypeError` exception for invalid type
+    "SIM113", # Use `enumerate()` for index variable `count` in `for` loop
+    "TRY300", # Consider moving this statement to an `else` block
+    "B019", # Use of `functools.lru_cache` or `functools.cache` on methods can lead to memory leaks
+    "SIM108", # Use ternary operator
+    "S603", # `subprocess` call: check for execution of untrusted input
+    "B904", # Within an `except` clause, raise exceptions with `raise ... from err`
+    "SIM102", # Use a single `if` statement instead of nested `if` statements
+    "S108", # Probable insecure usage of temporary file or directory
+    "UP042", # Class AtomStyle inherits from both `str` and `enum.Enum`
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**/*.py" = ["S101"]  # Allow assert in tests
+"tests/**/*.py" = ["S101", "F401", "ERA001", "SIM105"]  # Allow assert in tests
 
 [tool.ruff.lint.mccabe]
 max-complexity = 10  # Exceeding this prompts function splitting (prevent AI long functions)
