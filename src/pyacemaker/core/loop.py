@@ -29,6 +29,15 @@ class LoopState(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    @field_validator("mode")
+    @classmethod
+    def validate_mode(cls, v: str) -> str:
+        from pyacemaker.domain_models.defaults import WORKFLOW_MODE_DISTILLATION, WORKFLOW_MODE_LEGACY
+        if v not in (WORKFLOW_MODE_LEGACY, WORKFLOW_MODE_DISTILLATION):
+             msg = f"Invalid mode: {v}. Must be one of: {WORKFLOW_MODE_LEGACY}, {WORKFLOW_MODE_DISTILLATION}"
+             raise ValueError(msg)
+        return v
+
     @field_validator("current_potential")
     @classmethod
     def validate_potential_path(cls, v: Path | None) -> Path | None:
@@ -62,14 +71,18 @@ class LoopState(BaseModel):
         return v
 
     def save(self, path: Path) -> None:
-        """Saves the state to a JSON file using atomic write and streaming."""
+        """Saves the state to a JSON file using atomic write."""
         path = path.resolve()
         directory = path.parent
         directory.mkdir(parents=True, exist_ok=True)
 
+        # LoopState is small, so loading into memory for dump is acceptable.
+        # For larger datasets, we would stream.
+        data = self.model_dump(mode="json")
+
         # Use a temporary file in the same directory to ensure atomic move
         with tempfile.NamedTemporaryFile("w", dir=directory, delete=False) as tmp_file:
-            json.dump(self.model_dump(mode="json"), tmp_file, indent=2)
+            json.dump(data, tmp_file, indent=2)
 
             # Ensure data is flushed to disk
             tmp_file.flush()
@@ -100,8 +113,12 @@ class LoopState(BaseModel):
             raise ValueError(msg) from e
 
 
-def _raise_traversal_error(path: Path, cwd: Path, cause: Exception | None = None) -> None:
-    msg = f"Potential path {path} is outside the project directory {cwd}"
+def _raise_traversal_error(path: Path, base: Path, cause: Exception | None = None) -> None:
+    """Raises a ValueError indicating path traversal attempt."""
+    # Ensure absolute paths for logging/error
+    path = path.resolve()
+    base = base.resolve()
+    msg = f"Potential path {path} is outside the allowed directory {base}"
     if cause:
         raise ValueError(msg) from cause
     raise ValueError(msg)

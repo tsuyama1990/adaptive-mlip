@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict, Field, PositiveInt
+from pydantic import BaseModel, ConfigDict, Field, PositiveInt, model_validator
 
 
 class Step1DirectSamplingConfig(BaseModel):
@@ -51,3 +51,17 @@ class DistillationConfig(BaseModel):
     step7_pacemaker_finetune: Step7PacemakerFinetuneConfig = Field(
         default_factory=Step7PacemakerFinetuneConfig, description="Step 7 configuration"
     )
+
+    @model_validator(mode="after")
+    def validate_enabled_config(self) -> "DistillationConfig":
+        """
+        Validates that necessary configurations are sound when distillation is enabled.
+        Since sub-configs have defaults, they are always present, but we can add
+        cross-field validation here if needed.
+        """
+        if self.enable_mace_distillation:
+            # Example: Ensure step 1 target points is reasonable
+            if self.step1_direct_sampling.target_points < 10:
+                msg = "Step 1 target points must be at least 10."
+                raise ValueError(msg)
+        return self

@@ -41,3 +41,22 @@ def test_distillation_config_override() -> None:
     assert config.enable_mace_distillation is True
     assert config.step1_direct_sampling.target_points == 500
     assert config.step2_active_learning.uncertainty_threshold == 0.5
+
+
+def test_distillation_config_logic_validation() -> None:
+    """Test custom logic validator."""
+    with pytest.raises(ValidationError, match="Step 1 target points must be at least 10"):
+        DistillationConfig(
+            enable_mace_distillation=True,
+            step1_direct_sampling={"target_points": 5},
+        )
+
+
+def test_distillation_config_logic_validation_disabled() -> None:
+    """Validator should skip if disabled."""
+    # Should NOT raise error if disabled, even if points < 10 (but > 0 due to PositiveInt)
+    config = DistillationConfig(
+        enable_mace_distillation=False,
+        step1_direct_sampling={"target_points": 5},
+    )
+    assert config.step1_direct_sampling.target_points == 5

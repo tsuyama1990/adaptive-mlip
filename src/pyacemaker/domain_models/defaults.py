@@ -1,3 +1,4 @@
+import os
 import tempfile
 from pathlib import Path
 from typing import Final
@@ -120,7 +121,7 @@ DANGEROUS_PATH_CHARS: Final[set[str]] = {
 }
 
 # RAM Disk logic
-_ram_disk_candidate = "/dev/shm"  # noqa: S108
+_ram_disk_candidate = os.environ.get("PYACE_RAM_DISK", "/dev/shm")
 DEFAULT_RAM_DISK_PATH = (
     _ram_disk_candidate if Path(_ram_disk_candidate).exists() else tempfile.gettempdir()
 )
