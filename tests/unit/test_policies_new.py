@@ -1,6 +1,6 @@
-from collections.abc import Iterator
 from unittest.mock import MagicMock
 
+import numpy as np
 import pytest
 from ase import Atoms
 
@@ -32,13 +32,13 @@ def test_composite_policy_distribution(base_structure: Atoms, config: StructureC
     p1 = MagicMock(spec=BasePolicy)
     p2 = MagicMock(spec=BasePolicy)
 
-    def gen_side_effect_p1(*args, **kwargs) -> Iterator[Atoms]: # type: ignore
+    def gen_side_effect_p1(*args, **kwargs):
         for _ in range(kwargs["n_structures"]):
-            yield base_structure.copy() # type: ignore[no-untyped-call]
+            yield base_structure.copy()
 
-    def gen_side_effect_p2(*args, **kwargs) -> Iterator[Atoms]: # type: ignore
+    def gen_side_effect_p2(*args, **kwargs):
         for _ in range(kwargs["n_structures"]):
-            yield base_structure.copy() # type: ignore[no-untyped-call]
+            yield base_structure.copy()
 
     p1.generate.side_effect = gen_side_effect_p1
     p2.generate.side_effect = gen_side_effect_p2

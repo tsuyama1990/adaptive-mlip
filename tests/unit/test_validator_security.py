@@ -1,10 +1,7 @@
-from pathlib import Path
-from unittest.mock import MagicMock, patch
 
 import pytest
 
 from pyacemaker.core.validator import LammpsInputValidator
-from pyacemaker.utils.path import validate_path_safe
 
 
 class TestLammpsInputValidator:

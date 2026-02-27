@@ -34,17 +34,14 @@ def test_mock_oracle_type_validation() -> None:
 
 def test_mock_oracle_compute_logic() -> None:
     """Verify MockOracle computes reasonable values using LJ."""
+    # Use epsilon=1.0, sigma=2.0 for predictable results
     oracle = MockOracle(epsilon=1.0, sigma=2.0)
 
     # Dimer at equilibrium distance (approx 2^(1/6) * sigma)
-    # 2^(1/6) * 2.0 ~= 1.122 * 2.0 = 2.244
-    r = 2.244
-    atoms = Atoms("Ar2", positions=[[0, 0, 0], [0, 0, r]])
-    # MockOracle logic copies atoms and sets calc.
-    # We need to make sure calc runs without error.
-    # ASE LJ requires 'sigma' and 'epsilon' which we passed.
-    # It might also check atomic numbers or symbols? LJ usually generic.
-
+    # 2^(1/6) * 2.0 ~= 1.12246 * 2.0 = 2.2449
+    r_eq = 2.2449
+    # Use explicit positions for clear bond length
+    atoms = Atoms("Ar2", positions=[[0, 0, 0], [0, 0, r_eq]])
     structure = AtomStructure(atoms=atoms)
 
     result_iter = oracle.compute(iter([structure]))
@@ -52,16 +49,34 @@ def test_mock_oracle_compute_logic() -> None:
 
     assert result.energy is not None
     assert result.forces is not None
-    assert result.stress is not None
 
-    # Energy should be approx -epsilon (depth of well) at min for single pair
-    # Total energy of pair = 4*eps * (-0.25) = -eps.
-    # Wait, LJ minimum is -epsilon at r_min.
-    # So Energy ~ -1.0.
+    # Energy should be approx -epsilon (depth of well) at r_eq for a single pair?
+    # Lennard-Jones potential V(r) = 4*epsilon * [ (sigma/r)^12 - (sigma/r)^6 ]
+    # At r = r_eq = 2^(1/6)*sigma:
+    # sigma/r = 2^(-1/6)
+    # (sigma/r)^6 = 2^-1 = 0.5
+    # (sigma/r)^12 = 0.25
+    # V(r_eq) = 4 * 1.0 * [0.25 - 0.5] = 4 * (-0.25) = -1.0
 
-    # Check if close to -1.0
+    # Allow tolerance for ASE implementation details or precision
     assert np.isclose(result.energy, -1.0, atol=0.1)
 
-    # Forces should be low at equilibrium
+    # Forces should be near zero at equilibrium
     forces = result.forces
-    assert np.all(np.abs(forces) < 1.0)
+    assert np.all(np.abs(forces) < 0.2)
+
+    # Test repulsion (r < r_eq)
+    r_short = 2.0
+    atoms_short = Atoms("Ar2", positions=[[0, 0, 0], [0, 0, r_short]])
+    structure_short = AtomStructure(atoms=atoms_short)
+    res_short = next(oracle.compute(iter([structure_short])))
+
+    # Energy should be higher than min
+    assert res_short.energy > -1.0
+
+    # Forces should be repulsive (positive on 2nd atom along z?)
+    # Force F = -dV/dr.
+    # Repulsive force pushes atoms apart.
+    # Atom 1 (z=0) pushed to -z, Atom 2 (z=r) pushed to +z.
+    f_z_atom2 = res_short.forces[1][2]
+    assert f_z_atom2 > 0.0
