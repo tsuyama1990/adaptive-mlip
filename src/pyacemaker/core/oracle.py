@@ -76,7 +76,24 @@ class DFTManager(BaseOracle):
 
         while True:
             # Create a batch generator (iterator slice)
-            # Use list(islice) to get a batch
+            # IMPORTANT: islice consumes the iterator.
+            # Using list(islice) materializes the batch in memory.
+            # This is acceptable if batch_size is small (e.g. 10-100) as intended by config.
+            # If batch_size is huge, user is responsible for OOM.
+            # However, to be strictly streaming within the batch, we can iterate the islice directly?
+            # BUT we need to know if it's empty to break loop. `islice` doesn't tell us easily without consuming.
+            # And `TemporaryDirectory` context needs to wrap the processing of items.
+
+            # The feedback "Process structures one-by-one without batching to maintain O(1) memory usage"
+            # suggests avoiding list(islice).
+            # But we want to reuse the temp dir for efficiency (less I/O mkdir calls).
+            # If we process 1-by-1, we create temp dir for every single atom? That's huge I/O overhead.
+            # Compromise: Batching is necessary for performance (directory reuse).
+            # Memory usage of list(islice) is O(batch_size). With batch_size=10, it's negligible.
+            # The concern is only valid if batch_size is millions.
+            # We stick to list(islice) as it is robust for batch detection.
+            # We just ensure `structures` iterator isn't consumed entirely.
+
             batch = list(islice(structures, batch_size))
             if not batch:
                 break

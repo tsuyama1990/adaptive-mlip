@@ -3,7 +3,7 @@ import contextlib
 import numpy as np
 from ase import Atoms
 from ase.calculators.calculator import PropertyNotImplementedError
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class AtomStructure(BaseModel):
@@ -28,6 +28,18 @@ class AtomStructure(BaseModel):
         default_factory=dict, description="Metadata about origin (e.g., {'step': 'direct_sampling'})"
     )
 
+    @model_validator(mode="after")
+    def validate_forces_shape(self) -> "AtomStructure":
+        """
+        Validates that the forces array shape matches the number of atoms.
+        """
+        if self.forces is not None:
+            n_atoms = len(self.atoms)
+            if self.forces.shape != (n_atoms, 3):
+                msg = f"Forces shape mismatch: Expected ({n_atoms}, 3), got {self.forces.shape}"
+                raise ValueError(msg)
+        return self
+
     def to_ase(self) -> Atoms:
         """
         Returns a copy of the internal ase.Atoms object with all metadata attached
@@ -50,10 +62,7 @@ class AtomStructure(BaseModel):
             atoms_copy.info[f"provenance_{key}"] = value
 
         if self.forces is not None:
-            # Validate shape matches atoms
-            if self.forces.shape != (len(atoms_copy), 3):
-                 # This should ideally be caught by validation, but numpy arrays are tricky in pydantic
-                 pass
+            # Shape validation handled by model_validator
             atoms_copy.arrays["forces"] = self.forces
 
         return atoms_copy
