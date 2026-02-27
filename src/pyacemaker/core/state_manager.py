@@ -2,6 +2,7 @@ from logging import Logger
 from pathlib import Path
 
 from pyacemaker.core.loop import LoopState
+from pyacemaker.domain_models.workflow import WorkflowStep
 from pyacemaker.domain_models.defaults import (
     LOG_STATE_LOAD_FAIL,
     LOG_STATE_LOAD_SUCCESS,
@@ -52,3 +53,19 @@ class StateManager:
     @current_potential.setter
     def current_potential(self, value: Path | None) -> None:
         self.state.current_potential = value
+
+    @property
+    def current_step(self) -> WorkflowStep | None:
+        return self.state.current_step
+
+    @current_step.setter
+    def current_step(self, value: WorkflowStep | None) -> None:
+        self.state.current_step = value
+
+    @property
+    def mode(self) -> str:
+        return self.state.mode
+
+    @mode.setter
+    def mode(self, value: str) -> None:
+        self.state.mode = value

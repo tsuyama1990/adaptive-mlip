@@ -15,6 +15,7 @@ from pyacemaker.core.state_manager import StateManager
 from pyacemaker.core.validator import Validator
 from pyacemaker.domain_models import PyAceConfig
 from pyacemaker.domain_models.data import AtomStructure
+from pyacemaker.domain_models.workflow import WorkflowStep
 from pyacemaker.domain_models.defaults import (
     DEFAULT_PRODUCTION_DIR,
     FILENAME_CANDIDATES,
@@ -30,9 +31,17 @@ from pyacemaker.domain_models.defaults import (
     LOG_PROJECT_INIT,
     LOG_START_ITERATION,
     LOG_START_LOOP,
+    LOG_STEP_1,
+    LOG_STEP_2,
+    LOG_STEP_3,
+    LOG_STEP_4,
+    LOG_STEP_5,
+    LOG_STEP_6,
+    LOG_STEP_7,
     LOG_WORKFLOW_COMPLETED,
     LOG_WORKFLOW_CRASHED,
     TEMPLATE_POTENTIAL_FILE,
+    WORKFLOW_MODE_DISTILLATION,
 )
 from pyacemaker.domain_models.md import MDSimulationResult
 from pyacemaker.factory import ModuleFactory
@@ -555,6 +564,75 @@ class Orchestrator:
                 else:
                     self.logger.warning("Could not retrieve structure for validation.")
 
+    def _run_legacy_loop(self) -> None:
+        """Executes the legacy active learning loop."""
+        self._check_initial_potential()
+
+        while self.state_manager.iteration < self.config.workflow.max_iterations:
+            self._run_loop_iteration()
+
+    def _step1_direct_sampling(self) -> None:
+        self.logger.info(LOG_STEP_1)
+        # TODO: Implement step logic
+
+    def _step2_active_learning(self) -> None:
+        self.logger.info(LOG_STEP_2)
+        # TODO: Implement step logic
+
+    def _step3_mace_finetune(self) -> None:
+        self.logger.info(LOG_STEP_3)
+        # TODO: Implement step logic
+
+    def _step4_surrogate_sampling(self) -> None:
+        self.logger.info(LOG_STEP_4)
+        # TODO: Implement step logic
+
+    def _step5_surrogate_labeling(self) -> None:
+        self.logger.info(LOG_STEP_5)
+        # TODO: Implement step logic
+
+    def _step6_pacemaker_base(self) -> None:
+        self.logger.info(LOG_STEP_6)
+        # TODO: Implement step logic
+
+    def _step7_delta_learning(self) -> None:
+        self.logger.info(LOG_STEP_7)
+        # TODO: Implement step logic
+
+    def _run_distillation_workflow(self) -> None:
+        """Executes the 7-step MACE Distillation workflow."""
+        steps = [
+            (WorkflowStep.DIRECT_SAMPLING, self._step1_direct_sampling),
+            (WorkflowStep.ACTIVE_LEARNING, self._step2_active_learning),
+            (WorkflowStep.MACE_FINETUNE, self._step3_mace_finetune),
+            (WorkflowStep.SURROGATE_SAMPLING, self._step4_surrogate_sampling),
+            (WorkflowStep.SURROGATE_LABELING, self._step5_surrogate_labeling),
+            (WorkflowStep.PACEMAKER_BASE, self._step6_pacemaker_base),
+            (WorkflowStep.DELTA_LEARNING, self._step7_delta_learning),
+        ]
+
+        self.state_manager.mode = WORKFLOW_MODE_DISTILLATION
+
+        # Determine start index based on current step in state
+        start_index = 0
+        if self.state_manager.current_step:
+            for i, (step_enum, _) in enumerate(steps):
+                if step_enum == self.state_manager.current_step:
+                    # Resume from the found step
+                    start_index = i
+                    break
+
+        for i in range(start_index, len(steps)):
+            step_enum, step_func = steps[i]
+            self.state_manager.current_step = step_enum
+            self.state_manager.save()
+
+            try:
+                step_func()
+            except Exception as e:
+                self.logger.error(f"Failed at step {step_enum}: {e}")
+                raise
+
     def run(self) -> None:
         """
         Executes the main active learning loop.
@@ -563,10 +641,11 @@ class Orchestrator:
 
         try:
             self.initialize_modules()
-            self._check_initial_potential()
 
-            while self.state_manager.iteration < self.config.workflow.max_iterations:
-                 self._run_loop_iteration()
+            if self.config.distillation.enable_mace_distillation:
+                self._run_distillation_workflow()
+            else:
+                self._run_legacy_loop()
 
             self._finalize()
             self.logger.info(LOG_WORKFLOW_COMPLETED)

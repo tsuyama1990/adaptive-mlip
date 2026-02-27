@@ -175,6 +175,19 @@ RECIPROCAL_FACTOR = 2.0 * 3.141592653589793  # 2*PI approx
 # Policy
 DEFAULT_STRAIN_RANGE: Final[tuple[float, float]] = (-0.05, 0.05)
 
+# Workflow modes
+WORKFLOW_MODE_LEGACY = "legacy"
+WORKFLOW_MODE_DISTILLATION = "distillation"
+
+# Distillation steps
+LOG_STEP_1 = "Step 1: DIRECT Sampling (Entropy Maximization)"
+LOG_STEP_2 = "Step 2: MACE Uncertainty-based Active Learning"
+LOG_STEP_3 = "Step 3: MACE Fine-tuning"
+LOG_STEP_4 = "Step 4: Surrogate Data Generation"
+LOG_STEP_5 = "Step 5: Surrogate Labeling"
+LOG_STEP_6 = "Step 6: Pacemaker Base Training"
+LOG_STEP_7 = "Step 7: Delta Learning (Fine-tuning with DFT)"
+
 # PACE Driver script template (uses environment variables for security)
 PACE_DRIVER_TEMPLATE = """
 import sys

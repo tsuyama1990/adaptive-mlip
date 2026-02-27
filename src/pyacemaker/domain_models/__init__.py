@@ -1,5 +1,6 @@
 from .config import PyAceConfig
 from .dft import DFTConfig
+from .distillation import DistillationConfig
 from .eon import EONConfig
 from .logging import LoggingConfig
 from .md import HybridParams, MDConfig, MDSimulationResult
@@ -11,6 +12,7 @@ from .workflow import WorkflowConfig
 
 __all__ = [
     "DFTConfig",
+    "DistillationConfig",
     "EONConfig",
     "HybridParams",
     "LoggingConfig",

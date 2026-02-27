@@ -8,6 +8,7 @@ from ase import Atoms
 
 from pyacemaker.core.oracle import DFTManager
 from pyacemaker.domain_models import DFTConfig
+from pyacemaker.domain_models.data import AtomStructure
 from tests.conftest import create_dummy_pseudopotentials
 
 
@@ -33,8 +34,8 @@ def test_dft_manager_streaming_behavior(mock_dft_config: DFTConfig) -> None:
     def infinite_structures() -> Any:
         i = 0
         while True:
-            # Yield single atom each time
-            yield Atoms("H", positions=[[0, 0, 0]])
+            # Yield single atom structure each time
+            yield AtomStructure(atoms=Atoms("H", positions=[[0, 0, 0]]))
             i += 1
 
     # 2. Mock driver
@@ -42,6 +43,8 @@ def test_dft_manager_streaming_behavior(mock_dft_config: DFTConfig) -> None:
     # Mock calculator methods to return valid data (get_stress expects array)
     calc = MagicMock()
     calc.get_stress.return_value = np.zeros(6)
+    calc.get_forces.return_value = np.zeros((1, 3))
+    calc.get_potential_energy.return_value = 0.0
     mock_driver.get_calculator.return_value = calc
 
     manager = DFTManager(mock_dft_config, driver=mock_driver)
@@ -55,8 +58,8 @@ def test_dft_manager_streaming_behavior(mock_dft_config: DFTConfig) -> None:
     first = next(stream)
     second = next(stream)
 
-    assert len(first) == 1
-    assert len(second) == 1
+    assert len(first.atoms) == 1
+    assert len(second.atoms) == 1
 
     # If we reached here, it means compute didn't consume the whole iterator.
     # Verify driver calls matches consumed count

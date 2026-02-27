@@ -33,11 +33,14 @@ def test_composite_policy_distribution(base_structure: Atoms, config: StructureC
     p2 = MagicMock(spec=BasePolicy)
 
     def gen_side_effect_p1(*args, **kwargs):
-        for _ in range(kwargs["n_structures"]):
+        # n_structures is passed positionally as 3rd arg
+        n = args[2]
+        for _ in range(n):
             yield base_structure.copy()
 
     def gen_side_effect_p2(*args, **kwargs):
-        for _ in range(kwargs["n_structures"]):
+        n = args[2]
+        for _ in range(n):
             yield base_structure.copy()
 
     p1.generate.side_effect = gen_side_effect_p1
@@ -55,10 +58,10 @@ def test_composite_policy_distribution(base_structure: Atoms, config: StructureC
     assert p2.generate.call_count == 1
 
     args1, kwargs1 = p1.generate.call_args
-    assert kwargs1["n_structures"] == 5
+    assert args1[2] == 5
 
     args2, kwargs2 = p2.generate.call_args
-    assert kwargs2["n_structures"] == 5
+    assert args2[2] == 5
 
 
 def test_md_micro_burst_policy(base_structure: Atoms, config: StructureConfig) -> None:

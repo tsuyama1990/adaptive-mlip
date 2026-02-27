@@ -7,6 +7,8 @@ from typing import Self
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from pyacemaker.domain_models.workflow import WorkflowStep
+
 
 class LoopStatus(StrEnum):
     RUNNING = "RUNNING"
@@ -18,6 +20,12 @@ class LoopState(BaseModel):
     iteration: int = Field(default=0, ge=0)
     status: LoopStatus = Field(default=LoopStatus.RUNNING)
     current_potential: Path | None = Field(default=None)
+    current_step: WorkflowStep | None = Field(
+        default=None, description="Current step in distillation workflow"
+    )
+    mode: str = Field(
+        default="legacy", description="Workflow mode: 'legacy' or 'distillation'"
+    )
 
     model_config = ConfigDict(extra="forbid")
 
