@@ -4,7 +4,10 @@ import numpy as np
 from ase import Atoms
 from pyacemaker.domain_models.active_learning import DescriptorConfig
 
-from pyacemaker.domain_models.defaults import MAX_DESCRIPTOR_ARRAY_BYTES
+from pyacemaker.domain_models.defaults import (
+    DEFAULT_DESCRIPTOR_BATCH_SIZE,
+    MAX_DESCRIPTOR_ARRAY_BYTES,
+)
 
 if TYPE_CHECKING:
     pass
@@ -18,7 +21,7 @@ class DescriptorCalculator:
 
     Memory Implications:
     - Descriptors for large structures or high N/L max can be large.
-    - Computation is batched internally to avoid OOM.
+    - Computation should be streamed using compute_stream to avoid OOM for large N.
     """
     def __init__(self, config: DescriptorConfig) -> None:
         self.config = config
@@ -55,12 +58,14 @@ class DescriptorCalculator:
         """Estimates output dimension. Useful for pre-allocation or bounds checking."""
         method = self.config.method.lower()
         if method == "soap":
-            return int(self._transformer.get_number_of_features())
+            return int(self._transformer.get_number_of_features()) # type: ignore[attr-defined]
         return 0
 
-    def compute(self, atoms_list: list[Atoms], batch_size: int = 100) -> np.ndarray:
+    def compute(self, atoms_list: list[Atoms], batch_size: int = DEFAULT_DESCRIPTOR_BATCH_SIZE) -> np.ndarray:
         """
         Computes descriptors for a list of Atoms objects using batching to prevent OOM.
+        For very large datasets (>100k), use `compute_stream` instead to avoid holding
+        all input Atoms and output descriptors in memory.
 
         Args:
             atoms_list: List of ASE Atoms objects.
@@ -77,9 +82,9 @@ class DescriptorCalculator:
             return np.array([])
 
         n_structures = len(atoms_list)
-        # Assuming float64 output (8 bytes)
-        estimated_total_bytes = n_structures * self._dim * 8
 
+        # OOM Prevention Check BEFORE computation
+        estimated_total_bytes = n_structures * self._dim * 8
         if estimated_total_bytes > MAX_DESCRIPTOR_ARRAY_BYTES:
             msg = f"Requested descriptor calculation total size exceeds safe memory limits ({estimated_total_bytes} > {MAX_DESCRIPTOR_ARRAY_BYTES} bytes)."
             raise ValueError(msg)
@@ -92,7 +97,7 @@ class DescriptorCalculator:
                 batch = atoms_list[i:i + batch_size]
 
                 # dscribe's create method handles list of atoms
-                descriptors = self._transformer.create(batch)
+                descriptors = self._transformer.create(batch) # type: ignore[attr-defined]
 
                 # Ensure it's a numpy array
                 if not isinstance(descriptors, np.ndarray):

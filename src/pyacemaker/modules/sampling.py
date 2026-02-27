@@ -7,6 +7,7 @@ import numpy as np
 
 from pyacemaker.core.base import BaseGenerator
 from pyacemaker.domain_models.data import AtomStructure
+from pyacemaker.domain_models.defaults import MAX_MEMMAP_CHUNK_SIZE
 from pyacemaker.domain_models.distillation import Step1DirectSamplingConfig
 from pyacemaker.logger import get_logger
 from pyacemaker.utils.descriptors import DescriptorCalculator
@@ -54,24 +55,17 @@ class DirectSampler:
         remaining_indices.remove(first_idx)
 
         # Initialize min distances
-        # If descriptors is a memmap, slicing it loads the slice into memory.
-        # current_selected is (D,)
         current_selected = descriptors[first_idx]
 
-        # Calculate initial distances. For memmap, we should do this in chunks to avoid allocating full (N_candidates,) in RAM?
-        # Actually, a 1D array of float64 for 10M structures is 80MB. This easily fits in RAM.
-        # The OOM risk is loading the (10M, D) descriptor matrix.
-        # But `np.linalg.norm(descriptors - current_selected, axis=1)` creates an intermediate (10M, D) array in memory before reducing.
-        # We MUST chunk the distance calculation to be memory safe.
-
-        chunk_size = 10000
+        # Calculate initial squared distances to avoid intermediate array allocation overhead
+        chunk_size = MAX_MEMMAP_CHUNK_SIZE
         min_dists = np.zeros(n_candidates, dtype=np.float64)
 
         for start_idx in range(0, n_candidates, chunk_size):
             end_idx = min(start_idx + chunk_size, n_candidates)
             chunk = descriptors[start_idx:end_idx]
-            # Calculate distance for this chunk
-            chunk_dists = np.linalg.norm(chunk - current_selected, axis=1)
+            # Use squared distance per audit feedback: np.sum((chunk - current_selected)**2, axis=1)
+            chunk_dists = np.sum((chunk - current_selected)**2, axis=1)
             min_dists[start_idx:end_idx] = chunk_dists
 
         # 2. Greedy selection
@@ -94,7 +88,7 @@ class DirectSampler:
             for start_idx in range(0, n_candidates, chunk_size):
                 end_idx = min(start_idx + chunk_size, n_candidates)
                 chunk = descriptors[start_idx:end_idx]
-                chunk_dists = np.linalg.norm(chunk - new_selected, axis=1)
+                chunk_dists = np.sum((chunk - new_selected)**2, axis=1)
 
                 # Update the specific chunk of min_dists
                 min_dists[start_idx:end_idx] = np.minimum(
@@ -110,7 +104,6 @@ class DirectSampler:
         Uses ASE SQLite database for efficient out-of-core storage of structures
         and numpy memmap for out-of-core storage of descriptors.
         """
-        # Heuristic multiplier from config
         n_pool = self.config.target_points * self.config.candidate_multiplier
         batch_size = self.config.batch_size
 
