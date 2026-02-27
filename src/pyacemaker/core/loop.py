@@ -114,10 +114,7 @@ class LoopState(BaseModel):
 
 
 def _raise_traversal_error(path: Path, base: Path, cause: Exception | None = None) -> None:
-    """Raises a ValueError indicating path traversal attempt."""
-    # Ensure absolute paths for logging/error
-    path = path.resolve()
-    base = base.resolve()
+    """Raises a ValueError indicating path traversal attempt. Inputs should be resolved."""
     msg = f"Potential path {path} is outside the allowed directory {base}"
     if cause:
         raise ValueError(msg) from cause

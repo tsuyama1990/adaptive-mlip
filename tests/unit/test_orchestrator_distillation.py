@@ -56,8 +56,20 @@ def test_distillation_workflow_execution(
     mock_setup_logger.return_value = mock_logger_instance
 
     # Mock module factory return
+    mock_gen = MagicMock()
+    mock_oracle = MagicMock()
+    mock_trainer = MagicMock()
+    mock_engine = MagicMock()
+    mock_selector = MagicMock()
+    mock_validator = MagicMock()
+
     mock_create_modules.return_value = (
-        MagicMock(), MagicMock(), MagicMock(), MagicMock(), MagicMock(), MagicMock()
+        mock_gen,
+        mock_oracle,
+        mock_trainer,
+        mock_engine,
+        mock_selector,
+        mock_validator,
     )
 
     orchestrator = Orchestrator(mock_config)
@@ -71,6 +83,9 @@ def test_distillation_workflow_execution(
     # Verify that steps were executed
     mock_logger_instance.info.assert_any_call(LOG_STEP_1)
     mock_logger_instance.info.assert_any_call(LOG_STEP_7)
+
+    # Verify logic: Step 1 calls generator
+    mock_gen.generate.assert_called()
 
     assert mock_state_instance.save.call_count >= 7
 

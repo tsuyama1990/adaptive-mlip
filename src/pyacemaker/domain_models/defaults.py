@@ -9,8 +9,13 @@ DEFAULT_DATA_DIR = "data"
 DEFAULT_ACTIVE_LEARNING_DIR = "active_learning"
 DEFAULT_POTENTIALS_DIR = "potentials"
 DEFAULT_PRODUCTION_DIR = "production"
+# Default batch size for streaming operations.
+# Small value (5) chosen to keep memory usage low (O(N_atoms * batch))
+# while maintaining reasonable I/O efficiency.
 DEFAULT_BATCH_SIZE = 5
+# Number of candidates to generate in legacy loop
 DEFAULT_N_CANDIDATES = 10
+# Save state every N iterations to prevent data loss
 DEFAULT_CHECKPOINT_INTERVAL = 1
 
 # EON Defaults

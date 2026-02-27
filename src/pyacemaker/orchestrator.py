@@ -127,7 +127,10 @@ class Orchestrator:
     ) -> int:
         """
         Writes AtomStructure from a generator to a file in chunks to balance I/O and memory.
-        Uses explicit streaming and buffering to avoid memory issues.
+
+        This method implements buffered writing to ensure scalability for large datasets (e.g., 1M structures).
+        It consumes the generator lazily, accumulating only `batch_size` items in memory at a time.
+        The file is kept open during the process to minimize I/O overhead.
 
         Args:
             generator: Iterable of AtomStructure objects.
@@ -149,22 +152,26 @@ class Orchestrator:
         # This reduces I/O calls compared to writing one by one.
         buffer: list[Atoms] = []
 
-        with filepath.open(mode) as f:
-            for structure in generator:
-                # Convert to ASE Atoms with metadata
-                atoms = structure.to_ase()
-                buffer.append(atoms)
+        try:
+            with filepath.open(mode) as f:
+                for structure in generator:
+                    # Convert to ASE Atoms with metadata
+                    atoms = structure.to_ase()
+                    buffer.append(atoms)
 
-                if len(buffer) >= batch_size:
+                    if len(buffer) >= batch_size:
+                        write(f, buffer, format="extxyz")
+                        count += len(buffer)
+                        buffer.clear()
+
+                # Write remaining
+                if buffer:
                     write(f, buffer, format="extxyz")
                     count += len(buffer)
                     buffer.clear()
-
-            # Write remaining
-            if buffer:
-                write(f, buffer, format="extxyz")
-                count += len(buffer)
-                buffer.clear()
+        except Exception as e:
+            msg = f"Streaming write failed to {filepath}: {e}"
+            raise OrchestratorError(msg) from e
 
         return count
 
@@ -574,31 +581,70 @@ class Orchestrator:
 
     def _step1_direct_sampling(self) -> None:
         self.logger.info(LOG_STEP_1)
-        # TODO: Implement step logic
+        if not self.generator:
+            raise OrchestratorError("Generator not initialized")
+
+        target = self.config.distillation.step1_direct_sampling.target_points
+        step_dir = self.dir_manager.base_dir / "step1_direct_sampling"
+        step_dir.mkdir(exist_ok=True)
+        candidates_file = step_dir / FILENAME_CANDIDATES
+
+        try:
+            stream = self.generator.generate(n_candidates=target)
+            count = self._stream_write(
+                stream, candidates_file, batch_size=self.config.workflow.batch_size
+            )
+            self.logger.info(LOG_GENERATED_CANDIDATES.format(count=count))
+        except Exception as e:
+            raise OrchestratorError(f"Step 1 failed: {e}") from e
 
     def _step2_active_learning(self) -> None:
         self.logger.info(LOG_STEP_2)
-        # TODO: Implement step logic
+        if not self.oracle:
+            raise OrchestratorError("Oracle not initialized")
+        # Placeholder for Active Learning logic (MACE Uncertainty)
+        # In Cycle 01, we just verify oracle is present.
+        pass
 
     def _step3_mace_finetune(self) -> None:
         self.logger.info(LOG_STEP_3)
-        # TODO: Implement step logic
+        if not self.trainer:
+            raise OrchestratorError("Trainer not initialized")
+        # Placeholder for MACE Fine-tuning
+        pass
 
     def _step4_surrogate_sampling(self) -> None:
         self.logger.info(LOG_STEP_4)
-        # TODO: Implement step logic
+        if not self.generator:
+            raise OrchestratorError("Generator not initialized")
+        # Placeholder for Surrogate Data Generation
+        pass
 
     def _step5_surrogate_labeling(self) -> None:
         self.logger.info(LOG_STEP_5)
-        # TODO: Implement step logic
+        if not self.oracle:
+            raise OrchestratorError("Oracle not initialized")
+        # Placeholder for Surrogate Labeling
+        pass
 
     def _step6_pacemaker_base(self) -> None:
         self.logger.info(LOG_STEP_6)
-        # TODO: Implement step logic
+        if not self.trainer:
+            raise OrchestratorError("Trainer not initialized")
+        # Placeholder for Pacemaker Base Training
+        pass
 
     def _step7_delta_learning(self) -> None:
         self.logger.info(LOG_STEP_7)
-        # TODO: Implement step logic
+        if not self.trainer:
+            raise OrchestratorError("Trainer not initialized")
+
+        # This is the critical step.
+        # We would use self.trainer to train on DFT data.
+        # For now, we simulate success.
+        step_dir = self.dir_manager.base_dir / "step7_delta_learning"
+        step_dir.mkdir(exist_ok=True)
+        pass
 
     def _run_distillation_workflow(self) -> None:
         """Executes the 7-step MACE Distillation workflow."""
