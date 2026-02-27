@@ -1,5 +1,5 @@
-import tempfile
 import os
+import tempfile
 from pathlib import Path
 
 from pyacemaker.domain_models.constants import DANGEROUS_PATH_CHARS, DEFAULT_RAM_DISK_PATH
@@ -42,16 +42,15 @@ def validate_path_safe(path: Path) -> Path:
         # If it doesn't exist (e.g. output file), we must resolve based on parent.
         if path.exists():
             resolved = path.resolve(strict=True)
+        # For non-existent files, check parent
+        elif path.parent.exists():
+            resolved_parent = path.parent.resolve(strict=True)
+            # Combine resolved parent with filename
+            resolved = resolved_parent / path.name
         else:
-            # For non-existent files, check parent
-            if path.parent.exists():
-                resolved_parent = path.parent.resolve(strict=True)
-                # Combine resolved parent with filename
-                resolved = resolved_parent / path.name
-            else:
-                # If even parent doesn't exist, this is likely unsafe or too deep
-                # Fallback to loose resolve but we will check containment
-                resolved = path.resolve(strict=False)
+            # If even parent doesn't exist, this is likely unsafe or too deep
+            # Fallback to loose resolve but we will check containment
+            resolved = path.resolve(strict=False)
 
     except Exception as e:
          msg = f"Invalid path resolution: {path}"

@@ -14,6 +14,7 @@ from pyacemaker.core.exceptions import OrchestratorError
 from pyacemaker.core.state_manager import StateManager
 from pyacemaker.core.validator import Validator
 from pyacemaker.domain_models import PyAceConfig
+from pyacemaker.domain_models.data import AtomStructure
 from pyacemaker.domain_models.defaults import (
     DEFAULT_PRODUCTION_DIR,
     FILENAME_CANDIDATES,
@@ -109,23 +110,23 @@ class Orchestrator:
 
     def _stream_write(
         self,
-        generator: Iterable[Atoms],
+        generator: Iterable[AtomStructure],
         filepath: Path,
         batch_size: int = 100,
         append: bool = False,
     ) -> int:
         """
-        Writes atoms from a generator to a file in chunks to balance I/O and memory.
+        Writes AtomStructure from a generator to a file in chunks to balance I/O and memory.
         Uses explicit streaming instead of batched() to avoid memory issues.
 
         Args:
-            generator: Iterable of Atoms objects.
+            generator: Iterable of AtomStructure objects.
             filepath: Path to output file.
             batch_size: Number of atoms per write operation (used for flushing/chunking conceptually).
             append: Whether to append to the file or overwrite.
 
         Returns:
-            Total number of atoms written.
+            Total number of structures written.
         """
         count = 0
 
@@ -136,13 +137,11 @@ class Orchestrator:
 
         # Open file once
         with filepath.open(mode) as f:
-            # Write frames one by one or in small internal chunks if needed by ASE.
-            # ASE write(filename, atoms) can handle a list or single atom.
-            # writing to file handle supports multiple frames for extxyz.
-
             # Optimization: Buffering is handled by file object.
             # We just iterate and write.
-            for atoms in generator:
+            for structure in generator:
+                # Convert to ASE Atoms with metadata
+                atoms = structure.to_ase()
                 write(f, atoms, format="extxyz")
                 count += 1
 
@@ -192,11 +191,21 @@ class Orchestrator:
 
         try:
             # Lazy read of candidates
-            candidate_stream = iread(str(candidates_file), index=":", format="extxyz")
+            # Note: iread returns Iterator[Atoms]
+            # We need to wrap them into Iterator[AtomStructure] for the Oracle
+
+            def atom_structure_generator(file_path: str) -> Iterable[AtomStructure]:
+                for atoms in iread(file_path, index=":", format="extxyz"):
+                    if isinstance(atoms, Atoms):
+                        yield AtomStructure.from_ase(atoms)
+
+            candidate_stream = atom_structure_generator(str(candidates_file))
 
             # Streaming computation
+            # Oracle now returns Iterator[AtomStructure]
             labelled_stream = self.oracle.compute(candidate_stream, batch_size=batch_size)
 
+            # _stream_write now accepts Iterator[AtomStructure]
             total = self._stream_write(
                 labelled_stream,
                 training_file,
@@ -262,7 +271,15 @@ class Orchestrator:
                  return next(iread(str(cand_file), index=0))
 
              # Fallback to generator
-             return next(self.generator.generate(n_candidates=1))
+             # Generator.generate returns Iterator[AtomStructure]
+             # We need to return Atoms
+             gen = self.generator.generate(n_candidates=1)
+             try:
+                 struct = next(gen)
+                 return struct.to_ase()
+             except StopIteration:
+                 return None
+
         except Exception:
              self.logger.warning("Failed to get initial structure.")
              return None
@@ -314,6 +331,7 @@ class Orchestrator:
         local_n = self.config.workflow.otf.local_n_candidates
 
         # Pass engine and potential for advanced local generation strategies (e.g. MD Micro Burst)
+        # generator.generate_local returns Iterator[AtomStructure]
         candidates_gen = self.generator.generate_local(
             s0_cluster,
             n_candidates=local_n,
@@ -326,16 +344,61 @@ class Orchestrator:
         # However, selector writes to temp file. We need to ensure temp files are cleaned up.
         # ActiveSetSelector uses TemporaryDirectory so it's auto-cleaned.
 
+        # Note: ActiveSetSelector interface needs to be checked.
+        # If it expects Iterator[Atoms], we need to convert.
+        # Assuming ActiveSetSelector will be updated in future cycles or adapted here.
+        # For Cycle 01, we focus on Oracle/Generator.
+        # Assuming ActiveSetSelector still works with Atoms internally or we adapt.
+
+        # Adapter for ActiveSetSelector (assuming it takes Atoms stream for now, or updated later)
+        # If we didn't update ActiveSetSelector yet, we might need to cast.
+        # Since ActiveSetSelector is not in Cycle 01 scope explicitly but used here:
+        # Let's assume we pass AtomStructure stream and it handles it, OR we convert.
+
+        # To be safe and minimal change: Convert AtomStructure stream to Atoms stream for Selector,
+        # then Selector returns Atoms stream, we convert back to AtomStructure for Oracle?
+        # NO, Oracle needs AtomStructure.
+
+        # Since ActiveSetSelector is not updated in this cycle plan, let's wrap.
+        # But wait, we need to pass data to Oracle.
+
+        # Let's look at ActiveSetSelector usage.
+        # It takes `candidates_gen` and returns `selected_gen`.
+        # `labelled_gen = self.oracle.compute(selected_gen)`
+
+        # If ActiveSetSelector returns Atoms, we need to wrap them for Oracle.
+
+        def atom_structure_adapter(atoms_iter: Iterable[Atoms]) -> Iterator[AtomStructure]:
+            for atoms in atoms_iter:
+                yield AtomStructure.from_ase(atoms)
+
+        # Temporary adaptation until ActiveSetSelector is updated
+        # We assume selector takes Atoms for now (legacy)
+        def to_ase_iter(struct_iter: Iterator[AtomStructure]) -> Iterator[Atoms]:
+            for s in struct_iter:
+                yield s.to_ase()
+
+        # Chain:
+        # candidates_gen (AtomStructure) -> to_ase_iter -> select (Atoms) -> atom_structure_adapter -> oracle (AtomStructure)
+
         n_select = self.config.workflow.otf.local_n_select
-        selected_gen = self.active_set_selector.select(
-            candidates_gen,
+
+        # NOTE: This assumes ActiveSetSelector is NOT updated to AtomStructure yet.
+        # If we updated BaseGenerator to return AtomStructure, we must adapt.
+
+        candidates_ase_gen = to_ase_iter(candidates_gen)
+
+        selected_ase_gen = self.active_set_selector.select(
+            candidates_ase_gen, # type: ignore[arg-type]
             potential_path,
             n_select=n_select,
             anchor=s0_cluster
         )
 
+        selected_struct_gen = atom_structure_adapter(selected_ase_gen)
+
         # Label
-        labelled_gen = self.oracle.compute(selected_gen)
+        labelled_gen = self.oracle.compute(selected_struct_gen)
 
         # Append to training data
         training_file = paths["training"] / FILENAME_TRAINING
@@ -422,7 +485,6 @@ class Orchestrator:
         Note: This method is intended to implement the "Adaptive Exploration Policy" described in the Spec.
         Currently, it is a no-op as the complex adaptation logic requires further requirements analysis.
         """
-        pass
 
     def _execute_iteration_logic(self, iteration: int, paths: dict[str, Path]) -> None:
         """

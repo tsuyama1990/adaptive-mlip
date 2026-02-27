@@ -8,6 +8,7 @@ from ase import Atoms
 from pyacemaker.core.exceptions import OracleError
 from pyacemaker.core.oracle import DFTManager
 from pyacemaker.domain_models import DFTConfig
+from pyacemaker.domain_models.data import AtomStructure
 from tests.conftest import MockCalculator, create_dummy_pseudopotentials
 from tests.constants import TEST_ENERGY_GENERIC
 
@@ -33,6 +34,7 @@ def mock_dft_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> DFTConfi
 def test_dft_manager_compute_success(mock_dft_config: DFTConfig) -> None:
     """Test successful computation using dependency injection."""
     atoms = Atoms("H", cell=[10, 10, 10], pbc=True)
+    input_structure = AtomStructure(atoms=atoms)
 
     # Create Mock Driver
     mock_driver = MagicMock()
@@ -43,20 +45,24 @@ def test_dft_manager_compute_success(mock_dft_config: DFTConfig) -> None:
     # Inject mock driver
     manager = DFTManager(mock_dft_config, driver=mock_driver)
 
-    # Verify generator behavior with next() instead of list()
-    generator = manager.compute(iter([atoms]))
+    # Verify generator behavior
+    # Pass Iterator[AtomStructure]
+    generator = manager.compute(iter([input_structure]))
     result = next(generator)
 
-    assert result.get_potential_energy() == TEST_ENERGY_GENERIC  # type: ignore[no-untyped-call]
+    assert isinstance(result, AtomStructure)
+    assert result.energy == TEST_ENERGY_GENERIC
+    assert result.atoms.get_potential_energy() == TEST_ENERGY_GENERIC # type: ignore[no-untyped-call]
 
     # Verify get_calculator was called with correct config
     from unittest.mock import ANY
-    mock_driver.get_calculator.assert_called_with(atoms, mock_dft_config, directory=ANY)
+    mock_driver.get_calculator.assert_called_with(input_structure.atoms, mock_dft_config, directory=ANY)
 
 
 def test_dft_manager_self_healing(mock_dft_config: DFTConfig) -> None:
     """Test self-healing mechanism."""
     atoms = Atoms("H", cell=[10, 10, 10], pbc=True)
+    input_structure = AtomStructure(atoms=atoms)
 
     # Mock Driver
     mock_driver = MagicMock()
@@ -71,10 +77,10 @@ def test_dft_manager_self_healing(mock_dft_config: DFTConfig) -> None:
     manager = DFTManager(mock_dft_config, driver=mock_driver)
 
     # Use next() to consume generator one-by-one without materializing list
-    gen = manager.compute(iter([atoms]))
+    gen = manager.compute(iter([input_structure]))
     result = next(gen)
 
-    assert result.get_potential_energy() == TEST_ENERGY_GENERIC  # type: ignore[no-untyped-call]
+    assert result.energy == TEST_ENERGY_GENERIC
 
     # Verify calls to get_calculator
     assert mock_driver.get_calculator.call_count == 2
@@ -91,14 +97,13 @@ def test_dft_manager_self_healing(mock_dft_config: DFTConfig) -> None:
     config2 = call2_args[0][1]
 
     # Check if config was modified (it's a copy)
-    # The strategy modifies the copy.
-    # Just check if it's different from original default
     assert config2.mixing_beta != 0.7
 
 
 def test_dft_manager_fatal_error(mock_dft_config: DFTConfig) -> None:
     """Test fatal error after exhausting retries."""
     atoms = Atoms("H", cell=[10, 10, 10], pbc=True)
+    input_structure = AtomStructure(atoms=atoms)
 
     mock_driver = MagicMock()
     # Always fail
@@ -107,8 +112,7 @@ def test_dft_manager_fatal_error(mock_dft_config: DFTConfig) -> None:
     manager = DFTManager(mock_dft_config, driver=mock_driver)
 
     # Now raises OracleError
-    # Use next() to trigger execution
-    gen = manager.compute(iter([atoms]))
+    gen = manager.compute(iter([input_structure]))
     with pytest.raises(OracleError, match="Oracle calculation failed"):
         next(gen)
 
@@ -119,6 +123,7 @@ def test_dft_manager_fatal_error(mock_dft_config: DFTConfig) -> None:
 def test_dft_manager_setup_error(mock_dft_config: DFTConfig) -> None:
     """Test handling of CalculatorSetupError."""
     atoms = Atoms("H", cell=[10, 10, 10], pbc=True)
+    input_structure = AtomStructure(atoms=atoms)
 
     mock_driver = MagicMock()
     # Fails with setup error (e.g. missing pseudo file)
@@ -126,13 +131,10 @@ def test_dft_manager_setup_error(mock_dft_config: DFTConfig) -> None:
 
     manager = DFTManager(mock_dft_config, driver=mock_driver)
 
-    gen = manager.compute(iter([atoms]))
+    gen = manager.compute(iter([input_structure]))
     with pytest.raises(OracleError, match="Oracle calculation failed"):
         next(gen)
 
-    # Should retry even on setup error if it's considered transient or parameter based?
-    # Spec says "JobFailedException" (RuntimeError). Implementation catches (RuntimeError, CalculatorSetupError).
-    # So it should retry.
     assert mock_driver.get_calculator.call_count > 1
 
 
@@ -170,7 +172,7 @@ def test_dft_manager_strategies(mock_dft_config: DFTConfig) -> None:
 def test_dft_manager_invalid_input(mock_dft_config: DFTConfig) -> None:
     """Test compute raises TypeError for non-iterator input."""
     manager = DFTManager(mock_dft_config)
-    atoms_list = [Atoms("H")]
+    atoms_list = [AtomStructure(atoms=Atoms("H"))]
 
     # Check that it raises TypeError immediately upon calling compute (before next)
     with pytest.raises(TypeError, match="Oracle failed to create iterator"):
@@ -179,10 +181,8 @@ def test_dft_manager_invalid_input(mock_dft_config: DFTConfig) -> None:
 def test_dft_manager_empty_iterator(mock_dft_config: DFTConfig) -> None:
     """Test compute handles empty iterator correctly with warning."""
     manager = DFTManager(mock_dft_config)
-    empty_iter: Iterator[Atoms] = iter([])
+    empty_iter: Iterator[AtomStructure] = iter([])
 
-    # Explicit loop without list() materialization for safety
-    # Use deque(..., maxlen=0) to consume iterator efficiently
     from collections import deque
     with pytest.warns(UserWarning, match="Oracle received empty iterator"):
         deque(manager.compute(empty_iter), maxlen=0)
@@ -209,17 +209,19 @@ def test_dft_manager_embedding(mock_dft_config: DFTConfig, monkeypatch: pytest.M
     manager = DFTManager(mock_dft_config, driver=mock_driver)
 
     atoms = Atoms("H", positions=[[0, 0, 0]])
+    input_structure = AtomStructure(atoms=atoms)
+
     # Must be iterator
-    gen = manager.compute(iter([atoms]))
+    gen = manager.compute(iter([input_structure]))
     result = next(gen)
 
     # Check if embed_cluster was called
     mock_embed.assert_called_once()
     args, kwargs = mock_embed.call_args
+    # It should pass the 'atoms' field of the structure
     assert args[0] == atoms
     assert kwargs['buffer'] == 5.0
 
-    # Check if result is the embedded one
-    # DFTManager.compute yields the result of _compute_single(embedded_atoms)
-    # _compute_single returns the atom object passed to it (which is embedded_atoms)
-    assert result == embedded_atoms
+    # The result should be an AtomStructure wrapping the embedded atoms
+    assert isinstance(result, AtomStructure)
+    assert result.atoms == embedded_atoms

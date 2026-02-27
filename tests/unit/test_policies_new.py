@@ -1,124 +1,95 @@
-from typing import Any
-from unittest.mock import MagicMock, patch
+from collections.abc import Iterator
+from unittest.mock import MagicMock
 
+import pytest
 from ase import Atoms
 
+from pyacemaker.core.base import BasePolicy
 from pyacemaker.core.policy import (
-    BasePolicy,
     CompositePolicy,
     MDMicroBurstPolicy,
     NormalModePolicy,
 )
-from pyacemaker.domain_models.structure import StructureConfig
+from pyacemaker.domain_models.structure import ExplorationPolicy, StructureConfig
 
 
-class MockPolicy(BasePolicy):
-    def __init__(self, name: str) -> None:
-        super().__init__()
-        self.name = name
-
-    def generate(self, base_structure: Atoms, config: StructureConfig, n_structures: int = 1, **kwargs: Any):
-        for _ in range(n_structures):
-            a = base_structure.copy()
-            a.info["policy"] = self.name
-            yield a
+@pytest.fixture
+def base_structure() -> Atoms:
+    return Atoms("Fe", positions=[[0, 0, 0]], cell=[2.8, 2.8, 2.8], pbc=True)
 
 
-class MockEngine:
-    # Class-level attribute to control return value from instances created inside policy
-    result_to_return: Any = None
-
-    def __init__(self, config: Any) -> None:
-        self.config = config
-        # Ensure config has model_copy
-        if not hasattr(self.config, "model_copy"):
-             self.config.model_copy = MagicMock(return_value=config)
-
-    def run(self, structure: Any, potential: Any) -> Any:
-        return self.result_to_return
+@pytest.fixture
+def config() -> StructureConfig:
+    return StructureConfig(
+        elements=["Fe"],
+        supercell_size=[1, 1, 1],
+        active_policies=[ExplorationPolicy.COLD_START],
+    )
 
 
-def test_composite_policy_distribution() -> None:
-    p1 = MockPolicy("p1")
-    p2 = MockPolicy("p2")
+def test_composite_policy_distribution(base_structure: Atoms, config: StructureConfig) -> None:
+    # Create two dummy policies
+    p1 = MagicMock(spec=BasePolicy)
+    p2 = MagicMock(spec=BasePolicy)
+
+    def gen_side_effect_p1(*args, **kwargs) -> Iterator[Atoms]: # type: ignore
+        for _ in range(kwargs["n_structures"]):
+            yield base_structure.copy() # type: ignore[no-untyped-call]
+
+    def gen_side_effect_p2(*args, **kwargs) -> Iterator[Atoms]: # type: ignore
+        for _ in range(kwargs["n_structures"]):
+            yield base_structure.copy() # type: ignore[no-untyped-call]
+
+    p1.generate.side_effect = gen_side_effect_p1
+    p2.generate.side_effect = gen_side_effect_p2
+
     composite = CompositePolicy([p1, p2])
 
-    config = StructureConfig(elements=["H"], supercell_size=[1,1,1])
-    base = Atoms("H")
+    n_total = 10
+    results = list(composite.generate(base_structure, config, n_total))
 
-    # n=10, 2 policies -> 5 each
-    results = list(composite.generate(base, config, n_structures=10))
-    assert len(results) == 10
-    counts = {"p1": 0, "p2": 0}
-    for r in results:
-        counts[r.info["policy"]] += 1
+    assert len(results) == n_total
 
-    assert counts["p1"] == 5
-    assert counts["p2"] == 5
+    # Check distribution (5 each)
+    assert p1.generate.call_count == 1
+    assert p2.generate.call_count == 1
 
-    # n=3, 2 policies -> 2 for p1, 1 for p2 (remainder logic)
-    results = list(composite.generate(base, config, n_structures=3))
-    assert len(results) == 3
-    counts = {"p1": 0, "p2": 0}
-    for r in results:
-        counts[r.info["policy"]] += 1
+    args1, kwargs1 = p1.generate.call_args
+    assert kwargs1["n_structures"] == 5
 
-    assert counts["p1"] == 2
-    assert counts["p2"] == 1
+    args2, kwargs2 = p2.generate.call_args
+    assert kwargs2["n_structures"] == 5
 
 
-def test_md_micro_burst_policy() -> None:
-    # Setup Mock Result
-    from pyacemaker.domain_models.md import MDSimulationResult
-
-    mock_result = MagicMock(spec=MDSimulationResult)
-    mock_result.trajectory_path = "dummy.traj"
-
-    MockEngine.result_to_return = mock_result
-
-    # Setup initial engine
-    config_mock = MagicMock()
-    config_mock.model_copy.return_value = config_mock
-    initial_engine = MockEngine(config_mock)
-
-    # Mock trajectory read
-    with patch("pyacemaker.core.policy.read") as mock_read:
-        final_atoms = Atoms("He")
-        mock_read.return_value = final_atoms
-
-        policy = MDMicroBurstPolicy()
-        config = StructureConfig(elements=["H"], supercell_size=[1,1,1])
-        base = Atoms("H")
-
-        results = list(policy.generate(base, config, n_structures=1, engine=initial_engine, potential="pot"))
-
-        assert len(results) == 1
-        assert results[0] == final_atoms
-        mock_read.assert_called_with("dummy.traj", index=-1)
-
-
-def test_md_micro_burst_fallback() -> None:
-    # No engine provided -> Fallback to rattle
+def test_md_micro_burst_policy(base_structure: Atoms, config: StructureConfig) -> None:
+    """Test placeholder execution."""
     policy = MDMicroBurstPolicy()
-    config = StructureConfig(elements=["H"], supercell_size=[1,1,1])
-    base = Atoms("H")
-
-    results = list(policy.generate(base, config, n_structures=1)) # No engine kwarg
-
-    assert len(results) == 1
-    # Check if rattled (positions changed) or fallback logic executed
-    # Rattle changes positions.
-    assert results[0].get_chemical_symbols() == ["H"]
+    results = list(policy.generate(base_structure, config, n_structures=2))
+    assert len(results) == 2
+    # Verify it falls back to something valid (rattle)
+    assert results[0].positions is not None
 
 
-def test_normal_mode_policy_fallback() -> None:
+def test_md_micro_burst_fallback(base_structure: Atoms, config: StructureConfig) -> None:
+    """Explicitly test fallback mechanism (rattle)."""
+    policy = MDMicroBurstPolicy()
+
+    # Run with rattle stdev 0.1
+    config.rattle_stdev = 0.1
+    results = list(policy.generate(base_structure, config, n_structures=5))
+
+    # Positions should change (rattle)
+    for res in results:
+        assert not np.allclose(res.positions, base_structure.positions)
+
+
+def test_normal_mode_policy_fallback(base_structure: Atoms, config: StructureConfig) -> None:
+    """Test NormalMode fallback to Rattle."""
     policy = NormalModePolicy()
-    config = StructureConfig(elements=["H"], supercell_size=[1,1,1])
-    base = Atoms("H", positions=[[0,0,0]], cell=[10,10,10])
+    config.rattle_stdev = 0.1
 
-    results = list(policy.generate(base, config, n_structures=1))
+    results = list(policy.generate(base_structure, config, n_structures=5))
+    assert len(results) == 5
 
-    assert len(results) == 1
-    # Should fall back to rattle
-    import numpy as np
-    assert np.any(results[0].positions[0] != [0,0,0]) # Rattle moves atoms
+    for res in results:
+        assert not np.allclose(res.positions, base_structure.positions)

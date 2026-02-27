@@ -1,4 +1,5 @@
 import contextlib
+import logging
 import tempfile
 from collections.abc import Callable, Iterator
 from itertools import islice
@@ -11,9 +12,9 @@ from pyacemaker.core.base import BaseOracle
 from pyacemaker.core.exceptions import OracleError
 from pyacemaker.domain_models import DFTConfig
 from pyacemaker.domain_models.constants import ERR_ORACLE_FAILED, ERR_ORACLE_ITERATOR
+from pyacemaker.domain_models.data import AtomStructure
 from pyacemaker.interfaces.qe_driver import QEDriver
 from pyacemaker.utils.embedding import embed_cluster
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -46,16 +47,16 @@ class DFTManager(BaseOracle):
             self._strategy_use_cg
         ]
 
-    def compute(self, structures: Iterator[Atoms], batch_size: int = 10) -> Iterator[Atoms]:
+    def compute(self, structures: Iterator[AtomStructure], batch_size: int = 10) -> Iterator[AtomStructure]:
         """
         Computes DFT properties for stream of structures.
 
         Args:
-            structures: Iterator of Atoms objects.
+            structures: Iterator of AtomStructure objects.
             batch_size: Batch size for processing (used to manage temporary directories).
 
         Yields:
-            Atoms objects with computed properties.
+            AtomStructure objects with computed properties.
 
         Raises:
             OracleError: If a calculation fails fatally.
@@ -70,7 +71,7 @@ class DFTManager(BaseOracle):
 
         return self._compute_generator(structures, batch_size)
 
-    def _compute_generator(self, structures: Iterator[Atoms], batch_size: int) -> Iterator[Atoms]:
+    def _compute_generator(self, structures: Iterator[AtomStructure], batch_size: int) -> Iterator[AtomStructure]:
         """Internal generator for streaming computations with batching."""
         # Use batched processing (chunking) to reuse temporary directories
         # without materializing the whole batch in memory list.
@@ -106,32 +107,59 @@ class DFTManager(BaseOracle):
 
             with tempfile.TemporaryDirectory() as work_dir:
                 work_path = Path(work_dir)
-                for i, atoms in enumerate(batch):
+                for i, structure in enumerate(batch):
                     # Use unique subdirs or filenames to avoid collision if artifacts persist
                     # though we process sequentially here.
                     calc_dir = work_path / f"calc_{i}"
                     calc_dir.mkdir()
-                    yield self._process_structure(atoms, str(calc_dir))
+                    yield self._process_structure(structure, str(calc_dir))
 
-    def _process_structure(self, atoms: Atoms, calc_dir: str) -> Atoms:
+    def _process_structure(self, structure: AtomStructure, calc_dir: str) -> AtomStructure:
         """
         Applies embedding and computes properties for a single structure.
 
         Args:
-            atoms: The input atomic structure.
+            structure: The input atomic structure.
             calc_dir: Directory to run calculation in.
 
         Returns:
-            Atoms: The structure with computed properties (energy, forces, stress).
+            AtomStructure: The structure with computed properties (energy, forces, stress).
                    If embedding is configured, properties are computed for the embedded cluster.
         """
         # Apply Periodic Embedding if configured
         if self.config.embedding_buffer:
-            structure_to_compute = embed_cluster(atoms, buffer=self.config.embedding_buffer)
-        else:
-            structure_to_compute = atoms
+            # Note: embed_cluster returns ase.Atoms
+            # We need to perform calculation on the embedded atoms,
+            # and then update the AtomStructure with results.
+            # OR return a new AtomStructure with embedded atoms?
+            # Usually embedding is for calculation context, but forces/energy are mapped back.
+            # For simplicity in this cycle, we compute on embedded and return embedded.
 
-        return self._compute_single(structure_to_compute, calc_dir)
+            atoms_to_compute = embed_cluster(structure.atoms, buffer=self.config.embedding_buffer)
+
+            # Since atoms changed (embedded), we might conceptually have a new structure.
+            # However, mapping forces back to original cluster is complex (forces on buffer atoms).
+            # If we assume we train on what we compute:
+            # We return a new AtomStructure wrapping the embedded atoms.
+
+            # Create a temporary AtomStructure for computation
+            # Copy provenance
+            structure_to_compute = AtomStructure(
+                atoms=atoms_to_compute,
+                provenance=structure.provenance.copy()
+            )
+        else:
+            structure_to_compute = structure
+
+        # Run computation
+        computed_atoms = self._compute_single(structure_to_compute.atoms, calc_dir)
+
+        # Update AtomStructure with computed properties
+        # Since _compute_single modifies atoms in-place (attaches calculator results),
+        # we can just re-wrap or update.
+
+        return AtomStructure.from_ase(computed_atoms)
+
 
     def _get_strategies(self) -> list[Callable[[DFTConfig], None] | None]:
         """
