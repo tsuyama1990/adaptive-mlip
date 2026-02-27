@@ -38,7 +38,7 @@ class TestValidator:
 
         potential_path = Path("pot.yace")
         output_path = Path("report.html")
-        structure = MagicMock()
+        structure = Atoms("Fe", positions=[[0,0,0]], cell=[2.8,2.8,2.8], pbc=True)
 
         # Mock _relax_structure to isolate
         with patch.object(validator, "_relax_structure") as mock_relax:
@@ -62,7 +62,7 @@ class TestValidator:
 
         potential_path = Path("pot.yace")
         output_path = Path("report.html")
-        structure = MagicMock()
+        structure = Atoms("Fe", positions=[[0,0,0]], cell=[2.8,2.8,2.8], pbc=True)
 
         with patch.object(validator, "_relax_structure") as mock_relax:
             mock_relax.return_value = structure
@@ -88,10 +88,6 @@ class TestValidator:
     def test_validate_structure_invalid_element(self):
         """Test rejection of structure with invalid chemical symbol (dummy X)."""
         # 'X' is in atomic_numbers but Z=0
-        # Need pbc and cell for get_volume() check to pass first if we want to hit the element check.
-        # Or let volume check fail? But volume check raises "Failed to compute structure volume"
-        # We want to test element check specifically.
-        # So we provide a valid cell.
         structure = Atoms("X", positions=[[0,0,0]], cell=[10, 10, 10], pbc=True)
         with pytest.raises(ValueError, match="dummy element"):
             LammpsInputValidator.validate_structure(structure)

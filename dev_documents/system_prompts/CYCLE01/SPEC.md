@@ -3,6 +3,9 @@
 ## 1. Summary
 Cycle 01 lays the foundation for the `pyacemaker` system. The primary goal is to establish the core data structures (Pydantic models) and abstract interfaces (ABCs) that will drive the entire MACE Knowledge Distillation pipeline. By enforcing strict typing and a clear separation of concerns from the start, we ensure that subsequent cycles (Sampling, Oracle, Training) can be developed in parallel with minimal friction. This cycle also introduces a functional `MockOracle` to enable end-to-end testing without external DFT dependencies.
 
+**CRITICAL ARCHITECTURAL DECISION**:
+The system mandates the use of `AtomStructure` (a Pydantic model) as the primary data carrier for all core interfaces (`BaseOracle`, `BaseGenerator`, etc.), replacing raw `ase.Atoms` objects. This ensures that metadata (provenance, uncertainty, energy/forces) is strictly validated and carried throughout the pipeline.
+
 ## 2. System Architecture
 
 ### 2.1. File Structure
@@ -72,16 +75,17 @@ Abstract Base Classes (ABCs) defining the contract for all modules.
 
 #### `BaseGenerator`
 *   **Abstract Methods:**
-    *   `generate(n_structures: int) -> List[AtomStructure]`
+    *   `generate(n_structures: int) -> Iterator[AtomStructure]`
 
 #### `BaseOracle`
 *   **Abstract Methods:**
-    *   `compute(structure: AtomStructure) -> AtomStructure` (Returns structure with energy/forces populated)
-    *   `compute_batch(structures: List[AtomStructure]) -> List[AtomStructure]`
+    *   `compute(structures: Iterator[AtomStructure], batch_size: int = 10) -> Iterator[AtomStructure]`
+        *   Accepts a stream of `AtomStructure`.
+        *   Returns a stream of `AtomStructure` with `energy`, `forces`, and `stress` populated.
 
 #### `BaseTrainer`
 *   **Abstract Methods:**
-    *   `train(dataset: List[AtomStructure], **kwargs) -> Path` (Returns path to trained model)
+    *   `train(dataset_path: Path, **kwargs) -> Path` (Returns path to trained model)
 
 ## 4. Implementation Approach
 

@@ -8,6 +8,7 @@ from pyacemaker.core.exceptions import GeneratorError
 from pyacemaker.core.m3gnet_wrapper import M3GNetWrapper
 from pyacemaker.core.policy_factory import PolicyFactory
 from pyacemaker.domain_models.constants import ERR_GEN_BASE_FAIL, ERR_GEN_NCAND_NEG
+from pyacemaker.domain_models.data import AtomStructure
 from pyacemaker.domain_models.structure import StructureConfig
 
 
@@ -38,7 +39,7 @@ class StructureGenerator(BaseGenerator):
             raise TypeError(msg)
         self.config = config
 
-    def generate(self, n_candidates: int) -> Iterator[Atoms]:
+    def generate(self, n_candidates: int) -> Iterator[AtomStructure]:
         """
         Generates candidate structures.
 
@@ -49,7 +50,7 @@ class StructureGenerator(BaseGenerator):
             n_candidates: The number of candidate structures to generate.
 
         Yields:
-            Atoms: Generated atomic structures.
+            AtomStructure: Generated atomic structures.
 
         Raises:
             RuntimeError: If base structure generation fails.
@@ -66,29 +67,18 @@ class StructureGenerator(BaseGenerator):
         policy = PolicyFactory.get_policy(self.config)
 
         # Step 1: Base Structure Generation (Lazy)
-        # We define composition here but don't call prediction yet
         composition = "".join(self.config.elements)
 
-        # Step 2: Apply Policy (Streaming)
-        # Create the supercell template lazily inside the generator.
-        # This prevents materializing a potentially huge supercell if n_candidates is 0,
-        # but more importantly, the base_supercell itself is just one object.
-        # The true laziness comes from the policy yielding one by one.
-
-        # Ensure we strictly follow the iterator protocol.
-        def lazy_policy_stream() -> Iterator[Atoms]:
+        def lazy_policy_stream() -> Iterator[AtomStructure]:
             # Lazy loading of base structure only when generator is started and first item requested
             try:
+                # Assuming M3GNetWrapper handles this string.
+                # NOTE: M3GNet wrapper is used here. For large structures, predict_structure might take time,
+                # but it returns a single ASE Atoms object. We only hold this single base structure in memory.
+                # We DO NOT generate a list of n_candidates base structures.
                 base_structure = self.m3gnet.predict_structure(composition)
             except Exception as e:
                 raise GeneratorError(ERR_GEN_BASE_FAIL.format(composition=composition, error=e)) from e
-
-            # Generate the base supercell template once.
-            # We must materialize the base supercell to apply perturbations (rattle/strain).
-            # While this object sits in memory, it is a single instance.
-            # The streaming generator (yield) ensures we do not store n_candidates copies.
-            # Thus, memory usage is O(Supercell_Size), not O(n_candidates * Supercell_Size).
-            # We ensure this materialization happens strictly inside the generator (lazy).
 
             # Optimization: If supercell_size is (1,1,1), skip repeat to save a copy
             if tuple(self.config.supercell_size) == (1, 1, 1):
@@ -96,27 +86,34 @@ class StructureGenerator(BaseGenerator):
             else:
                 base_supercell = base_structure.repeat(self.config.supercell_size)  # type: ignore[no-untyped-call]
 
-            count = 0
+            # Streaming generation:
+            # We call policy.generate which yields Atoms one by one.
+            # We immediately wrap and yield AtomStructure.
+            # No list is accumulated here.
+
+            # Policy yields Atoms
             policy_iter = policy.generate(base_supercell, self.config, n_structures=n_candidates)
 
-            # Verify it's an iterator to enforce streaming contract at runtime
-            if not isinstance(policy_iter, Iterator):
-                 # Convert iterable to iterator if needed
-                 iter_policy = iter(policy_iter)
-            else:
-                 iter_policy = policy_iter
+            # Ensure iterator
+            iter_policy = iter(policy_iter)
 
-            for structure in iter_policy:
+            count = 0
+            for atoms in iter_policy:
                 if count >= n_candidates:
                     break
-                if len(structure) == 0:
-                    continue
-                yield structure
+
+                # Wrap Atoms in AtomStructure
+                provenance = {
+                    "step": "generation",
+                    "method": "policy_composite" # Simplified
+                }
+
+                yield AtomStructure(atoms=atoms, provenance=provenance)
                 count += 1
 
         yield from lazy_policy_stream()
 
-    def generate_local(self, base_structure: Atoms, n_candidates: int, **kwargs: Any) -> Iterator[Atoms]:
+    def generate_local(self, base_structure: Atoms, n_candidates: int, **kwargs: Any) -> Iterator[AtomStructure]:
         """
         Generates candidate structures by perturbing a base structure.
         Used in OTF loops to explore the local neighborhood of a high-uncertainty configuration.
@@ -128,7 +125,7 @@ class StructureGenerator(BaseGenerator):
             **kwargs: Additional arguments (e.g., engine).
 
         Returns:
-            Iterator yielding ASE Atoms objects.
+            Iterator yielding AtomStructure objects.
         """
         if n_candidates <= 0:
             return
@@ -138,5 +135,12 @@ class StructureGenerator(BaseGenerator):
         policy = PolicyFactory.get_local_policy(strategy)
 
         # Generate using policy
-        # Pass kwargs (e.g. engine) to allow advanced policies like MD Micro Burst
-        yield from policy.generate(base_structure, self.config, n_structures=n_candidates, **kwargs)
+        # Policy yields Atoms
+        atoms_iter = policy.generate(base_structure, self.config, n_structures=n_candidates, **kwargs)
+
+        for atoms in atoms_iter:
+            provenance = {
+                "step": "local_generation",
+                "method": str(strategy)
+            }
+            yield AtomStructure(atoms=atoms, provenance=provenance)

@@ -1,12 +1,13 @@
-import json
 import logging
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 import numpy as np
 import yaml
 from ase import Atoms
 from ase.io import iread
+
+from pyacemaker.domain_models.constants import STREAMING_CHUNK_SIZE
 
 logger = logging.getLogger(__name__)
 
@@ -134,25 +135,27 @@ def write_lammps_streaming(
     fileobj.write("Atoms # atomic\n\n")
 
     # Optimize Atom Writing:
-    # Use direct array access and iterators to avoid creating large intermediate lists/arrays if possible.
-    # But atoms.get_positions() returns a copy anyway.
+    # Use buffered writing by generating a list of lines and calling writelines once (or in chunks).
 
     pos = atoms.get_positions() # (N, 3)
     symbols = atoms.get_chemical_symbols() # List of strings (N)
 
-    # Generator for lines to keep memory usage O(1) per line (after pos array overhead)
-    # This avoids creating a huge string buffer or list of strings.
-    def line_generator() -> Iterable[str]:
-        for i in range(natoms):
-            s = symbols[i]
-            try:
-                t = type_map[s]
-            except KeyError:
-                 raise KeyError(f"Symbol {s} not in provided species list: {species}")
+    # Pre-lookup types to avoid dict lookup in tight loop
+    try:
+        atom_types = [type_map[s] for s in symbols]
+    except KeyError as e:
+         raise KeyError(f"Symbol not in provided species list: {species}") from e
 
-            # 1-based index
-            yield f"{i+1} {t} {pos[i, 0]:.6f} {pos[i, 1]:.6f} {pos[i, 2]:.6f}\n"
+    # Chunk size for writing (from constants)
+    chunk_size = STREAMING_CHUNK_SIZE
 
-    fileobj.writelines(line_generator())
+    for i in range(0, natoms, chunk_size):
+        end = min(i + chunk_size, natoms)
+        # Create chunk of lines
+        lines = [
+            f"{j+1} {atom_types[j]} {pos[j, 0]:.6f} {pos[j, 1]:.6f} {pos[j, 2]:.6f}\n"
+            for j in range(i, end)
+        ]
+        fileobj.writelines(lines)
 
     fileobj.write("\n")

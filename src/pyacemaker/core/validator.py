@@ -9,7 +9,6 @@ from pyacemaker.domain_models.constants import (
     ERR_POTENTIAL_NOT_FOUND,
     ERR_VAL_POT_NONE,
     ERR_VAL_POT_NOT_FILE,
-    ERR_VAL_POT_OUTSIDE,
     ERR_VAL_REQ_STRUCT,
     ERR_VAL_STRUCT_DUMMY_ELEM,
     ERR_VAL_STRUCT_EMPTY,
@@ -56,8 +55,8 @@ class LammpsInputValidator:
         # Validate structure physical properties
         try:
             vol = structure.get_volume()  # type: ignore[no-untyped-call]
-        except Exception as e:
-            # get_volume might fail if no cell is set
+        except (ValueError, AttributeError, RuntimeError) as e:
+            # Catch specific errors (e.g. no cell, or numpy error)
             raise ValueError(ERR_VAL_STRUCT_VOL_FAIL.format(error=e)) from e
 
         if vol <= 1e-9:

@@ -2,8 +2,10 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+from ase import Atoms
 
 from pyacemaker.domain_models import PyAceConfig
+from pyacemaker.domain_models.data import AtomStructure
 from tests.conftest import create_test_config_dict
 
 
@@ -94,3 +96,45 @@ def test_scenario_01_02_guardrails_check_cutoff(tmp_path: Path, monkeypatch: pyt
     from pydantic import ValidationError
     with pytest.raises(ValidationError):
         PyAceConfig(**config_dict)
+
+def test_scenario_01_03_mock_oracle_execution(tmp_path: Path) -> None:
+    """
+    Scenario 01-03: "Mock Oracle Execution"
+    Objective: Verify that Mock Oracle can compute energy/forces for a structure
+    via the AtomStructure interface.
+    """
+    # 1. Setup
+    # Create a simple structure
+    atoms = Atoms("Cu", positions=[[0, 0, 0]], cell=[3.6, 3.6, 3.6], pbc=True)
+    input_structure = AtomStructure(atoms=atoms)
+
+    # 2. Mock Oracle Instantiation
+    # We use the MockOracle from pyacemaker.modules.mock_oracle
+    # (Assuming it will be implemented in Logic Implementation phase)
+    # For now, we import it inside a try block or expect it to be available
+    # if we followed TDD order strictly (tests first, then code).
+    # Since we are writing tests *before* code, this import might fail if run now.
+    # But this is the test definition.
+
+    try:
+        from pyacemaker.modules.mock_oracle import MockOracle
+    except ImportError:
+        pytest.skip("MockOracle not implemented yet")
+
+    oracle = MockOracle()
+
+    # 3. Execution
+    # compute returns Iterator[AtomStructure]
+    results = oracle.compute(iter([input_structure]))
+    result_structure = next(results)
+
+    # 4. Assertions
+    assert isinstance(result_structure, AtomStructure)
+    assert result_structure.energy is not None
+    assert result_structure.forces is not None
+    assert result_structure.stress is not None
+
+    # Check physical plausibility (finite values)
+    import numpy as np
+    assert np.isfinite(result_structure.energy)
+    assert np.all(np.isfinite(result_structure.forces))

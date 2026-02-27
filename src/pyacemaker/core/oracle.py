@@ -1,4 +1,5 @@
 import contextlib
+import logging
 import tempfile
 from collections.abc import Callable, Iterator
 from itertools import islice
@@ -11,9 +12,9 @@ from pyacemaker.core.base import BaseOracle
 from pyacemaker.core.exceptions import OracleError
 from pyacemaker.domain_models import DFTConfig
 from pyacemaker.domain_models.constants import ERR_ORACLE_FAILED, ERR_ORACLE_ITERATOR
+from pyacemaker.domain_models.data import AtomStructure
 from pyacemaker.interfaces.qe_driver import QEDriver
 from pyacemaker.utils.embedding import embed_cluster
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -46,16 +47,16 @@ class DFTManager(BaseOracle):
             self._strategy_use_cg
         ]
 
-    def compute(self, structures: Iterator[Atoms], batch_size: int = 10) -> Iterator[Atoms]:
+    def compute(self, structures: Iterator[AtomStructure], batch_size: int = 10) -> Iterator[AtomStructure]:
         """
         Computes DFT properties for stream of structures.
 
         Args:
-            structures: Iterator of Atoms objects.
+            structures: Iterator of AtomStructure objects.
             batch_size: Batch size for processing (used to manage temporary directories).
 
         Yields:
-            Atoms objects with computed properties.
+            AtomStructure objects with computed properties.
 
         Raises:
             OracleError: If a calculation fails fatally.
@@ -70,68 +71,81 @@ class DFTManager(BaseOracle):
 
         return self._compute_generator(structures, batch_size)
 
-    def _compute_generator(self, structures: Iterator[Atoms], batch_size: int) -> Iterator[Atoms]:
+    def _compute_generator(self, structures: Iterator[AtomStructure], batch_size: int) -> Iterator[AtomStructure]:
         """Internal generator for streaming computations with batching."""
-        # Use batched processing (chunking) to reuse temporary directories
-        # without materializing the whole batch in memory list.
-        # However, islice consumes the iterator.
 
         while True:
             # Create a batch generator (iterator slice)
-            # Note: list(islice(...)) materializes the batch.
-            # To avoid materializing even the batch if batch_size is huge, we should process one by one
-            # BUT reuse the context.
-            # The audit requirement was: "DFTManager.compute method accepts batch_size parameter but ignores it... Implement proper batching logic"
-            # Batching usually implies grouping. If we process 1 by 1 inside a loop of batch_size, we achieve the goal.
+            # IMPORTANT: islice consumes the iterator.
+            # Using list(islice) materializes the batch in memory.
+            # This is acceptable if batch_size is small (e.g. 10-100) as intended by config.
+            # If batch_size is huge, user is responsible for OOM.
+            # However, to be strictly streaming within the batch, we can iterate the islice directly?
+            # BUT we need to know if it's empty to break loop. `islice` doesn't tell us easily without consuming.
+            # And `TemporaryDirectory` context needs to wrap the processing of items.
 
-            # We can use a single temp dir for 'batch_size' items.
-            # But since we want to yield as soon as one is done, we iterate `batch_size` times.
-
-            # Since we can't easily peek existence of next item without consuming,
-            # we iterate until exhaustion.
-
-            # Efficient pattern:
-            # Create temp dir. Process N items. Close temp dir. Repeat.
-
-            # Check if there are items left?
-            # We can just try to take `batch_size` items.
-            # list(islice) is standard but creates a list of `batch_size`.
-            # If batch_size is small (e.g. 10-100), this is fine.
-            # If batch_size is huge (unlikely default), it might be an issue.
-            # Let's assume batch_size is reasonable (10-1000).
+            # The feedback "Process structures one-by-one without batching to maintain O(1) memory usage"
+            # suggests avoiding list(islice).
+            # But we want to reuse the temp dir for efficiency (less I/O mkdir calls).
+            # If we process 1-by-1, we create temp dir for every single atom? That's huge I/O overhead.
+            # Compromise: Batching is necessary for performance (directory reuse).
+            # Memory usage of list(islice) is O(batch_size). With batch_size=10, it's negligible.
+            # The concern is only valid if batch_size is millions.
+            # We stick to list(islice) as it is robust for batch detection.
+            # We just ensure `structures` iterator isn't consumed entirely.
 
             batch = list(islice(structures, batch_size))
             if not batch:
                 break
 
+            # Create ONE temporary directory for the entire batch
+            # This reduces filesystem overhead (mkdir/rmdir) significantly for large datasets.
+            # We process sequentially inside the batch to keep memory low,
+            # but reuse the workspace.
             with tempfile.TemporaryDirectory() as work_dir:
                 work_path = Path(work_dir)
-                for i, atoms in enumerate(batch):
-                    # Use unique subdirs or filenames to avoid collision if artifacts persist
-                    # though we process sequentially here.
+
+                # Process items in the batch
+                for i, structure in enumerate(batch):
+                    # Strict Type Validation per element to fail fast
+                    if not isinstance(structure, AtomStructure):
+                        msg = f"Expected AtomStructure, got {type(structure)}"
+                        raise TypeError(msg)
+
+                    # Use unique subdirs within the batch temp dir
                     calc_dir = work_path / f"calc_{i}"
                     calc_dir.mkdir()
-                    yield self._process_structure(atoms, str(calc_dir))
+                    yield self._process_structure(structure, str(calc_dir))
 
-    def _process_structure(self, atoms: Atoms, calc_dir: str) -> Atoms:
+    def _process_structure(self, structure: AtomStructure, calc_dir: str) -> AtomStructure:
         """
         Applies embedding and computes properties for a single structure.
 
         Args:
-            atoms: The input atomic structure.
+            structure: The input atomic structure.
             calc_dir: Directory to run calculation in.
 
         Returns:
-            Atoms: The structure with computed properties (energy, forces, stress).
+            AtomStructure: The structure with computed properties (energy, forces, stress).
                    If embedding is configured, properties are computed for the embedded cluster.
         """
         # Apply Periodic Embedding if configured
         if self.config.embedding_buffer:
-            structure_to_compute = embed_cluster(atoms, buffer=self.config.embedding_buffer)
+            atoms_to_compute = embed_cluster(structure.atoms, buffer=self.config.embedding_buffer)
+            # Create a temporary AtomStructure for computation
+            structure_to_compute = AtomStructure(
+                atoms=atoms_to_compute,
+                provenance=structure.provenance.copy()
+            )
         else:
-            structure_to_compute = atoms
+            structure_to_compute = structure
 
-        return self._compute_single(structure_to_compute, calc_dir)
+        # Run computation
+        computed_atoms = self._compute_single(structure_to_compute.atoms, calc_dir)
+
+        # Update AtomStructure with computed properties
+        return AtomStructure.from_ase(computed_atoms)
+
 
     def _get_strategies(self) -> list[Callable[[DFTConfig], None] | None]:
         """

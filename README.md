@@ -1,102 +1,110 @@
-# PyAceMaker
+# pyacemaker: Adaptive Machine Learning Interatomic Potentials
 
-**Adaptive Machine Learning Interatomic Potentials via MACE Knowledge Distillation**
+![License](https://img.shields.io/badge/license-MIT-blue.svg)
+![Python](https://img.shields.io/badge/python-3.11+-blue.svg)
 
-[![Build Status](https://img.shields.io/badge/build-passing-brightgreen)]()
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/release/python-3110/)
+**Scalable, automated workflow for training MACE interatomic potentials.**
 
 ## Overview
-**PyAceMaker** is an automated pipeline for constructing production-ready Machine Learning Interatomic Potentials (MLIPs). It solves the "data gap" problem by using a large-scale foundation model (MACE-MP-0) as a knowledgeable surrogate. Instead of blindly running thousands of expensive DFT calculations, PyAceMaker intelligently samples the configuration space, distills knowledge from MACE, and applies a final "Delta Learning" correction to achieve DFT-level accuracy with a fraction of the cost.
 
-## Key Features
-*   **MACE Knowledge Distillation:** Leverage the power of pre-trained foundation models to guide potential generation.
-*   **Active Learning:** Automatically identifies and labels only the most informative structures (High Uncertainty).
-*   **Delta Learning:** Corrects systematic errors in the surrogate model using sparse DFT data.
-*   **Fully Automated:** From initial structure to final `.yace` file in one command.
-*   **HPC Ready:** Designed for scalability on Slurm/PBS clusters.
+### What is pyacemaker?
+`pyacemaker` is an orchestration framework designed to automate the lifecycle of Machine Learning Interatomic Potentials (MLIPs). It manages the entire process: from initial structure generation and active learning loops to training and validation. It leverages **MACE** technology for state-of-the-art accuracy and efficiency.
 
-## Architecture
+### Why use it?
+Training robust ML potentials requires complex iterative cycles of:
+1.  Exploring chemical space.
+2.  Running expensive DFT calculations (Oracle).
+3.  Training models.
+4.  Validating stability.
 
-```mermaid
-graph TD
-    User[User Config] --> Orch[Orchestrator]
-    Orch --> Gen[Generator]
-    Orch --> Oracle[Oracle: MACE/DFT]
-    Orch --> Train[Trainer: Pacemaker]
+`pyacemaker` automates this "Active Learning" loop, ensuring:
+*   **Reproducibility:** Every step is configured via code.
+*   **Scalability:** Streaming architecture handles large datasets with O(1) memory usage.
+*   **Resilience:** Self-healing DFT workflows recover from common convergence errors.
 
-    subgraph Pipeline
-        Gen -->|Step 1: Direct Sampling| Pool
-        Pool -->|Step 2: Uncertainty Check| Oracle
-        Oracle -->|Step 3-4: Surrogate MD| Data
-        Data -->|Step 5-6: Distillation| BaseModel
-        BaseModel -->|Step 7: Delta Learning| FinalModel
-    end
-```
+## Features
 
-## Prerequisites
-*   **Python 3.11+**
-*   **uv** (Recommended for dependency management)
-*   **LAMMPS** (Optional, for MD validation)
-*   **VASP/QuantumEspresso** (Optional, for Real Mode DFT calculations)
+*   **Core Data Models (Cycle 01):** Robust Pydantic-based schemas (`AtomStructure`) ensuring strict data validation and provenance tracking.
+*   **Mock Oracle:** Built-in Mock Oracle for testing pipelines without expensive DFT codes.
+*   **Configurable Workflow:** YAML-based configuration for all simulation parameters.
+*   **Streaming I/O:** Efficient handling of large trajectory files (XYZ/LAMMPS) to prevent memory overflows.
+
+## Requirements
+
+*   Python 3.11 or higher
+*   `uv` (recommended) or `pip`
+*   LAMMPS (optional, for MD)
+*   Quantum Espresso (optional, for DFT)
 
 ## Installation
 
 ```bash
-# 1. Clone the repository
 git clone https://github.com/your-org/pyacemaker.git
 cd pyacemaker
-
-# 2. Install dependencies using uv
 uv sync
-
-# 3. Activate the environment
-source .venv/bin/activate
 ```
 
 ## Usage
 
-### Quick Start (Mock Mode)
-To test the pipeline without external DFT codes or GPUs, use the Mock Mode. This runs the full logic using internal surrogate potentials.
+### Basic Execution
+
+To run the orchestrator with a configuration file:
 
 ```bash
-# Run the tutorial script
-export PYACEMAKER_MODE=MOCK
-uv run pyacemaker run --config examples/sn2_reaction.yaml
+uv run pyacemaker --config config.yaml
 ```
 
-### Production Run
-For scientific production, configure your `config.yaml` with valid DFT settings.
+### Configuration Example (`config.yaml`)
 
-```bash
-# Run the full pipeline
-uv run pyacemaker run --config my_system_config.yaml
+```yaml
+project_name: "CuZr_ActiveLearning"
+
+structure:
+  elements: ["Cu", "Zr"]
+  supercell_size: [2, 2, 2]
+
+dft:
+  code: "qe" # or "mock"
+  functional: "PBE"
+  kpoints_density: 0.04
+  encut: 500.0
+  pseudopotentials:
+    Cu: "Cu.UPF"
+    Zr: "Zr.UPF"
+
+training:
+  potential_type: "ace"
+  cutoff_radius: 5.0
+  max_basis_size: 500
+  output_filename: "potential.yace"
+
+md:
+  temperature: 1000.0
+  pressure: 0.0
+  timestep: 0.002
+  n_steps: 10000
+
+workflow:
+  max_iterations: 5
+  data_dir: "data"
 ```
 
-## Development Workflow
+## Architecture
 
-We use a strict cycle-based development process.
-
-### Running Tests
-```bash
-uv run pytest
-```
-
-### Linting
-```bash
-uv run ruff check .
-uv run mypy .
-```
-
-## Project Structure
 ```text
-.
-├── src/pyacemaker/       # Source code
-├── tests/                # Unit and Integration tests
-├── dev_documents/        # System specifications and plans
-├── tutorials/            # Interactive Marimo notebooks
-└── pyproject.toml        # Project configuration
+src/pyacemaker/
+├── core/               # Core logic (Orchestrator, Generator, Oracle, Trainer)
+├── domain_models/      # Pydantic data schemas (AtomStructure, Configs)
+├── modules/            # Concrete implementations (MockOracle)
+├── interfaces/         # Drivers for external codes (LAMMPS, QE)
+└── utils/              # Helper functions (I/O, Math)
 ```
 
-## License
-MIT License
+## Roadmap
+
+*   **Cycle 01:** Core Infrastructure & Data Models (Completed)
+*   **Cycle 02:** DFT Oracle & Self-Healing
+*   **Cycle 03:** Structure Generation Policies
+*   **Cycle 04:** Pacemaker Integration
+*   **Cycle 05:** Molecular Dynamics Engine
+*   **Cycle 06:** Active Learning Loop

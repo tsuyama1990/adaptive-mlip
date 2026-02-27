@@ -3,8 +3,8 @@ import re
 from pathlib import Path
 from typing import Any
 from unittest.mock import patch
-import numpy as np
 
+import numpy as np
 import pytest
 from ase import Atoms
 

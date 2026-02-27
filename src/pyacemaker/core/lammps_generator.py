@@ -1,11 +1,10 @@
+import shlex
 from functools import lru_cache
 from pathlib import Path
 from typing import TextIO
-import shlex
 
 from ase.data import atomic_numbers
 
-from pyacemaker.domain_models.constants import LAMMPS_MIN_STYLE_CG
 from pyacemaker.domain_models.md import MDConfig
 from pyacemaker.utils.path import validate_path_safe
 
@@ -39,21 +38,30 @@ class LammpsScriptGenerator:
         # Use shlex.quote for shell safety
         return shlex.quote(str(safe_path))
 
-    def _gen_potential_pure(self, buffer: TextIO, potential_path: Path, elements: list[str]) -> None:
-        """Generates pure PACE potential commands."""
+    def _write_pace_base(self, buffer: TextIO, potential_path: Path, elements: list[str]) -> None:
+        """
+        Writes the common base PACE potential coefficient command.
+
+        Args:
+            buffer: The file-like object to write to.
+            potential_path: Path to the PACE potential file.
+            elements: List of element symbols.
+        """
         species_str = " ".join(elements)
         quoted_pot = self._quote(str(potential_path))
-        buffer.write("pair_style pace\n")
         buffer.write(f"pair_coeff * * pace {quoted_pot} {species_str}\n")
+
+    def _gen_potential_pure(self, buffer: TextIO, potential_path: Path, elements: list[str]) -> None:
+        """Generates pure PACE potential commands."""
+        buffer.write("pair_style pace\n")
+        self._write_pace_base(buffer, potential_path, elements)
 
     def _gen_potential_hybrid(self, buffer: TextIO, potential_path: Path, elements: list[str]) -> None:
         """Generates hybrid PACE + ZBL potential commands."""
-        species_str = " ".join(elements)
-        quoted_pot = self._quote(str(potential_path))
         params = self.config.hybrid_params
 
         buffer.write(f"pair_style hybrid/overlay pace zbl {params.zbl_cut_inner} {params.zbl_cut_outer}\n")
-        buffer.write(f"pair_coeff * * pace {quoted_pot} {species_str}\n")
+        self._write_pace_base(buffer, potential_path, elements)
 
         n_types = len(elements)
 
@@ -241,7 +249,9 @@ class LammpsScriptGenerator:
 
         buffer.write(f"neighbor {self.config.neighbor_skin} bin\n")
         buffer.write("neigh_modify delay 0 every 1 check yes\n")
-        buffer.write(f"min_style {LAMMPS_MIN_STYLE_CG}\n")
+        # Use configurable min_style (default to cg if not set)
+        min_style = getattr(self.config, "minimize_style", "cg")
+        buffer.write(f"min_style {min_style}\n")
         buffer.write(
             f"minimize {self.config.minimize_tol} {self.config.minimize_ftol} "
             f"{self.config.minimize_steps} {self.config.minimize_max_iter}\n"

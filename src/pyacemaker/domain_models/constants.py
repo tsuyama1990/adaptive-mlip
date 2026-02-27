@@ -57,6 +57,9 @@ FILE_NAME_MGO_SURFACE: Final[str] = "mgo_surface.xyz"
 FILE_NAME_DEPOSITED: Final[str] = "deposited.xyz"
 FILE_NAME_EON_POS: Final[str] = "pos.con"
 
+# Streaming Constants
+STREAMING_CHUNK_SIZE: Final[int] = 1000
+
 __all__ = [
     "DANGEROUS_PATH_CHARS",
     "DEFAULT_EON_EXECUTABLE",
@@ -110,4 +113,5 @@ __all__ = [
     "PACE_DRIVER_TEMPLATE",
     "RECIPROCAL_FACTOR",
     "SCENARIO_NAME_FEPT_MGO",
+    "STREAMING_CHUNK_SIZE",
 ]

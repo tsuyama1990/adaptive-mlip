@@ -5,6 +5,7 @@ from typing import Any
 
 from ase import Atoms
 
+from pyacemaker.domain_models.data import AtomStructure
 from pyacemaker.domain_models.md import MDSimulationResult
 
 
@@ -36,7 +37,7 @@ class BaseGenerator(ABC):
         """
 
     @abstractmethod
-    def generate(self, n_candidates: int) -> Iterator[Atoms]:
+    def generate(self, n_candidates: int) -> Iterator[AtomStructure]:
         """
         Generates candidate structures.
 
@@ -47,23 +48,17 @@ class BaseGenerator(ABC):
             n_candidates: Number of structures to generate.
 
         Returns:
-            Iterator yielding ASE Atoms objects.
+            Iterator yielding AtomStructure objects.
             If generation cannot produce any structures, the iterator should be empty
             (or raise an error if 0 is invalid for the context).
 
         Raises:
             RuntimeError: If generation fails due to internal errors or configuration issues.
             ValueError: If input parameters are invalid.
-
-        Example:
-            class RandomGenerator(BaseGenerator):
-                def generate(self, n):
-                    for _ in range(n):
-                        yield create_random_structure()
         """
 
     @abstractmethod
-    def generate_local(self, base_structure: Atoms, n_candidates: int, **kwargs: Any) -> Iterator[Atoms]:
+    def generate_local(self, base_structure: Atoms, n_candidates: int, **kwargs: Any) -> Iterator[AtomStructure]:
         """
         Generates candidate structures by perturbing a base structure.
         Used in OTF loops to explore the local neighborhood of a high-uncertainty configuration.
@@ -74,7 +69,7 @@ class BaseGenerator(ABC):
             **kwargs: Additional arguments (e.g., engine).
 
         Returns:
-            Iterator yielding ASE Atoms objects.
+            Iterator yielding AtomStructure objects.
         """
 
 
@@ -85,29 +80,21 @@ class BaseOracle(ABC):
     """
 
     @abstractmethod
-    def compute(self, structures: Iterator[Atoms], batch_size: int = 10) -> Iterator[Atoms]:
+    def compute(self, structures: Iterator[AtomStructure], batch_size: int = 10) -> Iterator[AtomStructure]:
         """
         Computes properties (energy, forces, stress) for the given structures.
 
         Args:
-            structures: Iterator of ASE Atoms objects.
+            structures: Iterator of AtomStructure objects.
             batch_size: Number of structures to compute in a single batch (if supported).
 
         Returns:
-            Iterator of ASE Atoms objects with computed properties attached (e.g. in atoms.info).
+            Iterator of AtomStructure objects with computed properties attached (e.g. in atoms.info).
             If the input iterator is empty, the returned iterator should also be empty.
 
         Raises:
             RuntimeError: If calculation fails (e.g., DFT convergence error, connection error).
             ValueError: If input structures are invalid.
-
-        Example:
-            class DFTOracle(BaseOracle):
-                def compute(self, structures, batch_size=10):
-                    for batch in batched(structures, batch_size):
-                        results = run_dft(batch)
-                        for res in results:
-                            yield res
         """
 
 
@@ -139,15 +126,6 @@ class BaseTrainer(ABC):
         Raises:
             RuntimeError: If training fails (e.g., MLIP code crash, insufficient data).
             FileNotFoundError: If training data file does not exist.
-
-        Example:
-            class PacemakerTrainer(BaseTrainer):
-                def train(self, path, initial_potential=None):
-                    cmd = ["pace_train", "--dataset", str(path)]
-                    if initial_potential:
-                        cmd.extend(["--initial_potential", str(initial_potential)])
-                    subprocess.run(cmd)
-                    return "potential.yace"
         """
 
 
@@ -171,13 +149,6 @@ class BaseEngine(ABC):
 
         Raises:
             RuntimeError: If simulation fails (e.g., segmentation fault, physics explosion).
-
-        Example:
-            class LAMMPSEngine(BaseEngine):
-                def run(self, structure, potential):
-                    write_lammps_input(structure, potential)
-                    subprocess.run(["lmp", ...])
-                    return MDSimulationResult(...)
         """
 
     @abstractmethod
