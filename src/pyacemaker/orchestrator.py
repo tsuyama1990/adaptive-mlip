@@ -269,10 +269,13 @@ class Orchestrator:
             self.logger.warning("No training data found, skipping training.")
             return None
 
-        result = self.trainer.train(training_data_path=training_file, initial_potential=initial_potential)
-        self.logger.info(LOG_POTENTIAL_TRAINED)
-
-        return Path(result) if isinstance(result, (str, Path)) else None
+        try:
+            result = self.trainer.train(training_data_path=training_file, initial_potential=initial_potential)
+            self.logger.info(LOG_POTENTIAL_TRAINED)
+            return Path(result) if isinstance(result, (str, Path)) else None
+        except Exception as e:
+            msg = f"Training failed: {e}"
+            raise OrchestratorError(msg) from e
 
     def _check_initial_potential(self) -> None:
         """Checks if initial potential exists, if not generates one (Cold Start)."""
@@ -445,9 +448,10 @@ class Orchestrator:
             # Fine-tune
             return self._train(paths, initial_potential=potential_path)
 
-        except Exception:
-            self.logger.exception("Refinement failed")
-            return None
+        except Exception as e:
+            msg = f"Refinement failed: {e}"
+            self.logger.exception(msg)
+            raise OrchestratorError(msg) from e
 
     def _deploy_potential(self, iteration: int) -> Path:
         """Deploys the current potential to the potentials directory."""
@@ -471,7 +475,10 @@ class Orchestrator:
              return None
 
         if self.engine:
-            return self.engine.run(structure=initial_structure, potential=deployed_potential)
+            try:
+                return self.engine.run(structure=initial_structure, potential=deployed_potential)
+            except Exception as e:
+                raise OrchestratorError(f"MD Simulation failed: {e}") from e
         return None
 
     def _handle_md_halt(self, result: MDSimulationResult, deployed_potential: Path, paths: dict[str, Path]) -> None:
@@ -622,17 +629,33 @@ class Orchestrator:
             # Using configurable batch size
             scored_candidates = list(self.oracle.compute(candidates_iter, batch_size=config.batch_size))
 
-            # 3. Filter based on uncertainty
-            scored_candidates.sort(
-                key=lambda x: x.uncertainty if x.uncertainty is not None else -1.0,
-                reverse=True
+            if not scored_candidates:
+                self.logger.warning("No candidates scored by Oracle.")
+                return
+
+            # 3. Filter based on uncertainty (Memory Efficient Top-K)
+            # Instead of sorting the entire list (which is O(N log N) and memory heavy),
+            # we use heapq.nlargest to find the top k elements in O(N log k).
+            import heapq
+
+            # Wrapper class for heapq to handle None uncertainties and reverse ordering
+            class ScoredItem:
+                def __init__(self, struct: AtomStructure) -> None:
+                    self.struct = struct
+                    # Default to -inf if None to place at bottom
+                    self.score = struct.uncertainty if struct.uncertainty is not None else -float('inf')
+
+                def __lt__(self, other: "ScoredItem") -> bool:
+                    return self.score < other.score
+
+            top_k_items = heapq.nlargest(
+                config.n_active,
+                [ScoredItem(c) for c in scored_candidates]
             )
 
             active_set: list[AtomStructure] = []
-            for cand in scored_candidates:
-                if len(active_set) >= config.n_active:
-                    break
-
+            for item in top_k_items:
+                cand = item.struct
                 if cand.uncertainty is not None and cand.uncertainty >= config.uncertainty_threshold:
                      active_set.append(cand)
                 else:
@@ -640,7 +663,7 @@ class Orchestrator:
                      active_set.append(cand)
 
             if not active_set:
-                self.logger.warning("No candidates selected for active set.")
+                self.logger.warning("No candidates met active set selection criteria.")
                 return
 
             # 4. Save Active Set
@@ -728,7 +751,7 @@ class Orchestrator:
                 self.state_manager.rollback()
                 self.state_manager.state.status = LoopStatus.HALTED
                 self.state_manager.save(force=True)
-                raise
+                raise OrchestratorError(f"Workflow halted due to error in {step_enum}: {e}") from e
 
     def run(self) -> None:
         """
@@ -749,4 +772,4 @@ class Orchestrator:
 
         except Exception as e:
             self.logger.critical(LOG_WORKFLOW_CRASHED.format(error=e))
-            raise
+            raise OrchestratorError(f"Run failed: {e}") from e

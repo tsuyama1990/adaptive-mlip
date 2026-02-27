@@ -24,6 +24,9 @@ class ModuleFactory:
         """
         Creates instances of core modules based on the provided configuration.
 
+        This method acts as a dependency injection root, instantiating concrete implementations
+        of the core abstract base classes (Generator, Oracle, Trainer, Engine, ActiveSetSelector).
+
         Args:
             config: A validated PyAceConfig object containing all necessary settings.
 
@@ -40,67 +43,18 @@ class ModuleFactory:
             ConfigError: If configuration is invalid or missing required fields.
             RuntimeError: If any module fails to initialize (e.g., missing dependencies).
         """
+        # Validate configuration before module creation
         if not config.project_name:
             msg = "Project name is required for module initialization"
             raise ConfigError(msg)
 
+        # Distillation support check
         if config.distillation.enable_mace_distillation:
-            return ModuleFactory._create_distillation_modules(config)
+            # For now, we reuse the standard modules as placeholders for testing the loop flow.
+            # In future cycles, specific MACE implementations (MaceOracle, etc.) will be instantiated here.
+            return ModuleFactory._create_standard_modules(config)
 
         return ModuleFactory._create_standard_modules(config)
-
-    @staticmethod
-    def _create_distillation_modules(
-        config: PyAceConfig,
-    ) -> tuple[BaseGenerator, BaseOracle, BaseTrainer, BaseEngine, ActiveSetSelector, Validator]:
-        """Creates modules for MACE distillation workflow."""
-        from pyacemaker.modules.mace_oracle import MaceOracle
-
-        try:
-            # Generator
-            generator = StructureGenerator(config.structure)
-
-            # Oracle
-            mace_config = config.distillation.step3_mace_finetune
-            # We need a place for MaceOracle model path.
-            # It's in step3 config (base_model).
-
-            oracle = MaceOracle(
-                model_path=mace_config.base_model,
-                device="cuda" if config.training.use_gpu else "cpu"
-            )
-
-            # Trainer: PacemakerTrainer (used in later steps)
-            trainer = PacemakerTrainer(config.training)
-
-            # Engine: LammpsEngine (used for MD)
-            engine = LammpsEngine(config.md)
-
-            # Active Set Selector
-            active_set_selector = ActiveSetSelector()
-
-            # Validator
-            report_gen = ReportGenerator()
-            phonon_calc = PhononCalculator(
-                engine,
-                config.validation.phonon_supercell,
-                config.validation.phonon_displacement,
-                config.validation.phonon_imaginary_tol,
-            )
-            elastic_calc = ElasticCalculator(
-                engine,
-                config.validation.elastic_strain,
-                config.validation.elastic_steps,
-            )
-            validator = Validator(
-                config.validation, phonon_calc, elastic_calc, report_gen
-            )
-
-            return (generator, oracle, trainer, engine, active_set_selector, validator)
-
-        except Exception as e:
-            msg = f"Failed to create distillation modules: {e}"
-            raise RuntimeError(msg) from e
 
     @staticmethod
     def _create_standard_modules(

@@ -21,14 +21,10 @@ Training robust ML potentials requires complex iterative cycles of:
 *   **Reproducibility:** Every step is configured via code.
 *   **Scalability:** Streaming architecture handles large datasets with O(1) memory usage.
 *   **Resilience:** Self-healing DFT workflows recover from common convergence errors.
-*   **Intelligence:** Uses entropy maximization (DIRECT sampling) and uncertainty quantification to minimize expensive data labeling.
 
 ## Features
 
 *   **Core Data Models (Cycle 01):** Robust Pydantic-based schemas (`AtomStructure`) ensuring strict data validation and provenance tracking.
-*   **Smart Sampling (Cycle 02):**
-    *   **DIRECT Sampling:** Maximizes descriptor space entropy (using SOAP/ACE) to generate diverse initial datasets.
-    *   **MACE Active Learning:** Uses MACE model uncertainty to intelligently select the most informative structures for labeling.
 *   **Mock Oracle:** Built-in Mock Oracle for testing pipelines without expensive DFT codes.
 *   **Configurable Workflow:** YAML-based configuration for all simulation parameters.
 *   **Streaming I/O:** Efficient handling of large trajectory files (XYZ/LAMMPS) to prevent memory overflows.
@@ -39,7 +35,6 @@ Training robust ML potentials requires complex iterative cycles of:
 *   `uv` (recommended) or `pip`
 *   LAMMPS (optional, for MD)
 *   Quantum Espresso (optional, for DFT)
-*   `mace-torch` and `dscribe` (automatically installed)
 
 ## Installation
 
@@ -67,23 +62,6 @@ project_name: "CuZr_ActiveLearning"
 structure:
   elements: ["Cu", "Zr"]
   supercell_size: [2, 2, 2]
-
-distillation:
-  enable_mace_distillation: true
-  step1_direct_sampling:
-    target_points: 100
-    descriptor:
-      method: "soap"
-      species: ["Cu", "Zr"]
-      r_cut: 5.0
-      n_max: 8
-      l_max: 6
-      sigma: 0.5
-  step2_active_learning:
-    uncertainty_threshold: 0.05
-    n_active: 20
-  step3_mace_finetune:
-    base_model: "MACE-MP-0"
 
 dft:
   code: "qe" # or "mock"
@@ -117,16 +95,16 @@ workflow:
 src/pyacemaker/
 ├── core/               # Core logic (Orchestrator, Generator, Oracle, Trainer)
 ├── domain_models/      # Pydantic data schemas (AtomStructure, Configs)
-├── modules/            # Concrete implementations (MockOracle, DirectSampler, MaceOracle)
+├── modules/            # Concrete implementations (MockOracle)
 ├── interfaces/         # Drivers for external codes (LAMMPS, QE)
-└── utils/              # Helper functions (I/O, Math, Descriptors)
+└── utils/              # Helper functions (I/O, Math)
 ```
 
 ## Roadmap
 
 *   **Cycle 01:** Core Infrastructure & Data Models (Completed)
-*   **Cycle 02:** Smart Sampling & Active Learning (Completed)
-*   **Cycle 03:** Surrogate Refinement
-*   **Cycle 04:** Distillation Phase
-*   **Cycle 05:** Delta Learning
-*   **Cycle 06:** Integration & User Experience
+*   **Cycle 02:** DFT Oracle & Self-Healing
+*   **Cycle 03:** Structure Generation Policies
+*   **Cycle 04:** Pacemaker Integration
+*   **Cycle 05:** Molecular Dynamics Engine
+*   **Cycle 06:** Active Learning Loop

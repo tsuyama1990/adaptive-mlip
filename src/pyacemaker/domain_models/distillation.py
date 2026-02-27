@@ -1,12 +1,16 @@
 from pydantic import BaseModel, ConfigDict, Field, PositiveInt, field_validator, model_validator
 
 from pyacemaker.domain_models.active_learning import DescriptorConfig
-from pyacemaker.domain_models.defaults import DEFAULT_BATCH_SIZE
+from pyacemaker.domain_models.defaults import DEFAULT_BATCH_SIZE, DEFAULT_CANDIDATE_MULTIPLIER
 
 
 class Step1DirectSamplingConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
     target_points: PositiveInt = Field(default=100, description="Number of structures to generate")
+    candidate_multiplier: PositiveInt = Field(
+        default=DEFAULT_CANDIDATE_MULTIPLIER,
+        description="Multiplier for initial candidate pool size"
+    )
     objective: str = Field(default="maximize_entropy", description="Objective function for sampling")
     batch_size: PositiveInt = Field(default=DEFAULT_BATCH_SIZE, description="Batch size for processing")
     descriptor: DescriptorConfig = Field(..., description="Descriptor configuration for sampling")
@@ -51,27 +55,21 @@ class DistillationConfig(BaseModel):
 
     enable_mace_distillation: bool = Field(default=False, description="Enable the 7-step MACE distillation workflow")
 
-    step1_direct_sampling: Step1DirectSamplingConfig = Field(
-        # We cannot use default_factory for 'descriptor' anymore because we removed the hardcoded default.
-        # But DistillationConfig is usually loaded from YAML where 'descriptor' is mandatory if step1 is active.
-        # However, for Pydantic to allow instantiation without providing it (if step 1 is inactive), we need a default or Optional.
-        # Since 'enable_mace_distillation' controls flow, we should make sub-configs Optional or provide sane defaults.
-        # Given "Constitution - No Hardcoding", we should require explicit config for species.
-        # We'll make it Optional with default=None, but validate it's present if enabled.
+    step1_direct_sampling: Step1DirectSamplingConfig | None = Field(
         default=None,
         description="Step 1 configuration"
     )
-    step2_active_learning: Step2ActiveLearningConfig = Field(
-        default_factory=Step2ActiveLearningConfig, description="Step 2 configuration"
+    step2_active_learning: Step2ActiveLearningConfig | None = Field(
+        default=None, description="Step 2 configuration"
     )
-    step3_mace_finetune: Step3MaceFinetuneConfig = Field(
-        default_factory=Step3MaceFinetuneConfig, description="Step 3 configuration"
+    step3_mace_finetune: Step3MaceFinetuneConfig | None = Field(
+        default=None, description="Step 3 configuration"
     )
-    step4_surrogate_sampling: Step4SurrogateSamplingConfig = Field(
-        default_factory=Step4SurrogateSamplingConfig, description="Step 4 configuration"
+    step4_surrogate_sampling: Step4SurrogateSamplingConfig | None = Field(
+        default=None, description="Step 4 configuration"
     )
-    step7_pacemaker_finetune: Step7PacemakerFinetuneConfig = Field(
-        default_factory=Step7PacemakerFinetuneConfig, description="Step 7 configuration"
+    step7_pacemaker_finetune: Step7PacemakerFinetuneConfig | None = Field(
+        default=None, description="Step 7 configuration"
     )
 
     @model_validator(mode="after")
@@ -82,6 +80,10 @@ class DistillationConfig(BaseModel):
         if self.enable_mace_distillation:
             if self.step1_direct_sampling is None:
                  raise ValueError("Step 1 configuration is required when distillation is enabled.")
+            if self.step2_active_learning is None:
+                 raise ValueError("Step 2 configuration is required when distillation is enabled.")
+            if self.step3_mace_finetune is None:
+                 raise ValueError("Step 3 configuration is required when distillation is enabled.")
 
             # Validate Step 1
             if self.step1_direct_sampling.target_points < 10:

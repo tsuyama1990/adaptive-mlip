@@ -208,3 +208,9 @@ LOG_STEP_4 = "Step 4: Surrogate Data Generation"
 LOG_STEP_5 = "Step 5: Surrogate Labeling"
 LOG_STEP_6 = "Step 6: Pacemaker Base Training"
 LOG_STEP_7 = "Step 7: Delta Learning (Fine-tuning with DFT)"
+
+# Active Learning
+# Limit for descriptor array size in bytes (2GB)
+# 2 * 1024^3
+MAX_DESCRIPTOR_ARRAY_BYTES: Final[int] = 2_147_483_648
+DEFAULT_CANDIDATE_MULTIPLIER: Final[int] = 10

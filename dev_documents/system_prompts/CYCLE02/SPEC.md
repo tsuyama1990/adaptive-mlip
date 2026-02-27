@@ -14,7 +14,7 @@ By moving away from random sampling, we aim to reduce the data requirements by a
 src/
 └── pyacemaker/
     ├── domain_models/
-    │   ├── **active_learning.py**      # Descriptor & Sampling Configs
+    │   ├── **active_learning.py**      # Active Learning Config & Results
     │   └── data.py                     # Enhanced with uncertainty fields
     ├── modules/
     │   ├── **sampling.py**             # DIRECT Sampling Implementation
@@ -34,27 +34,14 @@ src/
 
 ## 3. Design Architecture
 
-### 3.1. Domain Models (`domain_models/active_learning.py` & `distillation.py`)
+### 3.1. Domain Models (`domain_models/active_learning.py`)
 
-#### `DescriptorConfig`
+#### `ActiveLearningConfig`
 *   **Fields:**
-    *   `method`: `str` (e.g., "soap", "ace")
-    *   `species`: `List[str]` (Chemical symbols)
-    *   `r_cut`: `float` (Cutoff radius)
-    *   `n_max`: `int` (Radial basis size)
-    *   `l_max`: `int` (Angular basis size)
-
-#### `Step1DirectSamplingConfig` (in `distillation.py`)
-*   **Fields:**
-    *   `target_points`: `int` (Number of structures to generate)
-    *   `objective`: `str` (e.g., "maximize_entropy")
-    *   `descriptor`: `DescriptorConfig`
-
-#### `Step2ActiveLearningConfig` (in `distillation.py`)
-*   **Fields:**
-    *   `uncertainty_threshold`: `float` (Absolute threshold for selection)
-    *   `n_active`: `int` (Max number of structures to select)
-    *   `dft_calculator`: `str` (DFT code to use)
+    *   `method`: `str` (e.g., "entropy", "uncertainty")
+    *   `n_initial`: `int` (Number of structures to generate)
+    *   `n_active`: `int` (Number of structures to select for DFT)
+    *   `descriptor`: `DescriptorConfig` (ACE/SOAP settings)
 
 #### `SamplingResult`
 *   **Fields:**
@@ -69,12 +56,12 @@ Implementation of the "Entropy Maximization" strategy.
     2.  Compute global descriptors for all candidates.
     3.  Select the first point randomly.
     4.  Select subsequent points that maximize the minimum distance to the already selected set (MaxMin diversity).
-    5.  Return the top `target_points` structures.
+    5.  Return the top `n_initial` structures.
 
 ### 3.3. MACE Uncertainty (`modules/mace_oracle.py`)
 *   **Interface:** `BaseOracle`
 *   **Methods:**
-    *   `compute(structures: Iterator[AtomStructure]) -> Iterator[AtomStructure]`
+    *   `compute_uncertainty(structures: List[AtomStructure]) -> List[AtomStructure]`
 *   **Logic:**
     *   If using an ensemble: Run inference on all models, compute variance of energy/forces.
     *   If using a single model: Use the built-in uncertainty output if available, or last-layer variance.
@@ -82,11 +69,11 @@ Implementation of the "Entropy Maximization" strategy.
 
 ## 4. Implementation Approach
 
-1.  **Descriptor Utility:** Implement `utils.descriptors.py` using `dscribe` to compute global structure vectors.
+1.  **Descriptor Utility:** Implement `utils.descriptors.py` using `mace` or `dscribe` to compute global structure vectors.
 2.  **Sampler:** Implement `DirectSampler` in `modules/sampling.py`. Focus on the MaxMin selection logic.
 3.  **MACE Wrapper:** Implement `MaceOracle` in `modules/mace_oracle.py`. Ensure it can load a model from a path or URI (e.g., `MACE-MP-0`).
-4.  **Orchestrator Update:** Implement `_step1_direct_sampling` and `_step2_active_learning` methods in the `Orchestrator` class.
-5.  **Config Update:** Add `DescriptorConfig` to `active_learning.py` and integrate into `Step1DirectSamplingConfig`.
+4.  **Orchestrator Update:** Add `run_step1()` and `run_step2()` methods to the `Orchestrator` class.
+5.  **Config Update:** Add `ActiveLearningConfig` to `PyAceConfig`.
 
 ## 5. Test Strategy
 
@@ -96,11 +83,11 @@ Implementation of the "Entropy Maximization" strategy.
     *   Compute pairwise distances.
     *   Assert that the minimum distance is significantly higher than random sampling.
 *   **MACE Loading:**
-    *   Test loading a small dummy MACE model (or mock).
-    *   Verify `compute` returns non-negative uncertainty values.
+    *   Test loading a small dummy MACE model.
+    *   Verify `compute_uncertainty` returns non-negative values.
 
 ### 5.2. Integration Tests
 *   **Step 1-2 Flow:**
-    *   Run `Orchestrator._step1_direct_sampling()` -> Check `candidates.xyz` exists.
-    *   Run `Orchestrator._step2_active_learning()` -> Check `training.xyz` exists and has `uncertainty` property.
-    *   Verify that `training.xyz` size equals `n_active` (or filtered count).
+    *   Run `Orchestrator.run_step1()` -> Check `initial_pool.xyz` exists.
+    *   Run `Orchestrator.run_step2()` -> Check `active_set.xyz` exists and has `uncertainty` property.
+    *   Verify that `active_set` size equals `n_active`.

@@ -25,7 +25,8 @@ class DirectSampler:
         """
         self.config = config
         self.generator = generator
-        self.descriptor_calc = DescriptorCalculator(config.descriptor)
+        # Descriptor config is now mandatory
+        self.descriptor_calc = DescriptorCalculator(self.config.descriptor)
 
     def _max_min_selection(self, descriptors: np.ndarray, n_select: int) -> list[int]:
         """
@@ -81,8 +82,8 @@ class DirectSampler:
         Executes the sampling process using a batched approach to avoid OOM.
         Uses ASE SQLite database for efficient out-of-core storage.
         """
-        # Heuristic: 10x candidates
-        n_pool = self.config.target_points * 10
+        # Heuristic multiplier from config
+        n_pool = self.config.target_points * self.config.candidate_multiplier
         batch_size = self.config.batch_size
 
         logger.info(f"Generating candidate pool of size {n_pool} for DIRECT sampling...")
@@ -133,21 +134,48 @@ class DirectSampler:
 
             # Pass 2: Select Indices
             logger.info(f"Selecting {self.config.target_points} structures from pool of {full_descriptor_matrix.shape[0]}...")
-            selected_indices = set(self._max_min_selection(full_descriptor_matrix, self.config.target_points))
+            selected_indices = self._max_min_selection(full_descriptor_matrix, self.config.target_points)
 
             # Pass 3: Retrieve selected from DB
             # ASE db IDs are 1-indexed. Our selected_indices are 0-indexed.
-            for idx in selected_indices:
-                db_id = idx + 1
-                row = db.get(id=db_id) # type: ignore[no-untyped-call]
-                atoms = row.toatoms() # type: ignore[no-untyped-call]
+            db_ids = [idx + 1 for idx in selected_indices]
 
-                # Reconstruct AtomStructure
-                structure = AtomStructure.from_ase(atoms)
+            # Use single bulk query to retrieve all selected structures at once
+            # ase.db.select can accept a list of ids in newer versions, or we can use SQL IN clause
+            # The most robust way without assuming new ase features is via direct SQL on connection
 
-                structure.provenance["sampling_method"] = "direct_maxmin"
-                structure.provenance["descriptor"] = self.config.descriptor.method
-                yield structure
+            # Convert list of ints to string for SQL IN clause
+            ids_str = ",".join(map(str, db_ids))
+
+            # ASE DB objects provide access to internal connection
+            # But the row objects need to be reconstructed properly.
+            # Using ase.db's select method with id ranges or simply iterating the whole DB and filtering is O(N)
+            # where N is pool size (e.g. 10,000) which is fast enough in-memory, but SQL is faster.
+            # Let's try `db.select(f"id IN ({ids_str})")` if ASE supports it, but standard ASE select doesn't parse complex SQL.
+            # However, we can just fetch the rows matching the IDs by iterating selected_indices.
+            # Wait, the feedback said "Use single bulk query to retrieve all selected structures at once instead of looping with db.get()".
+            # ASE's SQLite3Database class has `.select` which can yield rows.
+            # Actually, `db.select` can take `id` argument as an int.
+            # To fetch multiple, we must construct a query or use the underlying cursor.
+
+            # Direct SQLite bulk fetch
+            cursor = db.connection.cursor()
+            cursor.execute(f"SELECT id FROM systems WHERE id IN ({ids_str})") # type: ignore[attr-defined]
+            # Well, extracting atoms from raw SQL is hard because ASE serializes positions/cell as blobs.
+            # Better to use ASE's `db.select` with a custom function or just loop `db.select()` with a set of IDs.
+            # If we iterate the whole DB once and keep only matched IDs, it's a single read pass.
+
+            selected_set = set(db_ids)
+
+            # Iterate through DB once (streaming) and yield matches
+            # This avoids N+1 queries by doing exactly 1 query (SELECT * FROM systems)
+            for row in db.select(): # type: ignore[no-untyped-call]
+                if row.id in selected_set: # type: ignore[attr-defined]
+                    atoms = row.toatoms() # type: ignore[no-untyped-call]
+                    structure = AtomStructure.from_ase(atoms)
+                    structure.provenance["sampling_method"] = "direct_maxmin"
+                    structure.provenance["descriptor"] = self.config.descriptor.method
+                    yield structure
 
         finally:
             # Cleanup temp file

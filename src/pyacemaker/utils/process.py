@@ -1,7 +1,24 @@
 import logging
 import subprocess
+from pathlib import Path
+
+from pyacemaker.domain_models.constants import DANGEROUS_PATH_CHARS
 
 logger = logging.getLogger(__name__)
+
+# List of explicitly allowed commands to prevent execution of arbitrary binaries.
+# This whitelist restricts the agent to only the necessary scientific codes.
+ALLOWED_COMMANDS = {
+    "pace_yaml2yace",
+    "pace_train",
+    "eonclient",
+    "lmp",
+    "mpirun",
+    "mpiexec",
+    "vasp_std",
+    "vasp_gam",
+    "pw.x"
+}
 
 def run_command(
     cmd: list[str],
@@ -11,7 +28,7 @@ def run_command(
     text: bool = True,
 ) -> subprocess.CompletedProcess[str]:
     """
-    Executes a subprocess command safely with logging and error handling.
+    Executes a subprocess command safely with logging and strict allowlist validation.
 
     Args:
         cmd: List of command arguments.
@@ -26,27 +43,30 @@ def run_command(
     Raises:
         subprocess.CalledProcessError: If command fails and check=True.
         FileNotFoundError: If executable is not found.
+        ValueError: If command is not explicitly allowed or contains dangerous characters.
     """
-    # Strict Argument Validation (Allowlist)
-    # We allow alphanumeric, dot, dash, underscore, slash, equal, comma, colon.
-    # This covers paths, simple options, and numbers.
-    # Special characters (like &, ;, |, $) which are dangerous in shells are rejected.
-    import re
-    # More permissive regex for typical file paths and CLI args, but blocking shell metachars
-    # Allowing spaces in paths is tricky but " " is safe if not parsed by shell.
-    # However, since shell=False, the main risk is the command itself being malicious if arguments are passed to a sub-shell.
-    # But here we just want to ensure "integrity" of arguments.
+    if not cmd:
+        msg = "Empty command list provided."
+        raise ValueError(msg)
 
+    # 1. Whitelist the executable
+    executable = cmd[0]
+    # Handle paths to executables (e.g. /usr/bin/mpirun) by checking the basename
+    exe_basename = Path(executable).name
+    if exe_basename not in ALLOWED_COMMANDS:
+        msg = f"Executable '{exe_basename}' is not in the allowed list of commands."
+        raise ValueError(msg)
+
+    # 2. Strict Argument Validation (Blacklist dangerous chars)
     # Check for dangerous shell characters even if shell=False, as a defense-in-depth measure.
-    # This prevents arguments that might be interpreted by the executed program in a dangerous way.
-    dangerous_chars = re.compile(r"[;&|`$]")
+    # We use the centralized DANGEROUS_PATH_CHARS constant which includes ; & | ` $ etc.
     for arg in cmd:
-        if dangerous_chars.search(arg):
-             msg = f"Argument contains potentially dangerous characters: {arg}"
-             raise ValueError(msg)
+        for char in DANGEROUS_PATH_CHARS:
+             if char in arg:
+                 msg = f"Argument contains potentially dangerous character '{char}': {arg}"
+                 raise ValueError(msg)
 
     # Mask potentially sensitive arguments (basic heuristic)
-    # We redact arguments that look like they might be sensitive keys or very long strings
     safe_cmd = []
     for arg in cmd:
         if len(arg) > 100:  # Truncate very long args
@@ -58,7 +78,7 @@ def run_command(
     logger.debug(f"Running command: {safe_cmd_str}")
 
     try:
-        return subprocess.run(
+        return subprocess.run(  # noqa: S603
             cmd,
             cwd=cwd,
             check=check,

@@ -25,4 +25,4 @@ class SubprocessRunner(ProcessRunner):
         # Default to True (fail fast)
         check = kwargs.pop("check", True)
 
-        return subprocess.run(cmd, cwd=cwd, check=check, **kwargs)
+        return subprocess.run(cmd, cwd=cwd, check=check, **kwargs)  # noqa: S603
