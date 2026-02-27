@@ -17,10 +17,11 @@ class StateManager:
     Manages persistence of the active learning loop state.
     """
 
-    def __init__(self, state_file: Path, logger: Logger) -> None:
+    def __init__(self, state_file: Path, logger: Logger, checkpoint_interval: int = 1) -> None:
         self.state_file = state_file
         self.logger = logger
         self.state = LoopState()
+        self.checkpoint_interval = checkpoint_interval
         self._last_saved_state_dump: dict[str, Any] | None = None
 
     def load(self) -> None:
@@ -34,11 +35,23 @@ class StateManager:
             self.state = LoopState()
             self._last_saved_state_dump = None
 
-    def save(self) -> None:
-        """Saves the current iteration state."""
+    def save(self, force: bool = False) -> None:
+        """
+        Saves the current iteration state.
+
+        Args:
+            force: If True, bypasses dirty check and checkpoint interval (but still respects
+                   duplicate save check if state hasn't changed, unless we want to force disk write).
+                   Actually, dirty check logic: if state matches last saved dump, we skip.
+        """
         try:
             current_dump = self.state.model_dump(mode="json")
             if current_dump == self._last_saved_state_dump:
+                return
+
+            # Throttling: Only save if interval met or forced
+            # iteration 0 always saves (0 % N == 0).
+            if not force and self.state.iteration > 0 and self.state.iteration % self.checkpoint_interval != 0:
                 return
 
             self.state.save(self.state_file)

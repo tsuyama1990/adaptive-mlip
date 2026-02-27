@@ -10,12 +10,17 @@ DEFAULT_ACTIVE_LEARNING_DIR = "active_learning"
 DEFAULT_POTENTIALS_DIR = "potentials"
 DEFAULT_PRODUCTION_DIR = "production"
 # Default batch size for streaming operations.
-# Small value (5) chosen to keep memory usage low (O(N_atoms * batch))
-# while maintaining reasonable I/O efficiency.
+# 5 structures is small enough to avoid memory spikes even with large systems (e.g. 10k atoms * 5 = 50k atoms).
+# It allows frequent enough writes to disk to prevent data loss during long generation steps.
 DEFAULT_BATCH_SIZE = 5
-# Number of candidates to generate in legacy loop
+
+# Default candidates count for legacy loop.
+# 10 provides a reasonable exploration/exploitation balance for initial testing.
 DEFAULT_N_CANDIDATES = 10
-# Save state every N iterations to prevent data loss
+
+# Checkpoint interval: 1 means save every iteration.
+# Since iterations involve expensive MD/DFT, losing progress is costly.
+# Saving every step is recommended.
 DEFAULT_CHECKPOINT_INTERVAL = 1
 
 # EON Defaults

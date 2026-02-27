@@ -67,7 +67,11 @@ class Orchestrator:
         self.logger = setup_logger(config=config.logging, project_name=config.project_name)
 
         # Initialize Managers
-        self.state_manager = StateManager(Path(config.workflow.state_file_path), self.logger)
+        self.state_manager = StateManager(
+            Path(config.workflow.state_file_path),
+            self.logger,
+            checkpoint_interval=config.workflow.checkpoint_interval,
+        )
         self.dir_manager = DirectoryManager(Path(config.workflow.active_learning_dir), self.logger)
 
         self.data_dir = Path(config.workflow.data_dir)
@@ -148,6 +152,9 @@ class Orchestrator:
 
         mode = "a" if append else "w"
 
+        if batch_size <= 0:
+            raise OrchestratorError("Batch size must be positive")
+
         # Buffer a chunk of Atoms objects to write at once using ASE's list write support
         # This reduces I/O calls compared to writing one by one.
         buffer: list[Atoms] = []
@@ -169,8 +176,11 @@ class Orchestrator:
                     write(f, buffer, format="extxyz")
                     count += len(buffer)
                     buffer.clear()
+        except OSError as e:
+            msg = f"I/O error during streaming write to {filepath}: {e}"
+            raise OrchestratorError(msg) from e
         except Exception as e:
-            msg = f"Streaming write failed to {filepath}: {e}"
+            msg = f"Unexpected error during streaming write to {filepath}: {e}"
             raise OrchestratorError(msg) from e
 
         return count
@@ -672,14 +682,14 @@ class Orchestrator:
         for i in range(start_index, len(steps)):
             step_enum, step_func = steps[i]
             self.state_manager.current_step = step_enum
-            self.state_manager.save()
+            self.state_manager.save(force=True)
 
             try:
                 step_func()
             except Exception as e:
                 self.logger.error(f"Failed at step {step_enum}: {e}")
                 self.state_manager.state.status = LoopStatus.HALTED
-                self.state_manager.save()
+                self.state_manager.save(force=True)
                 raise
 
     def run(self) -> None:

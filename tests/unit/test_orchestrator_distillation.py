@@ -26,6 +26,9 @@ def mock_config() -> MagicMock:
     config.workflow.active_learning_dir = "active_learning"
     config.workflow.data_dir = "data"
     config.workflow.potentials_dir = "potentials"
+    config.workflow.batch_size = 5
+    config.workflow.checkpoint_interval = 1
+    config.distillation.step1_direct_sampling.target_points = 100
 
     # Logging config
     config.logging = MagicMock()

@@ -43,6 +43,12 @@ class LoopState(BaseModel):
     def validate_potential_path(cls, v: Path | None) -> Path | None:
         """Ensures that if a potential path is set, it exists, is a file, and is safe."""
         if v is not None:
+            # Strict security: Disallow symbolic links to prevent potential ambiguity or traversal tricks
+            # even before resolution.
+            if Path(v).is_symlink():
+                msg = f"Potential path cannot be a symbolic link: {v}"
+                raise ValueError(msg)
+
             # Resolve to absolute path to prevent traversal/ambiguity
             try:
                 path = Path(v).resolve(strict=True)

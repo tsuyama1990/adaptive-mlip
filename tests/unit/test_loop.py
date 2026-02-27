@@ -75,7 +75,9 @@ def test_loop_state_validation_path_traversal(tmp_path: Path) -> None:
             # Mock gettempdir to fail the whitelist check
             mp.setattr(tempfile, "gettempdir", lambda: "/nonexistent_temp")
 
-            with pytest.raises(ValueError, match="outside the project directory"):
+            # Match generic "outside the allowed directory" message or "project directory" if old msg?
+            # My update changed it to: "Potential path {path} is outside the allowed directory {base}"
+            with pytest.raises(ValueError, match="outside the allowed directory"):
                 LoopState(current_potential=unsafe_file)
     finally:
         os.chdir(cwd)
