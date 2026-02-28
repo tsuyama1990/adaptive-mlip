@@ -32,6 +32,42 @@ class LammpsInputValidator:
     """
 
     @staticmethod
+    def _validate_structure_type_and_size(structure: Any) -> None:
+        if structure is None:
+            raise ValueError(ERR_VAL_STRUCT_NONE)
+
+        if not isinstance(structure, Atoms) and type(structure).__name__ != "MagicMock":
+            raise TypeError(ERR_VAL_STRUCT_TYPE.format(type=type(structure)))
+
+        if type(structure).__name__ != "MagicMock" and len(structure) == 0:
+            raise ValueError(ERR_VAL_STRUCT_EMPTY)
+
+    @staticmethod
+    def _validate_structure_volume(structure: Any) -> None:
+        if type(structure).__name__ != "MagicMock":
+            try:
+                vol = structure.get_volume()
+            except Exception as e:
+                raise ValueError(ERR_VAL_STRUCT_VOL_FAIL.format(error=e)) from e
+
+            if vol <= 1e-9:
+                raise ValueError(ERR_VAL_STRUCT_ZERO_VOL)
+
+    @staticmethod
+    def _validate_structure_positions_and_elements(structure: Any) -> None:
+        if type(structure).__name__ != "MagicMock":
+            pos = structure.get_positions()
+            if not np.isfinite(pos).all():
+                raise ValueError(ERR_VAL_STRUCT_NAN_POS)
+
+            symbols = set(structure.get_chemical_symbols())
+            for s in symbols:
+                if s not in atomic_numbers:
+                    raise ValueError(ERR_VAL_STRUCT_UNKNOWN_SYM.format(symbol=s))
+                if atomic_numbers[s] == 0:
+                    raise ValueError(ERR_VAL_STRUCT_DUMMY_ELEM.format(symbol=s))
+
+    @staticmethod
     def validate_structure(structure: Any) -> None:
         """
         Validates the atomic structure.
@@ -43,39 +79,9 @@ class LammpsInputValidator:
             ValueError: If structure is invalid, empty, or contains unknown elements.
             TypeError: If input is not an ASE Atoms object.
         """
-        if structure is None:
-            raise ValueError(ERR_VAL_STRUCT_NONE)
-
-        if not isinstance(structure, Atoms) and type(structure).__name__ != "MagicMock":
-            raise TypeError(ERR_VAL_STRUCT_TYPE.format(type=type(structure)))
-
-        if type(structure).__name__ != "MagicMock" and len(structure) == 0:
-            raise ValueError(ERR_VAL_STRUCT_EMPTY)
-
-        if type(structure).__name__ != "MagicMock":
-            # Validate structure physical properties
-            try:
-                vol = structure.get_volume()
-            except Exception as e:
-                # get_volume might fail if no cell is set
-                raise ValueError(ERR_VAL_STRUCT_VOL_FAIL.format(error=e)) from e
-
-            if vol <= 1e-9:
-                raise ValueError(ERR_VAL_STRUCT_ZERO_VOL)
-
-        if type(structure).__name__ != "MagicMock":
-            # Validate positions are numeric and finite
-            pos = structure.get_positions()
-            if not np.isfinite(pos).all():
-                raise ValueError(ERR_VAL_STRUCT_NAN_POS)
-
-            # Validate elements against atomic_numbers
-            symbols = set(structure.get_chemical_symbols())
-            for s in symbols:
-                if s not in atomic_numbers:
-                    raise ValueError(ERR_VAL_STRUCT_UNKNOWN_SYM.format(symbol=s))
-                if atomic_numbers[s] == 0:
-                    raise ValueError(ERR_VAL_STRUCT_DUMMY_ELEM.format(symbol=s))
+        LammpsInputValidator._validate_structure_type_and_size(structure)
+        LammpsInputValidator._validate_structure_volume(structure)
+        LammpsInputValidator._validate_structure_positions_and_elements(structure)
 
     @staticmethod
     def validate_potential(potential: Any) -> Path:

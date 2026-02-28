@@ -1,5 +1,4 @@
 import shlex
-from functools import lru_cache
 from pathlib import Path
 from typing import TextIO
 
@@ -19,25 +18,26 @@ class LammpsScriptGenerator:
 
     def __init__(self, config: MDConfig) -> None:
         self.config = config
-        # Use lru_cache for methods instead of manual dict
-        self._atomic_numbers_cache = {}
+        self._atomic_numbers_cache: dict[str, int] = {}
+        self._quote_cache: dict[str, str] = {}
 
-    @lru_cache(maxsize=128)
     def _get_atomic_number(self, symbol: str) -> int:
         """Cached atomic number lookup."""
-        return atomic_numbers[symbol]
+        if symbol not in self._atomic_numbers_cache:
+            self._atomic_numbers_cache[symbol] = atomic_numbers[symbol]
+        return self._atomic_numbers_cache[symbol]
 
-    @lru_cache(maxsize=128)
     def _quote(self, path: str) -> str:
         """
         Quotes a path for LAMMPS script safety after validation.
         Uses caching to avoid redundant validation calls.
         """
-        # Sanitize input path
-        # Note: path must be string for lru_cache
-        safe_path = validate_path_safe(Path(path))
-        # Use shlex.quote for shell safety
-        return shlex.quote(str(safe_path))
+        if path not in self._quote_cache:
+            # Sanitize input path
+            safe_path = validate_path_safe(Path(path))
+            # Use shlex.quote for shell safety
+            self._quote_cache[path] = shlex.quote(str(safe_path))
+        return self._quote_cache[path]
 
     def _gen_potential_pure(
         self, buffer: TextIO, potential_path: Path, elements: list[str]

@@ -1,10 +1,10 @@
+from itertools import islice
+
 import numpy as np
 import pytest
 from ase import Atoms
 
 from pyacemaker.core.exceptions import GeneratorError
-from itertools import islice
-
 from pyacemaker.core.generator import StructureGenerator
 from pyacemaker.domain_models.structure import ExplorationPolicy, StructureConfig
 

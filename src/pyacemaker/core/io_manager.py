@@ -75,12 +75,12 @@ class LammpsFileManager:
                 elements = get_species_order(structure)
                 self._write_structure_memory(structure, data_file, elements)
 
-            return temp_dir_ctx, data_file, dump_file, log_file, elements
-
         except Exception:
             # Clean up if setup fails
             temp_dir_ctx.cleanup()
             raise
+        else:
+            return temp_dir_ctx, data_file, dump_file, log_file, elements
 
     def _write_structure_memory(
         self, structure: Atoms, output_path: Path, elements: list[str]

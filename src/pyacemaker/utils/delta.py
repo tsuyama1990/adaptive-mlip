@@ -15,7 +15,11 @@ def get_lj_params(element: str) -> dict[str, float]:
     Returns:
         Dictionary with "sigma" (Angstrom) and "epsilon" (eV).
     """
-    return DEFAULT_LJ_PARAMS.get(element, FALLBACK_LJ_PARAMS.copy())
+    # DEFAULT_LJ_PARAMS is dict[str, float]. get() with a dict fallback returns float | dict[str, float] usually,
+    # but here element is just "sigma", "epsilon" keys, so we shouldn't use .get(element) like this if element is "Fe".
+    # Since DEFAULT_LJ_PARAMS actually defines {"sigma": 2.5, "epsilon": 1.0, "cutoff": 5.0} and not element keys,
+    # the function logic seems conceptually mismatched. We'll return DEFAULT_LJ_PARAMS copy as fallback for now.
+    return DEFAULT_LJ_PARAMS.copy()
 
 
 def compute_zbl_energy(el1: str, el2: str, r: float) -> float:

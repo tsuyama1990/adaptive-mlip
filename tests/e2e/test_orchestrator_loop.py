@@ -14,7 +14,7 @@ from pyacemaker.domain_models.md import MDSimulationResult
 from pyacemaker.orchestrator import Orchestrator
 
 
-class FakeGenerator(BaseGenerator):
+class FakeGenerator(BaseGenerator): # type: ignore[misc]
     def __init__(self, elements: list[str] | None = None) -> None:
         self.elements = elements or ["H"]
 
@@ -102,9 +102,8 @@ def orchestrator(mock_config: PyAceConfig, tmp_path: Path) -> Orchestrator:
 
 
 def test_cold_start(orchestrator: Orchestrator, tmp_path: Path) -> None:
-    # Inject loop_state
-    if not hasattr(orchestrator, "loop_state"):
-        orchestrator.loop_state = LoopState()
+    # Access state via state_manager instead of loop_state to bypass read-only restriction
+    # Inject state if necessary
 
     # Setup mocks
     assert orchestrator.oracle is not None
@@ -124,7 +123,7 @@ def test_cold_start(orchestrator: Orchestrator, tmp_path: Path) -> None:
     orchestrator._check_initial_potential()
 
     # Verify
-    assert orchestrator.loop_state.current_potential == initial_pot
+    assert orchestrator.state_manager.current_potential == initial_pot
     # generator.generate called internally
     orchestrator.oracle.compute.assert_called_once()
     orchestrator.trainer.train.assert_called_once()
@@ -146,20 +145,15 @@ def test_resume_capability(mock_config: PyAceConfig, tmp_path: Path) -> None:
         mp.setattr("pyacemaker.orchestrator.setup_logger", lambda **kwargs: MagicMock())
         new_orch = Orchestrator(mock_config)
 
-    if hasattr(new_orch, "loop_state"):
-        assert new_orch.loop_state.iteration == 1
-        assert new_orch.loop_state.current_potential == pot_path
-    else:
-        pytest.fail("Orchestrator does not have loop_state attribute")
+    assert new_orch.state_manager.iteration == 1
+    assert new_orch.state_manager.current_potential == pot_path
 
 
 def test_run_loop_iteration_halt(orchestrator: Orchestrator, tmp_path: Path) -> None:
-    # Inject loop_state
-    if not hasattr(orchestrator, "loop_state"):
-        orchestrator.loop_state = LoopState()
-
-    orchestrator.loop_state.current_potential = tmp_path / "current.yace"
-    orchestrator.loop_state.current_potential.touch()
+    # Access state via state_manager
+    orchestrator.state_manager.current_potential = tmp_path / "current.yace"
+    if orchestrator.state_manager.current_potential:
+        orchestrator.state_manager.current_potential.touch()
 
     # Mock MD halt
     halt_path = tmp_path / "halt.xyz"
@@ -199,7 +193,7 @@ def test_run_loop_iteration_halt(orchestrator: Orchestrator, tmp_path: Path) -> 
     orchestrator._run_loop_iteration()
 
     # Verify
-    assert orchestrator.loop_state.iteration == 1
-    assert orchestrator.loop_state.current_potential == refined_pot
+    assert orchestrator.state_manager.iteration == 1
+    assert orchestrator.state_manager.current_potential == refined_pot
     orchestrator.engine.run.assert_called()
     orchestrator.trainer.train.assert_called()
