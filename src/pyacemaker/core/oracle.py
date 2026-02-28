@@ -72,43 +72,28 @@ class DFTManager(BaseOracle):
 
     def _compute_generator(self, structures: Iterator[Atoms], batch_size: int) -> Iterator[Atoms]:
         """Internal generator for streaming computations with batching."""
-        # Use batched processing (chunking) to reuse temporary directories
-        # without materializing the whole batch in memory list.
-        # However, islice consumes the iterator.
+        # Check if iterator is initially empty (optional but helpful for early warnings)
+        try:
+            first_item = next(structures)
+        except StopIteration:
+            import warnings
+            warnings.warn("Oracle received empty iterator", UserWarning, stacklevel=2)
+            return
+
+        def chained_structures() -> Iterator[Atoms]:
+            yield first_item
+            yield from structures
+
+        structures_iter = chained_structures()
 
         while True:
-            # Create a batch generator (iterator slice)
-            # Note: list(islice(...)) materializes the batch.
-            # To avoid materializing even the batch if batch_size is huge, we should process one by one
-            # BUT reuse the context.
-            # The audit requirement was: "DFTManager.compute method accepts batch_size parameter but ignores it... Implement proper batching logic"
-            # Batching usually implies grouping. If we process 1 by 1 inside a loop of batch_size, we achieve the goal.
-
-            # We can use a single temp dir for 'batch_size' items.
-            # But since we want to yield as soon as one is done, we iterate `batch_size` times.
-
-            # Since we can't easily peek existence of next item without consuming,
-            # we iterate until exhaustion.
-
-            # Efficient pattern:
-            # Create temp dir. Process N items. Close temp dir. Repeat.
-
-            # Check if there are items left?
-            # We can just try to take `batch_size` items.
-            # list(islice) is standard but creates a list of `batch_size`.
-            # If batch_size is small (e.g. 10-100), this is fine.
-            # If batch_size is huge (unlikely default), it might be an issue.
-            # Let's assume batch_size is reasonable (10-1000).
-
-            batch = list(islice(structures, batch_size))
+            batch = list(islice(structures_iter, batch_size))
             if not batch:
                 break
 
             with tempfile.TemporaryDirectory() as work_dir:
                 work_path = Path(work_dir)
                 for i, atoms in enumerate(batch):
-                    # Use unique subdirs or filenames to avoid collision if artifacts persist
-                    # though we process sequentially here.
                     calc_dir = work_path / f"calc_{i}"
                     calc_dir.mkdir()
                     yield self._process_structure(atoms, str(calc_dir))
