@@ -1,12 +1,15 @@
 import shlex
-from functools import lru_cache
 from pathlib import Path
 from typing import TextIO
 
 from ase.data import atomic_numbers
 
-from pyacemaker.domain_models.constants import LAMMPS_MIN_STYLE_CG
-from pyacemaker.domain_models.md import MDConfig
+from pyacemaker.domain_models.constants import (
+    LAMMPS_MIN_STYLE_CG,
+    LAMMPS_PAIR_STYLE_HYBRID_PACE_ZBL,
+    LAMMPS_PAIR_STYLE_PACE,
+)
+from pyacemaker.domain_models.md import HybridParams, MDConfig
 from pyacemaker.utils.path import validate_path_safe
 
 
@@ -19,25 +22,29 @@ class LammpsScriptGenerator:
 
     def __init__(self, config: MDConfig) -> None:
         self.config = config
-        # Use lru_cache for methods instead of manual dict
-        self._atomic_numbers_cache = {}
+        self._atomic_numbers_cache: dict[str, int] = {}
+        self._quote_cache: dict[str, str] = {}
 
-    @lru_cache(maxsize=128)
     def _get_atomic_number(self, symbol: str) -> int:
         """Cached atomic number lookup."""
-        return atomic_numbers[symbol]
+        if symbol not in self._atomic_numbers_cache:
+            self._atomic_numbers_cache[symbol] = atomic_numbers[symbol]
+        return self._atomic_numbers_cache[symbol]
 
-    @lru_cache(maxsize=128)
     def _quote(self, path: str) -> str:
         """
         Quotes a path for LAMMPS script safety after validation.
         Uses caching to avoid redundant validation calls.
         """
-        # Sanitize input path
-        # Note: path must be string for lru_cache
-        safe_path = validate_path_safe(Path(path))
-        # Use shlex.quote for shell safety
-        return shlex.quote(str(safe_path))
+        if path not in self._quote_cache:
+            # Sanitize input path
+            safe_path = validate_path_safe(Path(path))
+            # Use shlex.quote for shell safety
+            quoted = shlex.quote(str(safe_path))
+            # Validate the quoted path doesn't introduce vulnerabilities
+            validate_path_safe(Path(quoted.strip("'\"")))
+            self._quote_cache[path] = quoted
+        return self._quote_cache[path]
 
     def _gen_potential_pure(
         self, buffer: TextIO, potential_path: Path, elements: list[str]
@@ -45,41 +52,35 @@ class LammpsScriptGenerator:
         """Generates pure PACE potential commands."""
         species_str = " ".join(elements)
         quoted_pot = self._quote(str(potential_path))
-        buffer.write("pair_style pace\n")
+        buffer.write(f"{LAMMPS_PAIR_STYLE_PACE}\n")
         buffer.write(f"pair_coeff * * pace {quoted_pot} {species_str}\n")
 
     def _gen_potential_hybrid(
-        self, buffer: TextIO, potential_path: Path, elements: list[str]
+        self, buffer: TextIO, potential_path: Path, elements: list[str], params: HybridParams
     ) -> None:
         """Generates hybrid PACE + ZBL potential commands."""
         species_str = " ".join(elements)
         quoted_pot = self._quote(str(potential_path))
-        params = self.config.hybrid_params
 
-        buffer.write(
-            f"pair_style hybrid/overlay pace zbl {params.zbl_cut_inner} {params.zbl_cut_outer}\n"
+        pair_style = LAMMPS_PAIR_STYLE_HYBRID_PACE_ZBL.format(
+            inner=params.zbl_cut_inner, outer=params.zbl_cut_outer
         )
+        buffer.write(f"{pair_style}\n")
         buffer.write(f"pair_coeff * * pace {quoted_pot} {species_str}\n")
 
         n_types = len(elements)
 
-        # Optimize loop string concatenation
-        # Use list comprehension for ZBL pairs
-        zbl_lines = []
-        for i in range(n_types):
-            el_i = elements[i]
-            z_i = self._get_atomic_number(el_i)
-            for j in range(i, n_types):
-                el_j = elements[j]
-                z_j = self._get_atomic_number(el_j)
-                zbl_lines.append(f"pair_coeff {i + 1} {j + 1} zbl {z_i} {z_j}\n")
-
-        buffer.writelines(zbl_lines)
+        # Optimization: Use generator expression for O(1) memory overhead and direct writes
+        buffer.writelines(
+            f"pair_coeff {i + 1} {j + 1} zbl {self._get_atomic_number(elements[i])} {self._get_atomic_number(elements[j])}\n"
+            for i in range(n_types)
+            for j in range(i, n_types)
+        )
 
     def _gen_potential(self, buffer: TextIO, potential_path: Path, elements: list[str]) -> None:
         """Generates potential definition commands."""
         if self.config.hybrid_potential:
-            self._gen_potential_hybrid(buffer, potential_path, elements)
+            self._gen_potential_hybrid(buffer, potential_path, elements, self.config.hybrid_params)
         else:
             self._gen_potential_pure(buffer, potential_path, elements)
 

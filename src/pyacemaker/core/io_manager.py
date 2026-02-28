@@ -2,10 +2,8 @@ import logging
 import tempfile
 import uuid
 from pathlib import Path
-from typing import Any
 
 from ase import Atoms
-from ase.io import write
 
 from pyacemaker.domain_models.md import MDConfig
 from pyacemaker.utils.io import write_lammps_streaming
@@ -25,7 +23,7 @@ class LammpsFileManager:
 
     def prepare_workspace(
         self, structure: Atoms | str | Path
-    ) -> tuple[Any, Path, Path, Path, list[str]]:
+    ) -> tuple[tempfile.TemporaryDirectory[str], Path, Path, Path, list[str]]:
         """
         Creates temporary directory and writes structure file.
 
@@ -54,63 +52,46 @@ class LammpsFileManager:
 
             # Handle different input types
             if isinstance(structure, (str, Path)):
-                # Load only the first frame to minimize memory usage
-                from ase.io import iread
+                # Security: Validate input path before processing
+                from pyacemaker.utils.path import validate_path_safe
+                safe_structure_path = validate_path_safe(Path(structure))
 
-                try:
-                    atoms_iter = iread(str(structure))
-                    first_frame = next(atoms_iter)
-                except StopIteration:
-                    msg = f"Input structure file {structure} is empty."
-                    raise ValueError(msg) from None
-                except Exception as e:
-                    msg = f"Failed to read structure from {structure}: {e}"
-                    raise ValueError(msg) from e
+                # 100% Streaming approach: Do not load any Atoms objects.
+                from pyacemaker.utils.io import detect_elements, stream_extxyz_to_lammps
 
-                elements = get_species_order(first_frame)
-                self._write_structure_memory(first_frame, data_file, elements)
+                elements = detect_elements(safe_structure_path, max_frames=1)
+                with data_file.open("w") as f:
+                    stream_extxyz_to_lammps(safe_structure_path, f, elements)
 
             else:
                 # It's an Atoms object.
                 elements = get_species_order(structure)
                 self._write_structure_memory(structure, data_file, elements)
 
-            return temp_dir_ctx, data_file, dump_file, log_file, elements
-
         except Exception:
             # Clean up if setup fails
             temp_dir_ctx.cleanup()
             raise
+        else:
+            return temp_dir_ctx, data_file, dump_file, log_file, elements
+
+    @staticmethod
+    def _raise_value_error(msg: str) -> None:
+        raise ValueError(msg)
 
     def _write_structure_memory(
         self, structure: Atoms, output_path: Path, elements: list[str]
     ) -> None:
-        """Writes structure to disk using streaming writer if possible."""
+        """Writes structure to disk using streaming writer."""
         try:
-            # Memory Safety Fix: Always attempt streaming first if atom_style allows
-            streaming_success = False
-            if self.config.atom_style == "atomic":
-                try:
-                    with output_path.open("w") as f:
-                        write_lammps_streaming(f, structure, elements)
-                    streaming_success = True
-                    logger.debug("Successfully wrote LAMMPS data file using streaming.")
-                except ValueError as e:
-                    logger.debug("Streaming write skipped: %s. Falling back to ASE.", e)
+            # Memory Safety Fix: Always use streaming. ASE fallback removed per strictly streaming constraints.
+            if self.config.atom_style != "atomic":
+                msg = f"Atom style {self.config.atom_style} is not supported by streaming writer. Only 'atomic' is currently supported to prevent OOM errors."
+                LammpsFileManager._raise_value_error(msg)
 
-            if not streaming_success:
-                if len(structure) > 1000000:
-                    logger.warning(
-                        "Falling back to ASE write for large structure (%d atoms). Memory usage may be high.",
-                        len(structure),
-                    )
-                write(
-                    str(output_path),
-                    structure,
-                    format="lammps-data",
-                    specorder=elements,
-                    atom_style=self.config.atom_style.value,
-                )
+            with output_path.open("w") as f:
+                write_lammps_streaming(f, structure, elements)
+            logger.debug("Successfully wrote LAMMPS data file using streaming.")
 
         except Exception as e:
             msg = f"Failed to write LAMMPS data file: {e}"

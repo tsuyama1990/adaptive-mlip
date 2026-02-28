@@ -155,6 +155,9 @@ LAMMPS_VELOCITY_SEED = 12345
 LAMMPS_SAFE_CMD_PATTERN = r"^[a-zA-Z0-9\s_\-\.\/=\"\*]+$"
 LAMMPS_SCREEN_ARG = "-screen"
 LAMMPS_MIN_STYLE_CG = "cg"
+LAMMPS_PAIR_STYLE_PACE = "pair_style pace"
+LAMMPS_PAIR_STYLE_HYBRID_PACE_ZBL = "pair_style hybrid/overlay pace zbl {inner} {outer}"
+LAMMPS_FORMAT_STREAMING_HEADER = "LAMMPS data file via pyacemaker streaming\n\n"
 
 # Delta Learning
 DEFAULT_LJ_PARAMS: Final[dict[str, float]] = {"sigma": 2.5, "epsilon": 1.0, "cutoff": 5.0}

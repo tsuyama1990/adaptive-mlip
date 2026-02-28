@@ -67,12 +67,12 @@ class DefectPolicy(SafeBasePolicy):
     def generate(
         self, base_structure: Atoms, config: StructureConfig, n_structures: int = 1, **kwargs: Any
     ) -> Iterator[Atoms]:
-        import random
+        import secrets
 
         for _ in range(n_structures):
             atoms = base_structure.copy()  # type: ignore[no-untyped-call]
             if len(atoms) > 0:
-                idx = random.randint(0, len(atoms) - 1)
+                idx = secrets.randbelow(len(atoms))
                 del atoms[idx]
             yield atoms
 

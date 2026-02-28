@@ -1,12 +1,35 @@
+from itertools import islice
+
 import numpy as np
 import pytest
 from ase import Atoms
 
 from pyacemaker.core.exceptions import GeneratorError
-from itertools import islice
-
 from pyacemaker.core.generator import StructureGenerator
 from pyacemaker.domain_models.structure import ExplorationPolicy, StructureConfig
+
+
+def test_generate_empty_iterator() -> None:
+    # Test ensuring empty iterator throws correctly for empty generation loops avoiding memory loops blindly
+    from unittest.mock import MagicMock
+    config = StructureConfig(
+        elements=["Fe"],
+        supercell_size=[1, 1, 1],
+        policy_name=ExplorationPolicy.COLD_START,
+    )
+    generator = StructureGenerator(config)
+
+    # Mock the internal policy strictly yielding nothing
+    generator.m3gnet.predict_structure = MagicMock(return_value=Atoms("Fe"))
+    import pyacemaker.core.generator as gen_module
+
+    with pytest.MonkeyPatch.context() as mp:
+        mock_policy = MagicMock()
+        mock_policy.generate.return_value = iter([])
+        mp.setattr(gen_module.PolicyFactory, "get_policy", lambda c: mock_policy)
+
+        with pytest.raises(GeneratorError, match="Generator produced an empty iterator"):
+            list(generator.generate(5))
 
 
 def test_cold_start_policy() -> None:
@@ -112,8 +135,8 @@ def test_strain_policy() -> None:
     base_gen = StructureGenerator(base_config)
     base_atoms = next(base_gen.generate(1))
 
-    vol0 = structures[0].get_volume()  # type: ignore[no-untyped-call]
-    base_vol = base_atoms.get_volume()  # type: ignore[no-untyped-call]
+    vol0 = structures[0].get_volume()
+    base_vol = base_atoms.get_volume()
     assert vol0 != base_vol
 
 
@@ -129,7 +152,7 @@ def test_generator_invalid_composition() -> None:
         msg = "Simulated failure"
         raise ValueError(msg)
 
-    generator.m3gnet.predict_structure = mock_raise  # type: ignore
+    generator.m3gnet.predict_structure = mock_raise
 
     # Updated error message expectation
     with pytest.raises(GeneratorError, match="Base generator failed"):

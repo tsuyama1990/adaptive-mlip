@@ -28,6 +28,16 @@ def mock_lammps_module() -> Any:
         }.get(name, 0.0)
         # Mock get_natoms
         instance.get_natoms.return_value = 1
+        # Mock gather_atoms for forces and stress to prevent "too_short" validation error
+        # forces should be Nx3 flat array. N=1 -> 3 elements.
+
+        # When called with name="f", returns tuple of floats (1x3=3 elements)
+        # When called with name="v_pxx" etc for stress, it's not gather_atoms, it's extract_variable
+        # So we just mock gather_atoms to return a tuple of length 3
+        instance.gather_atoms.return_value = (0.0, 0.0, 0.0)
+
+        # We also need to mock driver.get_forces explicitly if lammps.gather_atoms isn't passing correctly through the mock
+        # Let's mock LammpsDriver methods on the engine mock directly
         yield mock
 
 
@@ -45,8 +55,10 @@ def test_engine_integration_workflow(
     atoms = Atoms("H", positions=[[0, 0, 0]], cell=[10, 10, 10], pbc=True)
 
     # 2. Execution
+    import numpy as np
     engine = LammpsEngine(mock_md_config)
-    result = engine.run(atoms, potential_path)
+    with patch("pyacemaker.interfaces.lammps_driver.LammpsDriver.get_forces", return_value=np.array([[0.0, 0.0, 0.0]])):
+        result = engine.run(atoms, potential_path)
 
     # 3. Verification
     assert isinstance(result, MDSimulationResult)

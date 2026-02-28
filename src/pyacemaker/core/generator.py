@@ -98,7 +98,6 @@ class StructureGenerator(BaseGenerator):
             else:
                 base_supercell = base_structure.repeat(self.config.supercell_size)  # type: ignore[no-untyped-call]
 
-            count = 0
             policy_iter = policy.generate(base_supercell, self.config, n_structures=n_candidates)
 
             # Verify it's an iterator to enforce streaming contract at runtime
@@ -108,15 +107,24 @@ class StructureGenerator(BaseGenerator):
             else:
                 iter_policy = policy_iter
 
-            for structure in iter_policy:
-                if count >= n_candidates:
-                    break
-                if len(structure) == 0:
-                    continue
-                yield structure
-                count += 1
+            yield from StructureGenerator._stream_candidates(iter_policy, n_candidates)
 
         yield from lazy_policy_stream()
+
+    @staticmethod
+    def _stream_candidates(iter_policy: Iterator[Atoms], n_candidates: int) -> Iterator[Atoms]:
+        count = 0
+        for structure in iter_policy:
+            if count >= n_candidates:
+                break
+            if len(structure) == 0:
+                continue
+            yield structure
+            count += 1
+
+        if count == 0:
+            msg = "Generator produced an empty iterator. No structures generated."
+            raise GeneratorError(msg)
 
     def generate_local(
         self, base_structure: Atoms, n_candidates: int, **kwargs: Any
