@@ -10,8 +10,8 @@ from pyacemaker.core.exceptions import ActiveSetError
 
 def test_select_with_anchor_basic(tmp_path: Path) -> None:
     selector = ActiveSetSelector()
-    candidates = [Atoms('H') for _ in range(10)]
-    anchor = Atoms('He', positions=[[0,0,0]])
+    candidates = [Atoms("H") for _ in range(10)]
+    anchor = Atoms("He", positions=[[0, 0, 0]])
     pot_path = tmp_path / "dummy.yace"
     pot_path.touch()
 
@@ -24,7 +24,8 @@ def test_select_with_anchor_basic(tmp_path: Path) -> None:
             out_path = Path(cmd[out_idx + 1])
             # Write 4 atoms
             from ase.io import write
-            write(out_path, [Atoms('Li') for _ in range(4)], format="extxyz")
+
+            write(out_path, [Atoms("Li") for _ in range(4)], format="extxyz")
             return MagicMock(returncode=0)
 
         mock_run.side_effect = side_effect
@@ -35,21 +36,22 @@ def test_select_with_anchor_basic(tmp_path: Path) -> None:
         assert len(result) == 5
 
         # Check first is anchor
-        assert result[0].get_chemical_symbols()[0] == 'He'  # type: ignore[no-untyped-call]
+        assert result[0].get_chemical_symbols()[0] == "He"  # type: ignore[no-untyped-call]
 
         # Check remaining are from mock output
-        assert result[1].get_chemical_symbols()[0] == 'Li'  # type: ignore[no-untyped-call]
+        assert result[1].get_chemical_symbols()[0] == "Li"  # type: ignore[no-untyped-call]
 
         # Check cmd arguments
         args, _ = mock_run.call_args
         cmd = args[0]
         select_idx = cmd.index("--select")
-        assert cmd[select_idx + 1] == "4" # 5 - 1 = 4
+        assert cmd[select_idx + 1] == "4"  # 5 - 1 = 4
+
 
 def test_select_with_anchor_only_one(tmp_path: Path) -> None:
     selector = ActiveSetSelector()
-    candidates = [Atoms('H') for _ in range(10)]
-    anchor = Atoms('He')
+    candidates = [Atoms("H") for _ in range(10)]
+    anchor = Atoms("He")
     pot_path = tmp_path / "dummy.yace"
     pot_path.touch()
 
@@ -58,8 +60,9 @@ def test_select_with_anchor_only_one(tmp_path: Path) -> None:
         result = list(selector.select(candidates, pot_path, n_select=1, anchor=anchor))
 
         assert len(result) == 1
-        assert result[0].get_chemical_symbols()[0] == 'He'  # type: ignore[no-untyped-call]
+        assert result[0].get_chemical_symbols()[0] == "He"  # type: ignore[no-untyped-call]
         mock_run.assert_not_called()
+
 
 def test_validate_path_resolution_safety() -> None:
     """Test that paths are resolved to absolute, mitigating simple flag injection and traversal."""
@@ -72,6 +75,7 @@ def test_validate_path_resolution_safety() -> None:
     # -rf is now explicitly rejected even if resolved, as filenames cannot start with -
     with pytest.raises(ActiveSetError, match="Filename cannot start with '-'"):
         selector._validate_path_safe(Path("-rf"))
+
 
 def test_validate_path_invalid_chars() -> None:
     """Test that path validation rejects shell metacharacters."""

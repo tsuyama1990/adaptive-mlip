@@ -24,10 +24,15 @@ from pyacemaker.orchestrator import Orchestrator
 
 # Fake Components
 class FakeGenerator(BaseGenerator):
-    def update_config(self, config: Any) -> None: pass
-    def generate(self, n_candidates: int) -> Iterator[Atoms]: yield from []
+    def update_config(self, config: Any) -> None:
+        pass
 
-    def generate_local(self, base_structure: Atoms, n_candidates: int, **kwargs: Any) -> Iterator[Atoms]:
+    def generate(self, n_candidates: int) -> Iterator[Atoms]:
+        yield from []
+
+    def generate_local(
+        self, base_structure: Atoms, n_candidates: int, **kwargs: Any
+    ) -> Iterator[Atoms]:
         # Returns perturbations of base (S0)
         # We need to verify that base_structure passed here IS the extracted cluster.
         # We can tag it or check size.
@@ -35,22 +40,29 @@ class FakeGenerator(BaseGenerator):
         for _ in range(n_candidates):
             yield base_structure.copy()  # type: ignore[no-untyped-call]
 
+
 class FakeOracle(BaseOracle):
     def compute(self, structures: Iterator[Atoms], batch_size: int = 10) -> Iterator[Atoms]:
         for atoms in structures:
             atoms.info["energy"] = -5.0
             yield atoms
 
+
 class FakeTrainer(BaseTrainer):
     def __init__(self, output_path: Path) -> None:
         self.output_path = output_path
 
-    def train(self, training_data_path: str | Path, initial_potential: str | Path | None = None) -> Any:
+    def train(
+        self, training_data_path: str | Path, initial_potential: str | Path | None = None
+    ) -> Any:
         self.output_path.touch()
         return self.output_path
 
+
 class FakeActiveSetSelector(ActiveSetSelector):
-    def select(self, candidates: Any, potential_path: Any, n_select: int, anchor: Any = None) -> Iterator[Atoms]:
+    def select(
+        self, candidates: Any, potential_path: Any, n_select: int, anchor: Any = None
+    ) -> Iterator[Atoms]:
         # Just return anchor and n_select-1 candidates
         if anchor:
             yield anchor
@@ -59,6 +71,7 @@ class FakeActiveSetSelector(ActiveSetSelector):
         cands = list(candidates)
         for i in range(min(n_select, len(cands))):
             yield cands[i]
+
 
 def test_orchestrator_refinement_logic(tmp_path: Path) -> None:
     # Create dummy UPF
@@ -73,7 +86,7 @@ def test_orchestrator_refinement_logic(tmp_path: Path) -> None:
             functional="PBE",
             pseudopotentials={"H": str(tmp_path / "H.UPF")},
             kpoints_density=0.04,
-            encut=400.0
+            encut=400.0,
         ),
         training=TrainingConfig(potential_type="ace", cutoff_radius=4.0, max_basis_size=100),
         md=MDConfig(temperature=300.0, pressure=0.0, timestep=0.001, n_steps=100, fix_halt=True),
@@ -106,9 +119,9 @@ def test_orchestrator_refinement_logic(tmp_path: Path) -> None:
     # No, distance is 5.
     # Anyway, we expect extraction to return > 1 atom.
 
-    atoms = Atoms("H2", positions=[[0,0,0], [5.0,0,0]], cell=[10,10,10], pbc=True)
+    atoms = Atoms("H2", positions=[[0, 0, 0], [5.0, 0, 0]], cell=[10, 10, 10], pbc=True)
     # Atom 1 (at 5.0) has high gamma
-    atoms.new_array("c_gamma", np.array([0.1, 10.0])) # type: ignore[no-untyped-call]
+    atoms.new_array("c_gamma", np.array([0.1, 10.0]))  # type: ignore[no-untyped-call]
     write(halt_path, atoms, format="extxyz")
 
     # 4. Inject Fakes
@@ -120,9 +133,14 @@ def test_orchestrator_refinement_logic(tmp_path: Path) -> None:
 
     # 5. Create Simulation Result
     result = MDSimulationResult(
-        energy=-10.0, forces=[[0,0,0]], halted=True, max_gamma=10.0,
-        n_steps=500, temperature=300,
-        halt_structure_path=str(halt_path), halt_step=500
+        energy=-10.0,
+        forces=[[0, 0, 0]],
+        halted=True,
+        max_gamma=10.0,
+        n_steps=500,
+        temperature=300,
+        halt_structure_path=str(halt_path),
+        halt_step=500,
     )
 
     # 6. Run _refine_potential
@@ -138,6 +156,7 @@ def test_orchestrator_refinement_logic(tmp_path: Path) -> None:
     # We can check if *any* file exists in training dir.
     assert any(paths["training"].iterdir())
 
+
 def test_orchestrator_refinement_extraction_failure(tmp_path: Path, caplog: Any) -> None:
     # Test graceful handling of extraction failure
 
@@ -148,7 +167,13 @@ def test_orchestrator_refinement_extraction_failure(tmp_path: Path, caplog: Any)
     config = PyAceConfig(
         project_name="TestRefine",
         structure=StructureConfig(elements=["H"], supercell_size=[1, 1, 1]),
-        dft=DFTConfig(code="qe", functional="PBE", pseudopotentials={"H": str(tmp_path / "H.UPF")}, kpoints_density=0.04, encut=400.0),
+        dft=DFTConfig(
+            code="qe",
+            functional="PBE",
+            pseudopotentials={"H": str(tmp_path / "H.UPF")},
+            kpoints_density=0.04,
+            encut=400.0,
+        ),
         training=TrainingConfig(potential_type="ace", cutoff_radius=4.0, max_basis_size=100),
         md=MDConfig(temperature=300.0, pressure=0.0, timestep=0.001, n_steps=100, fix_halt=True),
         workflow=WorkflowConfig(
@@ -170,24 +195,29 @@ def test_orchestrator_refinement_extraction_failure(tmp_path: Path, caplog: Any)
 
     # Create halt structure but force extraction failure by patching extraction util
     halt_path = tmp_path / "halt.extxyz"
-    atoms = Atoms("H", positions=[[0,0,0]], cell=[10,10,10], pbc=True)
-    atoms.new_array("c_gamma", np.array([10.0])) # type: ignore[no-untyped-call]
+    atoms = Atoms("H", positions=[[0, 0, 0]], cell=[10, 10, 10], pbc=True)
+    atoms.new_array("c_gamma", np.array([10.0]))  # type: ignore[no-untyped-call]
     write(halt_path, atoms, format="extxyz")
 
     # Mock result must respect strict validation (forces length)
     result = MDSimulationResult(
-        energy=0, forces=[[0.0, 0.0, 0.0]], halted=True, max_gamma=10.0, n_steps=10, temperature=300,
-        halt_structure_path=str(halt_path)
+        energy=0,
+        forces=[[0.0, 0.0, 0.0]],
+        halted=True,
+        max_gamma=10.0,
+        n_steps=10,
+        temperature=300,
+        halt_structure_path=str(halt_path),
     )
 
     with pytest.MonkeyPatch.context() as m:
-        # Patch extract_local_region to raise exception
+        # Patch extract_intelligent_cluster to raise exception
         def mock_fail(*args: Any, **kwargs: Any) -> None:
             msg = "Boom"
             raise ValueError(msg)
 
         # Need to patch where it is IMPORTED in orchestrator.py
-        m.setattr("pyacemaker.orchestrator.extract_local_region", mock_fail)
+        m.setattr("pyacemaker.orchestrator.extract_intelligent_cluster", mock_fail)
 
         new_pot = orch._refine_potential(result, Path("p"), {})
 

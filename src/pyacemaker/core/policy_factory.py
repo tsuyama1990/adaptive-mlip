@@ -56,7 +56,7 @@ class PolicyFactory:
         if len(selected_policies) == 1:
             return selected_policies[0]
 
-        return CompositePolicy(selected_policies)
+        return CompositePolicy(*selected_policies)
 
     @staticmethod
     def get_local_policy(strategy: LocalGenerationStrategy) -> BasePolicy:

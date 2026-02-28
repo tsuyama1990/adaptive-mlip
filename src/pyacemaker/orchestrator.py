@@ -36,7 +36,7 @@ from pyacemaker.domain_models.defaults import (
 from pyacemaker.domain_models.md import MDSimulationResult
 from pyacemaker.factory import ModuleFactory
 from pyacemaker.logger import setup_logger
-from pyacemaker.utils.extraction import extract_local_region
+from pyacemaker.utils.extraction import extract_intelligent_cluster
 
 
 class Orchestrator:
@@ -166,7 +166,7 @@ class Orchestrator:
                 candidate_stream,
                 candidates_file,
                 batch_size=self.config.workflow.batch_size,
-                append=True
+                append=True,
             )
 
             self.logger.info(LOG_GENERATED_CANDIDATES.format(count=total))
@@ -198,10 +198,7 @@ class Orchestrator:
             labelled_stream = self.oracle.compute(candidate_stream, batch_size=batch_size)
 
             total = self._stream_write(
-                labelled_stream,
-                training_file,
-                batch_size=batch_size,
-                append=True
+                labelled_stream, training_file, batch_size=batch_size, append=True
             )
 
             self.logger.info(LOG_COMPUTED_PROPERTIES.format(count=total))
@@ -219,7 +216,9 @@ class Orchestrator:
             self.logger.warning("No training data found, skipping training.")
             return None
 
-        result = self.trainer.train(training_data_path=training_file, initial_potential=initial_potential)
+        result = self.trainer.train(
+            training_data_path=training_file, initial_potential=initial_potential
+        )
         self.logger.info(LOG_POTENTIAL_TRAINED)
 
         return Path(result) if isinstance(result, (str, Path)) else None
@@ -254,18 +253,18 @@ class Orchestrator:
             return None
 
         try:
-             # Try to get from candidates of previous iteration or iteration 0
-             iter0_paths = self.dir_manager.setup_iteration(0)
-             cand_file = iter0_paths["candidates"] / FILENAME_CANDIDATES
-             if cand_file.exists():
-                 # Use next() on iread to get just the first frame efficiently
-                 return next(iread(str(cand_file), index=0))
+            # Try to get from candidates of previous iteration or iteration 0
+            iter0_paths = self.dir_manager.setup_iteration(0)
+            cand_file = iter0_paths["candidates"] / FILENAME_CANDIDATES
+            if cand_file.exists():
+                # Use next() on iread to get just the first frame efficiently
+                return next(iread(str(cand_file), index=0))
 
-             # Fallback to generator
-             return next(self.generator.generate(n_candidates=1))
+            # Fallback to generator
+            return next(self.generator.generate(n_candidates=1))
         except Exception:
-             self.logger.warning("Failed to get initial structure.")
-             return None
+            self.logger.warning("Failed to get initial structure.")
+            return None
 
     def _get_max_gamma_atom_index(self, structure: Atoms) -> int:
         """Finds the index of the atom with the maximum gamma value."""
@@ -292,16 +291,21 @@ class Orchestrator:
             radius = self.config.structure.local_extraction_radius
             buffer = self.config.structure.local_buffer_radius
 
-            return extract_local_region(halt_structure, center_idx, radius, buffer)
+            from pyacemaker.domain_models.distillation import CutoutConfig
+
+            cutout_config = (
+                self.config.cutout
+                if self.config.cutout
+                else CutoutConfig(core_radius=radius, buffer_radius=buffer)
+            )
+
+            return extract_intelligent_cluster(halt_structure, [center_idx], cutout_config)
         except Exception:
             self.logger.exception("Failed to extract local cluster.")
             return None
 
     def _select_and_label(
-        self,
-        s0_cluster: Atoms,
-        potential_path: Path,
-        paths: dict[str, Path]
+        self, s0_cluster: Atoms, potential_path: Path, paths: dict[str, Path]
     ) -> int:
         """
         Generates local candidates, selects active set, labels them, and writes to training file.
@@ -315,10 +319,7 @@ class Orchestrator:
 
         # Pass engine and potential for advanced local generation strategies (e.g. MD Micro Burst)
         candidates_gen = self.generator.generate_local(
-            s0_cluster,
-            n_candidates=local_n,
-            engine=self.engine,
-            potential=potential_path
+            s0_cluster, n_candidates=local_n, engine=self.engine, potential=potential_path
         )
 
         # Select Active Set (including S0 as anchor)
@@ -328,10 +329,7 @@ class Orchestrator:
 
         n_select = self.config.workflow.otf.local_n_select
         selected_gen = self.active_set_selector.select(
-            candidates_gen,
-            potential_path,
-            n_select=n_select,
-            anchor=s0_cluster
+            candidates_gen, potential_path, n_select=n_select, anchor=s0_cluster
         )
 
         # Label
@@ -341,24 +339,27 @@ class Orchestrator:
         training_file = paths["training"] / FILENAME_TRAINING
         batch_size = self.config.workflow.batch_size
 
-        return self._stream_write(
-            labelled_gen,
-            training_file,
-            batch_size=batch_size,
-            append=True
-        )
+        return self._stream_write(labelled_gen, training_file, batch_size=batch_size, append=True)
 
-    def _refine_potential(self, result: MDSimulationResult, potential_path: Path, paths: dict[str, Path]) -> Path | None:
+    def _refine_potential(
+        self, result: MDSimulationResult, potential_path: Path, paths: dict[str, Path]
+    ) -> Path | None:
         """
         Refines potential upon Halt.
         Orchestrates extraction, selection, labeling, and retraining.
         """
-        if not result.halt_structure_path or not self.generator or not self.active_set_selector or not self.oracle or not self.trainer:
+        if (
+            not result.halt_structure_path
+            or not self.generator
+            or not self.active_set_selector
+            or not self.oracle
+            or not self.trainer
+        ):
             return None
 
         threshold = self.config.workflow.otf.uncertainty_threshold
         if result.max_gamma <= threshold and not result.halted:
-             return None
+            return None
 
         try:
             s0_cluster = self._extract_cluster(result.halt_structure_path)
@@ -381,7 +382,7 @@ class Orchestrator:
         deployed_potential = self.potentials_dir / potential_filename
 
         if self.state_manager.current_potential:
-             if self.state_manager.current_potential != deployed_potential:
+            if self.state_manager.current_potential != deployed_potential:
                 shutil.copy(self.state_manager.current_potential, deployed_potential)
         else:
             msg = "No current potential to deploy."
@@ -389,18 +390,22 @@ class Orchestrator:
 
         return deployed_potential
 
-    def _run_md_simulation(self, iteration: int, deployed_potential: Path) -> MDSimulationResult | None:
+    def _run_md_simulation(
+        self, iteration: int, deployed_potential: Path
+    ) -> MDSimulationResult | None:
         """Runs the MD simulation."""
         initial_structure = self._get_initial_structure(iteration)
         if not initial_structure:
-             self.logger.warning("No structure for MD. Skipping iteration.")
-             return None
+            self.logger.warning("No structure for MD. Skipping iteration.")
+            return None
 
         if self.engine:
             return self.engine.run(structure=initial_structure, potential=deployed_potential)
         return None
 
-    def _handle_md_halt(self, result: MDSimulationResult, deployed_potential: Path, paths: dict[str, Path]) -> None:
+    def _handle_md_halt(
+        self, result: MDSimulationResult, deployed_potential: Path, paths: dict[str, Path]
+    ) -> None:
         """Handles MD halt logic and triggers refinement."""
         if result.halted:
             self.logger.info(f"MD Halted at step {result.n_steps}. Triggering refinement.")
@@ -412,7 +417,9 @@ class Orchestrator:
                     self.state_manager.current_potential = new_potential
                     self.logger.info(f"Potential refined to: {new_potential}")
         else:
-             self.logger.info(LOG_ITERATION_COMPLETED.format(iteration=self.state_manager.iteration + 1))
+            self.logger.info(
+                LOG_ITERATION_COMPLETED.format(iteration=self.state_manager.iteration + 1)
+            )
 
     def _adapt_strategy(self, result: MDSimulationResult) -> None:
         """
@@ -422,7 +429,6 @@ class Orchestrator:
         Note: This method is intended to implement the "Adaptive Exploration Policy" described in the Spec.
         Currently, it is a no-op as the complex adaptation logic requires further requirements analysis.
         """
-        pass
 
     def _execute_iteration_logic(self, iteration: int, paths: dict[str, Path]) -> None:
         """
@@ -440,7 +446,11 @@ class Orchestrator:
         """Executes one iteration of the active learning loop."""
         iteration = self.state_manager.iteration + 1
         paths = self.dir_manager.setup_iteration(iteration)
-        self.logger.info(LOG_START_ITERATION.format(iteration=iteration, max_iterations=self.config.workflow.max_iterations))
+        self.logger.info(
+            LOG_START_ITERATION.format(
+                iteration=iteration, max_iterations=self.config.workflow.max_iterations
+            )
+        )
 
         try:
             self._execute_iteration_logic(iteration, paths)
@@ -472,9 +482,7 @@ class Orchestrator:
                     self.logger.info("Running final validation...")
                     result = self.validator.validate(potential_target, report_path, structure)
                     status = (
-                        "PASSED"
-                        if (result.phonon_stable and result.elastic_stable)
-                        else "FAILED"
+                        "PASSED" if (result.phonon_stable and result.elastic_stable) else "FAILED"
                     )
                     self.logger.info(f"Validation {status}. Report saved to {report_path}")
                 else:
@@ -491,7 +499,7 @@ class Orchestrator:
             self._check_initial_potential()
 
             while self.state_manager.iteration < self.config.workflow.max_iterations:
-                 self._run_loop_iteration()
+                self._run_loop_iteration()
 
             self._finalize()
             self.logger.info(LOG_WORKFLOW_COMPLETED)

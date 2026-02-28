@@ -29,16 +29,22 @@ class TestValidator:
             config=config,
             phonon_calculator=mock_phonon_calc,
             elastic_calculator=mock_elastic_calc,
-            report_generator=mock_report_gen
+            report_generator=mock_report_gen,
         )
 
     def test_validate_pass(self, validator, mock_phonon_calc, mock_elastic_calc, mock_report_gen):
         mock_phonon_calc.check_stability.return_value = (True, "base64_phonon")
-        mock_elastic_calc.calculate_properties.return_value = (True, {"C11": 100.0}, 150.0, "base64_elastic")
+        mock_elastic_calc.calculate_properties.return_value = (
+            True,
+            {"C11": 100.0},
+            150.0,
+            "base64_elastic",
+        )
 
         potential_path = Path("pot.yace")
         output_path = Path("report.html")
         structure = MagicMock()
+        structure.get_volume.return_value = 10.0
 
         # Mock _relax_structure to isolate
         with patch.object(validator, "_relax_structure") as mock_relax:
@@ -58,11 +64,17 @@ class TestValidator:
 
     def test_validate_fail_phonon(self, validator, mock_phonon_calc, mock_elastic_calc):
         mock_phonon_calc.check_stability.return_value = (False, "base64_phonon_unstable")
-        mock_elastic_calc.calculate_properties.return_value = (True, {"C11": 100.0}, 150.0, "base64_elastic")
+        mock_elastic_calc.calculate_properties.return_value = (
+            True,
+            {"C11": 100.0},
+            150.0,
+            "base64_elastic",
+        )
 
         potential_path = Path("pot.yace")
         output_path = Path("report.html")
         structure = MagicMock()
+        structure.get_volume.return_value = 10.0
 
         with patch.object(validator, "_relax_structure") as mock_relax:
             mock_relax.return_value = structure
@@ -92,6 +104,6 @@ class TestValidator:
         # Or let volume check fail? But volume check raises "Failed to compute structure volume"
         # We want to test element check specifically.
         # So we provide a valid cell.
-        structure = Atoms("X", positions=[[0,0,0]], cell=[10, 10, 10], pbc=True)
+        structure = Atoms("X", positions=[[0, 0, 0]], cell=[10, 10, 10], pbc=True)
         with pytest.raises(ValueError, match="dummy element"):
             LammpsInputValidator.validate_structure(structure)

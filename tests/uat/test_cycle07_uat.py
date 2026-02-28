@@ -10,11 +10,8 @@ from pyacemaker.domain_models.validation import ValidationConfig
 
 @pytest.fixture
 def validator_dependencies():
-    return {
-        "phonon": MagicMock(),
-        "elastic": MagicMock(),
-        "report": MagicMock()
-    }
+    return {"phonon": MagicMock(), "elastic": MagicMock(), "report": MagicMock()}
+
 
 @pytest.fixture
 def validator(validator_dependencies):
@@ -23,8 +20,9 @@ def validator(validator_dependencies):
         config,
         validator_dependencies["phonon"],
         validator_dependencies["elastic"],
-        validator_dependencies["report"]
+        validator_dependencies["report"],
     )
+
 
 def test_uat_07_01_validate_potential_pass(validator, validator_dependencies):
     """Scenario 07-01: 'Validate Potential' (PASS)"""
@@ -36,11 +34,14 @@ def test_uat_07_01_validate_potential_pass(validator, validator_dependencies):
     # Mock successful validation
     validator_dependencies["phonon"].check_stability.return_value = (True, "base64_phonon")
     validator_dependencies["elastic"].calculate_properties.return_value = (
-        True, {"C11": 200.0, "C12": 100.0, "C44": 50.0}, 150.0, "base64_elastic"
+        True,
+        {"C11": 200.0, "C12": 100.0, "C44": 50.0},
+        150.0,
+        "base64_elastic",
     )
 
     # 2. Action
-    structure = Atoms("Fe", positions=[[0,0,0]], cell=[2.8,2.8,2.8])
+    structure = Atoms("Fe", positions=[[0, 0, 0]], cell=[2.8, 2.8, 2.8])
 
     with patch.object(validator, "_relax_structure") as mock_relax:
         mock_relax.return_value = structure
@@ -53,10 +54,13 @@ def test_uat_07_01_validate_potential_pass(validator, validator_dependencies):
     assert result.report_path == str(report_path)
 
     validator_dependencies["report"].generate.assert_called_once()
-    validator_dependencies["report"].save.assert_called_once_with(report_path, validator_dependencies["report"].generate.return_value)
+    validator_dependencies["report"].save.assert_called_once_with(
+        report_path, validator_dependencies["report"].generate.return_value
+    )
 
     if potential_path.exists():
         potential_path.unlink()
+
 
 def test_uat_07_02_unstable_detection(validator, validator_dependencies):
     """Scenario 07-02: 'Unstable Detection'"""
@@ -66,13 +70,19 @@ def test_uat_07_02_unstable_detection(validator, validator_dependencies):
     report_path = Path("validation_unstable_report.html")
 
     # Mock unstable (phonon unstable)
-    validator_dependencies["phonon"].check_stability.return_value = (False, "base64_phonon_unstable")
+    validator_dependencies["phonon"].check_stability.return_value = (
+        False,
+        "base64_phonon_unstable",
+    )
     validator_dependencies["elastic"].calculate_properties.return_value = (
-        True, {"C11": 200.0}, 150.0, "base64_elastic"
+        True,
+        {"C11": 200.0},
+        150.0,
+        "base64_elastic",
     )
 
     # 2. Action
-    structure = Atoms("Fe", positions=[[0,0,0]], cell=[2.8,2.8,2.8])
+    structure = Atoms("Fe", positions=[[0, 0, 0]], cell=[2.8, 2.8, 2.8])
 
     with patch.object(validator, "_relax_structure") as mock_relax:
         mock_relax.return_value = structure

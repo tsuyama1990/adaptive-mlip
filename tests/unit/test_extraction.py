@@ -1,64 +1,129 @@
 import numpy as np
+import pytest
+from ase import Atoms
 from ase.build import bulk
+from ase.calculators.lj import LennardJones
 
-from pyacemaker.utils.extraction import extract_local_region
+from pyacemaker.domain_models.distillation import CutoutConfig
+from pyacemaker.utils.extraction import (
+    _passivate_surface,
+    _pre_relax_buffer,
+    extract_intelligent_cluster,
+)
 
 
-def test_extract_local_region_basic() -> None:
-    # Create a simple cubic lattice
-    atoms = bulk('Cu', 'sc', a=2.5).repeat((3, 3, 3))  # type: ignore[no-untyped-call]
+@pytest.fixture
+def simple_cubic():
+    # 5x5x5 simple cubic lattice of pseudo atoms (e.g. Ar)
+    atoms = bulk("Ar", "sc", a=2.0)
+    atoms = atoms * (5, 5, 5)
+    # central atom should be around index 62 for 5x5x5
+    # center of the cell is 5.0, 5.0, 5.0
+    # atoms.positions range from 0 to 8
+    # Let's find the atom closest to center
+    center = np.array([5.0, 5.0, 5.0])
+    distances = np.linalg.norm(atoms.positions - center, axis=1)
+    target_idx = np.argmin(distances)
+    return atoms, target_idx
 
-    # Center atom at index 13 (middle of 3x3x3 is 13? 3*3*3=27. 13 is center)
-    center_idx = 13
 
-    # Radius covers 1st shell (2.5), Buffer covers 2nd shell
-    # 1st neighbor dist = 2.5
-    # 2nd neighbor dist = sqrt(2.5^2 + 2.5^2) = 3.535
-    # 3rd neighbor dist = sqrt(2.5^2 + 2.5^2 + 2.5^2) = 4.33
+def test_spherical_cutout_logic(simple_cubic):
+    atoms, target_idx = simple_cubic
 
-    radius = 2.6  # Includes 1st shell
-    buffer = 1.0  # Total cutoff 3.6 (Includes 2nd shell)
+    config = CutoutConfig(
+        core_radius=2.1,  # Should include 1st neighbors in SC (a=2.0)
+        buffer_radius=1.0,  # Total radius 3.1 -> should include 2nd neighbors
+        enable_pre_relaxation=False,
+        enable_passivation=False,
+    )
 
-    cluster = extract_local_region(atoms, center_idx, radius, buffer)
+    cluster = extract_intelligent_cluster(atoms, [int(target_idx)], config)
 
-    # Check cluster size
-    # 1 center + 6 nearest neighbors (1st shell) + 12 next-nearest (2nd shell) = 19
-    # Wait, 2nd shell is at 3.535. Total cutoff 3.6 includes it.
-    # So we expect 1 + 6 + 12 = 19 atoms.
+    # Assertions
+    assert isinstance(cluster, Atoms)
+    assert len(cluster) > 1
+    assert "force_weight" in cluster.arrays
+
+    force_weights = cluster.get_array("force_weight")
+
+    # Original target atom should be in the core (1.0)
+    # In SC lattice, 1st neighbors are at dist=2.0 (6 atoms) -> total 7 core atoms
+    core_count = np.sum(force_weights == 1.0)
+    assert core_count == 7
+
+    # 2nd neighbors are at dist=2.82 (12 atoms).
+    # Total atoms = 1 + 6 + 12 = 19
     assert len(cluster) == 19
+    buffer_count = np.sum(force_weights == 0.0)
+    assert buffer_count == 12
 
-    # Check weights
-    weights = cluster.get_array("force_weight")  # type: ignore[no-untyped-call]
 
-    # Center (index 0 in cluster usually, but let's check positions)
-    # Center is at [0,0,0] relative to original extraction logic, but embed_cluster centers it in box.
-    # So we can't rely on position being exactly 0 unless we check relative to box center.
-    # However, we know weights: 7 atoms (center + 6 NN) should have weight 1.0
-    # 12 atoms (2nd shell) should have weight 0.0
+def test_pre_relax_buffer(simple_cubic):
+    atoms, target_idx = simple_cubic
 
-    n_core = np.sum(weights == 1.0)
-    n_buffer = np.sum(weights == 0.0)
+    config = CutoutConfig(
+        core_radius=2.1,
+        buffer_radius=1.0,
+        enable_pre_relaxation=False,  # We call it manually for test
+        enable_passivation=False,
+    )
 
-    assert n_core == 7  # 1 center + 6 NN
-    assert n_buffer == 12 # 12 NNN
+    cluster = extract_intelligent_cluster(atoms, [int(target_idx)], config)
+    initial_positions = cluster.positions.copy()
 
-def test_extract_local_region_pbc() -> None:
-    # Test extraction across PBC
-    atoms = bulk('Cu', 'sc', a=2.5).repeat((2, 2, 2))  # type: ignore[no-untyped-call]
-    # 8 atoms.
-    # Center at 0 (corner).
-    # Radius covers nearest neighbors (which are wrapped).
+    calc = LennardJones(epsilon=1.0, sigma=2.0)
 
-    center_idx = 0
-    radius = 2.6
-    buffer = 0.1
+    relaxed_cluster = _pre_relax_buffer(cluster, calc)
 
-    cluster = extract_local_region(atoms, center_idx, radius, buffer)
+    final_positions = relaxed_cluster.positions
+    force_weights = relaxed_cluster.get_array("force_weight")
 
-    # NN of corner 0 in 2x2x2 SC are 3 (along axes) + ?
-    # In periodic 2x2x2, each atom has 6 NN.
-    # So we expect 1 + 6 = 7 atoms in cluster.
-    assert len(cluster) == 7
+    core_mask = force_weights == 1.0
+    buffer_mask = force_weights == 0.0
 
-    weights = cluster.get_array("force_weight")  # type: ignore[no-untyped-call]
-    assert np.all(weights == 1.0) # All are within radius
+    # Core atoms should NOT have moved
+    assert np.allclose(initial_positions[core_mask], final_positions[core_mask])
+
+    # Buffer atoms SHOULD have moved
+    assert not np.allclose(initial_positions[buffer_mask], final_positions[buffer_mask])
+
+
+def test_auto_passivation():
+    # Create a small "broken" silicon cluster to test passivation
+    # Just 2 Si atoms far apart to simulate dangling bonds
+    atoms = Atoms("Si2", positions=[[0, 0, 0], [4, 0, 0]])
+
+    # Simulate extraction by manually adding force weights
+    # Make one core, one buffer
+    atoms.set_array("force_weight", np.array([1.0, 0.0]))
+
+    config = CutoutConfig(passivation_element="H")
+
+    # _passivate_surface should add H atoms to the buffer atom
+    passivated_cluster = _passivate_surface(atoms, "H")
+
+    # It should have added at least one H atom
+    assert len(passivated_cluster) > 2
+
+    # Check that new atoms are H
+    added_atoms = passivated_cluster[2:]
+    assert all(a.symbol == "H" for a in added_atoms)
+
+    # Check force_weights of new atoms
+    force_weights = passivated_cluster.get_array("force_weight")
+    assert all(w == 0.0 for w in force_weights[2:])
+
+    # Check distance
+    # Buffer atom was Si at index 1
+    # Standard Si-H distance ~ 1.48 A (from covalent radii)
+    buffer_pos = passivated_cluster.positions[1]
+    for h_pos in passivated_cluster.positions[2:]:
+        dist = np.linalg.norm(h_pos - buffer_pos)
+        assert 1.0 < dist < 2.0  # Physically reasonable bond distance
+
+
+def test_extract_intelligent_cluster_empty_targets():
+    atoms = Atoms("Ar")
+    config = CutoutConfig()
+    with pytest.raises(ValueError, match="target_atoms list cannot be empty."):
+        extract_intelligent_cluster(atoms, [], config)

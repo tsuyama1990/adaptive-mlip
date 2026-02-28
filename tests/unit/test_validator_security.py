@@ -1,5 +1,6 @@
-from pathlib import Path
 import tempfile
+from pathlib import Path
+
 import pytest
 
 from pyacemaker.core.validator import LammpsInputValidator
@@ -16,12 +17,14 @@ class TestLammpsInputValidator:
 
     def test_validate_structure_empty(self):
         from ase import Atoms
+
         atoms = Atoms()
         with pytest.raises(ValueError, match="Structure is empty"):
             LammpsInputValidator.validate_structure(atoms)
 
     def test_validate_structure_zero_volume(self):
         from ase import Atoms
+
         # Zero volume cell
         atoms = Atoms("H", positions=[[0, 0, 0]], cell=[0, 0, 0], pbc=True)
         # Matches error from exception handling block
