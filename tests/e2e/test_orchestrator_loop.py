@@ -13,7 +13,7 @@ from pyacemaker.domain_models.md import MDSimulationResult
 from pyacemaker.orchestrator import Orchestrator
 
 
-class FakeGenerator(BaseGenerator): # type: ignore[misc]
+class FakeGenerator(BaseGenerator):
     def __init__(self, elements: list[str] | None = None) -> None:
         self.elements = elements or ["H"]
 

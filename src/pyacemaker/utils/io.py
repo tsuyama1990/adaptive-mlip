@@ -2,7 +2,6 @@ import logging
 from pathlib import Path
 from typing import Any, TextIO
 
-import numpy as np
 import yaml
 from ase import Atoms
 from ase.io import iread
@@ -111,19 +110,23 @@ def write_lammps_streaming(
     fileobj.write(f"{natoms} atoms\n")
     fileobj.write(f"{len(species)} atom types\n\n")
 
-    # 2. Box
-    cell = atoms.get_cell()
-    if not np.allclose(cell, np.diag(np.diag(cell))):
-        msg = "Streaming write currently only supports orthogonal cells"
-        raise ValueError(msg)
+    # 2. Box (Support triclinic cells safely)
+    cell = atoms.get_cell()  # type: ignore[no-untyped-call]
+    xlo, ylo, zlo = 0.0, 0.0, 0.0
+    xhi = cell[0, 0]
+    yhi = cell[1, 1]
+    zhi = cell[2, 2]
+    xy, xz, yz = cell[0, 1], cell[0, 2], cell[1, 2]
 
-    xlo, xhi = 0.0, cell[0, 0]
-    ylo, yhi = 0.0, cell[1, 1]
-    zlo, zhi = 0.0, cell[2, 2]
-
+    # In LAMMPS, xhi is bound by xhi-xlo, not max(x). But we assume origin at 0,0,0
     fileobj.write(f"{xlo:.6f} {xhi:.6f} xlo xhi\n")
     fileobj.write(f"{ylo:.6f} {yhi:.6f} ylo yhi\n")
-    fileobj.write(f"{zlo:.6f} {zhi:.6f} zlo zhi\n\n")
+    fileobj.write(f"{zlo:.6f} {zhi:.6f} zlo zhi\n")
+
+    if abs(xy) > 1e-6 or abs(xz) > 1e-6 or abs(yz) > 1e-6:
+        fileobj.write(f"{xy:.6f} {xz:.6f} {yz:.6f} xy xz yz\n")
+
+    fileobj.write("\n")
 
     # 3. Masses
     fileobj.write("Masses\n\n")
@@ -161,3 +164,91 @@ def write_lammps_streaming(
         fileobj.write(f"{i + 1} {t} {pos[i, 0]:.6f} {pos[i, 1]:.6f} {pos[i, 2]:.6f}\n")
 
     fileobj.write("\n")
+
+def _parse_and_write_lattice(props_line: str, output_fileobj: TextIO) -> None:
+    import re
+    lattice_match = re.search(r'Lattice="([^"]+)"', props_line)
+    if lattice_match:
+        try:
+            l_vals = [float(x) for x in lattice_match.group(1).split()]
+            if len(l_vals) == 9:
+                xhi = l_vals[0]
+                xy = l_vals[1]
+                xz = l_vals[2]
+                yhi = l_vals[4]
+                yz = l_vals[5]
+                zhi = l_vals[8]
+
+                output_fileobj.write(f"0.000000 {xhi:.6f} xlo xhi\n")
+                output_fileobj.write(f"0.000000 {yhi:.6f} ylo yhi\n")
+                output_fileobj.write(f"0.000000 {zhi:.6f} zlo zhi\n")
+
+                if abs(xy) > 1e-6 or abs(xz) > 1e-6 or abs(yz) > 1e-6:
+                    output_fileobj.write(f"{xy:.6f} {xz:.6f} {yz:.6f} xy xz yz\n")
+
+                output_fileobj.write("\n")
+        except (ValueError, IndexError):
+            pass
+
+def _write_masses(output_fileobj: TextIO, species: list[str], type_map: dict[str, int]) -> None:
+    output_fileobj.write("Masses\n\n")
+    for s in species:
+        type_id = type_map[s]
+        mass = _get_atomic_mass(s)
+        output_fileobj.write(f"{type_id} {mass:.4f} # {s}\n")
+    output_fileobj.write("\n")
+
+def _write_atoms(fin: TextIO, output_fileobj: TextIO, natoms: int, species: list[str], type_map: dict[str, int]) -> None:
+    output_fileobj.write("Atoms # atomic\n\n")
+    for i in range(natoms):
+        line = fin.readline()
+        if not line:
+            break
+        parts = line.split()
+        if len(parts) >= 4:
+            sym = parts[0]
+            try:
+                t = type_map[sym]
+            except KeyError as err:
+                msg = f"Symbol {sym} not in provided species list: {species}"
+                raise KeyError(msg) from err
+            x, y, z = parts[1], parts[2], parts[3]
+            output_fileobj.write(f"{i + 1} {t} {x} {y} {z}\n")
+
+def _read_natoms(first_line: str, input_path: Path) -> int:
+    if not first_line:
+        msg = f"Input structure file {input_path} is empty."
+        raise ValueError(msg)
+    try:
+        return int(first_line.strip())
+    except ValueError as err:
+        msg = f"Invalid extxyz format, expected integer for atom count on line 1, got: {first_line}"
+        raise ValueError(msg) from err
+
+def _write_header(output_fileobj: TextIO, natoms: int, num_species: int) -> None:
+    from pyacemaker.domain_models.constants import LAMMPS_FORMAT_STREAMING_HEADER
+    output_fileobj.write(LAMMPS_FORMAT_STREAMING_HEADER)
+    output_fileobj.write(f"{natoms} atoms\n")
+    output_fileobj.write(f"{num_species} atom types\n\n")
+
+def stream_extxyz_to_lammps(input_path: Path, output_fileobj: TextIO, species: list[str]) -> list[str]:
+    """
+    Streams an extended XYZ file directly to LAMMPS data format.
+    Guarantees O(1) memory usage by never materializing ASE Atoms objects.
+    """
+    with input_path.open("r") as fin:
+        first_line = fin.readline()
+        natoms = _read_natoms(first_line, input_path)
+
+        props_line = fin.readline().strip()
+
+        _write_header(output_fileobj, natoms, len(species))
+
+        _parse_and_write_lattice(props_line, output_fileobj)
+
+        type_map = {s: i + 1 for i, s in enumerate(species)}
+        _write_masses(output_fileobj, species, type_map)
+
+        _write_atoms(fin, output_fileobj, natoms, species, type_map)
+
+    return species

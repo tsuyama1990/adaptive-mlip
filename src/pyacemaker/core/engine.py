@@ -115,7 +115,8 @@ class LammpsEngine(BaseEngine):
                     energy = 0.0
                     temperature = 0.0
                     step = 0
-                    forces = [[0.0, 0.0, 0.0]]
+                    # Ensures default forces is correct length according to config min constraints
+                    forces = self.config.default_forces
                     stress = [0.0] * 6
 
                 max_gamma = 0.0

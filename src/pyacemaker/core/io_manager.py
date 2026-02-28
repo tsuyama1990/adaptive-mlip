@@ -54,32 +54,12 @@ class LammpsFileManager:
 
             # Handle different input types
             if isinstance(structure, (str, Path)):
-                # Instead of extracting the first frame into memory and writing it,
-                # we pass the iterator or a wrapper to a stream writer if we were using it,
-                # but our _write_structure_memory expects Atoms.
-                # To maintain O(1) memory, we must only parse the first frame lazily.
-                # iread provides the generator, next() fetches the first frame which is still O(1)
-                # compared to reading the whole file.
-                # The issue from the audit is that next(atoms_iter) creates the whole Atoms object
-                # for the first frame in memory. For a huge structure, this is an issue.
-                # Since ASE's iread yields complete Atoms objects per frame, there's no way around
-                # having the Atoms object in memory if using ASE.
-                # We will keep the next() call but ensure we don't hold the entire dataset.
-                from ase.io import iread
+                # 100% Streaming approach: Do not load any Atoms objects.
+                from pyacemaker.utils.io import detect_elements, stream_extxyz_to_lammps
 
-                try:
-                    atoms_iter = iread(str(structure))
-                    # We just get the first frame. This is standard ASE lazy loading.
-                    first_frame = next(atoms_iter)
-                except StopIteration:
-                    msg = f"Input structure file {structure} is empty."
-                    raise ValueError(msg) from None
-                except Exception as e:
-                    msg = f"Failed to read structure from {structure}: {e}"
-                    raise ValueError(msg) from e
-
-                elements = get_species_order(first_frame)
-                self._write_structure_memory(first_frame, data_file, elements)
+                elements = detect_elements(Path(structure), max_frames=1)
+                with data_file.open("w") as f:
+                    stream_extxyz_to_lammps(Path(structure), f, elements)
 
             else:
                 # It's an Atoms object.
@@ -99,17 +79,11 @@ class LammpsFileManager:
         """Writes structure to disk using streaming writer if possible."""
         try:
             # Memory Safety Fix: Always attempt streaming first if atom_style allows
-            streaming_success = False
             if self.config.atom_style == "atomic":
-                try:
-                    with output_path.open("w") as f:
-                        write_lammps_streaming(f, structure, elements)
-                    streaming_success = True
-                    logger.debug("Successfully wrote LAMMPS data file using streaming.")
-                except ValueError as e:
-                    logger.debug("Streaming write skipped: %s. Falling back to ASE.", e)
-
-            if not streaming_success:
+                with output_path.open("w") as f:
+                    write_lammps_streaming(f, structure, elements)
+                logger.debug("Successfully wrote LAMMPS data file using streaming.")
+            else:
                 if len(structure) > 1000000:
                     logger.warning(
                         "Falling back to ASE write for large structure (%d atoms). Memory usage may be high.",

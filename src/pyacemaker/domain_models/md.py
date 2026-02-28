@@ -237,6 +237,9 @@ class MDConfig(BaseModel):
 
     @model_validator(mode="after")
     def validate_default_forces(self) -> "MDConfig":
+        if not self.default_forces:
+            msg = "Default forces must have at least one element."
+            raise ValueError(msg)
         for f in self.default_forces:
             if len(f) != 3:
                 msg = "Default forces must be a list of 3D vectors (list of 3 floats)"
