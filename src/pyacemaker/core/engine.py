@@ -7,6 +7,7 @@ from pyacemaker.core.base import BaseEngine
 from pyacemaker.core.io_manager import LammpsFileManager
 from pyacemaker.core.lammps_generator import LammpsScriptGenerator
 from pyacemaker.core.validator import LammpsInputValidator
+from pyacemaker.domain_models.workflow import ActiveLearningThresholds
 from pyacemaker.domain_models.constants import (
     ERR_SIM_EXEC_FAIL,
     ERR_SIM_SECURITY_FAIL,
@@ -17,6 +18,78 @@ from pyacemaker.domain_models.constants import (
 )
 from pyacemaker.domain_models.md import MDConfig, MDSimulationResult
 from pyacemaker.interfaces.lammps_driver import LammpsDriver
+
+
+class UncertaintyWatchdog:
+    """Evaluates uncertainty from LAMMPS dump files using a two-tier threshold."""
+
+    @staticmethod
+    def _process_atom_line(line: str, gamma_idx: int, threshold: float, atoms: list[int], max_g: float) -> float:
+        parts = line.split()
+        if len(parts) < 6 or gamma_idx < 0:
+            return max_g
+        try:
+            atom_id = int(parts[0])
+            gamma = float(parts[gamma_idx])
+            if gamma > threshold:
+                atoms.append(atom_id)
+            return max(max_g, gamma)
+        except ValueError:
+            return max_g
+
+    @staticmethod
+    def _evaluate_uncertainty_stream(
+        dump_file: Path, thresholds: ActiveLearningThresholds
+    ) -> tuple[int | None, list[int]]:
+        """
+        Parses a LAMMPS dump file to evaluate uncertainty.
+        Returns: (halt_step, [list of atom IDs exceeding threshold_add_train])
+        """
+        if not dump_file.exists():
+            return None, []
+
+        c_steps = 0
+        halt_step = None
+        epi: list[int] = []
+
+        with dump_file.open("r") as f:
+            cur_step: int | None = None
+            max_g = 0.0
+            atoms: list[int] = []
+            in_atoms = False
+            g_idx = -1
+
+            for raw_line in f:
+                line = raw_line.strip()
+                if line.startswith("ITEM: TIMESTEP"):
+                    if cur_step is not None:
+                        c_steps = c_steps + 1 if max_g > thresholds.threshold_call_dft else 0
+                        if c_steps >= thresholds.smooth_steps:
+                            halt_step = cur_step
+                            epi = atoms
+                            break
+
+                    step_line = next(f, None)
+                    cur_step = int(step_line.strip()) if step_line else None
+                    max_g = 0.0
+                    atoms = []
+                    in_atoms = False
+                elif line.startswith("ITEM: ATOMS"):
+                    in_atoms = True
+                    parts = line.split()
+                    g_idx = parts.index("c_gamma") - 2 if "c_gamma" in parts else -1
+                elif in_atoms:
+                    max_g = UncertaintyWatchdog._process_atom_line(
+                        line, g_idx, thresholds.threshold_add_train, atoms, max_g
+                    )
+
+            if cur_step is not None and halt_step is None and max_g > thresholds.threshold_call_dft:
+                c_steps += 1
+                if c_steps >= thresholds.smooth_steps:
+                    halt_step = cur_step
+                    epi = atoms
+
+        return halt_step, epi
 
 
 class LammpsExecutor:
@@ -149,30 +222,33 @@ class LammpsEngine(BaseEngine):
         self.parser = parser or LammpsResultParser(config)
 
     def _prepare_simulation_env(
-        self, structure: Atoms | None, potential: Any
+        self, structure: Atoms | None, potential: Any, restart_file: Path | None = None
     ) -> tuple[Any, Path, Path, Path, list[str], Path]:
         """
         Prepares the simulation environment: validation, paths, and files.
         Returns: (ctx, data_file, dump_file, log_file, elements, potential_path)
         """
-        if structure is None:
+        if structure is None and restart_file is None:
             raise ValueError(ERR_STRUCTURE_NONE)
 
-        LammpsInputValidator.validate_structure(structure)
+        if structure is not None:
+            LammpsInputValidator.validate_structure(structure)
         potential_path = LammpsInputValidator.validate_potential(potential)
         potential_path = potential_path.resolve(strict=True)
 
+        # Workaround to support empty structure when restarting
+        struct_to_pass = structure if structure is not None else Atoms()
         ctx, data_file, dump_file, log_file, elements = self.file_manager.prepare_workspace(
-            structure
+            struct_to_pass
         )
         return ctx, data_file, dump_file, log_file, elements, potential_path
 
-    def run(self, structure: Atoms | None, potential: Any) -> MDSimulationResult:
+    def run(self, structure: Atoms | None, potential: Any, restart_file: Path | None = None) -> MDSimulationResult:
         """
         Runs the MD simulation.
         """
         ctx, data_file, dump_file, log_file, elements, potential_path = (
-            self._prepare_simulation_env(structure, potential)
+            self._prepare_simulation_env(structure, potential, restart_file)
         )
 
         with ctx:
@@ -181,14 +257,32 @@ class LammpsEngine(BaseEngine):
             input_script_path = temp_dir / "input.lmp"
 
             with input_script_path.open("w") as f:
-                self.generator.write_script(f, potential_path, data_file, dump_file, elements)
+                self.generator.write_script(f, potential_path, data_file, dump_file, elements, restart_file=restart_file)
 
             # Initialize Driver with unique log file
             driver = LammpsDriver(["-screen", LAMMPS_SCREEN_ARG, "-log", str(log_file)])
 
             try:
                 self.executor.execute_simulation(driver, input_script_path)
-                return self.parser.parse_md_result(driver, dump_file, log_file)
+                result = self.parser.parse_md_result(driver, dump_file, log_file)
+
+                import logging
+                logger = logging.getLogger(__name__)
+
+                # Check watchdog if configured
+                if self.config.fix_halt and self.config.active_learning:
+                    logger.debug(f"Evaluating uncertainty stream from {dump_file}")
+                    halt_step, epicenter = UncertaintyWatchdog._evaluate_uncertainty_stream(
+                        dump_file, self.config.active_learning
+                    )
+                    if halt_step is not None:
+                        logger.info(f"UncertaintyWatchdog triggered halt at step {halt_step} with {len(epicenter)} epicenter atoms.")
+                        result.halted = True
+                        result.halt_step = halt_step
+                    else:
+                        logger.debug("No sustained uncertainty detected. Continuing simulation.")
+
+                return result
             finally:
                 if hasattr(driver, "close"):
                     driver.close()

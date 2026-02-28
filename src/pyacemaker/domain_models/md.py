@@ -30,6 +30,7 @@ from pyacemaker.domain_models.defaults import (
     DEFAULT_MD_THERMO_FREQ,
     DEFAULT_OTF_UNCERTAINTY_THRESHOLD,
 )
+from pyacemaker.domain_models.workflow import ActiveLearningThresholds
 
 
 def _get_default_temp_dir() -> str | None:
@@ -223,6 +224,8 @@ class MDConfig(BaseModel):
         default_factory=lambda: int(os.environ.get("PYACE_MD_CHECK_INTERVAL", DEFAULT_MD_CHECK_INTERVAL)),
         gt=0, description="Step interval for uncertainty check"
     )
+
+    active_learning: ActiveLearningThresholds | None = Field(None, description="Active learning uncertainty configurations")
 
     # Spec Section 3.1: Ramping and MC
     ramping: MDRampingConfig | None = Field(None, description="Configuration for T/P ramping")

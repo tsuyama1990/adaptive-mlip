@@ -169,6 +169,18 @@ class LammpsScriptGenerator:
         )
         buffer.write(f"run {self.config.n_steps}\n")
 
+    def _generate_soft_start_commands(self, buffer: TextIO, temperature: float, steps: int) -> None:
+        """Generates soft start commands using Langevin thermostat."""
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.debug(f"Generating soft start commands: T={temperature}K for {steps} steps")
+        # A very short damping parameter (e.g., 0.1 ps) for soft start
+        buffer.write(f"fix soft_start_langevin all langevin {temperature} {temperature} 0.1 48279\n")
+        buffer.write("fix soft_start_nve all nve\n")
+        buffer.write(f"run {steps}\n")
+        buffer.write("unfix soft_start_langevin\n")
+        buffer.write("unfix soft_start_nve\n")
+
     def _gen_output_setup(self, buffer: TextIO, dump_file: Path) -> None:
         """Generates output settings (thermo and dump)."""
         buffer.write(f"thermo {self.config.thermo_freq}\n")
@@ -187,6 +199,11 @@ class LammpsScriptGenerator:
         buffer.write(f"thermo_style custom {style}\n")
         buffer.write(f"dump traj all custom {self.config.dump_freq} {quoted_dump} {dump_cols}\n")
 
+        # Checkpointing
+        restart_file = dump_file.parent / f"{dump_file.stem}.restart"
+        quoted_restart = self._quote(str(restart_file))
+        buffer.write(f"restart {self.config.dump_freq} {quoted_restart}\n")
+
         # Define variables for extraction via Python interface
         vars_to_export = ["pe", "temp", "step", "pxx", "pyy", "pzz", "pxy", "pxz", "pyz"]
         for v in vars_to_export:
@@ -202,18 +219,22 @@ class LammpsScriptGenerator:
         data_file: Path,
         dump_file: Path,
         elements: list[str],
+        restart_file: Path | None = None,
     ) -> None:
         """
         Writes the LAMMPS input script to the provided buffer.
         """
-        quoted_data = self._quote(str(data_file))
-
         buffer.write("clear\n")
-        buffer.write("units metal\n")
-        # Use .value to ensure we get the string value "atomic", "charge" etc.
-        buffer.write(f"atom_style {self.config.atom_style.value}\n")
-        buffer.write("boundary p p p\n")
-        buffer.write(f"read_data {quoted_data}\n")
+        if restart_file:
+            quoted_restart = self._quote(str(restart_file))
+            buffer.write(f"read_restart {quoted_restart}\n")
+        else:
+            quoted_data = self._quote(str(data_file))
+            buffer.write("units metal\n")
+            # Use .value to ensure we get the string value "atomic", "charge" etc.
+            buffer.write(f"atom_style {self.config.atom_style.value}\n")
+            buffer.write("boundary p p p\n")
+            buffer.write(f"read_data {quoted_data}\n")
 
         self._gen_potential(buffer, potential_path, elements)
         self._gen_settings(buffer)
@@ -222,7 +243,13 @@ class LammpsScriptGenerator:
         # Output setup MUST come before run
         self._gen_output_setup(buffer, dump_file)
 
-        self._gen_execution(buffer, elements)
+        if restart_file:
+            self._generate_soft_start_commands(buffer, self.config.temperature, 100)
+
+        if not restart_file:
+            self._gen_execution(buffer, elements)
+        else:
+            buffer.write(f"run {self.config.n_steps}\n")
 
         self._gen_post_run_diagnostics(buffer)
 
