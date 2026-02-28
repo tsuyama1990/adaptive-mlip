@@ -1,5 +1,3 @@
-from itertools import islice
-
 import numpy as np
 from ase import Atoms
 
@@ -88,3 +86,27 @@ def test_uat_03_02_defect_generation() -> None:
     vol_defect = defect_atoms.get_volume()  # type: ignore[no-untyped-call]
     vol_pristine = pristine_atoms.get_volume()  # type: ignore[no-untyped-call]
     assert abs(vol_defect - vol_pristine) < 1e-6
+
+
+def test_uat_generator_error_handling() -> None:
+    """
+    Test that the generator throws an appropriate error when generation fails.
+    """
+    import pytest
+
+    from pyacemaker.core.exceptions import GeneratorError
+
+    config = StructureConfig(
+        elements=["Fe"],
+        supercell_size=[1, 1, 1],
+    )
+    generator = StructureGenerator(config)
+
+    # Force the base generator to fail
+    with pytest.MonkeyPatch.context() as m:
+        m.setattr(generator.m3gnet, "predict_structure", lambda x: (_ for _ in ()).throw(RuntimeError("Simulated failure")))
+
+        # Trigger generation
+        stream = generator.generate(n_candidates=1)
+        with pytest.raises(GeneratorError):
+            next(stream)

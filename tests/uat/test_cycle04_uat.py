@@ -1,5 +1,4 @@
 from pathlib import Path
-from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -89,19 +88,26 @@ def test_uat_active_set_selection(tmp_path: Path) -> None:
 
     selector = ActiveSetSelector()
 
-    # Mocking run_command to simulate writing output
-    def side_effect(cmd: list[str], **kwargs: Any) -> MagicMock:
-        # cmd is list
-        out_idx = cmd.index("--output")
-        out_path = Path(cmd[out_idx + 1])
-        write(out_path, pool[:10], format="extxyz")
-        return MagicMock()
+    # The actual implementation of ActiveSetSelector relies on `pace_active_set`
+    # We must not mock the SUT logic itself, but we can mock the external process call
+    # if it's strictly a driver/wrapper test. However, we should test pure logic.
+    # We can mock `_write_structures` and `_read_structures` to avoid I/O entirely.
 
-    with patch("pyacemaker.core.active_set.run_command") as mock_run:
-        mock_run.side_effect = side_effect
-
-        from itertools import islice
+    with (
+        patch.object(selector, "_write_candidates", return_value=20) as mock_write,
+        patch.object(selector, "_execute_selection") as mock_execute,
+        patch("pyacemaker.core.active_set.iread", return_value=iter(pool[:10])) as mock_read,
+        patch("pathlib.Path.exists", return_value=True),
+        patch("pathlib.Path.stat", return_value=MagicMock(st_size=100)),
+    ):
         selected_iter = selector.select(pool, pot_path, n_select=10)
-        selected = list(islice(selected_iter, 10))
 
-        assert len(selected) == 10
+        # Test pure streaming consumption without materializing a list
+        first = next(selected_iter)
+        assert first is not None
+        remaining = sum(1 for _ in selected_iter)
+        assert remaining == 9
+
+        mock_write.assert_called_once()
+        mock_execute.assert_called_once()
+        mock_read.assert_called_once()

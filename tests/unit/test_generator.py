@@ -1,10 +1,10 @@
+from itertools import islice
+
 import numpy as np
 import pytest
 from ase import Atoms
 
 from pyacemaker.core.exceptions import GeneratorError
-from itertools import islice
-
 from pyacemaker.core.generator import StructureGenerator
 from pyacemaker.domain_models.structure import ExplorationPolicy, StructureConfig
 
@@ -134,6 +134,47 @@ def test_generator_invalid_composition() -> None:
     # Updated error message expectation
     with pytest.raises(GeneratorError, match="Base generator failed"):
         next(generator.generate(1))
+
+
+def test_generator_zero_candidates() -> None:
+    """Test generating 0 candidates handles gracefully."""
+    config = StructureConfig(
+        elements=["Fe"],
+        supercell_size=[1, 1, 1],
+        policy_name=ExplorationPolicy.COLD_START,
+    )
+    generator = StructureGenerator(config)
+
+    stream = generator.generate(0)
+    assert len(list(stream)) == 0
+
+
+def test_generator_negative_candidates() -> None:
+    """Test generating negative candidates raises ValueError."""
+    config = StructureConfig(
+        elements=["Fe"],
+        supercell_size=[1, 1, 1],
+        policy_name=ExplorationPolicy.COLD_START,
+    )
+    generator = StructureGenerator(config)
+
+    with pytest.raises(ValueError, match="Number of candidates must be positive"):
+        stream = generator.generate(-1)
+        next(stream)  # Exhaust to trigger generator execution
+
+
+def test_generate_local_zero_candidates() -> None:
+    """Test generating 0 local candidates handles gracefully."""
+    config = StructureConfig(
+        elements=["Fe"],
+        supercell_size=[1, 1, 1],
+        policy_name=ExplorationPolicy.COLD_START,
+    )
+    generator = StructureGenerator(config)
+    base = Atoms("Fe", positions=[[0, 0, 0]])
+
+    stream = generator.generate_local(base, 0)
+    assert len(list(stream)) == 0
 
 
 def test_generate_local() -> None:

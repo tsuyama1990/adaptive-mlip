@@ -16,6 +16,7 @@ from pyacemaker.core.validator import Validator
 from pyacemaker.domain_models import PyAceConfig
 from pyacemaker.domain_models.defaults import (
     DEFAULT_PRODUCTION_DIR,
+    FILE_FORMAT_EXTXYZ,
     FILENAME_CANDIDATES,
     FILENAME_POTENTIAL,
     FILENAME_TRAINING,
@@ -111,17 +112,14 @@ class Orchestrator:
         self,
         generator: Iterable[Atoms],
         filepath: Path,
-        batch_size: int = 100,
         append: bool = False,
     ) -> int:
         """
-        Writes atoms from a generator to a file in chunks to balance I/O and memory.
-        Uses explicit streaming instead of batched() to avoid memory issues.
+        Writes atoms from a generator to a file one-by-one to avoid loading everything into memory.
 
         Args:
             generator: Iterable of Atoms objects.
             filepath: Path to output file.
-            batch_size: Number of atoms per write operation (used for flushing/chunking conceptually).
             append: Whether to append to the file or overwrite.
 
         Returns:
@@ -136,14 +134,9 @@ class Orchestrator:
 
         # Open file once
         with filepath.open(mode) as f:
-            # Write frames one by one or in small internal chunks if needed by ASE.
-            # ASE write(filename, atoms) can handle a list or single atom.
-            # writing to file handle supports multiple frames for extxyz.
-
-            # Optimization: Buffering is handled by file object.
-            # We just iterate and write.
+            # Write frames one by one
             for atoms in generator:
-                write(f, atoms, format="extxyz")
+                write(f, atoms, format=FILE_FORMAT_EXTXYZ)
                 count += 1
 
         return count
@@ -165,7 +158,6 @@ class Orchestrator:
             total = self._stream_write(
                 candidate_stream,
                 candidates_file,
-                batch_size=self.config.workflow.batch_size,
                 append=True,
             )
 
@@ -192,13 +184,13 @@ class Orchestrator:
 
         try:
             # Lazy read of candidates
-            candidate_stream = iread(str(candidates_file), index=":", format="extxyz")
+            candidate_stream = iread(str(candidates_file), index=":", format=FILE_FORMAT_EXTXYZ)
 
             # Streaming computation
             labelled_stream = self.oracle.compute(candidate_stream, batch_size=batch_size)
 
             total = self._stream_write(
-                labelled_stream, training_file, batch_size=batch_size, append=True
+                labelled_stream, training_file, append=True
             )
 
             self.logger.info(LOG_COMPUTED_PROPERTIES.format(count=total))
@@ -329,9 +321,7 @@ class Orchestrator:
 
         # Append to training data
         training_file = paths["training"] / FILENAME_TRAINING
-        batch_size = self.config.workflow.batch_size
-
-        return self._stream_write(labelled_gen, training_file, batch_size=batch_size, append=True)
+        return self._stream_write(labelled_gen, training_file, append=True)
 
     def _refine_potential(
         self, result: MDSimulationResult, potential_path: Path, paths: dict[str, Path]
@@ -415,12 +405,27 @@ class Orchestrator:
 
     def _adapt_strategy(self, result: MDSimulationResult) -> None:
         """
-        Placeholder for adaptive policy logic.
-        Future implementation: Update self.generator.config based on result metrics.
-
-        Note: This method is intended to implement the "Adaptive Exploration Policy" described in the Spec.
-        Currently, it is a no-op as the complex adaptation logic requires further requirements analysis.
+        Adapts the exploration strategy based on the simulation result.
+        Updates self.config.structure parameters based on max_gamma and halt status.
         """
+        threshold = self.config.workflow.otf.uncertainty_threshold
+        current_rattle = self.config.structure.rattle_stdev
+
+        if not result.halted and result.max_gamma < threshold / 2:
+            # Exploration is too safe, increase perturbation
+            self.config.structure.rattle_stdev = current_rattle * 1.1
+            self.logger.info(
+                f"Adaptive Strategy: Increased rattle_stdev to {self.config.structure.rattle_stdev:.4f}"
+            )
+        elif result.halted and result.max_gamma > threshold * 2:
+            # Exploration is too aggressive, decrease perturbation
+            self.config.structure.rattle_stdev = max(0.01, current_rattle * 0.9)
+            self.logger.info(
+                f"Adaptive Strategy: Decreased rattle_stdev to {self.config.structure.rattle_stdev:.4f}"
+            )
+
+        if self.generator:
+            self.generator.update_config(self.config.structure)
 
     def _execute_iteration_logic(self, iteration: int, paths: dict[str, Path]) -> None:
         """

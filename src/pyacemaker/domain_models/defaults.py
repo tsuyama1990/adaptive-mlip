@@ -21,6 +21,7 @@ DEFAULT_EON_SEED = 12345
 FILENAME_CANDIDATES = "candidates.xyz"
 FILENAME_TRAINING = "training_data.xyz"
 FILENAME_POTENTIAL = "potential.yace"
+FILE_FORMAT_EXTXYZ = "extxyz"
 
 # Template strings
 TEMPLATE_ITER_DIR = "iter_{iteration:03d}"
@@ -157,6 +158,8 @@ LAMMPS_SCREEN_ARG = "-screen"
 LAMMPS_MIN_STYLE_CG = "cg"
 
 # Delta Learning
+# Ensure values are strictly typed and managed
+# (Using dicts here, but we will wrap them in Pydantic models where used if necessary)
 DEFAULT_LJ_PARAMS: Final[dict[str, float]] = {"sigma": 2.5, "epsilon": 1.0, "cutoff": 5.0}
 FALLBACK_LJ_PARAMS: Final[dict[str, float]] = {"sigma": 2.0, "epsilon": 0.5, "cutoff": 4.0}
 
