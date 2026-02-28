@@ -29,13 +29,17 @@ def uat_dft_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> DFTConfig
     )
 
 
-def test_uat_02_01_single_point_calculation(uat_dft_config: DFTConfig, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_uat_02_01_single_point_calculation(
+    uat_dft_config: DFTConfig, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """
     Scenario 02-01: Single Point Calculation.
     Verify that the system can run a simple DFT calculation (mocked).
     """
     # 1. Preparation: H2O molecule
-    h2o = Atoms("H2O", positions=[[0, 0, 0], [0, 0, 0.96], [0, 0.96, 0]], cell=[10, 10, 10], pbc=True)
+    h2o = Atoms(
+        "H2O", positions=[[0, 0, 0], [0, 0, 0.96], [0, 0.96, 0]], cell=[10, 10, 10], pbc=True
+    )
 
     # 2. Action: Run DFTManager with mocked driver
     # We patch QEDriver but we also need to ensure the driver instance returned
@@ -48,8 +52,8 @@ def test_uat_02_01_single_point_calculation(uat_dft_config: DFTConfig, monkeypat
         mock_driver_instance = MockDriverClass.return_value
         # Mock get_calculator to return a MockCalculator instance with H2O energy
         # Accept **kwargs to handle 'directory' argument
-        mock_driver_instance.get_calculator.side_effect = lambda atoms, config, **kwargs: MockCalculator(
-            fail_count=0, test_energy=TEST_ENERGY_H2O
+        mock_driver_instance.get_calculator.side_effect = lambda atoms, config, **kwargs: (
+            MockCalculator(fail_count=0, test_energy=TEST_ENERGY_H2O)
         )
 
         manager = DFTManager(uat_dft_config)
@@ -63,13 +67,17 @@ def test_uat_02_01_single_point_calculation(uat_dft_config: DFTConfig, monkeypat
         assert result.get_forces().shape == (3, 3)  # type: ignore[no-untyped-call]
 
 
-def test_uat_02_02_self_healing(uat_dft_config: DFTConfig, caplog: pytest.LogCaptureFixture) -> None:
+def test_uat_02_02_self_healing(
+    uat_dft_config: DFTConfig, caplog: pytest.LogCaptureFixture
+) -> None:
     """
     Scenario 02-02: Self-Healing Test.
     Verify that the system recovers from a simulated SCF convergence failure.
     """
     # 1. Preparation
-    h2o = Atoms("H2O", positions=[[0, 0, 0], [0, 0, 0.96], [0, 0.96, 0]], cell=[10, 10, 10], pbc=True)
+    h2o = Atoms(
+        "H2O", positions=[[0, 0, 0], [0, 0, 0.96], [0, 0.96, 0]], cell=[10, 10, 10], pbc=True
+    )
 
     # 2. Action: Run DFTManager with failure
     with patch("pyacemaker.core.oracle.QEDriver") as MockDriverClass:

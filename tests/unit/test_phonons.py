@@ -21,10 +21,7 @@ class TestPhononCalculator:
     @pytest.fixture
     def calculator(self, mock_engine):
         return PhononCalculator(
-            engine=mock_engine,
-            supercell_matrix=[2, 2, 2],
-            displacement=0.01,
-            imaginary_tol=-0.05
+            engine=mock_engine, supercell_matrix=[2, 2, 2], displacement=0.01, imaginary_tol=-0.05
         )
 
     @patch("pyacemaker.utils.phonons.Phonopy")
@@ -34,12 +31,9 @@ class TestPhononCalculator:
         # Mock band structure frequencies
         # Phonopy.get_band_structure_dict() returns a dict with 'frequencies' list of arrays
         mock_phonopy.get_band_structure_dict.return_value = {
-            "frequencies": [
-                np.array([1.0, 2.0, 3.0]),
-                np.array([1.5, 2.5, 3.5])
-            ],
+            "frequencies": [np.array([1.0, 2.0, 3.0]), np.array([1.5, 2.5, 3.5])],
             "qpoints": [],
-            "distances": []
+            "distances": [],
         }
 
         structure = Atoms("Fe", positions=[[0, 0, 0]], cell=[2.8, 2.8, 2.8], pbc=True)
@@ -61,10 +55,10 @@ class TestPhononCalculator:
         # Mock imaginary frequencies (negative values)
         mock_phonopy.get_band_structure_dict.return_value = {
             "frequencies": [
-                np.array([-1.0, 2.0, 3.0]) # -1.0 is < -0.05 tolerance
+                np.array([-1.0, 2.0, 3.0])  # -1.0 is < -0.05 tolerance
             ],
             "qpoints": [],
-            "distances": []
+            "distances": [],
         }
 
         structure = Atoms("Fe", positions=[[0, 0, 0]], cell=[2.8, 2.8, 2.8], pbc=True)

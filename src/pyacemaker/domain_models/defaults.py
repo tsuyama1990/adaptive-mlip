@@ -115,8 +115,34 @@ DEFAULT_VALIDATION_ELASTIC_STEPS = 5
 # Security constants
 # Audit fix: Expanded list of dangerous characters
 DANGEROUS_PATH_CHARS: Final[set[str]] = {
-    ";", "&", "|", "`", "$", "(", ")", "<", ">", "\n", "\r", "\t", "?",
-    "*", "[", "]", "{", "}", "'", '"', "!", "#",
+    ";",
+    "&",
+    "|",
+    "`",
+    "$",
+    "(",
+    ")",
+    "<",
+    ">",
+    "\n",
+    "\r",
+    "\t",
+    "?",
+    "*",
+    "[",
+    "]",
+    "{",
+    "}",
+    "'",
+    '"',
+    "!",
+    "#",
+    "\\",
+    "=",
+    "%",
+    "^",
+    "~",
+    " ",
 }
 
 # RAM Disk logic

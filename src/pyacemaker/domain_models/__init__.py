@@ -1,4 +1,4 @@
-from .config import PyAceConfig
+from .config import PyAceConfig, DistillationConfig, ActiveLearningThresholds, CutoutConfig, LoopStrategyConfig
 from .dft import DFTConfig
 from .eon import EONConfig
 from .logging import LoggingConfig
@@ -17,6 +17,10 @@ __all__ = [
     "MDConfig",
     "MDSimulationResult",
     "PyAceConfig",
+    "DistillationConfig",
+    "ActiveLearningThresholds",
+    "CutoutConfig",
+    "LoopStrategyConfig",
     "ScenarioConfig",
     "StructureConfig",
     "TrainingConfig",

@@ -87,30 +87,38 @@ class ActiveSetSelector:
                 msg = f"Failed to read selected structures: {e}"
                 raise ActiveSetError(msg) from e
 
-    def _write_candidates(self, candidates: Iterable[Atoms], file_path: Path) -> int:
+    def _write_candidates(self, candidates: Iterable[Atoms], file_path: Path, batch_size: int = 1000) -> int:
         """
         Writes candidates to disk using pure streaming.
-        Passes the iterator directly to ASE write to avoid any intermediate batch materialization.
+        Uses append mode and batches to prevent holding file descriptor open for too long
+        and allows strict chunking without full materialization.
         """
+        from itertools import islice
         count = 0
 
-        # Generator wrapper to count items while streaming
-        def counting_wrapper(iterable: Iterable[Atoms]) -> Iterator[Atoms]:
-            nonlocal count
-            for atoms in iterable:
-                count += 1
-                yield atoms
-
         try:
-            # write() iterates over the generator and writes frame by frame.
-            # This is O(1) memory usage relative to dataset size.
-            write(file_path, counting_wrapper(candidates), format="extxyz")  # type: ignore[arg-type]
+            # create iterator if it is not already
+            candidate_iter = iter(candidates)
+
+            while True:
+                # get a batch using islice
+                batch = list(islice(candidate_iter, batch_size))
+                if not batch:
+                    break
+
+                count += len(batch)
+
+                # Write batch in append mode
+                write(file_path, batch, format="extxyz", append=True)
+
         except Exception as e:
             msg = f"Failed to write candidates to temporary file: {e}"
             raise ActiveSetError(msg) from e
         return count
 
-    def _execute_selection(self, candidates_file: Path, potential_path: Path, output_file: Path, n_select: int) -> None:
+    def _execute_selection(
+        self, candidates_file: Path, potential_path: Path, output_file: Path, n_select: int
+    ) -> None:
         """Constructs and runs the selection command."""
         self._validate_path_safe(candidates_file)
         self._validate_path_safe(potential_path)

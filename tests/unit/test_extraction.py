@@ -6,7 +6,7 @@ from pyacemaker.utils.extraction import extract_local_region
 
 def test_extract_local_region_basic() -> None:
     # Create a simple cubic lattice
-    atoms = bulk('Cu', 'sc', a=2.5).repeat((3, 3, 3))  # type: ignore[no-untyped-call]
+    atoms = bulk("Cu", "sc", a=2.5).repeat((3, 3, 3))  # type: ignore[no-untyped-call]
 
     # Center atom at index 13 (middle of 3x3x3 is 13? 3*3*3=27. 13 is center)
     center_idx = 13
@@ -40,11 +40,12 @@ def test_extract_local_region_basic() -> None:
     n_buffer = np.sum(weights == 0.0)
 
     assert n_core == 7  # 1 center + 6 NN
-    assert n_buffer == 12 # 12 NNN
+    assert n_buffer == 12  # 12 NNN
+
 
 def test_extract_local_region_pbc() -> None:
     # Test extraction across PBC
-    atoms = bulk('Cu', 'sc', a=2.5).repeat((2, 2, 2))  # type: ignore[no-untyped-call]
+    atoms = bulk("Cu", "sc", a=2.5).repeat((2, 2, 2))  # type: ignore[no-untyped-call]
     # 8 atoms.
     # Center at 0 (corner).
     # Radius covers nearest neighbors (which are wrapped).
@@ -61,4 +62,4 @@ def test_extract_local_region_pbc() -> None:
     assert len(cluster) == 7
 
     weights = cluster.get_array("force_weight")  # type: ignore[no-untyped-call]
-    assert np.all(weights == 1.0) # All are within radius
+    assert np.all(weights == 1.0)  # All are within radius

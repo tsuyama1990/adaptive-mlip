@@ -1,8 +1,126 @@
+from typing import Any, List
+
 import numpy as np
 from ase import Atoms
+from ase.calculators.calculator import Calculator
+from ase.constraints import FixAtoms
 from ase.neighborlist import neighbor_list
+from ase.optimize import LBFGS
 
+from pyacemaker.domain_models.config import CutoutConfig
 from pyacemaker.utils.embedding import embed_cluster
+
+
+def _pre_relax_buffer(cluster: Atoms, calculator: Calculator) -> None:
+    """Relaxes the buffer region using the provided calculator while fixing core atoms."""
+    weights = cluster.arrays.get("force_weight", np.ones(len(cluster)))
+
+    # Core atoms have weight == 1.0
+    core_indices = np.where(weights == 1.0)[0]
+
+    constraint = FixAtoms(indices=core_indices)  # type: ignore[no-untyped-call]
+    cluster.set_constraint(constraint)  # type: ignore[no-untyped-call]
+
+    cluster.calc = calculator
+    opt = LBFGS(cluster, logfile=None)
+    opt.run(fmax=0.05, steps=50)  # type: ignore[no-untyped-call]
+
+    # Remove constraints and calculator after relaxation to clean up
+    cluster.set_constraint()  # type: ignore[no-untyped-call]
+    cluster.calc = None
+
+
+def _passivate_surface(cluster: Atoms, element: str) -> None:
+    """Auto-passivates under-coordinated atoms at the boundary."""
+    weights = cluster.arrays.get("force_weight", np.ones(len(cluster)))
+
+    # Passivate only atoms in the buffer (weight == 0.0)
+    boundary_indices = np.where(weights == 0.0)[0]
+    if len(boundary_indices) == 0:
+        return
+
+    positions = cluster.positions
+    center_of_mass = np.mean(positions, axis=0)
+
+    new_symbols = list(cluster.symbols)
+    new_positions = list(positions)
+    new_weights = list(weights)
+
+    passivation_distance = 1.0  # approximate bond length for H
+
+    for idx in boundary_indices:
+        # Vector from center to atom
+        outward_vector = positions[idx] - center_of_mass
+        norm = np.linalg.norm(outward_vector)
+        if norm > 1e-6:
+            direction = outward_vector / norm
+            # Add new atom
+            new_pos = positions[idx] + direction * passivation_distance
+            new_symbols.append(element)
+            new_positions.append(new_pos)
+            new_weights.append(0.0)  # Passivation atoms get weight 0.0
+
+    # Update cluster by extending
+    for i in range(len(cluster), len(new_symbols)):
+        cluster.append(Atoms(symbols=[new_symbols[i]], positions=[new_positions[i]])[0])  # type: ignore[no-untyped-call]
+
+    cluster.arrays["force_weight"] = np.array(new_weights)
+
+
+def extract_intelligent_cluster(
+    structure: Atoms, target_atoms: List[int], config: CutoutConfig, calculator: Any = None
+) -> Atoms:
+    """
+    Extracts an intelligent cluster around a set of target atoms.
+
+    Applies force weights according to core and buffer radii.
+    Optionally pre-relaxes the buffer and passivates dangling bonds.
+    """
+    total_cutoff = config.core_radius + config.buffer_radius
+
+    all_indices_to_include = set()
+
+    # Spherical Cutout: find all atoms within radii of ANY target atom
+    for center_idx in target_atoms:
+        i_indices, j_indices, D_vectors = neighbor_list('ijD', structure, cutoff=total_cutoff)  # type: ignore[no-untyped-call]
+        mask = (i_indices == center_idx)
+        neighbors_indices = j_indices[mask]
+
+        all_indices_to_include.add(center_idx)
+        all_indices_to_include.update(neighbors_indices)
+
+    sorted_indices = sorted(all_indices_to_include)
+
+    if not sorted_indices:
+        return Atoms()
+
+    cluster = structure[sorted_indices].copy()  # type: ignore[no-untyped-call]
+
+    # Calculate weights efficiently using KDTree/Neighbor list logic
+    # instead of N^2
+    target_positions = structure.positions[target_atoms]
+    cluster_positions = cluster.positions
+    weights = np.zeros(len(cluster))
+
+    # For O(N log N) we could use scipy cKDTree, but let's avoid adding new deps
+    # and just use vectorized dist calculation per target atom since target_atoms is very small (e.g. 1 defect core).
+    for i, pos in enumerate(cluster_positions):
+        min_dist = np.min(np.linalg.norm(target_positions - pos, axis=1))
+        if min_dist <= config.core_radius + 1e-6:
+            weights[i] = 1.0
+
+    cluster.new_array("force_weight", weights)
+
+    # Pre-relaxation
+    if config.enable_pre_relaxation and calculator is not None:
+        _pre_relax_buffer(cluster, calculator)
+
+    # Auto-Passivation
+    if config.enable_passivation:
+        _passivate_surface(cluster, config.passivation_element)
+
+    # Finally, embed it
+    return embed_cluster(cluster, buffer=5.0)
 
 
 def extract_local_region(

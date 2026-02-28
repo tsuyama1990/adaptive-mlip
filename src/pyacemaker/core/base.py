@@ -12,11 +12,15 @@ class BasePolicy(ABC):
     """
     Abstract base class for exploration policies.
     """
+
     @abstractmethod
-    def generate(self, **kwargs: Any) -> None:
+    def generate(
+        self, base_structure: Atoms, config: Any, n_structures: int = 1, **kwargs: Any
+    ) -> Iterator[Atoms]:
         """
         Generates new candidates based on policy logic.
         """
+        pass
 
 
 class BaseGenerator(ABC):
@@ -63,7 +67,9 @@ class BaseGenerator(ABC):
         """
 
     @abstractmethod
-    def generate_local(self, base_structure: Atoms, n_candidates: int, **kwargs: Any) -> Iterator[Atoms]:
+    def generate_local(
+        self, base_structure: Atoms, n_candidates: int, **kwargs: Any
+    ) -> Iterator[Atoms]:
         """
         Generates candidate structures by perturbing a base structure.
         Used in OTF loops to explore the local neighborhood of a high-uncertainty configuration.
@@ -119,9 +125,7 @@ class BaseTrainer(ABC):
 
     @abstractmethod
     def train(
-        self,
-        training_data_path: str | Path,
-        initial_potential: str | Path | None = None
+        self, training_data_path: str | Path, initial_potential: str | Path | None = None
     ) -> Any:
         """
         Trains a potential using the provided training data file.

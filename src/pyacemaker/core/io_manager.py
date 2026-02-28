@@ -23,7 +23,9 @@ class LammpsFileManager:
     def __init__(self, config: MDConfig) -> None:
         self.config = config
 
-    def prepare_workspace(self, structure: Atoms | str | Path) -> tuple[Any, Path, Path, Path, list[str]]:
+    def prepare_workspace(
+        self, structure: Atoms | str | Path
+    ) -> tuple[Any, Path, Path, Path, list[str]]:
         """
         Creates temporary directory and writes structure file.
 
@@ -54,6 +56,7 @@ class LammpsFileManager:
             if isinstance(structure, (str, Path)):
                 # Load only the first frame to minimize memory usage
                 from ase.io import iread
+
                 try:
                     atoms_iter = iread(str(structure))
                     first_frame = next(atoms_iter)
@@ -79,7 +82,9 @@ class LammpsFileManager:
             temp_dir_ctx.cleanup()
             raise
 
-    def _write_structure_memory(self, structure: Atoms, output_path: Path, elements: list[str]) -> None:
+    def _write_structure_memory(
+        self, structure: Atoms, output_path: Path, elements: list[str]
+    ) -> None:
         """Writes structure to disk using streaming writer if possible."""
         try:
             # Memory Safety Fix: Always attempt streaming first if atom_style allows
@@ -95,8 +100,17 @@ class LammpsFileManager:
 
             if not streaming_success:
                 if len(structure) > 1000000:
-                    logger.warning("Falling back to ASE write for large structure (%d atoms). Memory usage may be high.", len(structure))
-                write(str(output_path), structure, format="lammps-data", specorder=elements, atom_style=self.config.atom_style.value)
+                    logger.warning(
+                        "Falling back to ASE write for large structure (%d atoms). Memory usage may be high.",
+                        len(structure),
+                    )
+                write(
+                    str(output_path),
+                    structure,
+                    format="lammps-data",
+                    specorder=elements,
+                    atom_style=self.config.atom_style.value,
+                )
 
         except Exception as e:
             msg = f"Failed to write LAMMPS data file: {e}"

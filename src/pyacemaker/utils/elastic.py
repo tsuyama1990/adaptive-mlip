@@ -52,7 +52,7 @@ class ElasticCalculator:
         for eps in strains:
             atoms = structure.copy()  # type: ignore[no-untyped-call]
             cell = base_cell.copy()
-            cell[0, 0] *= (1 + eps)
+            cell[0, 0] *= 1 + eps
             atoms.set_cell(cell, scale_atoms=True)
 
             stress = self._get_stress(atoms, potential_path)
@@ -77,11 +77,11 @@ class ElasticCalculator:
             # Shear strain gamma: x -> x + gamma*y
             # cell vector a1 = (a, 0, 0), a2 = (0, a, 0)
             # New a2 = (gamma*a, a, 0)
-            cell[1, 0] += eps * base_cell[0, 0] # Simple shear
+            cell[1, 0] += eps * base_cell[0, 0]  # Simple shear
             atoms.set_cell(cell, scale_atoms=True)
 
             stress = self._get_stress(atoms, potential_path)
-            stress_xy.append(stress[5]) # xy component (Voigt index 5)
+            stress_xy.append(stress[5])  # xy component (Voigt index 5)
 
         # Fit sigma_xy vs gamma (gamma = eps if defined as such)
         # Actually standard definition: e_xy = 0.5 * gamma.
@@ -115,18 +115,18 @@ class ElasticCalculator:
 
         # Plot
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4))
-        ax1.plot(strains, stress_xx, 'o-', label='sigma_xx')
-        ax1.plot(strains, stress_yy, 's-', label='sigma_yy')
-        ax1.set_xlabel('Strain')
-        ax1.set_ylabel('Stress (Bar)')
+        ax1.plot(strains, stress_xx, "o-", label="sigma_xx")
+        ax1.plot(strains, stress_yy, "s-", label="sigma_yy")
+        ax1.set_xlabel("Strain")
+        ax1.set_ylabel("Stress (Bar)")
         ax1.legend()
-        ax1.set_title('Normal Strain')
+        ax1.set_title("Normal Strain")
 
-        ax2.plot(strains, stress_xy, '^-', label='sigma_xy')
-        ax2.set_xlabel('Shear Strain')
-        ax2.set_ylabel('Stress (Bar)')
+        ax2.plot(strains, stress_xy, "^-", label="sigma_xy")
+        ax2.set_xlabel("Shear Strain")
+        ax2.set_ylabel("Stress (Bar)")
         ax2.legend()
-        ax2.set_title('Shear Strain')
+        ax2.set_title("Shear Strain")
 
         buf = io.BytesIO()
         plt.tight_layout()

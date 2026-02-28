@@ -60,8 +60,8 @@ class LammpsDriver:
             ValueError: If script contains non-ASCII characters or unsafe commands.
         """
         if not script.isascii():
-             msg = "Script contains non-ASCII characters, which may be unsafe."
-             raise ValueError(msg)
+            msg = "Script contains non-ASCII characters, which may be unsafe."
+            raise ValueError(msg)
 
         for line in script.split("\n"):
             cmd = line.strip()
@@ -143,8 +143,8 @@ class LammpsDriver:
         try:
             symbols = [elements[t - 1] for t in types_view]
         except IndexError as e:
-             msg = f"LAMMPS type index out of range for elements list: {e}"
-             raise ValueError(msg) from e
+            msg = f"LAMMPS type index out of range for elements list: {e}"
+            raise ValueError(msg) from e
 
         boxlo, boxhi, xy, yz, xz, periodicity, box_change = self.lmp.extract_box()
 
@@ -152,11 +152,7 @@ class LammpsDriver:
         ly = boxhi[1] - boxlo[1]
         lz = boxhi[2] - boxlo[2]
 
-        cell = np.array([
-            [lx, 0.0, 0.0],
-            [xy, ly, 0.0],
-            [xz, yz, lz]
-        ])
+        cell = np.array([[lx, 0.0, 0.0], [xy, ly, 0.0], [xz, yz, lz]])
 
         return Atoms(symbols=symbols, positions=positions_view, cell=cell, pbc=periodicity)
 

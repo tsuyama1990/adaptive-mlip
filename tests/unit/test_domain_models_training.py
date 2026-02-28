@@ -26,10 +26,7 @@ def test_training_config_defaults() -> None:
 def test_training_config_filename_validation() -> None:
     # Valid
     TrainingConfig(
-        potential_type="ace",
-        cutoff_radius=5.0,
-        max_basis_size=1,
-        output_filename="valid.yace"
+        potential_type="ace", cutoff_radius=5.0, max_basis_size=1, output_filename="valid.yace"
     )
 
     # Invalid
@@ -38,7 +35,7 @@ def test_training_config_filename_validation() -> None:
             potential_type="ace",
             cutoff_radius=5.0,
             max_basis_size=1,
-            output_filename="path/traversal.yace"
+            output_filename="path/traversal.yace",
         )
 
 
@@ -72,6 +69,7 @@ def test_training_config_active_set_size_invalid_negative() -> None:
             active_set_size=-1,
         )
 
+
 def test_training_config_active_set_required() -> None:
     with pytest.raises(ValidationError, match="active_set_size must be set"):
         TrainingConfig(
@@ -81,6 +79,7 @@ def test_training_config_active_set_required() -> None:
             active_set_optimization=True,
             # active_set_size missing
         )
+
 
 def test_pacemaker_config_custom_values() -> None:
     pm_config = PacemakerConfig(
@@ -95,14 +94,11 @@ def test_pacemaker_config_custom_values() -> None:
         loss_l1_coeffs=1e-5,
         loss_l2_coeffs=1e-5,
         repulsion_sigma=0.1,
-        optimizer="Adam"
+        optimizer="Adam",
     )
 
     config = TrainingConfig(
-        potential_type="ace",
-        cutoff_radius=5.0,
-        max_basis_size=1,
-        pacemaker=pm_config
+        potential_type="ace", cutoff_radius=5.0, max_basis_size=1, pacemaker=pm_config
     )
 
     assert config.pacemaker.optimizer == "Adam"
