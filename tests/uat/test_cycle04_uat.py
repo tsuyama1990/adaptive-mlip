@@ -101,6 +101,7 @@ def test_uat_active_set_selection(tmp_path: Path) -> None:
         mock_run.side_effect = side_effect
 
         from itertools import islice
+
         selected_iter = selector.select(pool, pot_path, n_select=10)
         selected = list(islice(selected_iter, 10))
 

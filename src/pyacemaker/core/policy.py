@@ -29,11 +29,74 @@ class MDMicroBurstPolicy(SafeBasePolicy):
     Policy using short MD bursts to explore phase space.
     """
 
+    def generate(
+        self, base_structure: Atoms, config: StructureConfig, n_structures: int = 1, **kwargs: Any
+    ) -> Iterator[Atoms]:
+        from ase.io import read
+
+        engine = kwargs.get("engine")
+        potential = kwargs.get("potential")
+
+        if not engine:
+            for _ in range(n_structures):
+                yield base_structure.copy()  # type: ignore[no-untyped-call]
+            return
+
+        for _ in range(n_structures):
+            atoms = base_structure.copy()  # type: ignore[no-untyped-call]
+            try:
+                # We expect engine.run to return an MDSimulationResult
+                result = engine.run(atoms, potential)
+                target_path = result.halt_structure_path or result.trajectory_path
+                if target_path:
+                    # Trajectory might contain multiple frames, we want the last one
+                    trajectory = read(target_path, index=":")
+                    if trajectory and isinstance(trajectory, list):
+                        yield trajectory[-1]
+                    elif isinstance(trajectory, Atoms):
+                        yield trajectory
+                    else:
+                        yield atoms
+                else:
+                    yield atoms
+            except Exception:
+                yield atoms
+
 
 class NormalModePolicy(SafeBasePolicy):
     """
     Policy using Normal Mode sampling.
     """
+
+    def generate(
+        self, base_structure: Atoms, config: StructureConfig, n_structures: int = 1, **kwargs: Any
+    ) -> Iterator[Atoms]:
+        import numpy as np
+
+        stdev = getattr(config, "rattle_stdev", 0.1)
+        masses = base_structure.get_masses()
+
+        # If masses are zero (dummy atoms) or not set, fallback to 1.0 to avoid division by zero
+        masses[masses <= 0] = 1.0
+
+        # Scale displacements by inverse square root of mass
+        scale_factors = 1.0 / np.sqrt(masses)
+        # Normalize scale factors so the average displacement matches stdev
+        scale_factors /= np.mean(scale_factors)
+
+        for _ in range(n_structures):
+            atoms = base_structure.copy()  # type: ignore[no-untyped-call]
+            positions = atoms.get_positions()
+
+            # Generate random displacements
+            displacements = np.random.normal(scale=stdev, size=positions.shape)
+
+            # Apply mass scaling
+            displacements *= scale_factors[:, np.newaxis]
+
+            positions += displacements
+            atoms.set_positions(positions)
+            yield atoms
 
 
 class CompositePolicy(SafeBasePolicy):

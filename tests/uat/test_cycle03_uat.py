@@ -1,5 +1,3 @@
-from itertools import islice
-
 import numpy as np
 from ase import Atoms
 

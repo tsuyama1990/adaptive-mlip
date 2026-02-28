@@ -415,12 +415,27 @@ class Orchestrator:
 
     def _adapt_strategy(self, result: MDSimulationResult) -> None:
         """
-        Placeholder for adaptive policy logic.
-        Future implementation: Update self.generator.config based on result metrics.
-
-        Note: This method is intended to implement the "Adaptive Exploration Policy" described in the Spec.
-        Currently, it is a no-op as the complex adaptation logic requires further requirements analysis.
+        Adapts the exploration strategy based on the simulation result.
+        Updates self.config.structure parameters based on max_gamma and halt status.
         """
+        threshold = self.config.workflow.otf.uncertainty_threshold
+        current_rattle = self.config.structure.rattle_stdev
+
+        if not result.halted and result.max_gamma < threshold / 2:
+            # Exploration is too safe, increase perturbation
+            self.config.structure.rattle_stdev = current_rattle * 1.1
+            self.logger.info(
+                f"Adaptive Strategy: Increased rattle_stdev to {self.config.structure.rattle_stdev:.4f}"
+            )
+        elif result.halted and result.max_gamma > threshold * 2:
+            # Exploration is too aggressive, decrease perturbation
+            self.config.structure.rattle_stdev = max(0.01, current_rattle * 0.9)
+            self.logger.info(
+                f"Adaptive Strategy: Decreased rattle_stdev to {self.config.structure.rattle_stdev:.4f}"
+            )
+
+        if self.generator:
+            self.generator.update_config(self.config.structure)
 
     def _execute_iteration_logic(self, iteration: int, paths: dict[str, Path]) -> None:
         """
