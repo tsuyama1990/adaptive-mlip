@@ -4,7 +4,50 @@
 
 ---
 
-# PYACEMAKER v2.1.0 受入テスト（UAT）シナリオ
+# PYACEMAKER v2.1.0 受入テスト（UAT）及びチュートリアル計画 (Master Plan)
+
+このドキュメントは、PYACEMAKER Version 2.1.0の機能要件（ALL_SPEC.md）及びシステムアーキテクチャ設計（SYSTEM_ARCHITECTURE.md）に基づく、ユーザー受入テスト（UAT）および新規ユーザー向けチュートリアルのマスタープランを定義します。
+
+## 1. チュートリアル戦略 (Tutorial Strategy)
+
+開発された各サイクル（CYCLE01〜04）の複雑な機能をユーザーが直感的に検証・理解できるよう、**単一のMarimoノートブック (`tutorials/UAT_AND_TUTORIAL.py`)** を作成し、すべてのUATシナリオを統合します。
+
+*   **Marimoの採用:** インタラクティブな実行、コードの自己文書化、およびステートの確実な管理が可能な `marimo` を採用します。これにより、ユーザーはセル単位でアーキテクチャの挙動を確認できます。
+*   **実行モード (Real vs. Mock):**
+    *   **Mock Mode (CI/Tutorial用):** デフォルトのモードです。重いDFT計算（QE）や長時間の学習（Pacemaker）、推論（MACE）を高速なダミークラス（例: Lennard-Jonesポテンシャル、乱数ジェネレーター）でモック化し、数秒でパイプライン全体のロジック（切り出し、状態管理、再開）を検証できるようにします。
+    *   **Real Mode (本番検証用):** 設定フラグ（例: `USE_REAL_ENGINES=True`）を切り替えることで、実際にQEやMACEを呼び出す本番環境テストモードに切り替わる設計とします。
+
+## 2. チュートリアル計画 (Tutorial Plan)
+
+以下の内容を包含する単一ファイル `tutorials/UAT_AND_TUTORIAL.py` を実装します。
+
+### セクション構成案
+
+1.  **はじめに (Introduction):** PYACEMAKER v2.1.0の「階層的蒸留アーキテクチャ」の概要図（Mermaid）と、本チュートリアルの目的（Mockモードでの動作確認）を説明。
+2.  **シナリオ 1: Zero-Shot Distillation (Phase 1):**
+    *   4元系合金の `DistillationConfig` を定義。
+    *   `MACEManager` (Mock) を用いて、不確実性ベースのフィルタリングが動作し、DFTなしで `base.yace` (ダミー) が生成されることを実演。
+3.  **シナリオ 2: Intelligent Cutout (Phase 3):**
+    *   巨大なバルク構造（ASE `bulk` で生成）に意図的に欠陥を導入。
+    *   `extract_intelligent_cluster` 関数を呼び出し、`force_weight` の割り当て（Core/Buffer）と自動終端処理（H原子付与）を可視化（ASEのplot機能などを利用してインライン表示）。
+4.  **シナリオ 3: Seamless Resume (Phase 4 / Engine):**
+    *   LAMMPSエンジン（Mock）を起動し、途中で意図的にHalt例外を発生させる。
+    *   `restart_file` を用いて、例外発生ステップから正確に速度・座標が引き継がれて再開（Resume）されることをログ出力で証明。
+5.  **シナリオ 4: Orchestrator & Resilience:**
+    *   `Orchestrator` のメインループを数サイクル回す。
+    *   `StateManager` によって `state.json` が生成されていること、および `cleanup_artifacts` によって巨大なダミーファイルが削除されていることをファイルシステムの確認を通じて実演。
+
+## 3. チュートリアル検証 (Tutorial Validation)
+
+このチュートリアルファイル自体が、システムのCI（継続的インテグレーション）における結合テストとして機能します。
+
+*   **自動テスト:** `pytest` のテストスイートから `marimo export html tutorials/UAT_AND_TUTORIAL.py` 相当のコマンドを実行（またはAPI経由で実行）し、エラーなく完走することをもって、全機能のインテグレーションが成功しているとみなします。
+
+---
+
+## 補足: 個別機能の受入テストシナリオ (Detailed Scenarios)
+
+以下は、各開発サイクルで定義されたUATの詳細シナリオです（上記チュートリアル内でコードとして実装されます）。
 
 ## シナリオ1：Phase 1 - ゼロショット蒸留とベースライン構築の検証
 
