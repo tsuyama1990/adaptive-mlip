@@ -18,16 +18,29 @@ def _check_dangerous_chars(path: Path) -> None:
         raise ValueError(msg)
 
 def _resolve_path(path: Path) -> Path:
+    # Reject symlinks to prevent TOCTOU symlink attacks
+    if path.is_symlink():
+        msg = f"Path is a symlink, which is not allowed for security reasons: {path}"
+        raise ValueError(msg)
+
     try:
         if path.exists():
-            return path.resolve(strict=True)
-        if path.parent.exists():
+            resolved = path.resolve(strict=True)
+        elif path.parent.exists():
             resolved_parent = path.parent.resolve(strict=True)
-            return resolved_parent / path.name
-        return path.resolve(strict=False)
+            resolved = resolved_parent / path.name
+        else:
+            resolved = path.resolve(strict=False)
     except Exception as e:
         msg = f"Invalid path resolution: {path}"
         raise ValueError(msg) from e
+    else:
+        # Reject symlinks to prevent TOCTOU symlink attacks
+        if path.is_symlink():
+            msg = f"Path is a symlink, which is not allowed for security reasons: {path}"
+            raise ValueError(msg)
+
+        return resolved
 
 def _check_allowed_roots(resolved: Path) -> None:
     base_dir = Path.cwd().resolve()

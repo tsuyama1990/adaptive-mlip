@@ -1,7 +1,6 @@
 import logging
-from collections.abc import Iterable
 from pathlib import Path
-from typing import Any
+from typing import Any, TextIO
 
 import numpy as np
 import yaml
@@ -47,14 +46,15 @@ def detect_elements(data_path: Path, max_frames: int = 10) -> list[str]:
     Returns:
         List of chemical symbols (sorted alphabetically).
     """
-    symbols = set()
+    symbols: set[str] = set()
     try:
         # Optimization: Use iread to peek. Stop if we have 'enough' frames or symbols stabilize?
         # Difficult to know if symbols stabilize. Just read max_frames.
+        # Ensure streaming by iterating directly without converting to list.
         gen = iread(str(data_path), index=f":{max_frames}")
         for atoms in gen:
             if isinstance(atoms, Atoms):
-                new_syms = set(atoms.get_chemical_symbols())
+                new_syms = set(atoms.get_chemical_symbols())  # type: ignore[no-untyped-call]
                 # If we found new symbols, update.
                 if not new_syms.issubset(symbols):
                     symbols.update(new_syms)
@@ -87,8 +87,10 @@ def _get_atomic_mass(symbol: str) -> float:
     return _ATOMIC_MASSES_CACHE[symbol]
 
 
+
+
 def write_lammps_streaming(
-    fileobj: Any, atoms: Atoms, species: list[str], atom_style: str = "atomic"
+    fileobj: TextIO, atoms: Atoms, species: list[str], atom_style: str = "atomic"
 ) -> None:
     """
     Writes a single frame in LAMMPS data format to an open file object.
@@ -102,8 +104,10 @@ def write_lammps_streaming(
     """
     natoms = len(atoms)
 
+    from pyacemaker.domain_models.constants import LAMMPS_FORMAT_STREAMING_HEADER
+
     # 1. Header
-    fileobj.write("LAMMPS data file via pyacemaker streaming\n\n")
+    fileobj.write(LAMMPS_FORMAT_STREAMING_HEADER)
     fileobj.write(f"{natoms} atoms\n")
     fileobj.write(f"{len(species)} atom types\n\n")
 
@@ -138,26 +142,22 @@ def write_lammps_streaming(
     fileobj.write("Atoms # atomic\n\n")
 
     # Optimize Atom Writing:
-    # Use direct array access and iterators to avoid creating large intermediate lists/arrays if possible.
-    # But atoms.get_positions() returns a copy anyway.
+    # Avoid getting the entire positions array into memory if possible by using atoms.positions memory view.
+    # We write directly to the file inside the loop.
 
-    pos = atoms.get_positions()  # (N, 3)
-    symbols = atoms.get_chemical_symbols()  # List of strings (N)
+    pos = atoms.positions  # memoryview / reference to existing array
+    symbols = atoms.symbols  # property returning a view-like object
 
-    # Generator for lines to keep memory usage O(1) per line (after pos array overhead)
-    # This avoids creating a huge string buffer or list of strings.
-    def line_generator() -> Iterable[str]:
-        for i in range(natoms):
-            s = symbols[i]
-            try:
-                t = type_map[s]
-            except KeyError as err:
-                msg = f"Symbol {s} not in provided species list: {species}"
-                raise KeyError(msg) from err
+    # Write chunks of lines directly to avoid huge string or writelines buffering
+    for i in range(natoms):
+        s = symbols[i]
+        try:
+            t = type_map[s]
+        except KeyError as err:
+            msg = f"Symbol {s} not in provided species list: {species}"
+            raise KeyError(msg) from err
 
-            # 1-based index
-            yield f"{i + 1} {t} {pos[i, 0]:.6f} {pos[i, 1]:.6f} {pos[i, 2]:.6f}\n"
-
-    fileobj.writelines(line_generator())
+        # 1-based index
+        fileobj.write(f"{i + 1} {t} {pos[i, 0]:.6f} {pos[i, 1]:.6f} {pos[i, 2]:.6f}\n")
 
     fileobj.write("\n")

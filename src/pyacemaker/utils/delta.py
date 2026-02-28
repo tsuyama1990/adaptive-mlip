@@ -1,7 +1,7 @@
 import numpy as np
 from ase.data import atomic_numbers
 
-from pyacemaker.domain_models.constants import DEFAULT_LJ_PARAMS, FALLBACK_LJ_PARAMS
+from pyacemaker.domain_models.constants import DEFAULT_LJ_PARAMS
 
 
 def get_lj_params(element: str) -> dict[str, float]:

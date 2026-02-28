@@ -81,7 +81,7 @@ class MDSimulationResult(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     energy: float = Field(..., description="Final potential energy of the system")
-    forces: list[list[float]] = Field(..., description="Forces on atoms in the final frame")
+    forces: list[list[float]] = Field(..., min_length=1, description="Forces on atoms in the final frame")
     stress: list[float] = Field(
         default_factory=lambda: [0.0] * 6,
         description="Stress tensor (Voigt: xx, yy, zz, yz, xz, xy) in Bar",
@@ -188,7 +188,7 @@ class MDConfig(BaseModel):
         DEFAULT_MD_BASE_ENERGY, description="Baseline energy for mock simulation"
     )
     default_forces: list[list[float]] = Field(
-        default=[[0.0, 0.0, 0.0]], description="Default forces for mock simulation"
+        default=[[0.0, 0.0, 0.0]], min_length=1, description="Default forces for mock simulation"
     )
 
     # Spec Section 3.4 (Hybrid Potential & OTF)

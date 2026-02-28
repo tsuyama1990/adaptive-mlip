@@ -8,7 +8,6 @@ from ase import Atoms
 from ase.io import write
 
 from pyacemaker.core.base import BaseGenerator
-from pyacemaker.core.loop import LoopState
 from pyacemaker.domain_models import PyAceConfig
 from pyacemaker.domain_models.md import MDSimulationResult
 from pyacemaker.orchestrator import Orchestrator
@@ -129,6 +128,17 @@ def test_cold_start(orchestrator: Orchestrator, tmp_path: Path) -> None:
     orchestrator.trainer.train.assert_called_once()
 
 
+def test_cold_start_empty_iterator(orchestrator: Orchestrator, tmp_path: Path) -> None:
+    """Test cold start handles empty iterator gracefully (audit requirement)."""
+    assert isinstance(orchestrator.generator, FakeGenerator)
+    # Patch generator to yield nothing
+    orchestrator.generator.generate = lambda n: iter([])  # type: ignore[assignment]
+
+    from pyacemaker.core.exceptions import OrchestratorError
+    with pytest.raises(OrchestratorError):
+        orchestrator._check_initial_potential()
+
+
 def test_resume_capability(mock_config: PyAceConfig, tmp_path: Path) -> None:
     # Setup saved state
     state_file = Path(mock_config.workflow.state_file_path)
@@ -195,5 +205,5 @@ def test_run_loop_iteration_halt(orchestrator: Orchestrator, tmp_path: Path) -> 
     # Verify
     assert orchestrator.state_manager.iteration == 1
     assert orchestrator.state_manager.current_potential == refined_pot
-    orchestrator.engine.run.assert_called()
+    orchestrator.engine.run.assert_called_once()
     orchestrator.trainer.train.assert_called()
