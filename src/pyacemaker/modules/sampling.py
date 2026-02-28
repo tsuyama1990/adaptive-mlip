@@ -87,40 +87,35 @@ class DirectSampler:
         # We store min_dists only for the active_indices subset
         min_dists = np.zeros(n_active, dtype=np.float64)
 
-        # Compute initial distances in chunks over the active subset
+        # Compute initial distances in chunks over the active subset to avoid large intermediate allocations
+        # Process the subset directly sequentially without allocating n_active sized fancy indices matrix at once.
         for start_pos in range(0, n_active, chunk_size):
             end_pos = min(start_pos + chunk_size, n_active)
-            # Get real indices for this chunk
             chunk_real_indices = active_indices[start_pos:end_pos]
-            # Fetch from memmap (fancy indexing on memmap might load into memory, but it's bounded by chunk_size)
-            chunk = descriptors[chunk_real_indices]
-            # Use squared distance
+            # Safe slice reading: read row-by-row if fancy indexing breaks out of memory boundaries
+            chunk = np.array([descriptors[i] for i in chunk_real_indices])
             chunk_dists = np.sum((chunk - current_selected)**2, axis=1)
             min_dists[start_pos:end_pos] = chunk_dists
 
         # 2. Greedy selection
         for _ in range(n_select - 1):
-            # Mask out already selected
             valid_min_dists = min_dists.copy()
             valid_min_dists[~is_active] = -1.0
 
-            # Find next point
             next_active_pos = int(np.argmax(valid_min_dists))
             next_real_idx = active_indices[next_active_pos]
 
             selected_real_indices.append(next_real_idx)
             is_active[next_active_pos] = False
 
-            # Update min_dists using chunking
             new_selected = descriptors[next_real_idx]
 
             for start_pos in range(0, n_active, chunk_size):
                 end_pos = min(start_pos + chunk_size, n_active)
                 chunk_real_indices = active_indices[start_pos:end_pos]
-                chunk = descriptors[chunk_real_indices]
+                chunk = np.array([descriptors[i] for i in chunk_real_indices])
                 chunk_dists = np.sum((chunk - new_selected)**2, axis=1)
 
-                # Update the specific chunk of min_dists
                 min_dists[start_pos:end_pos] = np.minimum(
                     min_dists[start_pos:end_pos],
                     chunk_dists

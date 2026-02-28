@@ -10,6 +10,7 @@ from ase.io import write
 from pyacemaker.core.base import BaseGenerator
 from pyacemaker.core.loop import LoopState
 from pyacemaker.domain_models import PyAceConfig
+from pyacemaker.domain_models.data import AtomStructure
 from pyacemaker.domain_models.md import MDSimulationResult
 from pyacemaker.orchestrator import Orchestrator
 
@@ -21,14 +22,14 @@ class FakeGenerator(BaseGenerator):
     def update_config(self, config: Any) -> None:
         pass
 
-    def generate(self, n_candidates: int) -> Iterator[Atoms]:
+    def generate(self, n_candidates: int) -> Iterator[AtomStructure]:
         for _ in range(n_candidates):
             symbol = self.elements[0]
-            yield Atoms(f"{symbol}2", positions=[[0, 0, 0], [0, 0, 0.74]])
+            yield AtomStructure(atoms=Atoms(f"{symbol}2", positions=[[0, 0, 0], [0, 0, 0.74]]))
 
-    def generate_local(self, base_structure: Atoms, n_candidates: int, **kwargs: Any) -> Iterator[Atoms]:
+    def generate_local(self, base_structure: Atoms, n_candidates: int, **kwargs: Any) -> Iterator[AtomStructure]:
         for _ in range(n_candidates):
-            yield base_structure.copy()  # type: ignore[no-untyped-call]
+            yield AtomStructure(atoms=base_structure.copy())  # type: ignore[no-untyped-call]
 
 
 @pytest.fixture
@@ -113,7 +114,7 @@ def test_cold_start(orchestrator: Orchestrator, tmp_path: Path) -> None:
     assert isinstance(orchestrator.oracle, MagicMock)
     assert isinstance(orchestrator.trainer, MagicMock)
 
-    orchestrator.oracle.compute.return_value = iter([Atoms("Fe")])
+    orchestrator.oracle.compute.return_value = iter([AtomStructure(atoms=Atoms("Fe"))])
     initial_pot = tmp_path / "initial.yace"
     initial_pot.touch()
     orchestrator.trainer.train.return_value = initial_pot
@@ -185,8 +186,8 @@ def test_run_loop_iteration_halt(orchestrator: Orchestrator, tmp_path: Path) -> 
     orchestrator.engine.run.return_value = result
 
     # Mock refinement
-    orchestrator.active_set_selector.select.return_value = iter([Atoms("Fe")])
-    orchestrator.oracle.compute.return_value = iter([Atoms("Fe")])
+    orchestrator.active_set_selector.select.return_value = iter([AtomStructure(atoms=Atoms("Fe"))])
+    orchestrator.oracle.compute.return_value = iter([AtomStructure(atoms=Atoms("Fe"))])
     refined_pot = tmp_path / "refined.yace"
     refined_pot.touch()
     orchestrator.trainer.train.return_value = refined_pot

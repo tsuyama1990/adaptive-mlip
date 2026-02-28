@@ -24,7 +24,7 @@ from pyacemaker.domain_models.defaults import (
 class PacemakerConfig(BaseModel):
     """Specific configuration for Pacemaker training."""
 
-    model_config = ConfigDict(extra="allow")
+    model_config = ConfigDict(extra="forbid")
 
     # Embedding settings
     embedding_type: str = Field(
@@ -76,7 +76,7 @@ class PacemakerConfig(BaseModel):
 
 
 class TrainingConfig(BaseModel):
-    model_config = ConfigDict(extra="allow")
+    model_config = ConfigDict(extra="forbid")
 
     potential_type: str = Field(..., description="Type of potential to train")
     cutoff_radius: PositiveFloat = Field(..., description="Potential cutoff radius in Angstrom")

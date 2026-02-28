@@ -18,7 +18,7 @@ class ColdStartPolicy(BasePolicy):
         base_structure: Atoms,
         config: StructureConfig,
         n_structures: int,
-        **kwargs: Any,
+        **kwargs: dict[str, Any],
     ) -> Iterator[Atoms]:
         """
         Yields the base structure exactly once.
@@ -48,7 +48,7 @@ class RattlePolicy(BasePolicy):
         base_structure: Atoms,
         config: StructureConfig,
         n_structures: int,
-        **kwargs: Any,
+        **kwargs: dict[str, Any],
     ) -> Iterator[Atoms]:
         """
         Generates n_structures by randomly rattling the base structure.
@@ -65,7 +65,9 @@ class RattlePolicy(BasePolicy):
         stdev = config.rattle_stdev
         for _ in range(n_structures):
             atoms = base_structure.copy() # type: ignore[no-untyped-call]
-            atoms.rattle(stdev=stdev)
+            import numpy as np
+            rng = np.random.default_rng()
+            atoms.rattle(stdev=stdev, seed=rng.integers(0, 1000000))
             yield atoms
 
 
@@ -79,7 +81,7 @@ class StrainPolicy(BasePolicy):
         base_structure: Atoms,
         config: StructureConfig,
         n_structures: int,
-        **kwargs: Any,
+        **kwargs: dict[str, Any],
     ) -> Iterator[Atoms]:
         """
         Generates n_structures by applying random strain.
@@ -94,6 +96,7 @@ class StrainPolicy(BasePolicy):
             Atoms: Strained structures.
         """
         import numpy as np
+
         from pyacemaker.utils.perturbations import apply_strain
 
         mode = config.strain_mode
@@ -104,8 +107,11 @@ class StrainPolicy(BasePolicy):
             # apply_random_strain modifies in-place
             strain_t = magnitude if isinstance(magnitude, (list, tuple, np.ndarray)) else np.array([[magnitude, 0, 0], [0, magnitude, 0], [0, 0, magnitude]])
             # Randomize sign
-            strain_t = strain_t * np.random.choice([0.5, 1.5])
-            apply_strain(atoms, strain_tensor=np.array(strain_t)) # type: ignore[arg-type]
+            # Ensure deterministic random seeding if possible
+            import numpy as np
+            rng = np.random.default_rng()
+            strain_t = strain_t * rng.choice([0.5, 1.5])
+            apply_strain(atoms, strain_tensor=np.array(strain_t))
             yield atoms
 
 
@@ -119,7 +125,7 @@ class DefectPolicy(BasePolicy):
         base_structure: Atoms,
         config: StructureConfig,
         n_structures: int,
-        **kwargs: Any,
+        **kwargs: dict[str, Any],
     ) -> Iterator[Atoms]:
         """
         Generates n_structures with random vacancies.
@@ -155,7 +161,7 @@ class CompositePolicy(BasePolicy):
         base_structure: Atoms,
         config: StructureConfig,
         n_structures: int,
-        **kwargs: Any,
+        **kwargs: dict[str, Any],
     ) -> Iterator[Atoms]:
         """
         Generates structures by delegating to sub-policies.
@@ -200,7 +206,7 @@ class NormalModePolicy(BasePolicy):
     Placeholder for Normal Mode sampling.
     Future implementation will use phonon modes for perturbations.
     """
-    def generate(self, base_structure: Atoms, config: StructureConfig, n_structures: int, **kwargs: Any) -> Iterator[Atoms]:
+    def generate(self, base_structure: Atoms, config: StructureConfig, n_structures: int, **kwargs: dict[str, Any]) -> Iterator[Atoms]:
         """Fallback to rattle if normal mode not implemented."""
         yield from RattlePolicy().generate(base_structure, config, n_structures, **kwargs)
 
@@ -209,6 +215,6 @@ class MDMicroBurstPolicy(BasePolicy):
     Placeholder for MD Micro Burst sampling.
     Future implementation will run short MD trajectories.
     """
-    def generate(self, base_structure: Atoms, config: StructureConfig, n_structures: int, **kwargs: Any) -> Iterator[Atoms]:
+    def generate(self, base_structure: Atoms, config: StructureConfig, n_structures: int, **kwargs: dict[str, Any]) -> Iterator[Atoms]:
         """Fallback to rattle if MD burst not implemented."""
         yield from RattlePolicy().generate(base_structure, config, n_structures, **kwargs)

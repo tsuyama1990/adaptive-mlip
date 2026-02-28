@@ -46,7 +46,7 @@ class AtomStyle(str, Enum):
 
 
 class HybridParams(BaseModel):
-    model_config = ConfigDict(extra="allow")
+    model_config = ConfigDict(extra="forbid")
 
     zbl_cut_inner: PositiveFloat = Field(
         DEFAULT_MD_HYBRID_ZBL_INNER, description="Inner cutoff radius for ZBL potential (Angstrom)"
@@ -57,7 +57,7 @@ class HybridParams(BaseModel):
 
 
 class MDRampingConfig(BaseModel):
-    model_config = ConfigDict(extra="allow")
+    model_config = ConfigDict(extra="forbid")
 
     temp_start: float | None = Field(None, ge=0.0, description="Starting temperature (K)")
     temp_end: float | None = Field(None, ge=0.0, description="Ending temperature (K)")
@@ -70,7 +70,7 @@ class MDRampingConfig(BaseModel):
 
 
 class MCConfig(BaseModel):
-    model_config = ConfigDict(extra="allow")
+    model_config = ConfigDict(extra="forbid")
 
     swap_freq: int = Field(..., gt=0, description="Frequency of MC swaps (steps)")
     swap_prob: float = Field(..., gt=0.0, le=1.0, description="Probability of swapping atoms")
@@ -78,7 +78,7 @@ class MCConfig(BaseModel):
 
 
 class MDSimulationResult(BaseModel):
-    model_config = ConfigDict(extra="allow")
+    model_config = ConfigDict(extra="forbid")
 
     energy: float = Field(..., description="Final potential energy of the system")
     forces: list[list[float]] = Field(..., description="Forces on atoms in the final frame")
@@ -123,7 +123,7 @@ class MDConfig(BaseModel):
     """
     Configuration for Molecular Dynamics simulations.
     """
-    model_config = ConfigDict(extra="allow")
+    model_config = ConfigDict(extra="forbid")
 
     # Basic Physics
     temperature: float = Field(..., ge=0.0, description="Simulation temperature in Kelvin")
@@ -214,7 +214,9 @@ class MDConfig(BaseModel):
     def validate_simulation_physics(self) -> "MDConfig":
         total_time = self.n_steps * self.timestep
         if total_time > MAX_MD_DURATION:
-             pass
+             raise ValueError(f"Total simulation time {total_time} ps exceeds maximum {MAX_MD_DURATION} ps.")
+        if self.temperature < 0.0 or self.temperature > 10000.0:
+             raise ValueError("Temperature must be between 0 and 10000 K.")
         return self
 
     @model_validator(mode="after")

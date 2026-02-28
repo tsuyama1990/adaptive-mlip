@@ -7,6 +7,7 @@ from ase.io import write
 
 from pyacemaker.core.loop import LoopState, LoopStatus
 from pyacemaker.domain_models import PyAceConfig
+from pyacemaker.domain_models.data import AtomStructure
 from pyacemaker.domain_models.md import MDSimulationResult
 from pyacemaker.orchestrator import Orchestrator
 
@@ -85,9 +86,9 @@ def test_scenario_06_01_active_learning_campaign(uat_config: PyAceConfig, tmp_pa
         pot3.touch()
 
         # Setup behaviors
-        mock_gen.generate.return_value = iter([Atoms("Fe")])
+        mock_gen.generate.return_value = iter([AtomStructure(atoms=Atoms("Fe"))])
         # Use lambda to return fresh iterator each time
-        mock_oracle.compute.side_effect = lambda *args, **kwargs: iter([Atoms("Fe")])
+        mock_oracle.compute.side_effect = lambda *args, **kwargs: iter([AtomStructure(atoms=Atoms("Fe"))])
         mock_trainer.train.side_effect = [pot1, pot2, pot3]
 
         # Iteration 1: Halt
@@ -107,8 +108,8 @@ def test_scenario_06_01_active_learning_campaign(uat_config: PyAceConfig, tmp_pa
 
         mock_engine.run.side_effect = [res1, res2]
 
-        mock_gen.generate_local.return_value = iter([Atoms("Fe")])
-        mock_selector.select.return_value = iter([Atoms("Fe")])
+        mock_gen.generate_local.return_value = iter([AtomStructure(atoms=Atoms("Fe"))])
+        mock_selector.select.return_value = iter([AtomStructure(atoms=Atoms("Fe"))])
 
         # Run Orchestrator
         orch = Orchestrator(uat_config)

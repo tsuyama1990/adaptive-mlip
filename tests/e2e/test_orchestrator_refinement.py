@@ -19,6 +19,7 @@ from pyacemaker.domain_models import (
     TrainingConfig,
     WorkflowConfig,
 )
+from pyacemaker.domain_models.data import AtomStructure
 from pyacemaker.orchestrator import Orchestrator
 
 
@@ -36,9 +37,9 @@ class FakeGenerator(BaseGenerator):
             yield base_structure.copy()  # type: ignore[no-untyped-call]
 
 class FakeOracle(BaseOracle):
-    def compute(self, structures: Iterator[Atoms], batch_size: int = 10) -> Iterator[Atoms]:
+    def compute(self, structures: Iterator[AtomStructure], batch_size: int = 10) -> Iterator[AtomStructure]:
         for atoms in structures:
-            atoms.info["energy"] = -5.0
+            atoms.energy = -5.0
             yield atoms
 
 class FakeTrainer(BaseTrainer):

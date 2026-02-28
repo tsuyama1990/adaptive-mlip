@@ -14,7 +14,7 @@ class BasePolicy(ABC):
     Abstract base class for exploration policies.
     """
     @abstractmethod
-    def generate(self, base_structure: Atoms, config: Any, n_structures: int, **kwargs: Any) -> Iterator[Atoms]:
+    def generate(self, base_structure: Atoms, config: Any, n_structures: int, **kwargs: dict[str, Any]) -> Iterator[Atoms]:
         """
         Generates new candidates based on policy logic.
         """

@@ -1,5 +1,4 @@
 import os
-import tempfile
 from pathlib import Path
 
 import pytest
@@ -105,7 +104,6 @@ def test_loop_state_concurrent_save(tmp_path: Path) -> None:
         with contextlib.suppress(OSError):
             local_state.save(state_file)
             # OS might lock file during rename on Windows, but atomic rename should handle it
-            pass
 
     threads = []
     for i in range(20):

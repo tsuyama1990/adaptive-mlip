@@ -10,7 +10,7 @@ from pyacemaker.utils.path import validate_path_safe
 class EONConfig(BaseModel):
     """Configuration for EON (Adaptive Kinetic Monte Carlo)."""
 
-    model_config = ConfigDict(extra="allow")
+    model_config = ConfigDict(extra="forbid")
 
     enabled: bool = Field(False, description="Whether to enable EON")
     eon_executable: str = Field(

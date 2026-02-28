@@ -10,7 +10,7 @@ from pyacemaker.domain_models.defaults import (
 
 
 class ValidationConfig(BaseModel):
-    model_config = ConfigDict(extra="allow")
+    model_config = ConfigDict(extra="forbid")
 
     phonon_supercell: list[int] = Field(
         default=DEFAULT_VALIDATION_PHONON_SUPERCELL,
@@ -35,7 +35,7 @@ class ValidationConfig(BaseModel):
 
 
 class ValidationResult(BaseModel):
-    model_config = ConfigDict(extra="allow")
+    model_config = ConfigDict(extra="forbid")
 
     phonon_stable: bool = Field(..., description="Whether the potential is dynamically stable")
     elastic_stable: bool = Field(..., description="Whether the potential is mechanically stable")

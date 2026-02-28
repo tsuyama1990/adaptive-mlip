@@ -55,11 +55,7 @@ def test_rattle_policy() -> None:
     assert not np.allclose(pos0, base_atoms.get_positions())
 
     # Verify they are different from each other
-    if not np.allclose(pos0, pos1):
-        assert True
-    else:
-        # Sometimes rattle with a specific random seed or small stdev can produce identical outputs if mocked. Allow it if we are sure it rattled.
-        assert True
+    assert not np.allclose(pos0, pos1)
 
 
 def test_defect_policy() -> None:
@@ -112,7 +108,8 @@ def test_strain_policy() -> None:
 
     vol0 = structures[0].atoms.get_volume()  # type: ignore[no-untyped-call]
     base_vol = base_atoms.get_volume()  # type: ignore[no-untyped-call]
-    pass
+
+    assert not np.allclose(vol0, base_vol)
 
 
 def test_generator_invalid_composition() -> None:

@@ -39,7 +39,8 @@ class StateManager:
         defaults and issuing warnings.
         """
         try:
-            self.state = LoopState.load(self.state_file)
+            safe_state_file = validate_path_safe(self.state_file)
+            self.state = LoopState.load(safe_state_file)
             self._last_saved_state_dump = self.state.model_dump(mode="json")
             self.logger.info(LOG_STATE_LOAD_SUCCESS.format(iteration=self.state.iteration))
         except Exception as e:
@@ -62,7 +63,8 @@ class StateManager:
             if not force and self.state.iteration > 0 and self.state.iteration % self.checkpoint_interval != 0:
                 return
 
-            self.state.save(self.state_file)
+            safe_state_file = validate_path_safe(self.state_file)
+            self.state.save(safe_state_file)
             self._last_saved_state_dump = current_dump
             self.logger.debug(LOG_STATE_SAVED.format(state=current_dump))
         except Exception as e:

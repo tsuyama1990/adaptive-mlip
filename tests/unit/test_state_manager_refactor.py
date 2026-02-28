@@ -29,8 +29,8 @@ def test_state_manager_property_removal() -> None:
 
 def test_sqlite_db_cleanup() -> None:
     from ase import Atoms
-    from pyacemaker.domain_models.active_learning import DescriptorConfig
 
+    from pyacemaker.domain_models.active_learning import DescriptorConfig
     from pyacemaker.domain_models.data import AtomStructure
     from pyacemaker.domain_models.distillation import Step1DirectSamplingConfig
     from pyacemaker.modules.sampling import DirectSampler

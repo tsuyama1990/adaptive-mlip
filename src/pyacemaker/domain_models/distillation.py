@@ -7,7 +7,7 @@ from pyacemaker.domain_models.defaults import DEFAULT_BATCH_SIZE, DEFAULT_CANDID
 
 
 class Step1DirectSamplingConfig(BaseModel):
-    model_config = ConfigDict(extra="allow")
+    model_config = ConfigDict(extra="forbid")
     target_points: PositiveInt = Field(default=100, description="Number of structures to generate")
     candidate_multiplier: PositiveInt = Field(
         default=DEFAULT_CANDIDATE_MULTIPLIER,
@@ -23,7 +23,7 @@ class Step1DirectSamplingConfig(BaseModel):
 
 
 class Step2ActiveLearningConfig(BaseModel):
-    model_config = ConfigDict(extra="allow")
+    model_config = ConfigDict(extra="forbid")
     uncertainty_threshold: float = Field(default=0.8, gt=0.0, description="Uncertainty threshold for DFT calculation")
     n_active: PositiveInt = Field(default=10, description="Maximum number of structures to select for DFT")
     dft_calculator: str = Field(default="VASP", description="DFT code to use")
@@ -31,25 +31,25 @@ class Step2ActiveLearningConfig(BaseModel):
 
 
 class Step3MaceFinetuneConfig(BaseModel):
-    model_config = ConfigDict(extra="allow")
+    model_config = ConfigDict(extra="forbid")
     base_model: str = Field(default="MACE-MP-0", description="Base MACE model to fine-tune")
     epochs: PositiveInt = Field(default=50, description="Number of fine-tuning epochs")
 
 
 class Step4SurrogateSamplingConfig(BaseModel):
-    model_config = ConfigDict(extra="allow")
+    model_config = ConfigDict(extra="forbid")
     target_points: PositiveInt = Field(default=1000, description="Number of surrogate structures to generate")
     method: str = Field(default="mace_md", description="Method for surrogate sampling (e.g., mace_md)")
 
 
 class Step7PacemakerFinetuneConfig(BaseModel):
-    model_config = ConfigDict(extra="allow")
+    model_config = ConfigDict(extra="forbid")
     enable: bool = Field(default=True, description="Enable Delta Learning phase")
     weight_dft: float = Field(default=10.0, gt=0.0, description="Weight of DFT data in loss function")
 
 
 class DistillationConfig(BaseModel):
-    model_config = ConfigDict(extra="allow")
+    model_config = ConfigDict(extra="forbid")
 
     enable_mace_distillation: bool = Field(default=False, description="Enable the 7-step MACE distillation workflow")
 

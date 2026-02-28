@@ -1,3 +1,4 @@
+from pyacemaker.domain_models.data import AtomStructure
 from pathlib import Path
 from unittest.mock import patch
 
@@ -55,12 +56,12 @@ def test_uat_02_01_single_point_calculation(uat_dft_config: DFTConfig, monkeypat
         manager = DFTManager(uat_dft_config)
 
         # Use explicit iteration
-        gen = manager.compute(iter([h2o]))
+        gen = manager.compute(iter([AtomStructure(atoms=h2o)]))
         result = next(gen)
 
         # 3. Expectation
-        assert result.get_potential_energy() == TEST_ENERGY_H2O  # type: ignore[no-untyped-call]
-        assert result.get_forces().shape == (3, 3)  # type: ignore[no-untyped-call]
+        assert result.energy == TEST_ENERGY_H2O  # type: ignore[no-untyped-call]
+        assert result.forces.shape == (3, 3)  # type: ignore[no-untyped-call]
 
 
 def test_uat_02_02_self_healing(uat_dft_config: DFTConfig, caplog: pytest.LogCaptureFixture) -> None:
@@ -87,11 +88,11 @@ def test_uat_02_02_self_healing(uat_dft_config: DFTConfig, caplog: pytest.LogCap
 
         manager = DFTManager(uat_dft_config)
 
-        gen = manager.compute(iter([h2o]))
+        gen = manager.compute(iter([AtomStructure(atoms=h2o)]))
         result = next(gen)
 
         # 3. Expectation
-        assert result.get_potential_energy() == TEST_ENERGY_H2O  # type: ignore[no-untyped-call]
+        assert result.energy == TEST_ENERGY_H2O  # type: ignore[no-untyped-call]
 
         # Verify that get_calculator was called twice (original + retry)
         assert mock_driver_instance.get_calculator.call_count == 2

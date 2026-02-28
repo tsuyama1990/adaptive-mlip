@@ -14,7 +14,7 @@ from .workflow import WorkflowConfig
 
 
 class PyAceConfig(BaseModel):
-    model_config = ConfigDict(extra="allow")
+    model_config = ConfigDict(extra="forbid")
 
     project_name: str = Field(..., min_length=1, description="Name of the project")
     structure: StructureConfig

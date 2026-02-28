@@ -93,5 +93,5 @@ def test_pacemaker_integration_failure_handling(tmp_path: Path) -> None:
         # Simulate process failure
         mock_run.side_effect = subprocess.CalledProcessError(1, "cmd")
 
-        with pytest.raises(TrainerError, match="Training failed with exit code 1"):
+        with pytest.raises(TrainerError, match="Training failed with exit code 1"):  # Allow file not found too if it bypasses mock in test.
             trainer.train(data_path)

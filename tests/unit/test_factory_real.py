@@ -62,7 +62,12 @@ def test_create_modules_distillation(
             "data_dir": "data",
             "n_candidates": 10
         },
-        distillation={"enable_mace_distillation": True}
+        distillation={
+            "enable_mace_distillation": True,
+            "step1_direct_sampling": {"target_points": 10, "descriptor": {"method": "soap", "species": ["H"], "r_cut": 5.0, "n_max": 2, "l_max": 2, "sigma": 0.1}},
+            "step2_active_learning": {"uncertainty_threshold": 0.8, "dft_calculator": "VASP"},
+            "step3_mace_finetune": {"base_model": "test"}
+        }
     )
 
     modules = ModuleFactory.create_modules(config)

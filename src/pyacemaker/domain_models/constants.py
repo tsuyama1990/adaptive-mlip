@@ -49,6 +49,8 @@ from .defaults import (
     RECIPROCAL_FACTOR,
 )
 
+MAX_PATH_LENGTH: Final[int] = 4096
+
 # Scenario Constants
 SCENARIO_NAME_FEPT_MGO: Final[str] = "fept_mgo"
 FILE_EXT_XYZ: Final[str] = "xyz"
@@ -111,6 +113,7 @@ __all__ = [
     "LAMMPS_VELOCITY_SEED",
     "MAX_MD_DURATION",
     "MAX_MD_PRESSURE",
+    "MAX_PATH_LENGTH",
     "PACE_DRIVER_TEMPLATE",
     "RECIPROCAL_FACTOR",
     "SCENARIO_NAME_FEPT_MGO",

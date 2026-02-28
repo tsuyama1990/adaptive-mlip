@@ -4,8 +4,8 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 from ase import Atoms
-from pyacemaker.domain_models.active_learning import DescriptorConfig
 
+from pyacemaker.domain_models.active_learning import DescriptorConfig
 from pyacemaker.domain_models.data import AtomStructure
 from pyacemaker.domain_models.distillation import Step1DirectSamplingConfig
 from pyacemaker.modules.sampling import DirectSampler
@@ -59,7 +59,6 @@ def test_direct_sampler_error_recovery() -> None:
 
 def test_descriptor_calculator_oom_prevention() -> None:
     from pyacemaker.domain_models.active_learning import DescriptorConfig
-
     from pyacemaker.utils.descriptors import DescriptorCalculator
 
     config = DescriptorConfig(method="soap", species=["Cu"], r_cut=5.0, n_max=8, l_max=6, sigma=0.5)
@@ -76,3 +75,28 @@ def test_descriptor_calculator_oom_prevention() -> None:
 
         with pytest.raises(ValueError, match="exceeds safe memory limits"):
             calc.compute(atoms_list)
+
+def test_direct_sampler_memmap_streaming() -> None:
+    # Ensure chunk logic doesn't crash on very large theoretical dimensions via chunked mock
+    descriptor_config = DescriptorConfig(
+        method="soap", species=["Cu"], r_cut=5.0, n_max=8, l_max=6, sigma=0.5
+    )
+    config = Step1DirectSamplingConfig(
+        target_points=5,
+        objective="maximize_entropy",
+        descriptor=descriptor_config,
+        batch_size=5,
+        candidate_multiplier=2
+    )
+
+    mock_generator = MagicMock()
+    def candidate_stream(n_candidates: int) -> Iterator[AtomStructure]:
+        for i in range(n_candidates):
+            yield AtomStructure(atoms=Atoms('Cu', positions=[[i, 0, 0]]))
+    mock_generator.generate.side_effect = candidate_stream
+
+    with patch("pyacemaker.modules.sampling.DescriptorCalculator", MockDescriptorCalculator):
+        with patch("pyacemaker.modules.sampling.MAX_MEMMAP_CHUNK_SIZE", 2):  # force chunking
+            sampler = DirectSampler(config, mock_generator)
+            results = list(sampler.generate())
+            assert len(results) == 5

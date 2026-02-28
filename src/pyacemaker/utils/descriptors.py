@@ -3,8 +3,8 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 from ase import Atoms
-from pyacemaker.domain_models.active_learning import DescriptorConfig
 
+from pyacemaker.domain_models.active_learning import DescriptorConfig
 from pyacemaker.domain_models.defaults import (
     DEFAULT_DESCRIPTOR_BATCH_SIZE,
     MAX_DESCRIPTOR_ARRAY_BYTES,
@@ -96,29 +96,12 @@ class DescriptorCalculator:
             msg = f"Requested descriptor calculation total size exceeds safe memory limits ({estimated_total_bytes} > {MAX_DESCRIPTOR_ARRAY_BYTES} bytes). Use compute_stream instead."
             raise ValueError(msg)
 
-        all_descriptors = []
+        # Utilize compute_stream logic internally for consistency and to avoid keeping large intermediate states
+        all_descriptors = list(self.compute_stream(iter(atoms_list), batch_size=batch_size))
 
-        try:
-            # Batch processing to prevent dscribe from consuming too much memory during intermediate steps
-            for i in range(0, n_structures, batch_size):
-                batch = atoms_list[i:i + batch_size]
-
-                # dscribe's create method handles list of atoms
-                descriptors = self._transformer.create(batch) # type: ignore[attr-defined]
-
-                # Ensure it's a numpy array
-                if not isinstance(descriptors, np.ndarray):
-                    # If sparse, convert to dense for now
-                    descriptors = descriptors.toarray()
-
-                all_descriptors.append(descriptors)
-
-            if all_descriptors:
-                return np.vstack(all_descriptors)
-            return np.array([])
-
-        except Exception as e:
-            raise RuntimeError(f"Descriptor calculation failed: {e}") from e
+        if all_descriptors:
+            return np.vstack(all_descriptors)
+        return np.array([])
 
     def compute_stream(self, atoms_iter: Iterator[Atoms], batch_size: int = DEFAULT_DESCRIPTOR_BATCH_SIZE) -> Iterator[np.ndarray]:
         """

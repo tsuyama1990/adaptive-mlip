@@ -30,8 +30,8 @@ def mock_config() -> MagicMock:
     config.workflow.checkpoint_interval = 1
     config.distillation.step1_direct_sampling.target_points = 100
     # Add proper config mocking
-    from pyacemaker.domain_models.distillation import Step1DirectSamplingConfig
     from pyacemaker.domain_models.active_learning import DescriptorConfig
+    from pyacemaker.domain_models.distillation import Step1DirectSamplingConfig
     config.distillation.step1_direct_sampling = Step1DirectSamplingConfig(
         target_points=1,
         descriptor=DescriptorConfig(method="soap", species=["H"], r_cut=5.0, n_max=2, l_max=2, sigma=0.1)
@@ -135,7 +135,7 @@ def test_distillation_workflow_resume(
 
     # Verify Log Step 1 was NOT called
     log_calls = [call.args[0] for call in mock_logger_instance.info.call_args_list]
-    pass # assert LOG_STEP_1 not in log_calls
+    # assert LOG_STEP_1 not in log_calls
     assert LOG_STEP_7 in log_calls
 
 

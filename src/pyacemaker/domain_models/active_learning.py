@@ -1,7 +1,8 @@
 from pydantic import BaseModel, ConfigDict, Field
 
+
 class DescriptorConfig(BaseModel):
-    model_config = ConfigDict(extra="allow")
+    model_config = ConfigDict(extra="forbid")
     method: str = Field(..., description="Descriptor method (e.g. soap)")
     species: list[str] = Field(..., description="Species involved")
     r_cut: float = Field(..., gt=0.0, description="Cutoff radius")
