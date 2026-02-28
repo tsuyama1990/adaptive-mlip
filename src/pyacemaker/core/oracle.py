@@ -1,4 +1,5 @@
 import contextlib
+import logging
 import tempfile
 from collections.abc import Callable, Iterator
 from itertools import islice
@@ -13,9 +14,9 @@ from pyacemaker.domain_models import DFTConfig
 from pyacemaker.domain_models.constants import ERR_ORACLE_FAILED, ERR_ORACLE_ITERATOR
 from pyacemaker.interfaces.qe_driver import QEDriver
 from pyacemaker.utils.embedding import embed_cluster
-import logging
 
 logger = logging.getLogger(__name__)
+
 
 class DFTManager(BaseOracle):
     """
@@ -43,7 +44,7 @@ class DFTManager(BaseOracle):
             None,
             self._strategy_reduce_beta,
             self._strategy_increase_smearing,
-            self._strategy_use_cg
+            self._strategy_use_cg,
         ]
 
     def compute(self, structures: Iterator[Atoms], batch_size: int = 10) -> Iterator[Atoms]:
@@ -72,38 +73,27 @@ class DFTManager(BaseOracle):
 
     def _compute_generator(self, structures: Iterator[Atoms], batch_size: int) -> Iterator[Atoms]:
         """Internal generator for streaming computations with batching."""
-        # Use batched processing (chunking) to reuse temporary directories
-        # without materializing the whole batch in memory list.
-        # However, islice consumes the iterator.
+        # Check if empty first
+        import warnings
+        try:
+            first_item = next(structures)
+        except StopIteration:
+            warnings.warn("Oracle received empty iterator", UserWarning, stacklevel=2)
+            return
 
-        while True:
-            # Create a batch generator (iterator slice)
-            # Note: list(islice(...)) materializes the batch.
-            # To avoid materializing even the batch if batch_size is huge, we should process one by one
-            # BUT reuse the context.
-            # The audit requirement was: "DFTManager.compute method accepts batch_size parameter but ignores it... Implement proper batching logic"
-            # Batching usually implies grouping. If we process 1 by 1 inside a loop of batch_size, we achieve the goal.
+        def reconstruct_iter() -> Iterator[Atoms]:
+            yield first_item
+            yield from structures
 
-            # We can use a single temp dir for 'batch_size' items.
-            # But since we want to yield as soon as one is done, we iterate `batch_size` times.
+        def gen_batches() -> Iterator[list[Atoms]]:
+            it = reconstruct_iter()
+            while True:
+                batch = list(islice(it, batch_size))
+                if not batch:
+                    break
+                yield batch
 
-            # Since we can't easily peek existence of next item without consuming,
-            # we iterate until exhaustion.
-
-            # Efficient pattern:
-            # Create temp dir. Process N items. Close temp dir. Repeat.
-
-            # Check if there are items left?
-            # We can just try to take `batch_size` items.
-            # list(islice) is standard but creates a list of `batch_size`.
-            # If batch_size is small (e.g. 10-100), this is fine.
-            # If batch_size is huge (unlikely default), it might be an issue.
-            # Let's assume batch_size is reasonable (10-1000).
-
-            batch = list(islice(structures, batch_size))
-            if not batch:
-                break
-
+        for batch in gen_batches():
             with tempfile.TemporaryDirectory() as work_dir:
                 work_path = Path(work_dir)
                 for i, atoms in enumerate(batch):
@@ -183,7 +173,7 @@ class DFTManager(BaseOracle):
 
                 # Enhanced Logging for debugging
                 logger.warning(
-                    f"DFT calculation attempt {i+1} ({strategy_name}) failed. Error: {e!s}. Retrying..."
+                    f"DFT calculation attempt {i + 1} ({strategy_name}) failed. Error: {e!s}. Retrying..."
                 )
                 continue
             else:

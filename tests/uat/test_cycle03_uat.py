@@ -47,7 +47,7 @@ def test_uat_03_01_generate_candidates() -> None:
 
     # Verify we can consume the rest without keeping them
     remaining_count = sum(1 for _ in stream)
-    assert remaining_count == 8 # 10 - 2
+    assert remaining_count == 8  # 10 - 2
 
 
 def test_uat_03_02_defect_generation() -> None:
@@ -71,11 +71,13 @@ def test_uat_03_02_defect_generation() -> None:
 
     # 3. Expectation
     # Get pristine count
-    pristine_config = config.model_copy(update={
-        "policy_name": ExplorationPolicy.COLD_START,
-        "active_policies": [ExplorationPolicy.COLD_START],
-        "vacancy_rate": 0.0
-    })
+    pristine_config = config.model_copy(
+        update={
+            "policy_name": ExplorationPolicy.COLD_START,
+            "active_policies": [ExplorationPolicy.COLD_START],
+            "vacancy_rate": 0.0,
+        }
+    )
     pristine_gen = StructureGenerator(pristine_config)
     pristine_atoms = next(pristine_gen.generate(1))
 

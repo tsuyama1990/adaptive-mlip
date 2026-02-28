@@ -88,9 +88,12 @@ cp .env.example .env
         enable: true
         mace_model_path: "mace-mp-0-medium"
         uncertainty_threshold: 0.05
+        sampling_structures_per_system: 1000
     loop_strategy:
+        use_tiered_oracle: true
         incremental_update: true
         replay_buffer_size: 500
+        baseline_potential_type: "LJ"
         thresholds:
             threshold_call_dft: 0.05
             threshold_add_train: 0.02

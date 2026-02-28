@@ -41,7 +41,9 @@ class FakeGenerator(BaseGenerator):
             symbol = self.elements[0]
             yield Atoms(f"{symbol}2", positions=[[0, 0, 0], [0, 0, 0.74]])
 
-    def generate_local(self, base_structure: Atoms, n_candidates: int, **kwargs: Any) -> Iterator[Atoms]:
+    def generate_local(
+        self, base_structure: Atoms, n_candidates: int, **kwargs: Any
+    ) -> Iterator[Atoms]:
         for _ in range(n_candidates):
             yield base_structure.copy()  # type: ignore[no-untyped-call]
 
@@ -58,9 +60,7 @@ class FakeTrainer(BaseTrainer):
         self.output_dir = output_dir
 
     def train(
-        self,
-        training_data_path: str | Path,
-        initial_potential: str | Path | None = None
+        self, training_data_path: str | Path, initial_potential: str | Path | None = None
     ) -> Any:
         path = Path(training_data_path)
         if not path.exists():
@@ -75,15 +75,15 @@ class FakeTrainer(BaseTrainer):
 class FakeEngine(BaseEngine):
     def run(self, structure: Atoms | None, potential: Any) -> MDSimulationResult:
         return MDSimulationResult(
-             energy=-10.0,
-             forces=[[0.0, 0.0, 0.0]],
-             halted=False,
-             max_gamma=0.0,
-             n_steps=100,
-             temperature=300.0,
-             trajectory_path="traj.xyz",
-             log_path="log.lammps",
-             halt_structure_path=None
+            energy=-10.0,
+            forces=[[0.0, 0.0, 0.0]],
+            halted=False,
+            max_gamma=0.0,
+            n_steps=100,
+            temperature=300.0,
+            trajectory_path="traj.xyz",
+            log_path="log.lammps",
+            halt_structure_path=None,
         )
 
     def compute_static_properties(self, structure: Atoms, potential: Any) -> MDSimulationResult:
@@ -100,7 +100,9 @@ def mock_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> PyAceConfig:
 
     return PyAceConfig(
         project_name="TestProject",
-        structure=StructureConfig(elements=["H"], supercell_size=[1, 1, 1], policy_name="cold_start"),
+        structure=StructureConfig(
+            elements=["H"], supercell_size=[1, 1, 1], policy_name="cold_start"
+        ),
         dft=DFTConfig(
             code="qe",
             functional="PBE",
@@ -185,7 +187,9 @@ def test_orchestrator_checkpointing(mock_config: PyAceConfig) -> None:
     assert orch2.loop_state.iteration == 5
 
 
-def test_orchestrator_corrupted_state_file(mock_config: PyAceConfig, tmp_path: Path, caplog: Any) -> None:
+def test_orchestrator_corrupted_state_file(
+    mock_config: PyAceConfig, tmp_path: Path, caplog: Any
+) -> None:
     state_file = Path(mock_config.workflow.state_file_path)
     state_file.write_text("{invalid_json")
 
@@ -197,7 +201,10 @@ def test_orchestrator_directory_creation_error(mock_config: PyAceConfig, monkeyp
     """Test error handling when directory creation fails."""
     # Patch pathlib.Path.mkdir to raise PermissionError
     original_mkdir = Path.mkdir
-    def mock_mkdir(self: Path, mode: int = 0o777, parents: bool = False, exist_ok: bool = False) -> None:
+
+    def mock_mkdir(
+        self: Path, mode: int = 0o777, parents: bool = False, exist_ok: bool = False
+    ) -> None:
         if "iter_" in str(self):
             msg = "Mock permission denied"
             raise PermissionError(msg)
@@ -207,7 +214,15 @@ def test_orchestrator_directory_creation_error(mock_config: PyAceConfig, monkeyp
 
     # We also need to mock module creation to pass init
     def mock_create_modules(cfg: PyAceConfig) -> tuple[Any, Any, Any, Any, Any, Any]:
-        return (FakeGenerator(), FakeOracle(), FakeTrainer(Path()), FakeEngine(), MagicMock(), MagicMock())
+        return (
+            FakeGenerator(),
+            FakeOracle(),
+            FakeTrainer(Path()),
+            FakeEngine(),
+            MagicMock(),
+            MagicMock(),
+        )
+
     monkeypatch.setattr(ModuleFactory, "create_modules", mock_create_modules)
 
     orch = Orchestrator(mock_config)
@@ -237,14 +252,19 @@ def test_orchestrator_error_handling_oracle_stream(
     mock_config: PyAceConfig, monkeypatch: Any
 ) -> None:
     class FailingOracle(BaseOracle):
-        def compute(
-            self, structures: Iterator[Atoms], batch_size: int = 10
-        ) -> Iterator[Atoms]:
+        def compute(self, structures: Iterator[Atoms], batch_size: int = 10) -> Iterator[Atoms]:
             msg = "Oracle computation failed"
             raise RuntimeError(msg)
 
     def mock_create_modules(cfg: PyAceConfig) -> tuple[Any, Any, Any, Any, Any, Any]:
-         return FakeGenerator(elements=cfg.structure.elements), FailingOracle(), MagicMock(), MagicMock(), MagicMock(), MagicMock()
+        return (
+            FakeGenerator(elements=cfg.structure.elements),
+            FailingOracle(),
+            MagicMock(),
+            MagicMock(),
+            MagicMock(),
+            MagicMock(),
+        )
 
     monkeypatch.setattr(ModuleFactory, "create_modules", mock_create_modules)
 

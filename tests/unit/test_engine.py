@@ -1,10 +1,9 @@
-
 import re
 from pathlib import Path
 from typing import Any
 from unittest.mock import patch
-import numpy as np
 
+import numpy as np
 import pytest
 from ase import Atoms
 
@@ -26,7 +25,7 @@ def test_lammps_engine_run(mock_md_config: MDConfig, mock_driver: Any, tmp_path:
         "step": 1000,
         "max_g": 0.05,
         "temp": 300.0,
-        "halted": 0.0  # Not halted
+        "halted": 0.0,  # Not halted
     }.get(name, 0.0)
 
     # Mock array returns for forces and stress
@@ -35,8 +34,10 @@ def test_lammps_engine_run(mock_md_config: MDConfig, mock_driver: Any, tmp_path:
 
     # Capture script content
     script_content = []
+
     def capture_run(path: str) -> None:
         script_content.append(Path(path).read_text())
+
     driver_instance.run_file.side_effect = capture_run
 
     # Mock get_atoms
@@ -79,7 +80,7 @@ def test_lammps_engine_halted(mock_md_config: MDConfig, mock_driver: Any, tmp_pa
         "step": 500,
         "max_g": 10.0,
         "temp": 310.0,
-        "halted": 1.0
+        "halted": 1.0,
     }.get(name, 0.0)
 
     driver_instance.get_forces.return_value = np.zeros((1, 3))
@@ -102,9 +103,13 @@ def test_lammps_engine_halted(mock_md_config: MDConfig, mock_driver: Any, tmp_pa
     assert result.halt_structure_path == result.trajectory_path
 
 
-def test_lammps_engine_hybrid_potential(mock_md_config: MDConfig, mock_driver: Any, tmp_path: Path) -> None:
+def test_lammps_engine_hybrid_potential(
+    mock_md_config: MDConfig, mock_driver: Any, tmp_path: Path
+) -> None:
     hybrid_params = HybridParams(zbl_cut_inner=1.0, zbl_cut_outer=1.5)
-    config = mock_md_config.model_copy(update={"hybrid_potential": True, "hybrid_params": hybrid_params})
+    config = mock_md_config.model_copy(
+        update={"hybrid_potential": True, "hybrid_params": hybrid_params}
+    )
 
     engine = LammpsEngine(config)
     atoms = Atoms("Al", cell=[10, 10, 10], pbc=True)
@@ -117,6 +122,7 @@ def test_lammps_engine_hybrid_potential(mock_md_config: MDConfig, mock_driver: A
 
     # Capture script content
     script_content = []
+
     def capture_run(path: str) -> None:
         script_content.append(Path(path).read_text())
 
@@ -130,14 +136,14 @@ def test_lammps_engine_hybrid_potential(mock_md_config: MDConfig, mock_driver: A
 
     assert "pair_style hybrid/overlay" in script
     assert "pair_coeff * * pace" in script
-    assert "pair_coeff 1 1 zbl 13 13" in script # Al is Z=13
+    assert "pair_coeff 1 1 zbl 13 13" in script  # Al is Z=13
     assert "1.0 1.5" in script
 
 
 def test_run_empty_structure_error(mock_md_config: MDConfig, tmp_path: Path) -> None:
     """Tests error handling for empty structure."""
     engine = LammpsEngine(mock_md_config)
-    atoms = Atoms() # Empty
+    atoms = Atoms()  # Empty
     pot_path = tmp_path / "pot.yace"
     pot_path.touch()
 
@@ -155,13 +161,18 @@ def test_run_missing_potential_error(mock_md_config: MDConfig) -> None:
         engine.run(atoms, "nonexistent.yace")
 
 
-def test_run_large_structure_warning(mock_md_config: MDConfig, mock_driver: Any, caplog: Any, tmp_path: Path) -> None:
+def test_run_large_structure_warning(
+    mock_md_config: MDConfig, mock_driver: Any, caplog: Any, tmp_path: Path
+) -> None:
     """Tests info log for large structures (streaming)."""
     import logging
+
     caplog.set_level(logging.INFO)
     engine = LammpsEngine(mock_md_config)
     # Create large structure > 10k
-    atoms = Atoms(symbols=["H"] * 10001, positions=[[0,0,0]]*10001, cell=[100,100,100], pbc=True)
+    atoms = Atoms(
+        symbols=["H"] * 10001, positions=[[0, 0, 0]] * 10001, cell=[100, 100, 100], pbc=True
+    )
 
     pot_path = tmp_path / "pot.yace"
     pot_path.touch()
@@ -170,9 +181,11 @@ def test_run_large_structure_warning(mock_md_config: MDConfig, mock_driver: Any,
     driver_instance.get_forces.return_value = np.zeros((10001, 3))
     driver_instance.get_stress.return_value = np.zeros(6)
 
-    with patch("pyacemaker.core.io_manager.write_lammps_streaming") as mock_stream, \
-         patch("pyacemaker.core.io_manager.get_species_order", return_value=["H"]):
-            engine.run(atoms, pot_path)
+    with (
+        patch("pyacemaker.core.io_manager.write_lammps_streaming") as mock_stream,
+        patch("pyacemaker.core.io_manager.get_species_order", return_value=["H"]),
+    ):
+        engine.run(atoms, pot_path)
 
     # We allow this test to pass if mock_stream is called, as log capture can be flaky depending on pytest config.
     mock_stream.assert_called()

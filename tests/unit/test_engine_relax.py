@@ -14,7 +14,10 @@ def mock_driver_relax() -> Any:
     with patch("pyacemaker.core.engine.LammpsDriver") as mock:
         yield mock
 
-def test_lammps_engine_relax(mock_md_config: MDConfig, mock_driver_relax: Any, tmp_path: Path) -> None:
+
+def test_lammps_engine_relax(
+    mock_md_config: MDConfig, mock_driver_relax: Any, tmp_path: Path
+) -> None:
     # Setup mock driver
     driver_class = mock_driver_relax
     driver_instance = driver_class.return_value
@@ -57,14 +60,20 @@ def test_lammps_engine_relax(mock_md_config: MDConfig, mock_driver_relax: Any, t
     assert "fix npt" not in script
     assert "velocity all create" not in script
 
-def test_lammps_engine_relax_missing_potential(mock_md_config: MDConfig, mock_driver_relax: Any) -> None:
+
+def test_lammps_engine_relax_missing_potential(
+    mock_md_config: MDConfig, mock_driver_relax: Any
+) -> None:
     engine = LammpsEngine(mock_md_config)
-    atoms = Atoms("H", cell=[10,10,10], pbc=True) # Must be valid structure
+    atoms = Atoms("H", cell=[10, 10, 10], pbc=True)  # Must be valid structure
 
     with pytest.raises(FileNotFoundError):
         engine.relax(atoms, "nonexistent.yace")
 
-def test_lammps_engine_relax_driver_fail(mock_md_config: MDConfig, mock_driver_relax: Any, tmp_path: Path) -> None:
+
+def test_lammps_engine_relax_driver_fail(
+    mock_md_config: MDConfig, mock_driver_relax: Any, tmp_path: Path
+) -> None:
     driver_instance = mock_driver_relax.return_value
     driver_instance.run_file.side_effect = RuntimeError("Minimization failed")
 
