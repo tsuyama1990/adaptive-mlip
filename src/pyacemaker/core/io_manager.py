@@ -2,7 +2,6 @@ import logging
 import tempfile
 import uuid
 from pathlib import Path
-from typing import Any
 
 from ase import Atoms
 from ase.io import write
@@ -25,7 +24,7 @@ class LammpsFileManager:
 
     def prepare_workspace(
         self, structure: Atoms | str | Path
-    ) -> tuple[Any, Path, Path, Path, list[str]]:
+    ) -> tuple[tempfile.TemporaryDirectory[str], Path, Path, Path, list[str]]:
         """
         Creates temporary directory and writes structure file.
 
@@ -54,12 +53,16 @@ class LammpsFileManager:
 
             # Handle different input types
             if isinstance(structure, (str, Path)):
+                # Security: Validate input path before processing
+                from pyacemaker.utils.path import validate_path_safe
+                safe_structure_path = validate_path_safe(Path(structure))
+
                 # 100% Streaming approach: Do not load any Atoms objects.
                 from pyacemaker.utils.io import detect_elements, stream_extxyz_to_lammps
 
-                elements = detect_elements(Path(structure), max_frames=1)
+                elements = detect_elements(safe_structure_path, max_frames=1)
                 with data_file.open("w") as f:
-                    stream_extxyz_to_lammps(Path(structure), f, elements)
+                    stream_extxyz_to_lammps(safe_structure_path, f, elements)
 
             else:
                 # It's an Atoms object.

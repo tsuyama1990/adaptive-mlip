@@ -152,7 +152,7 @@ class MDConfig(BaseModel):
     )
     atom_style: AtomStyle = Field(AtomStyle(DEFAULT_MD_ATOM_STYLE), description="LAMMPS atom style")
 
-    # Configurable LAMMPS Parameters (No Hardcoding)
+    # Configurable LAMMPS Parameters
     velocity_seed: int = Field(
         LAMMPS_VELOCITY_SEED, description="Random seed for velocity initialization"
     )

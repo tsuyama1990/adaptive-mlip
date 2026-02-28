@@ -116,6 +116,10 @@ class StructureGenerator(BaseGenerator):
                 yield structure
                 count += 1
 
+            if count == 0:
+                msg = "Generator produced an empty iterator. No structures generated."
+                raise GeneratorError(msg)
+
         yield from lazy_policy_stream()
 
     def generate_local(

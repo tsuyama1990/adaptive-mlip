@@ -38,7 +38,6 @@ def mock_lammps_module() -> Any:
 
         # We also need to mock driver.get_forces explicitly if lammps.gather_atoms isn't passing correctly through the mock
         # Let's mock LammpsDriver methods on the engine mock directly
-        pass
         yield mock
 
 
