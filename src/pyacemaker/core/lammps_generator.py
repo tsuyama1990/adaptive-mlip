@@ -19,7 +19,7 @@ class LammpsScriptGenerator:
     def __init__(self, config: MDConfig) -> None:
         self.config = config
         # Use lru_cache for methods instead of manual dict
-        self._atomic_numbers_cache = {}
+        self._atomic_numbers_cache: dict[str, int] = {}
 
     @lru_cache(maxsize=128)
     def _get_atomic_number(self, symbol: str) -> int:

@@ -22,7 +22,7 @@ class MockOracle(BaseOracle):
             sigma: Lennard-Jones sigma parameter (default: 2.5 Angstrom).
             epsilon: Lennard-Jones epsilon parameter (default: 1.0 eV).
         """
-        self.calc = LennardJones(sigma=sigma, epsilon=epsilon)
+        self.calc = LennardJones(sigma=sigma, epsilon=epsilon) # type: ignore[no-untyped-call]
 
     def compute(self, structures: Iterator[AtomStructure], batch_size: int = 10) -> Iterator[AtomStructure]:
         """
@@ -50,17 +50,17 @@ class MockOracle(BaseOracle):
             atoms.calc = self.calc
 
             try:
-                energy = float(atoms.get_potential_energy())  # type: ignore[no-untyped-call]
+                energy = float(atoms.get_potential_energy())
             except Exception:
                 energy = 0.0
 
             try:
-                forces = atoms.get_forces()  # type: ignore[no-untyped-call]
+                forces = atoms.get_forces()
             except Exception:
                 forces = np.zeros((len(atoms), 3))
 
             try:
-                stress = atoms.get_stress()  # type: ignore[no-untyped-call]
+                stress = atoms.get_stress()
             except Exception:
                 stress = np.zeros(6)
 

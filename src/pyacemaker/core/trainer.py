@@ -1,5 +1,6 @@
 import shutil
 import subprocess
+from pyacemaker.utils.process import run_command
 from pathlib import Path
 from typing import Any
 
@@ -85,7 +86,7 @@ class PacemakerTrainer(BaseTrainer):
 
         try:
             # We use subprocess directly here as run_command might not be imported or behave as expected
-            subprocess.run(cmd, check=True, capture_output=True)
+            run_command(cmd)
         except subprocess.CalledProcessError as e:
             # Capture specific subprocess error
             msg = f"Training failed with exit code {e.returncode}: {e}"

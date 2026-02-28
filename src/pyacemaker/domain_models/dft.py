@@ -64,7 +64,8 @@ class DFTConfig(BaseModel):
         """Helper to validate a single pseudopotential path."""
         import re
 
-        MAX_PATH_LENGTH = 4096
+        from pyacemaker.domain_models.constants import MAX_PATH_LENGTH
+
         # Allow alphanumeric, dot, underscore, dash, slash, plus.
         SAFE_PATH_PATTERN = re.compile(r"^[a-zA-Z0-9_\-./\+]+$")
 

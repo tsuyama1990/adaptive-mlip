@@ -18,6 +18,7 @@ from pyacemaker.domain_models import (
     TrainingConfig,
     WorkflowConfig,
 )
+from pyacemaker.domain_models.data import AtomStructure
 from pyacemaker.domain_models.defaults import (
     FILENAME_TRAINING,
     LOG_COMPUTED_PROPERTIES,
@@ -36,20 +37,20 @@ class FakeGenerator(BaseGenerator):
     def update_config(self, config: Any) -> None:
         pass
 
-    def generate(self, n_candidates: int) -> Iterator[Atoms]:
+    def generate(self, n_candidates: int) -> Iterator[AtomStructure]:
         for _ in range(n_candidates):
             symbol = self.elements[0]
-            yield Atoms(f"{symbol}2", positions=[[0, 0, 0], [0, 0, 0.74]])
+            yield AtomStructure(atoms=Atoms(f"{symbol}2", positions=[[0, 0, 0], [0, 0, 0.74]]))
 
-    def generate_local(self, base_structure: Atoms, n_candidates: int, **kwargs: Any) -> Iterator[Atoms]:
+    def generate_local(self, base_structure: Atoms, n_candidates: int, **kwargs: Any) -> Iterator[AtomStructure]:
         for _ in range(n_candidates):
-            yield base_structure.copy()  # type: ignore[no-untyped-call]
+            yield AtomStructure(atoms=base_structure.copy())  # type: ignore[no-untyped-call]
 
 
 class FakeOracle(BaseOracle):
-    def compute(self, structures: Iterator[Atoms], batch_size: int = 10) -> Iterator[Atoms]:
+    def compute(self, structures: Iterator[AtomStructure], batch_size: int = 10) -> Iterator[AtomStructure]:
         for atoms in structures:
-            atoms.info["energy"] = -10.0
+            atoms.energy = -10.0
             yield atoms
 
 

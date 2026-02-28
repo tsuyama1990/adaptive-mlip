@@ -214,7 +214,9 @@ class MDConfig(BaseModel):
     def validate_simulation_physics(self) -> "MDConfig":
         total_time = self.n_steps * self.timestep
         if total_time > MAX_MD_DURATION:
-             pass
+             raise ValueError(f"Total simulation time {total_time} ps exceeds maximum {MAX_MD_DURATION} ps.")
+        if self.temperature < 0.0 or self.temperature > 10000.0:
+             raise ValueError("Temperature must be between 0 and 10000 K.")
         return self
 
     @model_validator(mode="after")

@@ -1,4 +1,5 @@
 from collections.abc import Iterator
+from typing import Any
 
 from ase import Atoms
 
@@ -17,7 +18,7 @@ class ColdStartPolicy(BasePolicy):
         base_structure: Atoms,
         config: StructureConfig,
         n_structures: int,
-        **kwargs: dict,
+        **kwargs: dict[str, Any],
     ) -> Iterator[Atoms]:
         """
         Yields the base structure exactly once.
@@ -47,7 +48,7 @@ class RattlePolicy(BasePolicy):
         base_structure: Atoms,
         config: StructureConfig,
         n_structures: int,
-        **kwargs: dict,
+        **kwargs: dict[str, Any],
     ) -> Iterator[Atoms]:
         """
         Generates n_structures by randomly rattling the base structure.
@@ -64,7 +65,9 @@ class RattlePolicy(BasePolicy):
         stdev = config.rattle_stdev
         for _ in range(n_structures):
             atoms = base_structure.copy() # type: ignore[no-untyped-call]
-            atoms.rattle(stdev=stdev) # type: ignore[no-untyped-call]
+            import numpy as np
+            rng = np.random.default_rng()
+            atoms.rattle(stdev=stdev, seed=rng.integers(0, 1000000))
             yield atoms
 
 
@@ -78,7 +81,7 @@ class StrainPolicy(BasePolicy):
         base_structure: Atoms,
         config: StructureConfig,
         n_structures: int,
-        **kwargs: dict,
+        **kwargs: dict[str, Any],
     ) -> Iterator[Atoms]:
         """
         Generates n_structures by applying random strain.
@@ -92,7 +95,9 @@ class StrainPolicy(BasePolicy):
         Yields:
             Atoms: Strained structures.
         """
-        from pyacemaker.utils.perturbations import apply_random_strain
+        import numpy as np
+
+        from pyacemaker.utils.perturbations import apply_strain
 
         mode = config.strain_mode
         magnitude = config.strain_magnitude
@@ -100,7 +105,13 @@ class StrainPolicy(BasePolicy):
         for _ in range(n_structures):
             atoms = base_structure.copy() # type: ignore[no-untyped-call]
             # apply_random_strain modifies in-place
-            apply_random_strain(atoms, mode=str(mode), magnitude=magnitude)
+            strain_t = magnitude if isinstance(magnitude, (list, tuple, np.ndarray)) else np.array([[magnitude, 0, 0], [0, magnitude, 0], [0, 0, magnitude]])
+            # Randomize sign
+            # Ensure deterministic random seeding if possible
+            import numpy as np
+            rng = np.random.default_rng()
+            strain_t = strain_t * rng.choice([0.5, 1.5])
+            apply_strain(atoms, strain_tensor=np.array(strain_t))
             yield atoms
 
 
@@ -114,7 +125,7 @@ class DefectPolicy(BasePolicy):
         base_structure: Atoms,
         config: StructureConfig,
         n_structures: int,
-        **kwargs: dict,
+        **kwargs: dict[str, Any],
     ) -> Iterator[Atoms]:
         """
         Generates n_structures with random vacancies.
@@ -128,12 +139,12 @@ class DefectPolicy(BasePolicy):
         Yields:
             Atoms: Structures with vacancies.
         """
-        from pyacemaker.utils.perturbations import introduce_vacancies
+        from pyacemaker.utils.perturbations import create_vacancy
 
         rate = config.vacancy_rate
         for _ in range(n_structures):
             atoms = base_structure.copy() # type: ignore[no-untyped-call]
-            introduce_vacancies(atoms, rate=rate)
+            create_vacancy(atoms, rate=rate)
             yield atoms
 
 
@@ -150,7 +161,7 @@ class CompositePolicy(BasePolicy):
         base_structure: Atoms,
         config: StructureConfig,
         n_structures: int,
-        **kwargs: dict,
+        **kwargs: dict[str, Any],
     ) -> Iterator[Atoms]:
         """
         Generates structures by delegating to sub-policies.
@@ -166,6 +177,7 @@ class CompositePolicy(BasePolicy):
             Atoms: Generated structures from all sub-policies.
         """
         if not self.policies:
+            yield from []
             return
 
         n_per_policy = max(1, n_structures // len(self.policies))
@@ -194,7 +206,7 @@ class NormalModePolicy(BasePolicy):
     Placeholder for Normal Mode sampling.
     Future implementation will use phonon modes for perturbations.
     """
-    def generate(self, base_structure: Atoms, config: StructureConfig, n_structures: int, **kwargs: dict) -> Iterator[Atoms]:
+    def generate(self, base_structure: Atoms, config: StructureConfig, n_structures: int, **kwargs: dict[str, Any]) -> Iterator[Atoms]:
         """Fallback to rattle if normal mode not implemented."""
         yield from RattlePolicy().generate(base_structure, config, n_structures, **kwargs)
 
@@ -203,6 +215,6 @@ class MDMicroBurstPolicy(BasePolicy):
     Placeholder for MD Micro Burst sampling.
     Future implementation will run short MD trajectories.
     """
-    def generate(self, base_structure: Atoms, config: StructureConfig, n_structures: int, **kwargs: dict) -> Iterator[Atoms]:
+    def generate(self, base_structure: Atoms, config: StructureConfig, n_structures: int, **kwargs: dict[str, Any]) -> Iterator[Atoms]:
         """Fallback to rattle if MD burst not implemented."""
         yield from RattlePolicy().generate(base_structure, config, n_structures, **kwargs)

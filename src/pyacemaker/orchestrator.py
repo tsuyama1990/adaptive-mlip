@@ -401,7 +401,7 @@ class Orchestrator:
 
         def to_ase_iter(struct_iter: Iterator[AtomStructure]) -> Iterator[Atoms]:
             for s in struct_iter:
-                yield s.to_ase()
+                yield s.to_ase() if hasattr(s, "to_ase") else s # type: ignore[misc]
 
         def atom_structure_adapter(atoms_iter: Iterable[Atoms]) -> Iterator[AtomStructure]:
             for atoms in atoms_iter:
@@ -411,7 +411,7 @@ class Orchestrator:
         candidates_ase_gen = to_ase_iter(candidates_gen)
 
         selected_ase_gen = self.active_set_selector.select(
-            candidates_ase_gen,  # type: ignore[arg-type]
+            candidates_ase_gen,
             potential_path,
             n_select=n_select,
             anchor=s0_cluster,

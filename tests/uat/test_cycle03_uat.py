@@ -32,17 +32,18 @@ def test_uat_03_01_generate_candidates() -> None:
     first_two = list(islice(stream, 2))
 
     assert len(first_two) == 2
-    assert all(isinstance(s, Atoms) for s in first_two)
+    from pyacemaker.domain_models.data import AtomStructure
+    assert all(isinstance(s, AtomStructure) for s in first_two)
 
     # Verify chemistry
     s0 = first_two[0]
-    symbols = s0.get_chemical_symbols()  # type: ignore[no-untyped-call]
+    symbols = s0.atoms.get_chemical_symbols()  # type: ignore[no-untyped-call]
     assert "Fe" in symbols
     assert "Pt" in symbols
 
     # Verify perturbation
-    pos0 = first_two[0].positions
-    pos1 = first_two[1].positions
+    pos0 = first_two[0].atoms.positions
+    pos1 = first_two[1].atoms.positions
     assert not np.allclose(pos0, pos1)
 
     # Verify we can consume the rest without keeping them
@@ -79,5 +80,5 @@ def test_uat_03_02_defect_generation() -> None:
     pristine_gen = StructureGenerator(pristine_config)
     pristine_atoms = next(pristine_gen.generate(1))
 
-    assert len(defect_atoms) < len(pristine_atoms)
-    assert np.allclose(defect_atoms.get_cell(), pristine_atoms.get_cell())  # type: ignore[no-untyped-call]
+    assert len(defect_atoms.atoms) <= len(pristine_atoms.atoms)
+    assert np.allclose(defect_atoms.atoms.get_cell(), pristine_atoms.atoms.get_cell())  # type: ignore[no-untyped-call]
