@@ -218,6 +218,37 @@ def test_lammps_engine_run(mock_md_config: MDConfig, mock_driver: Any, tmp_path:
     assert "fix halt" in script
     assert "read_data" in script
 
+    # Assert driver closed
+    driver_instance.close.assert_called_once()
+
+
+def test_watchdog_corrupted_dump(tmp_path: Path) -> None:
+    """Test that watchdog handles malformed dump files gracefully."""
+    dump_file = tmp_path / "corrupted.dump"
+    # Provide an unexpected/malformed format
+    dump_content = """ITEM: TIMESTEP
+abc
+ITEM: NUMBER OF ATOMS
+not_a_number
+ITEM: BOX BOUNDS pp pp pp
+0.0 10.0
+0.0 10.0
+0.0 10.0
+ITEM: ATOMS id type x y z c_gamma
+1 1 0 0 0 invalid_float
+"""
+    dump_file.write_text(dump_content)
+
+    thresholds = ActiveLearningThresholds(
+        threshold_call_dft=0.05,
+        threshold_add_train=0.02,
+        smooth_steps=2
+    )
+
+    watchdog = UncertaintyWatchdog(thresholds)
+    halt_step, epicenter = watchdog.evaluate_stream(dump_file)
+    assert halt_step is None
+
 
 def test_lammps_engine_halted(mock_md_config: MDConfig, mock_driver: Any, tmp_path: Path) -> None:
     driver_instance = mock_driver.return_value
@@ -352,5 +383,19 @@ def test_run_driver_failure(mock_md_config: MDConfig, mock_driver: Any, tmp_path
     pot_path.touch()
 
     # Updated error message expectation
-    with pytest.raises(RuntimeError, match="Simulation execution failed: LAMMPS crashed"):
+    with pytest.raises(RuntimeError, match="Simulation execution failed.*LAMMPS crashed"):
         engine.run(atoms, pot_path)
+
+
+def test_run_driver_missing_file_failure(mock_md_config: MDConfig, mock_driver: Any, tmp_path: Path) -> None:
+    """Tests error handling when LAMMPS execution fails due to a missing script."""
+    engine = LammpsEngine(mock_md_config)
+    atoms = Atoms("H", cell=[10, 10, 10], pbc=True)
+    pot_path = tmp_path / "pot.yace"
+    pot_path.touch()
+
+    # We patch only LammpsExecutor._ensure_script_readable since patching Path.exists completely breaks file_manager logic
+    with patch("pyacemaker.core.engine.LammpsExecutor._ensure_script_readable") as mock_ensure:
+        mock_ensure.side_effect = FileNotFoundError("Input script not found")
+        with pytest.raises(RuntimeError, match="Simulation setup failed.*Input script not found"):
+            engine.run(atoms, pot_path)

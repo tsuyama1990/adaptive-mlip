@@ -2,7 +2,6 @@ import os
 from collections.abc import Iterator
 from enum import StrEnum
 from pathlib import Path
-from typing import Any
 
 import numpy as np
 from pydantic import BaseModel, ConfigDict, Field, PositiveFloat, PositiveInt, model_validator
@@ -60,6 +59,13 @@ class HybridParams(BaseModel):
         DEFAULT_MD_HYBRID_ZBL_OUTER, description="Outer cutoff radius for ZBL potential (Angstrom)"
     )
 
+    @model_validator(mode="after")
+    def validate_cutoffs(self) -> "HybridParams":
+        if self.zbl_cut_inner >= self.zbl_cut_outer:
+            msg = f"zbl_cut_inner ({self.zbl_cut_inner}) must be strictly less than zbl_cut_outer ({self.zbl_cut_outer})."
+            raise ValueError(msg)
+        return self
+
 
 class MDRampingConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -86,7 +92,7 @@ class MDSimulationResult(BaseModel):
     model_config = ConfigDict(extra="forbid", arbitrary_types_allowed=True)
 
     energy: float = Field(..., description="Final potential energy of the system")
-    forces: Iterator[list[float]] | list[list[float]] | Any = Field(..., description="Forces on atoms in the final frame (can be generator/iterator for large structs)")
+    forces: Iterator[list[float]] | list[list[float]] = Field(..., description="Forces on atoms in the final frame (can be generator/iterator for large structs)")
     stress: list[float] = Field(
         default_factory=lambda: [0.0] * 6,
         description="Stress tensor (Voigt: xx, yy, zz, yz, xz, xy) in Bar",
@@ -236,7 +242,7 @@ class MDConfig(BaseModel):
     )
     soft_start_seed: int = Field(
         default=DEFAULT_MD_SOFT_START_SEED,
-        description="Random seed for soft start Langevin thermostat"
+        ge=0, description="Random seed for soft start Langevin thermostat"
     )
 
     # Spec Section 3.1: Ramping and MC
@@ -247,7 +253,8 @@ class MDConfig(BaseModel):
     def validate_simulation_physics(self) -> "MDConfig":
         total_time = self.n_steps * self.timestep
         if total_time > MAX_MD_DURATION:
-            pass
+            msg = f"Total simulation time ({total_time} ps) exceeds maximum allowed duration ({MAX_MD_DURATION} ps)."
+            raise ValueError(msg)
         return self
 
     @model_validator(mode="after")
@@ -260,6 +267,13 @@ class MDConfig(BaseModel):
     @model_validator(mode="after")
     def validate_temp_dir(self) -> "MDConfig":
         if self.temp_dir:
+            from pyacemaker.domain_models.constants import DANGEROUS_PATH_CHARS
+
+            # Check for invalid characters first
+            if any(char in self.temp_dir for char in DANGEROUS_PATH_CHARS):
+                msg = f"Temporary directory path contains invalid characters: {self.temp_dir}"
+                raise ValueError(msg)
+
             p = Path(self.temp_dir)
             if not p.exists() or not os.access(p, os.W_OK):
                 msg = f"Temporary directory {p} does not exist or is not writable."

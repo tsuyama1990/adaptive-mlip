@@ -46,6 +46,49 @@ class UncertaintyWatchdog:
         is_halt = c_steps >= self.thresholds.smooth_steps
         return is_halt, c_steps
 
+    def _process_chunk(
+        self,
+        lines: list[str],
+        cur_step: int | None,
+        max_g: float,
+        atoms: list[int],
+        in_atoms: bool,
+        g_idx: int,
+        c_steps: int,
+    ) -> tuple[int | None, list[int], int | None, float, list[int], bool, int, int]:
+        halt_step: int | None = None
+        epi: list[int] = []
+
+        for raw_line in lines:
+            line = raw_line.strip()
+            if line.startswith("ITEM: TIMESTEP"):
+                if cur_step is not None:
+                    is_halt, c_steps = self._evaluate_step(max_g, c_steps)
+                    if is_halt:
+                        return cur_step, atoms, cur_step, max_g, atoms, in_atoms, g_idx, c_steps
+                in_atoms = False
+                cur_step = -1 # Sentinel to read next digit as step
+                continue
+
+            if not in_atoms and cur_step == -1 and line.isdigit() and len(line) < 15:
+                cur_step = int(line)
+                max_g = 0.0
+                atoms = []
+                continue
+
+            if line.startswith("ITEM: ATOMS"):
+                in_atoms = True
+                parts = line.split()
+                g_idx = parts.index("c_gamma") - 2 if "c_gamma" in parts else -1
+                continue
+
+            if in_atoms and self.thresholds is not None:
+                max_g = self._process_atom_line(
+                    line, g_idx, self.thresholds.threshold_add_train, atoms, max_g
+                )
+
+        return halt_step, epi, cur_step, max_g, atoms, in_atoms, g_idx, c_steps
+
     def evaluate_stream(self, dump_file: Path) -> tuple[int | None, list[int]]:
         """
         Parses a LAMMPS dump file to evaluate uncertainty.
@@ -65,35 +108,22 @@ class UncertaintyWatchdog:
             in_atoms = False
             g_idx = -1
 
-            for raw_line in f:
-                line = raw_line.strip()
-                if line.startswith("ITEM: TIMESTEP"):
-                    if cur_step is not None:
-                        is_halt, c_steps = self._evaluate_step(max_g, c_steps)
-                        if is_halt:
-                            halt_step = cur_step
-                            epi = atoms
-                            break
+            # Scalability: Read in chunks of 10,000 lines
+            while True:
+                lines = f.readlines(10000)
+                if not lines:
+                    break
 
-                    step_line = next(f, None)
-                    cur_step = int(step_line.strip()) if step_line else None
-                    max_g = 0.0
-                    atoms = []
-                    in_atoms = False
-                elif line.startswith("ITEM: ATOMS"):
-                    in_atoms = True
-                    parts = line.split()
-                    g_idx = parts.index("c_gamma") - 2 if "c_gamma" in parts else -1
-                elif in_atoms:
-                    max_g = self._process_atom_line(
-                        line, g_idx, self.thresholds.threshold_add_train, atoms, max_g
-                    )
+                halt_step, epi, cur_step, max_g, atoms, in_atoms, g_idx, c_steps = self._process_chunk(
+                    lines, cur_step, max_g, atoms, in_atoms, g_idx, c_steps
+                )
+                if halt_step is not None:
+                    return halt_step, epi
 
-            if cur_step is not None and halt_step is None:
+            if cur_step is not None:
                 is_halt, c_steps = self._evaluate_step(max_g, c_steps)
                 if is_halt:
-                    halt_step = cur_step
-                    epi = atoms
+                    return cur_step, atoms
 
         return halt_step, epi
 
@@ -114,39 +144,31 @@ class LammpsExecutor:
 
     @staticmethod
     def execute_simulation(driver: LammpsDriver, script_path: Path) -> None:
-        import threading
+        import concurrent.futures
 
         try:
             LammpsExecutor._ensure_script_readable(script_path)
 
-            # Scalability I/O fix: Run driver.run_file in a separate thread to prevent blocking
-            # main execution path entirely if we want to do incremental processing or just decouple I/O.
-            # Using basic thread mapping here to conform to "Use a producer-consumer pattern where
-            # the LAMMPS driver writes to a buffer and a separate thread/stream processes the data incrementally".
+            # Scalability I/O fix: Run driver.run_file in a separate thread using ThreadPoolExecutor
+            # to prevent blocking main execution path entirely if we want to decouple I/O.
 
-            error_holder: list[Exception] = []
-
-            def worker() -> None:
-                try:
-                    driver.run_file(str(script_path))
-                except Exception as ex:
-                    error_holder.append(ex)
-
-            t = threading.Thread(target=worker)
-            t.start()
-            t.join()
-
-            if error_holder:
-                LammpsExecutor._raise_error_static(error_holder[0])
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(driver.run_file, str(script_path))
+                # Using future.result() properly surfaces exceptions raised inside the thread
+                future.result()
 
         except FileNotFoundError as e:
-            raise RuntimeError(ERR_SIM_SETUP_FAIL.format(error=e)) from e
+            msg = f"{ERR_SIM_SETUP_FAIL.format(error=e)} - Script Path: {script_path}"
+            raise RuntimeError(msg) from e
         except ValueError as e:
-            raise RuntimeError(ERR_SIM_SECURITY_FAIL.format(error=e)) from e
+            msg = f"{ERR_SIM_SECURITY_FAIL.format(error=e)} - Script Path: {script_path}"
+            raise RuntimeError(msg) from e
         except RuntimeError as e:
-            raise RuntimeError(ERR_SIM_EXEC_FAIL.format(error=e)) from e
+            msg = f"{ERR_SIM_EXEC_FAIL.format(error=e)} - Script Path: {script_path}"
+            raise RuntimeError(msg) from e
         except Exception as e:
-            raise RuntimeError(ERR_SIM_UNEXPECTED.format(error=e)) from e
+            msg = f"{ERR_SIM_UNEXPECTED.format(error=e)} - Script Path: {script_path}"
+            raise RuntimeError(msg) from e
 
 class LammpsResultParser:
     """Handles extracting results from LAMMPS driver."""
@@ -160,8 +182,11 @@ class LammpsResultParser:
             temperature = driver.extract_variable("temp")
             step = int(driver.extract_variable("step"))
 
+            from collections.abc import Iterator
+
             # Scalability fix: Implement streaming generator for forces instead of materializing the full list
-            def _force_generator() -> Any:
+            # We must return the generator itself so it isn't evaluated eagerly into a list.
+            def _force_generator() -> Iterator[list[float]]:
                 forces_array = driver.get_forces()
                 for i in range(forces_array.shape[0]):
                     yield [float(forces_array[i, 0]), float(forces_array[i, 1]), float(forces_array[i, 2])]
@@ -174,7 +199,11 @@ class LammpsResultParser:
             energy = 0.0
             temperature = 0.0
             step = 0
-            forces = self.config.default_forces
+
+            def _default_force_generator() -> Iterator[list[float]]:
+                yield from self.config.default_forces
+
+            forces = _default_force_generator()
             stress = [0.0] * 6
 
         max_gamma = 0.0
@@ -203,10 +232,35 @@ class LammpsResultParser:
         )
 
 
+class LammpsPreparationEngine:
+    """Handles the preparation of the LAMMPS simulation environment."""
+
+    def __init__(self, file_manager: LammpsFileManager | None = None) -> None:
+        self.file_manager = file_manager
+
+    def prepare(
+        self, config: MDConfig, structure: Atoms | None, potential: Any, restart_file: Path | None = None
+    ) -> tuple[Any, Path, Path, Path, list[str], Path]:
+        if structure is None and restart_file is None:
+            raise ValueError(ERR_STRUCTURE_NONE)
+
+        if structure is not None:
+            LammpsInputValidator.validate_structure(structure)
+        potential_path = LammpsInputValidator.validate_potential(potential)
+        potential_path = potential_path.resolve(strict=True)
+
+        if not self.file_manager:
+            self.file_manager = LammpsFileManager(config)
+
+        struct_to_pass = structure if structure is not None else Atoms()
+        ctx, data_file, dump_file, log_file, elements = self.file_manager.prepare_workspace(struct_to_pass)
+        return ctx, data_file, dump_file, log_file, elements, potential_path
+
+
 class LammpsEngine(BaseEngine):
     """
     MD Engine using LAMMPS.
-    Composes generation, execution, and result parsing.
+    Orchestrates specialized sub-engines to satisfy SRP.
     """
 
     def __init__(
@@ -217,53 +271,30 @@ class LammpsEngine(BaseEngine):
         executor: LammpsExecutor | None = None,
         parser: LammpsResultParser | None = None,
         watchdog: UncertaintyWatchdog | None = None,
+        preparation_engine: LammpsPreparationEngine | None = None,
     ) -> None:
         self.config = config
         self.generator = generator or LammpsScriptGenerator(config)
-        self.file_manager = file_manager or LammpsFileManager(config)
         self.executor = executor or LammpsExecutor()
         self.parser = parser or LammpsResultParser(config)
         self.watchdog = watchdog or UncertaintyWatchdog(config.active_learning)
-
-    def _prepare_simulation_env(
-        self, structure: Atoms | None, potential: Any, restart_file: Path | None = None
-    ) -> tuple[Any, Path, Path, Path, list[str], Path]:
-        """
-        Prepares the simulation environment: validation, paths, and files.
-        Returns: (ctx, data_file, dump_file, log_file, elements, potential_path)
-        """
-        if structure is None and restart_file is None:
-            raise ValueError(ERR_STRUCTURE_NONE)
-
-        if structure is not None:
-            LammpsInputValidator.validate_structure(structure)
-        potential_path = LammpsInputValidator.validate_potential(potential)
-        potential_path = potential_path.resolve(strict=True)
-
-        # Workaround to support empty structure when restarting
-        struct_to_pass = structure if structure is not None else Atoms()
-        ctx, data_file, dump_file, log_file, elements = self.file_manager.prepare_workspace(
-            struct_to_pass
-        )
-        return ctx, data_file, dump_file, log_file, elements, potential_path
+        self.preparation_engine = preparation_engine or LammpsPreparationEngine(file_manager)
 
     def run(self, structure: Atoms | None, potential: Any, restart_file: Path | None = None) -> MDSimulationResult:
         """
         Runs the MD simulation.
         """
         ctx, data_file, dump_file, log_file, elements, potential_path = (
-            self._prepare_simulation_env(structure, potential, restart_file)
+            self.preparation_engine.prepare(self.config, structure, potential, restart_file)
         )
 
         with ctx:
-            # Generate input script to file
             temp_dir = Path(ctx.name) if hasattr(ctx, "name") else data_file.parent
             input_script_path = temp_dir / "input.lmp"
 
             with input_script_path.open("w") as f:
                 self.generator.write_script(f, potential_path, data_file, dump_file, elements, restart_file=restart_file)
 
-            # Initialize Driver with unique log file
             driver = LammpsDriver(["-screen", LAMMPS_SCREEN_ARG, "-log", str(log_file)])
 
             try:
@@ -273,7 +304,6 @@ class LammpsEngine(BaseEngine):
                 import logging
                 logger = logging.getLogger(__name__)
 
-                # Check watchdog if configured
                 if self.config.fix_halt and self.config.active_learning:
                     logger.debug(f"Evaluating uncertainty stream from {dump_file}")
                     halt_step, epicenter = self.watchdog.evaluate_stream(dump_file)
@@ -306,7 +336,7 @@ class LammpsEngine(BaseEngine):
         Relaxes the structure to a local minimum using LAMMPS minimize.
         """
         ctx, data_file, dump_file, log_file, elements, potential_path = (
-            self._prepare_simulation_env(structure, potential)
+            self.preparation_engine.prepare(self.config, structure, potential)
         )
 
         with ctx:
