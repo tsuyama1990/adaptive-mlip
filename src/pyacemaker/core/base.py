@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from pathlib import Path
 from typing import Any
 
@@ -16,7 +16,7 @@ class BasePolicy(ABC):
     @abstractmethod
     def generate(
         self, base_structure: Atoms, config: Any, n_structures: int = 1, **kwargs: Any
-    ) -> Iterator[Atoms]:
+    ) -> Iterable[Atoms]:
         """
         Generates new candidates based on policy logic.
         """

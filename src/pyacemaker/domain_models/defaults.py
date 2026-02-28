@@ -21,6 +21,7 @@ DEFAULT_EON_SEED = 12345
 FILENAME_CANDIDATES = "candidates.xyz"
 FILENAME_TRAINING = "training_data.xyz"
 FILENAME_POTENTIAL = "potential.yace"
+FILE_FORMAT_EXTXYZ = "extxyz"
 
 # Template strings
 TEMPLATE_ITER_DIR = "iter_{iteration:03d}"

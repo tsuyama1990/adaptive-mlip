@@ -1,4 +1,4 @@
-from collections.abc import Iterator
+from collections.abc import Iterable
 from typing import Any
 
 from ase import Atoms
@@ -10,7 +10,7 @@ from pyacemaker.domain_models.structure import StructureConfig
 class SafeBasePolicy(BasePolicy):
     def generate(
         self, base_structure: Atoms, config: StructureConfig, n_structures: int = 1, **kwargs: Any
-    ) -> Iterator[Atoms]:
+    ) -> Iterable[Atoms]:
         """
         Generates new candidates based on policy logic.
         """
@@ -31,7 +31,7 @@ class MDMicroBurstPolicy(SafeBasePolicy):
 
     def generate(
         self, base_structure: Atoms, config: StructureConfig, n_structures: int = 1, **kwargs: Any
-    ) -> Iterator[Atoms]:
+    ) -> Iterable[Atoms]:
         from ase.io import read
 
         engine = kwargs.get("engine")
@@ -70,7 +70,7 @@ class NormalModePolicy(SafeBasePolicy):
 
     def generate(
         self, base_structure: Atoms, config: StructureConfig, n_structures: int = 1, **kwargs: Any
-    ) -> Iterator[Atoms]:
+    ) -> Iterable[Atoms]:
         import numpy as np
 
         stdev = getattr(config, "rattle_stdev", 0.1)
@@ -109,7 +109,7 @@ class CompositePolicy(SafeBasePolicy):
 
     def generate(
         self, base_structure: Atoms, config: StructureConfig, n_structures: int = 1, **kwargs: Any
-    ) -> Iterator[Atoms]:
+    ) -> Iterable[Atoms]:
         if not self.policies:
             return
 
@@ -129,7 +129,7 @@ class DefectPolicy(SafeBasePolicy):
 
     def generate(
         self, base_structure: Atoms, config: StructureConfig, n_structures: int = 1, **kwargs: Any
-    ) -> Iterator[Atoms]:
+    ) -> Iterable[Atoms]:
         import random
 
         for _ in range(n_structures):
@@ -147,7 +147,7 @@ class RattlePolicy(SafeBasePolicy):
 
     def generate(
         self, base_structure: Atoms, config: StructureConfig, n_structures: int = 1, **kwargs: Any
-    ) -> Iterator[Atoms]:
+    ) -> Iterable[Atoms]:
         import numpy as np
 
         for _ in range(n_structures):
@@ -168,7 +168,7 @@ class StrainPolicy(SafeBasePolicy):
 
     def generate(
         self, base_structure: Atoms, config: StructureConfig, n_structures: int = 1, **kwargs: Any
-    ) -> Iterator[Atoms]:
+    ) -> Iterable[Atoms]:
         for _ in range(n_structures):
             atoms = base_structure.copy()  # type: ignore[no-untyped-call]
             cell = atoms.get_cell()
