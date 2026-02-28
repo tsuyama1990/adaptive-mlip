@@ -75,7 +75,7 @@ Name                                         Stmts   Miss  Cover   Missing
 --------------------------------------------------------------------------
 src/pyacemaker/__init__.py                       4      0   100%
 src/pyacemaker/core/__init__.py                  7      0   100%
-src/pyacemaker/core/active_set.py               71     10    86%   46-47, 60-61, 71, 77-78, 86-88
+src/pyacemaker/core/active_set.py               71      9    87%   46-47, 60-61, 71, 77-78, 87-88
 src/pyacemaker/core/base.py                     29      0   100%
 src/pyacemaker/core/config_generator.py         36      3    92%   56-58
 src/pyacemaker/core/directory_manager.py        20      0   100%
@@ -129,7 +129,7 @@ src/pyacemaker/utils/phonons.py                 51      2    96%   51, 69
 src/pyacemaker/utils/process.py                 25     21    16%   35-77
 src/pyacemaker/utils/structure.py                6      2    67%   19-20
 --------------------------------------------------------------------------
-TOTAL                                         2631    351    87%
-======================== 240 passed, 1 warning in 3.72s ========================
+TOTAL                                         2631    350    87%
+======================== 240 passed, 1 warning in 2.81s ========================
 /app/.venv/lib/python3.12/site-packages/coverage/inorout.py:561: CoverageWarning: Module dev_src was never imported. (module-not-imported); see https://coverage.readthedocs.io/en/7.13.4/messages.html#warning-module-not-imported
   self.warn(f"Module {pkg} was never imported.", slug="module-not-imported")

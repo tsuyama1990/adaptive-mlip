@@ -100,7 +100,8 @@ def test_uat_active_set_selection(tmp_path: Path) -> None:
     with patch("pyacemaker.core.active_set.run_command") as mock_run:
         mock_run.side_effect = side_effect
 
+        from itertools import islice
         selected_iter = selector.select(pool, pot_path, n_select=10)
-        selected = list(selected_iter)
+        selected = list(islice(selected_iter, 10))
 
         assert len(selected) == 10
