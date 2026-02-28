@@ -24,14 +24,16 @@ def mock_lammps_module() -> Any:
             "step": 1000,
             "max_g": 0.05,
             "temp": 300.0,
-            "halted": 0.0
+            "halted": 0.0,
         }.get(name, 0.0)
         # Mock get_natoms
         instance.get_natoms.return_value = 1
         yield mock
 
 
-def test_engine_integration_workflow(tmp_path: Path, mock_md_config: MDConfig, mock_lammps_module: Any) -> None:
+def test_engine_integration_workflow(
+    tmp_path: Path, mock_md_config: MDConfig, mock_lammps_module: Any
+) -> None:
     """
     Verifies that the engine can be instantiated and run.
     This simulates the full workflow but mocks the actual LAMMPS C++ calls.
@@ -61,7 +63,9 @@ def test_engine_integration_workflow(tmp_path: Path, mock_md_config: MDConfig, m
     assert any("pair_style hybrid/overlay" in c[0][0] for c in calls)
 
 
-def test_engine_integration_lammps_failure(tmp_path: Path, mock_md_config: MDConfig, mock_lammps_module: Any) -> None:
+def test_engine_integration_lammps_failure(
+    tmp_path: Path, mock_md_config: MDConfig, mock_lammps_module: Any
+) -> None:
     """Tests proper error handling when LAMMPS crashes."""
     potential_path = tmp_path / "potential.yace"
     potential_path.touch()

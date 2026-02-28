@@ -30,9 +30,7 @@ def main() -> None:
     parser.add_argument(
         "--dry-run", action="store_true", help="Validate config and exit without running"
     )
-    parser.add_argument(
-        "--scenario", type=str, help="Run a specific scenario (e.g., fept_mgo)"
-    )
+    parser.add_argument("--scenario", type=str, help="Run a specific scenario (e.g., fept_mgo)")
 
     args = parser.parse_args()
     config_path = Path(args.config)

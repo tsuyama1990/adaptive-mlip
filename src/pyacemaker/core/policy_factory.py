@@ -1,5 +1,5 @@
+from pyacemaker.core.base import BasePolicy
 from pyacemaker.core.policy import (
-    BasePolicy,
     ColdStartPolicy,
     CompositePolicy,
     DefectPolicy,

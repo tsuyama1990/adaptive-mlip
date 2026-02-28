@@ -44,9 +44,10 @@ def test_pacemaker_integration_full_flow(tmp_path: Path) -> None:
     # We mock:
     # - shutil.which (to simulate pace_train exists)
     # - subprocess.run (to simulate successful execution)
-    with patch("shutil.which", return_value="/usr/bin/pace_train"), \
-         patch("pyacemaker.core.trainer.run_command") as mock_run:
-
+    with (
+        patch("shutil.which", return_value="/usr/bin/pace_train"),
+        patch("pyacemaker.core.trainer.run_command") as mock_run,
+    ):
         # Simulate output file creation by the external process
         def side_effect(cmd: list[str], **kwargs: Any) -> MagicMock:
             # cmd[0] is 'pace_train', cmd[1] is input.yaml path
@@ -73,23 +74,21 @@ def test_pacemaker_integration_full_flow(tmp_path: Path) -> None:
         assert result.exists()
         mock_run.assert_called_once()
 
+
 def test_pacemaker_integration_failure_handling(tmp_path: Path) -> None:
     """Test trainer failure handling."""
     data_path = tmp_path / "data.xyz"
     write(data_path, Atoms("He"))
 
-    config = TrainingConfig(
-        potential_type="ace",
-        cutoff_radius=3.0,
-        max_basis_size=100
-    )
+    config = TrainingConfig(potential_type="ace", cutoff_radius=3.0, max_basis_size=100)
     trainer = PacemakerTrainer(config)
 
     from pyacemaker.core.exceptions import TrainerError
 
-    with patch("shutil.which", return_value="/bin/true"), \
-         patch("pyacemaker.core.trainer.run_command") as mock_run:
-
+    with (
+        patch("shutil.which", return_value="/bin/true"),
+        patch("pyacemaker.core.trainer.run_command") as mock_run,
+    ):
         # Simulate process failure
         mock_run.side_effect = subprocess.CalledProcessError(1, "cmd")
 

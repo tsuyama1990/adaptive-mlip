@@ -24,11 +24,13 @@ def mock_dft_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> DFTConfi
         pseudopotentials={"H": "H.UPF"},
     )
 
+
 def test_dft_manager_streaming_behavior(mock_dft_config: DFTConfig) -> None:
     """
     Verify that DFTManager computes properties one by one (streaming)
     and does NOT consume the whole generator upfront.
     """
+
     # 1. Create an infinite or large generator
     def infinite_structures() -> Any:
         i = 0

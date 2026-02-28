@@ -15,7 +15,9 @@ class QEDriver:
     Interface for Quantum Espresso calculations using ASE.
     """
 
-    def get_calculator(self, atoms: Atoms, config: DFTConfig, directory: str | None = None) -> Espresso:
+    def get_calculator(
+        self, atoms: Atoms, config: DFTConfig, directory: str | None = None
+    ) -> Espresso:
         """
         Creates an ASE Espresso calculator configured based on DFTConfig.
 
@@ -119,9 +121,9 @@ class QEDriver:
         a1, a2, a3 = cell[0], cell[1], cell[2]
 
         cross_lengths = [
-            np.linalg.norm(np.cross(a2, a3)), # for b1
-            np.linalg.norm(np.cross(a3, a1)), # for b2
-            np.linalg.norm(np.cross(a1, a2)), # for b3
+            np.linalg.norm(np.cross(a2, a3)),  # for b1
+            np.linalg.norm(np.cross(a3, a1)),  # for b2
+            np.linalg.norm(np.cross(a1, a2)),  # for b3
         ]
 
         kpts = []
@@ -138,4 +140,4 @@ class QEDriver:
             val = int(np.ceil(b_norm / spacing))
             kpts.append(max(1, val))
 
-        return tuple(kpts) # type: ignore[return-value]
+        return tuple(kpts)  # type: ignore[return-value]

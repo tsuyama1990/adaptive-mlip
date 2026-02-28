@@ -1,7 +1,5 @@
 from io import StringIO
-from unittest.mock import MagicMock, patch
 
-import numpy as np
 import pytest
 from ase import Atoms
 
@@ -14,7 +12,7 @@ def test_write_lammps_streaming_format() -> None:
 
     # Create simple structure: 2 atoms, cubic box
     structure = Atoms("LiH", positions=[[0, 0, 0], [0.5, 0.5, 0.5]], cell=[4.0, 4.0, 4.0], pbc=True)
-    elements = ["H", "Li"] # Sorted order: H (Z=1), Li (Z=3)
+    elements = ["H", "Li"]  # Sorted order: H (Z=1), Li (Z=3)
 
     write_lammps_streaming(buffer, structure, elements)
 
@@ -74,5 +72,7 @@ def test_write_lammps_streaming_non_orthogonal() -> None:
     structure = Atoms("H", positions=[[0, 0, 0]], cell=cell, pbc=True)
     elements = ["H"]
 
-    with pytest.raises(ValueError, match="Streaming write currently only supports orthogonal cells"):
+    with pytest.raises(
+        ValueError, match="Streaming write currently only supports orthogonal cells"
+    ):
         write_lammps_streaming(buffer, structure, elements)

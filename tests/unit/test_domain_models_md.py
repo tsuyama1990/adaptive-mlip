@@ -115,9 +115,7 @@ def test_md_simulation_result_halted() -> None:
 def test_md_ramping_config() -> None:
     """Tests MDRampingConfig validation."""
     # Valid
-    config = MDRampingConfig(
-        temp_start=300.0, temp_end=1000.0, press_start=1.0, press_end=100.0
-    )
+    config = MDRampingConfig(temp_start=300.0, temp_end=1000.0, press_start=1.0, press_end=100.0)
     assert config.temp_start == 300.0
     assert config.press_end == 100.0
 

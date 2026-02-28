@@ -1,7 +1,7 @@
 import contextlib
+import logging
 import tempfile
 from collections.abc import Callable, Iterator
-from itertools import islice
 from pathlib import Path
 
 from ase import Atoms
@@ -13,9 +13,36 @@ from pyacemaker.domain_models import DFTConfig
 from pyacemaker.domain_models.constants import ERR_ORACLE_FAILED, ERR_ORACLE_ITERATOR
 from pyacemaker.interfaces.qe_driver import QEDriver
 from pyacemaker.utils.embedding import embed_cluster
-import logging
 
 logger = logging.getLogger(__name__)
+
+
+class SelfHealingManager:
+    """
+    Manages self-healing strategies for DFT calculations.
+    """
+
+    def __init__(self, config: DFTConfig) -> None:
+        self.config = config
+        self.strategies: list[Callable[[DFTConfig], None] | None] = [
+            None,
+            self._strategy_reduce_beta,
+            self._strategy_increase_smearing,
+            self._strategy_use_cg,
+        ]
+
+    def _strategy_reduce_beta(self, c: DFTConfig) -> None:
+        c.mixing_beta *= self.config.mixing_beta_factor
+
+    def _strategy_increase_smearing(self, c: DFTConfig) -> None:
+        c.smearing_width *= self.config.smearing_width_factor
+
+    def _strategy_use_cg(self, c: DFTConfig) -> None:
+        c.diagonalization = "cg"
+
+    def get_strategies(self) -> list[Callable[[DFTConfig], None] | None]:
+        return self.strategies
+
 
 class DFTManager(BaseOracle):
     """
@@ -37,22 +64,17 @@ class DFTManager(BaseOracle):
         """
         self.config = config
         self.driver = driver or QEDriver()
+        self.self_healing = SelfHealingManager(config)
 
-        # Cache strategies to avoid recreation on every compute call
-        self.strategies: list[Callable[[DFTConfig], None] | None] = [
-            None,
-            self._strategy_reduce_beta,
-            self._strategy_increase_smearing,
-            self._strategy_use_cg
-        ]
-
-    def compute(self, structures: Iterator[Atoms], batch_size: int = 10) -> Iterator[Atoms]:
+    def compute(
+        self, structures: Iterator[Atoms], batch_size: int | None = None
+    ) -> Iterator[Atoms]:
         """
         Computes DFT properties for stream of structures.
 
         Args:
             structures: Iterator of Atoms objects.
-            batch_size: Batch size for processing (used to manage temporary directories).
+            batch_size: Deprecated. Left for backwards compatibility.
 
         Yields:
             Atoms objects with computed properties.
@@ -68,15 +90,22 @@ class DFTManager(BaseOracle):
         if not isinstance(structures, Iterator):
             raise TypeError(ERR_ORACLE_ITERATOR.format(type=type(structures)))
 
-        return self._compute_generator(structures, batch_size)
+        return self._compute_generator(structures)
 
-    def _compute_generator(self, structures: Iterator[Atoms], batch_size: int) -> Iterator[Atoms]:
-        """Internal generator for streaming computations with batching."""
+    def _compute_generator(self, structures: Iterator[Atoms]) -> Iterator[Atoms]:
+        """
+        Internal generator for streaming computations.
+
+        This method processes structures one-by-one from the input iterator, guaranteeing
+        O(1) memory usage regardless of dataset size. It uses a single shared temporary
+        directory for the entire generator lifetime to prevent I/O bottlenecks.
+        """
         # Check if iterator is initially empty (optional but helpful for early warnings)
         try:
             first_item = next(structures)
         except StopIteration:
             import warnings
+
             warnings.warn("Oracle received empty iterator", UserWarning, stacklevel=2)
             return
 
@@ -84,19 +113,17 @@ class DFTManager(BaseOracle):
             yield first_item
             yield from structures
 
-        structures_iter = chained_structures()
+        from pyacemaker.utils.path import validate_path_safe
 
-        while True:
-            batch = list(islice(structures_iter, batch_size))
-            if not batch:
-                break
-
-            with tempfile.TemporaryDirectory() as work_dir:
-                work_path = Path(work_dir)
-                for i, atoms in enumerate(batch):
-                    calc_dir = work_path / f"calc_{i}"
-                    calc_dir.mkdir()
-                    yield self._process_structure(atoms, str(calc_dir))
+        # Use a single temp dir for the lifetime of the stream to avoid I/O bottlenecks
+        with tempfile.TemporaryDirectory() as work_dir:
+            work_path = Path(work_dir)
+            for i, atoms in enumerate(chained_structures()):
+                calc_dir = work_path / f"calc_{i}"
+                calc_dir.mkdir()
+                # Validate path safely just in case
+                validate_path_safe(calc_dir)
+                yield self._process_structure(atoms, str(calc_dir))
 
     def _process_structure(self, atoms: Atoms, calc_dir: str) -> Atoms:
         """
@@ -122,16 +149,7 @@ class DFTManager(BaseOracle):
         """
         Returns a list of self-healing strategies.
         """
-        return self.strategies
-
-    def _strategy_reduce_beta(self, c: DFTConfig) -> None:
-        c.mixing_beta *= self.config.mixing_beta_factor
-
-    def _strategy_increase_smearing(self, c: DFTConfig) -> None:
-        c.smearing_width *= self.config.smearing_width_factor
-
-    def _strategy_use_cg(self, c: DFTConfig) -> None:
-        c.diagonalization = "cg"
+        return self.self_healing.get_strategies()
 
     def _compute_single(self, atoms: Atoms, calc_dir: str) -> Atoms:
         """
@@ -151,8 +169,10 @@ class DFTManager(BaseOracle):
         strategies = self._get_strategies()
         last_error: Exception | None = None
 
+        # Filter out None to avoid unnecessary checks inside the loop, though
+        # first attempt is "None" meaning "no change". We can handle it explicitly.
         for i, strategy in enumerate(strategies):
-            if strategy:
+            if strategy is not None:
                 strategy(current_config)
                 strategy_name = strategy.__name__
             else:
@@ -168,7 +188,7 @@ class DFTManager(BaseOracle):
 
                 # Enhanced Logging for debugging
                 logger.warning(
-                    f"DFT calculation attempt {i+1} ({strategy_name}) failed. Error: {e!s}. Retrying..."
+                    f"DFT calculation attempt {i + 1} ({strategy_name}) failed. Error: {e!s}. Retrying..."
                 )
                 continue
             else:

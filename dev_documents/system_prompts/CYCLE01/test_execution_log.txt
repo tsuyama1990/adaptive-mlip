@@ -4,261 +4,64 @@ rootdir: /app
 configfile: pyproject.toml
 testpaths: tests
 plugins: cov-7.0.0
-collected 243 items
+collected 240 items
 
 tests/e2e/test_engine_integration.py ..                                  [  0%]
 tests/e2e/test_orchestrator.py .......                                   [  3%]
-tests/e2e/test_orchestrator_loop.py ...                                  [  4%]
+tests/e2e/test_orchestrator_loop.py ...                                  [  5%]
 tests/e2e/test_orchestrator_refinement.py ..                             [  5%]
 tests/integration/test_pacemaker_integration.py ..                       [  6%]
-tests/integration/test_scenarios.py .                                    [  6%]
+tests/integration/test_scenarios.py .                                    [  7%]
 tests/uat/test_cycle01_uat.py ...                                        [  8%]
 tests/uat/test_cycle02_uat.py ..                                         [  9%]
-tests/uat/test_cycle03_uat.py ..                                         [  9%]
+tests/uat/test_cycle03_uat.py ..                                         [ 10%]
 tests/uat/test_cycle04_uat.py ...                                        [ 11%]
-tests/uat/test_cycle06_uat.py ..                                         [ 11%]
+tests/uat/test_cycle06_uat.py ..                                         [ 12%]
 tests/uat/test_cycle07_uat.py ..                                         [ 12%]
-tests/unit/test_active_set.py .....                                      [ 14%]
+tests/unit/test_active_set.py .....                                      [ 15%]
 tests/unit/test_active_set_anchor.py ....                                [ 16%]
 tests/unit/test_delta.py ....                                            [ 18%]
 tests/unit/test_domain_models.py ............                            [ 23%]
 tests/unit/test_domain_models_dft.py .............                       [ 28%]
 tests/unit/test_domain_models_eon.py ....                                [ 30%]
-tests/unit/test_domain_models_md.py ...........                          [ 34%]
+tests/unit/test_domain_models_md.py ...........                          [ 35%]
 tests/unit/test_domain_models_md_new.py ..                               [ 35%]
 tests/unit/test_domain_models_scenario.py ..                             [ 36%]
 tests/unit/test_domain_models_training.py .......                        [ 39%]
-tests/unit/test_domain_models_validation.py ....                         [ 40%]
+tests/unit/test_domain_models_validation.py ....                         [ 41%]
 tests/unit/test_elastic.py ....                                          [ 42%]
 tests/unit/test_embedding.py .......                                     [ 45%]
 tests/unit/test_engine.py .......                                        [ 48%]
-tests/unit/test_engine_halt_step.py ..                                   [ 48%]
+tests/unit/test_engine_halt_step.py ..                                   [ 49%]
 tests/unit/test_engine_relax.py ...                                      [ 50%]
 tests/unit/test_eon_driver.py .....                                      [ 52%]
 tests/unit/test_extraction.py ..                                         [ 53%]
-tests/unit/test_factory.py ..                                            [ 53%]
-tests/unit/test_generator.py ......                                      [ 56%]
+tests/unit/test_factory.py ..                                            [ 54%]
+tests/unit/test_generator.py ......                                      [ 57%]
 tests/unit/test_generator_local.py ..                                    [ 57%]
-tests/unit/test_io.py ........                                           [ 60%]
-tests/unit/test_io_manager.py ..                                         [ 61%]
-tests/unit/test_lammps_driver.py ...........                             [ 65%]
+tests/unit/test_io.py ........                                           [ 61%]
+tests/unit/test_io_manager.py ..                                         [ 62%]
+tests/unit/test_lammps_driver.py ...........                             [ 66%]
 tests/unit/test_lammps_driver_security.py ...                            [ 67%]
-tests/unit/test_lammps_generator.py ...                                  [ 68%]
-tests/unit/test_lammps_generator_reorder.py ..                           [ 69%]
+tests/unit/test_lammps_generator.py ...                                  [ 69%]
+tests/unit/test_lammps_generator_reorder.py ..                           [ 70%]
 tests/unit/test_loop.py .......                                          [ 72%]
-tests/unit/test_main.py ...                                              [ 73%]
-tests/unit/test_oracle.py ........                                       [ 76%]
-tests/unit/test_oracle_streaming.py .                                    [ 76%]
-tests/unit/test_path_validation.py .....                                 [ 79%]
-tests/unit/test_perturbations.py ...                                     [ 80%]
-tests/unit/test_phonons.py ..                                            [ 81%]
-tests/unit/test_policies_new.py .F.F                                     [ 82%]
+tests/unit/test_main.py ...                                              [ 74%]
+tests/unit/test_oracle.py ........                                       [ 77%]
+tests/unit/test_oracle_streaming.py .                                    [ 77%]
+tests/unit/test_path_validation.py .....                                 [ 80%]
+tests/unit/test_perturbations.py ...                                     [ 81%]
+tests/unit/test_phonons.py ..                                            [ 82%]
+tests/unit/test_policies_new.py .                                        [ 82%]
 tests/unit/test_policy_factory.py ...                                    [ 83%]
 tests/unit/test_qe_driver.py .......                                     [ 86%]
 tests/unit/test_report.py ..                                             [ 87%]
 tests/unit/test_scenarios_fept_mgo.py ......                             [ 90%]
 tests/unit/test_streaming_io.py ...                                      [ 91%]
 tests/unit/test_trainer_pacemaker.py ......                              [ 93%]
-tests/unit/test_validator.py FF..                                        [ 95%]
+tests/unit/test_validator.py ....                                        [ 95%]
 tests/unit/test_validator_security.py ...........                        [100%]
 
-=================================== FAILURES ===================================
-__________________________ test_md_micro_burst_policy __________________________
-
-    def test_md_micro_burst_policy() -> None:
-        # Setup Mock Result
-        from pyacemaker.domain_models.md import MDSimulationResult
-
-        mock_result = MagicMock(spec=MDSimulationResult)
-        mock_result.trajectory_path = "dummy.traj"
-
-        MockEngine.result_to_return = mock_result
-
-        # Setup initial engine
-        config_mock = MagicMock()
-        config_mock.model_copy.return_value = config_mock
-        initial_engine = MockEngine(config_mock)
-
-        # Mock trajectory read
->       with patch("pyacemaker.core.policy.read") as mock_read:
-             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-tests/unit/test_policies_new.py:85:
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
-/home/jules/.pyenv/versions/3.12.12/lib/python3.12/unittest/mock.py:1467: in __enter__
-    original, local = self.get_original()
-                      ^^^^^^^^^^^^^^^^^^^
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
-
-self = <unittest.mock._patch object at 0x7f55b3d2afc0>
-
-    def get_original(self):
-        target = self.getter()
-        name = self.attribute
-
-        original = DEFAULT
-        local = False
-
-        try:
-            original = target.__dict__[name]
-        except (AttributeError, KeyError):
-            original = getattr(target, name, DEFAULT)
-        else:
-            local = True
-
-        if name in _builtins and isinstance(target, ModuleType):
-            self.create = True
-
-        if not self.create and original is DEFAULT:
->           raise AttributeError(
-                "%s does not have the attribute %r" % (target, name)
-            )
-E           AttributeError: <module 'pyacemaker.core.policy' from '/app/src/pyacemaker/core/policy.py'> does not have the attribute 'read'
-
-/home/jules/.pyenv/versions/3.12.12/lib/python3.12/unittest/mock.py:1437: AttributeError
-_______________________ test_normal_mode_policy_fallback _______________________
-
-    def test_normal_mode_policy_fallback() -> None:
-        policy = NormalModePolicy()
-        config = StructureConfig(elements=["H"], supercell_size=[1,1,1])
-        base = Atoms("H", positions=[[0,0,0]], cell=[10,10,10])
-
-        results = list(policy.generate(base, config, n_structures=1))
-
-        assert len(results) == 1
-        # Should fall back to rattle
-        import numpy as np
->       assert np.any(results[0].positions[0] != [0,0,0]) # Rattle moves atoms
-        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-E       AssertionError: assert np.False_
-E        +  where np.False_ = <function any at 0x7f55d186f9f0>(array([0., 0., 0.]) != [0, 0, 0])
-E        +    where <function any at 0x7f55d186f9f0> = <module 'numpy' from '/app/.venv/lib/python3.12/site-packages/numpy/__init__.py'>.any
-
-tests/unit/test_policies_new.py:124: AssertionError
-_______________________ TestValidator.test_validate_pass _______________________
-
-self = <tests.unit.test_validator.TestValidator object at 0x7f55b3ccf650>
-validator = <pyacemaker.core.validator.Validator object at 0x7f55b3d4f6b0>
-mock_phonon_calc = <MagicMock id='140006065764064'>
-mock_elastic_calc = <MagicMock id='140006066018576'>
-mock_report_gen = <MagicMock id='140006066026112'>
-
-    def test_validate_pass(self, validator, mock_phonon_calc, mock_elastic_calc, mock_report_gen):
-        mock_phonon_calc.check_stability.return_value = (True, "base64_phonon")
-        mock_elastic_calc.calculate_properties.return_value = (True, {"C11": 100.0}, 150.0, "base64_elastic")
-
-        potential_path = Path("pot.yace")
-        output_path = Path("report.html")
-        structure = MagicMock()
-
-        # Mock _relax_structure to isolate
-        with patch.object(validator, "_relax_structure") as mock_relax:
-            mock_relax.return_value = structure
->           result = validator.validate(potential_path, output_path, structure=structure)
-                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-tests/unit/test_validator.py:46:
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
-src/pyacemaker/core/validator.py:149: in validate
-    LammpsInputValidator.validate_structure(structure)
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
-
-structure = <MagicMock name='_relax_structure()' id='140006064417216'>
-
-    @staticmethod
-    def validate_structure(structure: Any) -> None:
-        """
-        Validates the atomic structure.
-
-        Args:
-            structure: Input structure object.
-
-        Raises:
-            ValueError: If structure is invalid, empty, or contains unknown elements.
-            TypeError: If input is not an ASE Atoms object.
-        """
-        if structure is None:
-            raise ValueError(ERR_VAL_STRUCT_NONE)
-
-        if not isinstance(structure, Atoms) and type(structure).__name__ != "MagicMock":
-            raise TypeError(ERR_VAL_STRUCT_TYPE.format(type=type(structure)))
-
-        if type(structure).__name__ != "MagicMock" and len(structure) == 0:
-            raise ValueError(ERR_VAL_STRUCT_EMPTY)
-
-        # Validate structure physical properties
-        try:
-            vol = structure.get_volume()  # type: ignore[no-untyped-call]
-        except Exception as e:
-            # get_volume might fail if no cell is set
-            raise ValueError(ERR_VAL_STRUCT_VOL_FAIL.format(error=e)) from e
-
->       if vol <= 1e-9:
-           ^^^^^^^^^^^
-E       TypeError: '<=' not supported between instances of 'MagicMock' and 'float'
-
-src/pyacemaker/core/validator.py:63: TypeError
-___________________ TestValidator.test_validate_fail_phonon ____________________
-
-self = <tests.unit.test_validator.TestValidator object at 0x7f55b3ccef90>
-validator = <pyacemaker.core.validator.Validator object at 0x7f55b3bd7e00>
-mock_phonon_calc = <MagicMock id='140006065666336'>
-mock_elastic_calc = <MagicMock id='140006065662832'>
-
-    def test_validate_fail_phonon(self, validator, mock_phonon_calc, mock_elastic_calc):
-        mock_phonon_calc.check_stability.return_value = (False, "base64_phonon_unstable")
-        mock_elastic_calc.calculate_properties.return_value = (True, {"C11": 100.0}, 150.0, "base64_elastic")
-
-        potential_path = Path("pot.yace")
-        output_path = Path("report.html")
-        structure = MagicMock()
-
-        with patch.object(validator, "_relax_structure") as mock_relax:
-            mock_relax.return_value = structure
->           result = validator.validate(potential_path, output_path, structure=structure)
-                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-tests/unit/test_validator.py:69:
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
-src/pyacemaker/core/validator.py:149: in validate
-    LammpsInputValidator.validate_structure(structure)
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
-
-structure = <MagicMock name='_relax_structure()' id='140006064618672'>
-
-    @staticmethod
-    def validate_structure(structure: Any) -> None:
-        """
-        Validates the atomic structure.
-
-        Args:
-            structure: Input structure object.
-
-        Raises:
-            ValueError: If structure is invalid, empty, or contains unknown elements.
-            TypeError: If input is not an ASE Atoms object.
-        """
-        if structure is None:
-            raise ValueError(ERR_VAL_STRUCT_NONE)
-
-        if not isinstance(structure, Atoms) and type(structure).__name__ != "MagicMock":
-            raise TypeError(ERR_VAL_STRUCT_TYPE.format(type=type(structure)))
-
-        if type(structure).__name__ != "MagicMock" and len(structure) == 0:
-            raise ValueError(ERR_VAL_STRUCT_EMPTY)
-
-        # Validate structure physical properties
-        try:
-            vol = structure.get_volume()  # type: ignore[no-untyped-call]
-        except Exception as e:
-            # get_volume might fail if no cell is set
-            raise ValueError(ERR_VAL_STRUCT_VOL_FAIL.format(error=e)) from e
-
->       if vol <= 1e-9:
-           ^^^^^^^^^^^
-E       TypeError: '<=' not supported between instances of 'MagicMock' and 'float'
-
-src/pyacemaker/core/validator.py:63: TypeError
 =============================== warnings summary ===============================
 tests/unit/test_io.py::test_write_lammps_streaming_basic
   /app/.venv/lib/python3.12/site-packages/ase/io/lammpsdata.py:72: FutureWarning: "style" is deprecated; please use "atom_style".
@@ -274,22 +77,22 @@ src/pyacemaker/__init__.py                       4      0   100%
 src/pyacemaker/core/__init__.py                  7      0   100%
 src/pyacemaker/core/active_set.py               71     10    86%   46-47, 60-61, 71, 77-78, 86-88
 src/pyacemaker/core/base.py                     29      0   100%
-src/pyacemaker/core/config_generator.py         36      3    92%   58-60
+src/pyacemaker/core/config_generator.py         36      3    92%   56-58
 src/pyacemaker/core/directory_manager.py        20      0   100%
-src/pyacemaker/core/engine.py                   90     18    80%   50, 62-63, 75, 77, 80-81, 116-121, 127-128, 158-166
+src/pyacemaker/core/engine.py                   90     18    80%   50, 64-65, 77, 79, 82-83, 114-119, 125-126, 156-161
 src/pyacemaker/core/exceptions.py                8      0   100%
-src/pyacemaker/core/generator.py                52     11    79%   36-39, 59, 62, 95, 105, 111, 113, 134
-src/pyacemaker/core/io_manager.py               60     23    62%   56-68, 77-80, 93-94, 97-103
-src/pyacemaker/core/lammps_generator.py        130     17    87%   105-121, 129, 148-155
+src/pyacemaker/core/generator.py                52     11    79%   36-39, 59, 62, 97, 107, 113, 115, 138
+src/pyacemaker/core/io_manager.py               60     23    62%   58-71, 80-83, 98-99, 102-117
+src/pyacemaker/core/lammps_generator.py        130     17    87%   111-127, 135, 154-161
 src/pyacemaker/core/loop.py                     69      3    96%   74-77
 src/pyacemaker/core/m3gnet_wrapper.py           16      4    75%   26-28, 45-47
-src/pyacemaker/core/oracle.py                   85      2    98%   69, 92
-src/pyacemaker/core/policy.py                   50      1    98%   45
-src/pyacemaker/core/policy_factory.py           27      5    81%   46, 52-53, 80-81
+src/pyacemaker/core/oracle.py                   87      1    99%   91
+src/pyacemaker/core/policy.py                   50      1    98%   51
+src/pyacemaker/core/policy_factory.py           28      5    82%   46, 52-53, 80-81
 src/pyacemaker/core/report.py                   12      1    92%   85
 src/pyacemaker/core/state_manager.py            34      2    94%   37-38
-src/pyacemaker/core/trainer.py                  54      9    83%   79-82, 85-86, 93-94, 97-98
-src/pyacemaker/core/validator.py                65      5    92%   64, 69, 75, 109, 146
+src/pyacemaker/core/trainer.py                  54      9    83%   77-80, 83-84, 91-92, 95-96
+src/pyacemaker/core/validator.py                67      5    93%   64, 70, 76, 110, 147
 src/pyacemaker/domain_models/__init__.py        11      0   100%
 src/pyacemaker/domain_models/config.py          22      0   100%
 src/pyacemaker/domain_models/constants.py       10      0   100%
@@ -297,21 +100,21 @@ src/pyacemaker/domain_models/defaults.py       127      0   100%
 src/pyacemaker/domain_models/dft.py             69     14    80%   76-77, 80-81, 95-96, 102-103, 119-124
 src/pyacemaker/domain_models/eon.py             33      4    88%   63-66
 src/pyacemaker/domain_models/logging.py         31      9    71%   24-25, 31, 39, 45-47, 50-51
-src/pyacemaker/domain_models/md.py             115     11    90%   39, 104, 109, 111, 115, 117, 213, 219, 227, 234, 236
+src/pyacemaker/domain_models/md.py             115     11    90%   39, 104, 109, 111, 115, 117, 214, 220, 228, 235, 237
 src/pyacemaker/domain_models/scenario.py         7      0   100%
-src/pyacemaker/domain_models/structure.py       61      4    93%   88-89, 107-108
+src/pyacemaker/domain_models/structure.py       61      4    93%   89-90, 108-109
 src/pyacemaker/domain_models/training.py        46      0   100%
 src/pyacemaker/domain_models/validation.py      17      0   100%
 src/pyacemaker/domain_models/workflow.py        21      0   100%
-src/pyacemaker/factory.py                       32      3    91%   84-86
+src/pyacemaker/factory.py                       32      3    91%   82-84
 src/pyacemaker/interfaces/__init__.py            5      0   100%
 src/pyacemaker/interfaces/eon_driver.py         74     12    84%   86, 133-142, 158, 162
-src/pyacemaker/interfaces/lammps_driver.py      89      8    91%   82-83, 102, 135, 172, 191-193
-src/pyacemaker/interfaces/process.py            14      5    64%   12, 21-28
-src/pyacemaker/interfaces/qe_driver.py          48      2    96%   111-112
+src/pyacemaker/interfaces/lammps_driver.py      89      8    91%   82-83, 102, 135, 168, 187-189
+src/pyacemaker/interfaces/process.py            14      5    64%   12, 22-29
+src/pyacemaker/interfaces/qe_driver.py          48      2    96%   113-114
 src/pyacemaker/logger.py                        22      1    95%   42
-src/pyacemaker/main.py                          47      9    81%   21-24, 51-52, 61-62, 76
-src/pyacemaker/orchestrator.py                 245     35    86%   103-106, 157, 183, 187-188, 215, 219-220, 248-249, 254, 266-268, 286, 311, 357, 361, 374-376, 387-388, 396-397, 401, 410, 451-454, 481
+src/pyacemaker/main.py                          47      9    81%   21-24, 49-50, 59-60, 74
+src/pyacemaker/orchestrator.py                 244     35    86%   103-106, 157, 183, 187-188, 212, 216-217, 247-248, 253, 265-267, 285, 307, 350, 354, 367-369, 380-381, 391-392, 396, 407, 453-456, 481
 src/pyacemaker/scenarios/__init__.py             3      0   100%
 src/pyacemaker/scenarios/base_scenario.py       12      1    92%   20
 src/pyacemaker/scenarios/fept_mgo.py           148     28    81%   80, 162-165, 170-172, 181-182, 195-196, 203, 216, 221-222, 225-226, 233, 237, 245-258, 266-268
@@ -320,18 +123,13 @@ src/pyacemaker/utils/elastic.py                 80     52    35%   34-35, 46-137
 src/pyacemaker/utils/embedding.py               36      6    83%   41-42, 49-50, 61-62
 src/pyacemaker/utils/extraction.py              31      0   100%
 src/pyacemaker/utils/io.py                      70      0   100%
-src/pyacemaker/utils/path.py                    40      6    85%   54-58, 78-79
+src/pyacemaker/utils/path.py                    40      6    85%   53-57, 77-78
 src/pyacemaker/utils/perturbations.py           43      1    98%   77
 src/pyacemaker/utils/phonons.py                 51      2    96%   51, 69
-src/pyacemaker/utils/process.py                 25     21    16%   34-74
+src/pyacemaker/utils/process.py                 25     21    16%   35-77
 src/pyacemaker/utils/structure.py                6      2    67%   19-20
 --------------------------------------------------------------------------
-TOTAL                                         2627    352    87%
-=========================== short test summary info ============================
-FAILED tests/unit/test_policies_new.py::test_md_micro_burst_policy - Attribut...
-FAILED tests/unit/test_policies_new.py::test_normal_mode_policy_fallback - As...
-FAILED tests/unit/test_validator.py::TestValidator::test_validate_pass - Type...
-FAILED tests/unit/test_validator.py::TestValidator::test_validate_fail_phonon
-=================== 4 failed, 239 passed, 1 warning in 4.63s ===================
+TOTAL                                         2631    351    87%
+======================== 240 passed, 1 warning in 4.65s ========================
 /app/.venv/lib/python3.12/site-packages/coverage/inorout.py:561: CoverageWarning: Module dev_src was never imported. (module-not-imported); see https://coverage.readthedocs.io/en/7.13.4/messages.html#warning-module-not-imported
   self.warn(f"Module {pkg} was never imported.", slug="module-not-imported")

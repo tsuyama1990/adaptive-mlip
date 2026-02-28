@@ -1,4 +1,3 @@
-
 from pydantic import BaseModel, ConfigDict, Field
 
 from .dft import DFTConfig
