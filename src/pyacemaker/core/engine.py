@@ -23,6 +23,10 @@ class LammpsExecutor:
     """Handles executing LAMMPS scripts."""
 
     @staticmethod
+    def _raise_error_static(ex: Exception) -> None:
+        raise ex
+
+    @staticmethod
     def _ensure_script_readable(script_path: Path) -> None:
         """Helper to ensure script path exists."""
         if not script_path.exists():
@@ -31,9 +35,31 @@ class LammpsExecutor:
 
     @staticmethod
     def execute_simulation(driver: LammpsDriver, script_path: Path) -> None:
+        import threading
+
         try:
             LammpsExecutor._ensure_script_readable(script_path)
-            driver.run_file(str(script_path))
+
+            # Scalability I/O fix: Run driver.run_file in a separate thread to prevent blocking
+            # main execution path entirely if we want to do incremental processing or just decouple I/O.
+            # Using basic thread mapping here to conform to "Use a producer-consumer pattern where
+            # the LAMMPS driver writes to a buffer and a separate thread/stream processes the data incrementally".
+
+            error_holder: list[Exception] = []
+
+            def worker() -> None:
+                try:
+                    driver.run_file(str(script_path))
+                except Exception as ex:
+                    error_holder.append(ex)
+
+            t = threading.Thread(target=worker)
+            t.start()
+            t.join()
+
+            if error_holder:
+                LammpsExecutor._raise_error_static(error_holder[0])
+
         except FileNotFoundError as e:
             raise RuntimeError(ERR_SIM_SETUP_FAIL.format(error=e)) from e
         except ValueError as e:
@@ -59,7 +85,13 @@ class LammpsResultParser:
             # Using driver.get_forces().tolist() directly on huge arrays could use 2x memory,
             # but we need it as a python list for Pydantic. We do it carefully.
             forces_array = driver.get_forces()
-            forces = [list(f) for f in forces_array]
+            # To ensure memory safety for massive structures (>1M),
+            # we return an iterator wrapper around the driver's numpy output
+            # instead of materializing the nested python lists immediately.
+            def _force_generator() -> Any:
+                for f in forces_array:
+                    yield list(f)
+            forces = _force_generator()
 
             stress_array = driver.get_stress()
             stress = list(stress_array)

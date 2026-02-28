@@ -1,6 +1,7 @@
 import os
 from enum import StrEnum
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 from pydantic import BaseModel, ConfigDict, Field, PositiveFloat, PositiveInt, model_validator
@@ -81,7 +82,7 @@ class MDSimulationResult(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     energy: float = Field(..., description="Final potential energy of the system")
-    forces: list[list[float]] = Field(..., min_length=1, description="Forces on atoms in the final frame")
+    forces: list[list[float]] | Any = Field(..., description="Forces on atoms in the final frame (can be generator/iterator for large structs)")
     stress: list[float] = Field(
         default_factory=lambda: [0.0] * 6,
         description="Stress tensor (Voigt: xx, yy, zz, yz, xz, xy) in Bar",
@@ -104,14 +105,15 @@ class MDSimulationResult(BaseModel):
             msg = "Energy must be a finite number"
             raise ValueError(msg)
 
-        # Validate forces shape and values
-        for f in self.forces:
-            if len(f) != 3:
-                msg = "Forces must be 3D vectors (list of 3 floats)"
-                raise ValueError(msg)
-            if not np.isfinite(f).all():
-                msg = "Forces must contain finite numbers"
-                raise ValueError(msg)
+        # Skip forces validation here if it's an iterator to preserve memory O(1) constraints
+        if isinstance(self.forces, list):
+            for f in self.forces:
+                if len(f) != 3:
+                    msg = "Forces must be 3D vectors (list of 3 floats)"
+                    raise ValueError(msg)
+                if not np.isfinite(f).all():
+                    msg = "Forces must contain finite numbers"
+                    raise ValueError(msg)
 
         # Validate stress
         if len(self.stress) != 6:
@@ -141,32 +143,43 @@ class MDConfig(BaseModel):
 
     # Output Control
     thermo_freq: PositiveInt = Field(
-        DEFAULT_MD_THERMO_FREQ, description="Frequency of thermodynamic output (steps)"
+        default_factory=lambda: int(os.environ.get("PYACE_MD_THERMO_FREQ", DEFAULT_MD_THERMO_FREQ)),
+        description="Frequency of thermodynamic output (steps)"
     )
     dump_freq: PositiveInt = Field(
-        DEFAULT_MD_DUMP_FREQ, description="Frequency of trajectory dump (steps)"
+        default_factory=lambda: int(os.environ.get("PYACE_MD_DUMP_FREQ", DEFAULT_MD_DUMP_FREQ)),
+        description="Frequency of trajectory dump (steps)"
     )
     minimize: bool = Field(False, description="Perform energy minimization before MD")
     neighbor_skin: PositiveFloat = Field(
-        DEFAULT_MD_NEIGHBOR_SKIN, description="Neighbor list skin distance (Angstrom)"
+        default_factory=lambda: float(os.environ.get("PYACE_MD_NEIGHBOR_SKIN", DEFAULT_MD_NEIGHBOR_SKIN)),
+        description="Neighbor list skin distance (Angstrom)"
     )
-    atom_style: AtomStyle = Field(AtomStyle(DEFAULT_MD_ATOM_STYLE), description="LAMMPS atom style")
+    atom_style: AtomStyle = Field(
+        default_factory=lambda: AtomStyle(os.environ.get("PYACE_MD_ATOM_STYLE", DEFAULT_MD_ATOM_STYLE)),
+        description="LAMMPS atom style"
+    )
 
     # Configurable LAMMPS Parameters
     velocity_seed: int = Field(
-        LAMMPS_VELOCITY_SEED, description="Random seed for velocity initialization"
+        default_factory=lambda: int(os.environ.get("PYACE_MD_VELOCITY_SEED", LAMMPS_VELOCITY_SEED)),
+        description="Random seed for velocity initialization"
     )
     minimize_steps: int = Field(
-        LAMMPS_MINIMIZE_STEPS, description="Max iterations for minimization (steps)"
+        default_factory=lambda: int(os.environ.get("PYACE_MD_MINIMIZE_STEPS", LAMMPS_MINIMIZE_STEPS)),
+        description="Max iterations for minimization (steps)"
     )
     minimize_max_iter: int = Field(
-        LAMMPS_MINIMIZE_MAX_ITER, description="Max force evaluations for minimization"
+        default_factory=lambda: int(os.environ.get("PYACE_MD_MINIMIZE_MAX_ITER", LAMMPS_MINIMIZE_MAX_ITER)),
+        description="Max force evaluations for minimization"
     )
     minimize_tol: float = Field(
-        DEFAULT_MD_MINIMIZE_TOL, description="Energy tolerance for minimization"
+        default_factory=lambda: float(os.environ.get("PYACE_MD_MINIMIZE_TOL", DEFAULT_MD_MINIMIZE_TOL)),
+        description="Energy tolerance for minimization"
     )
     minimize_ftol: float = Field(
-        DEFAULT_MD_MINIMIZE_FTOL, description="Force tolerance for minimization"
+        default_factory=lambda: float(os.environ.get("PYACE_MD_MINIMIZE_FTOL", DEFAULT_MD_MINIMIZE_FTOL)),
+        description="Force tolerance for minimization"
     )
 
     # Advanced Settings
@@ -175,17 +188,19 @@ class MDConfig(BaseModel):
         description="Directory for temporary files (e.g., /dev/shm for RAM disk)",
     )
     tdamp_factor: float = Field(
-        DEFAULT_MD_TDAMP_FACTOR,
+        default_factory=lambda: float(os.environ.get("PYACE_MD_TDAMP_FACTOR", DEFAULT_MD_TDAMP_FACTOR)),
         gt=0.0,
         description="Temperature damping factor (multiplies timestep)",
     )
     pdamp_factor: float = Field(
-        DEFAULT_MD_PDAMP_FACTOR, gt=0.0, description="Pressure damping factor (multiplies timestep)"
+        default_factory=lambda: float(os.environ.get("PYACE_MD_PDAMP_FACTOR", DEFAULT_MD_PDAMP_FACTOR)),
+        gt=0.0, description="Pressure damping factor (multiplies timestep)"
     )
 
     # Mocking Parameters (Audit Requirement)
     base_energy: float = Field(
-        DEFAULT_MD_BASE_ENERGY, description="Baseline energy for mock simulation"
+        default_factory=lambda: float(os.environ.get("PYACE_MD_BASE_ENERGY", DEFAULT_MD_BASE_ENERGY)),
+        description="Baseline energy for mock simulation"
     )
     default_forces: list[list[float]] = Field(
         default=[[0.0, 0.0, 0.0]], min_length=1, description="Default forces for mock simulation"
@@ -200,12 +215,13 @@ class MDConfig(BaseModel):
     # Spec Section 3.4 (OTF)
     fix_halt: bool = Field(False, description="Enable OTF halting based on uncertainty")
     uncertainty_threshold: float = Field(
-        DEFAULT_OTF_UNCERTAINTY_THRESHOLD,
+        default_factory=lambda: float(os.environ.get("PYACE_MD_UNCERTAINTY_THRESHOLD", DEFAULT_OTF_UNCERTAINTY_THRESHOLD)),
         gt=0.0,
         description="Gamma threshold for halting simulation",
     )
     check_interval: int = Field(
-        DEFAULT_MD_CHECK_INTERVAL, gt=0, description="Step interval for uncertainty check"
+        default_factory=lambda: int(os.environ.get("PYACE_MD_CHECK_INTERVAL", DEFAULT_MD_CHECK_INTERVAL)),
+        gt=0, description="Step interval for uncertainty check"
     )
 
     # Spec Section 3.1: Ramping and MC

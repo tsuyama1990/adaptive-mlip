@@ -64,6 +64,24 @@ def test_write_lammps_streaming_invalid_elements() -> None:
         write_lammps_streaming(buffer, structure, elements)
 
 
+def test_write_lammps_streaming_large_structure() -> None:
+    """Test performance / validity bounds processing a large block of atoms mapping exactly chunks."""
+    buffer = StringIO()
+
+    # Just creating a reasonably large chunk that forces iterators to cycle multiple bounds
+    # Using 10,000 for local test to avoid huge mem but proves the logic bounds work
+    import numpy as np
+    n = 10000
+    pos = np.zeros((n, 3))
+    structure = Atoms("H" * n, positions=pos, cell=[10.0, 10.0, 10.0], pbc=True)
+    elements = ["H"]
+
+    write_lammps_streaming(buffer, structure, elements)
+    content = buffer.getvalue()
+
+    assert f"{n} atoms" in content
+    assert "10000 1 0.000000 0.000000 0.000000" in content
+
 def test_write_lammps_streaming_non_orthogonal() -> None:
     """Test correctly writing non-orthogonal cell formatting."""
     buffer = StringIO()

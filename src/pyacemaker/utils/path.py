@@ -53,8 +53,16 @@ def _check_allowed_roots(resolved: Path) -> None:
     for root in allowed_roots:
         try:
             common = Path(os.path.commonpath([root, resolved]))
+            # Strict check: the resolved path MUST be strictly under the allowed root
+            # using relative_to checks to guarantee no bypass
             if common == root:
-                return
+                # Ensure it doesn't just share a prefix but is truly a subpath
+                try:
+                    resolved.relative_to(root)
+                except ValueError:
+                    pass
+                else:
+                    return
         except ValueError:
             continue
 

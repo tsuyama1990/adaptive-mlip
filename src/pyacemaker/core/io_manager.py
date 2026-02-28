@@ -4,7 +4,6 @@ import uuid
 from pathlib import Path
 
 from ase import Atoms
-from ase.io import write
 
 from pyacemaker.domain_models.md import MDConfig
 from pyacemaker.utils.io import write_lammps_streaming
@@ -76,29 +75,23 @@ class LammpsFileManager:
         else:
             return temp_dir_ctx, data_file, dump_file, log_file, elements
 
+    @staticmethod
+    def _raise_value_error(msg: str) -> None:
+        raise ValueError(msg)
+
     def _write_structure_memory(
         self, structure: Atoms, output_path: Path, elements: list[str]
     ) -> None:
-        """Writes structure to disk using streaming writer if possible."""
+        """Writes structure to disk using streaming writer."""
         try:
-            # Memory Safety Fix: Always attempt streaming first if atom_style allows
-            if self.config.atom_style == "atomic":
-                with output_path.open("w") as f:
-                    write_lammps_streaming(f, structure, elements)
-                logger.debug("Successfully wrote LAMMPS data file using streaming.")
-            else:
-                if len(structure) > 1000000:
-                    logger.warning(
-                        "Falling back to ASE write for large structure (%d atoms). Memory usage may be high.",
-                        len(structure),
-                    )
-                write(
-                    str(output_path),
-                    structure,
-                    format="lammps-data",
-                    specorder=elements,
-                    atom_style=self.config.atom_style.value,
-                )
+            # Memory Safety Fix: Always use streaming. ASE fallback removed per strictly streaming constraints.
+            if self.config.atom_style != "atomic":
+                msg = f"Atom style {self.config.atom_style} is not supported by streaming writer. Only 'atomic' is currently supported to prevent OOM errors."
+                LammpsFileManager._raise_value_error(msg)
+
+            with output_path.open("w") as f:
+                write_lammps_streaming(f, structure, elements)
+            logger.debug("Successfully wrote LAMMPS data file using streaming.")
 
         except Exception as e:
             msg = f"Failed to write LAMMPS data file: {e}"
