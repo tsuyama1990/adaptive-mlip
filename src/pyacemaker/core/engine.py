@@ -7,7 +7,6 @@ from pyacemaker.core.base import BaseEngine
 from pyacemaker.core.io_manager import LammpsFileManager
 from pyacemaker.core.lammps_generator import LammpsScriptGenerator
 from pyacemaker.core.validator import LammpsInputValidator
-from pyacemaker.domain_models.workflow import ActiveLearningThresholds
 from pyacemaker.domain_models.constants import (
     ERR_SIM_EXEC_FAIL,
     ERR_SIM_SECURITY_FAIL,
@@ -17,14 +16,17 @@ from pyacemaker.domain_models.constants import (
     LAMMPS_SCREEN_ARG,
 )
 from pyacemaker.domain_models.md import MDConfig, MDSimulationResult
+from pyacemaker.domain_models.workflow import ActiveLearningThresholds
 from pyacemaker.interfaces.lammps_driver import LammpsDriver
 
 
 class UncertaintyWatchdog:
     """Evaluates uncertainty from LAMMPS dump files using a two-tier threshold."""
 
-    @staticmethod
-    def _process_atom_line(line: str, gamma_idx: int, threshold: float, atoms: list[int], max_g: float) -> float:
+    def __init__(self, thresholds: ActiveLearningThresholds | None = None) -> None:
+        self.thresholds = thresholds
+
+    def _process_atom_line(self, line: str, gamma_idx: int, threshold: float, atoms: list[int], max_g: float) -> float:
         parts = line.split()
         if len(parts) < 6 or gamma_idx < 0:
             return max_g
@@ -37,22 +39,26 @@ class UncertaintyWatchdog:
         except ValueError:
             return max_g
 
-    @staticmethod
-    def _evaluate_uncertainty_stream(
-        dump_file: Path, thresholds: ActiveLearningThresholds
-    ) -> tuple[int | None, list[int]]:
+    def _evaluate_step(self, max_g: float, c_steps: int) -> tuple[bool, int]:
+        if not self.thresholds:
+            return False, c_steps
+        c_steps = c_steps + 1 if max_g > self.thresholds.threshold_call_dft else 0
+        is_halt = c_steps >= self.thresholds.smooth_steps
+        return is_halt, c_steps
+
+    def evaluate_stream(self, dump_file: Path) -> tuple[int | None, list[int]]:
         """
         Parses a LAMMPS dump file to evaluate uncertainty.
         Returns: (halt_step, [list of atom IDs exceeding threshold_add_train])
         """
-        if not dump_file.exists():
+        if not self.thresholds or not dump_file.exists():
             return None, []
 
         c_steps = 0
-        halt_step = None
+        halt_step: int | None = None
         epi: list[int] = []
 
-        with dump_file.open("r") as f:
+        with dump_file.open("r", buffering=8192) as f:
             cur_step: int | None = None
             max_g = 0.0
             atoms: list[int] = []
@@ -63,8 +69,8 @@ class UncertaintyWatchdog:
                 line = raw_line.strip()
                 if line.startswith("ITEM: TIMESTEP"):
                     if cur_step is not None:
-                        c_steps = c_steps + 1 if max_g > thresholds.threshold_call_dft else 0
-                        if c_steps >= thresholds.smooth_steps:
+                        is_halt, c_steps = self._evaluate_step(max_g, c_steps)
+                        if is_halt:
                             halt_step = cur_step
                             epi = atoms
                             break
@@ -79,13 +85,13 @@ class UncertaintyWatchdog:
                     parts = line.split()
                     g_idx = parts.index("c_gamma") - 2 if "c_gamma" in parts else -1
                 elif in_atoms:
-                    max_g = UncertaintyWatchdog._process_atom_line(
-                        line, g_idx, thresholds.threshold_add_train, atoms, max_g
+                    max_g = self._process_atom_line(
+                        line, g_idx, self.thresholds.threshold_add_train, atoms, max_g
                     )
 
-            if cur_step is not None and halt_step is None and max_g > thresholds.threshold_call_dft:
-                c_steps += 1
-                if c_steps >= thresholds.smooth_steps:
+            if cur_step is not None and halt_step is None:
+                is_halt, c_steps = self._evaluate_step(max_g, c_steps)
+                if is_halt:
                     halt_step = cur_step
                     epi = atoms
 
@@ -153,17 +159,13 @@ class LammpsResultParser:
             energy = driver.extract_variable("pe")
             temperature = driver.extract_variable("temp")
             step = int(driver.extract_variable("step"))
-            # Scalability fix: convert to simple python lists incrementally to avoid large numpy materializations
-            # if driver supports returning an iterator, but driver.get_forces returns numpy array right now.
-            # Using driver.get_forces().tolist() directly on huge arrays could use 2x memory,
-            # but we need it as a python list for Pydantic. We do it carefully.
-            forces_array = driver.get_forces()
-            # To ensure memory safety for massive structures (>1M),
-            # we return an iterator wrapper around the driver's numpy output
-            # instead of materializing the nested python lists immediately.
+
+            # Scalability fix: Implement streaming generator for forces instead of materializing the full list
             def _force_generator() -> Any:
-                for f in forces_array:
-                    yield list(f)
+                forces_array = driver.get_forces()
+                for i in range(forces_array.shape[0]):
+                    yield [float(forces_array[i, 0]), float(forces_array[i, 1]), float(forces_array[i, 2])]
+
             forces = _force_generator()
 
             stress_array = driver.get_stress()
@@ -214,12 +216,14 @@ class LammpsEngine(BaseEngine):
         file_manager: LammpsFileManager | None = None,
         executor: LammpsExecutor | None = None,
         parser: LammpsResultParser | None = None,
+        watchdog: UncertaintyWatchdog | None = None,
     ) -> None:
         self.config = config
         self.generator = generator or LammpsScriptGenerator(config)
         self.file_manager = file_manager or LammpsFileManager(config)
         self.executor = executor or LammpsExecutor()
         self.parser = parser or LammpsResultParser(config)
+        self.watchdog = watchdog or UncertaintyWatchdog(config.active_learning)
 
     def _prepare_simulation_env(
         self, structure: Atoms | None, potential: Any, restart_file: Path | None = None
@@ -272,9 +276,7 @@ class LammpsEngine(BaseEngine):
                 # Check watchdog if configured
                 if self.config.fix_halt and self.config.active_learning:
                     logger.debug(f"Evaluating uncertainty stream from {dump_file}")
-                    halt_step, epicenter = UncertaintyWatchdog._evaluate_uncertainty_stream(
-                        dump_file, self.config.active_learning
-                    )
+                    halt_step, epicenter = self.watchdog.evaluate_stream(dump_file)
                     if halt_step is not None:
                         logger.info(f"UncertaintyWatchdog triggered halt at step {halt_step} with {len(epicenter)} epicenter atoms.")
                         result.halted = True

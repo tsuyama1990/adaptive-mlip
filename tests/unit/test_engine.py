@@ -8,8 +8,8 @@ import pytest
 from ase import Atoms
 
 from pyacemaker.core.engine import LammpsEngine, UncertaintyWatchdog
-from pyacemaker.domain_models.workflow import ActiveLearningThresholds
 from pyacemaker.domain_models.md import HybridParams, MDConfig, MDSimulationResult
+from pyacemaker.domain_models.workflow import ActiveLearningThresholds
 
 
 @pytest.fixture
@@ -100,7 +100,8 @@ ITEM: ATOMS id type x y z c_gamma
         smooth_steps=2
     )
 
-    halt_step, epicenter = UncertaintyWatchdog._evaluate_uncertainty_stream(dump_file, thresholds)
+    watchdog = UncertaintyWatchdog(thresholds)
+    halt_step, epicenter = watchdog.evaluate_stream(dump_file)
     assert halt_step is None
 
 def test_watchdog_sustained_uncertainty(tmp_path: Path) -> None:
@@ -150,7 +151,8 @@ ITEM: ATOMS id type x y z c_gamma
         smooth_steps=2
     )
 
-    halt_step, epicenter = UncertaintyWatchdog._evaluate_uncertainty_stream(dump_file, thresholds)
+    watchdog = UncertaintyWatchdog(thresholds)
+    halt_step, epicenter = watchdog.evaluate_stream(dump_file)
     assert halt_step == 300
     # Both atoms in step 3 exceed 0.02
     assert set(epicenter) == {1, 2}
@@ -203,6 +205,11 @@ def test_lammps_engine_run(mock_md_config: MDConfig, mock_driver: Any, tmp_path:
 
     # Verify driver run_file called
     driver_instance.run_file.assert_called()
+
+    # Check variables extracted properly
+    calls = [call[0][0] for call in driver_instance.extract_variable.call_args_list]
+    for var in ["pe", "step", "temp"]:
+        assert var in calls
 
     # Check captured script
     assert len(script_content) == 1

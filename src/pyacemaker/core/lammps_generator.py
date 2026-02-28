@@ -38,7 +38,18 @@ class LammpsScriptGenerator:
         """
         if path not in self._quote_cache:
             # Sanitize input path
-            safe_path = validate_path_safe(Path(path))
+            p = Path(path)
+            # Security fix: strictly resolve the parent directory to prevent command injection and traversal
+            # Only resolve if it exists to support dynamically generated output paths, otherwise resolve parent
+            if p.exists():
+                safe_path = p.resolve(strict=True)
+            else:
+                safe_parent = p.parent.resolve(strict=True)
+                safe_path = safe_parent / p.name
+
+            # Further validation using existing safety utility
+            safe_path = validate_path_safe(safe_path)
+
             # Use shlex.quote for shell safety
             quoted = shlex.quote(str(safe_path))
             # Validate the quoted path doesn't introduce vulnerabilities
@@ -70,12 +81,12 @@ class LammpsScriptGenerator:
 
         n_types = len(elements)
 
-        # Optimization: Use generator expression for O(1) memory overhead and direct writes
-        buffer.writelines(
-            f"pair_coeff {i + 1} {j + 1} zbl {self._get_atomic_number(elements[i])} {self._get_atomic_number(elements[j])}\n"
-            for i in range(n_types)
-            for j in range(i, n_types)
-        )
+        # Scalability fix: Write each line individually to avoid materializing strings
+        for i in range(n_types):
+            z_i = self._get_atomic_number(elements[i])
+            for j in range(i, n_types):
+                z_j = self._get_atomic_number(elements[j])
+                buffer.write(f"pair_coeff {i + 1} {j + 1} zbl {z_i} {z_j}\n")
 
     def _gen_potential(self, buffer: TextIO, potential_path: Path, elements: list[str]) -> None:
         """Generates potential definition commands."""
@@ -174,8 +185,12 @@ class LammpsScriptGenerator:
         import logging
         logger = logging.getLogger(__name__)
         logger.debug(f"Generating soft start commands: T={temperature}K for {steps} steps")
-        # A very short damping parameter (e.g., 0.1 ps) for soft start
-        buffer.write(f"fix soft_start_langevin all langevin {temperature} {temperature} 0.1 48279\n")
+
+        # Use configurable damping parameter and seed for soft start
+        tdamp = self.config.soft_start_tdamp
+        seed = self.config.soft_start_seed
+
+        buffer.write(f"fix soft_start_langevin all langevin {temperature} {temperature} {tdamp} {seed}\n")
         buffer.write("fix soft_start_nve all nve\n")
         buffer.write(f"run {steps}\n")
         buffer.write("unfix soft_start_langevin\n")

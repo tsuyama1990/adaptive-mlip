@@ -8,8 +8,8 @@ from ase import Atoms
 from pyacemaker.core.engine import LammpsEngine, UncertaintyWatchdog
 from pyacemaker.core.oracle import DFTManager
 from pyacemaker.domain_models import DFTConfig
-from pyacemaker.domain_models.workflow import ActiveLearningThresholds
 from pyacemaker.domain_models.md import MDConfig
+from pyacemaker.domain_models.workflow import ActiveLearningThresholds
 from tests.conftest import MockCalculator
 from tests.constants import TEST_ENERGY_H2O
 
@@ -63,8 +63,8 @@ def test_uat_02_01_single_point_calculation(uat_dft_config: DFTConfig, monkeypat
         result = next(gen)
 
         # 3. Expectation
-        assert result.get_potential_energy() == TEST_ENERGY_H2O  # type: ignore[no-untyped-call]
-        assert result.get_forces().shape == (3, 3)  # type: ignore[no-untyped-call]
+        assert result.get_potential_energy() == TEST_ENERGY_H2O
+        assert result.get_forces().shape == (3, 3)
 
 
 def test_uat_02_02_self_healing(uat_dft_config: DFTConfig, caplog: pytest.LogCaptureFixture) -> None:
@@ -95,7 +95,7 @@ def test_uat_02_02_self_healing(uat_dft_config: DFTConfig, caplog: pytest.LogCap
         result = next(gen)
 
         # 3. Expectation
-        assert result.get_potential_energy() == TEST_ENERGY_H2O  # type: ignore[no-untyped-call]
+        assert result.get_potential_energy() == TEST_ENERGY_H2O
 
         # Verify that get_calculator was called twice (original + retry)
         assert mock_driver_instance.get_calculator.call_count == 2
@@ -108,11 +108,7 @@ def test_uat_02_02_self_healing(uat_dft_config: DFTConfig, caplog: pytest.LogCap
         assert final_config.mixing_beta < 0.7
         assert final_config.mixing_beta == 0.35
 
-import numpy as np
 
-from pyacemaker.core.engine import LammpsEngine, UncertaintyWatchdog
-from pyacemaker.domain_models.workflow import ActiveLearningThresholds
-from pyacemaker.domain_models.md import MDConfig
 
 
 def test_uat_02_03_seamless_resume(mock_md_config: MDConfig, tmp_path: Path) -> None:
@@ -217,7 +213,8 @@ ITEM: ATOMS id type x y z c_gamma
 """
     dump_file.write_text(dump_content_noise)
 
-    halt_step_noise, epicenter_noise = UncertaintyWatchdog._evaluate_uncertainty_stream(dump_file, thresholds)
+    watchdog = UncertaintyWatchdog(thresholds)
+    halt_step_noise, epicenter_noise = watchdog.evaluate_stream(dump_file)
     assert halt_step_noise is None  # Should not halt
 
     # 2. Test Sustained Uncertainty
@@ -274,6 +271,48 @@ ITEM: ATOMS id type x y z c_gamma
 """
     dump_file.write_text(dump_content_sustained)
 
-    halt_step_sustained, epicenter_sustained = UncertaintyWatchdog._evaluate_uncertainty_stream(dump_file, thresholds)
+    watchdog = UncertaintyWatchdog(thresholds)
+    halt_step_sustained, epicenter_sustained = watchdog.evaluate_stream(dump_file)
     assert halt_step_sustained == 400  # Should halt exactly on the 3rd consecutive step > 0.05
     assert set(epicenter_sustained) == {1}
+
+    # 3. Test Edge Cases (Exactly equal to thresholds)
+    dump_content_edge = """ITEM: TIMESTEP
+100
+ITEM: NUMBER OF ATOMS
+2
+ITEM: BOX BOUNDS pp pp pp
+0 10
+0 10
+0 10
+ITEM: ATOMS id type x y z c_gamma
+1 1 0 0 0 0.05
+2 1 1 1 1 0.02
+ITEM: TIMESTEP
+200
+ITEM: NUMBER OF ATOMS
+2
+ITEM: BOX BOUNDS pp pp pp
+0 10
+0 10
+0 10
+ITEM: ATOMS id type x y z c_gamma
+1 1 0 0 0 0.05
+2 1 1 1 1 0.02
+ITEM: TIMESTEP
+300
+ITEM: NUMBER OF ATOMS
+2
+ITEM: BOX BOUNDS pp pp pp
+0 10
+0 10
+0 10
+ITEM: ATOMS id type x y z c_gamma
+1 1 0 0 0 0.05
+2 1 1 1 1 0.02
+"""
+    dump_file.write_text(dump_content_edge)
+
+    halt_step_edge, epicenter_edge = watchdog.evaluate_stream(dump_file)
+    # Since condition is strictly greater than (>), exact match should not trigger
+    assert halt_step_edge is None
