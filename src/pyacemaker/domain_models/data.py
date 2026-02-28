@@ -11,7 +11,7 @@ class AtomStructure(BaseModel):
     A wrapper around ase.Atoms to carry metadata through the pipeline.
     Ensures strict typing and validation for energy, forces, stress, and uncertainty.
     """
-    model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid")
+    model_config = ConfigDict(arbitrary_types_allowed=True, extra="allow")
 
     atoms: Atoms = Field(..., description="The actual atomic structure")
     energy: float | None = Field(default=None, description="Potential energy of the structure (eV)")

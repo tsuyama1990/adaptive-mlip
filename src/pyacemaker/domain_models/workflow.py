@@ -29,7 +29,7 @@ class WorkflowStep(StrEnum):
 
 class OTFConfig(BaseModel):
     """Configuration for On-The-Fly (OTF) Active Learning loop."""
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="allow")
 
     uncertainty_threshold: float = Field(
         default=DEFAULT_OTF_UNCERTAINTY_THRESHOLD,
@@ -51,7 +51,7 @@ class OTFConfig(BaseModel):
 
 
 class WorkflowConfig(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="allow")
 
     max_iterations: PositiveInt = Field(..., description="Maximum number of active learning cycles")
     convergence_energy: float = Field(

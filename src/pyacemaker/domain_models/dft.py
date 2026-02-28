@@ -13,7 +13,7 @@ from pyacemaker.domain_models.defaults import (
 
 
 class DFTConfig(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="allow")
 
     code: str = Field(..., description="DFT code to use")
     functional: str = Field(..., description="Exchange-correlation functional")

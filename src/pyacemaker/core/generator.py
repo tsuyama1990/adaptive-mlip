@@ -84,7 +84,7 @@ class StructureGenerator(BaseGenerator):
             if tuple(self.config.supercell_size) == (1, 1, 1):
                 base_supercell = base_structure
             else:
-                base_supercell = base_structure.repeat(self.config.supercell_size)  # type: ignore[no-untyped-call]
+                base_supercell = base_structure.repeat(self.config.supercell_size) # type: ignore[no-untyped-call]
 
             # Streaming generation:
             # We call policy.generate which yields Atoms one by one.

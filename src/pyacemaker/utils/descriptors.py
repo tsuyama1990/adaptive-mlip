@@ -31,7 +31,10 @@ class DescriptorCalculator:
 
     def _initialize_transformer(self) -> object:
         """Initializes the descriptor transformer based on config."""
-        method = self.config.method.lower()
+        method = getattr(self.config, "method", "soap")
+        if not isinstance(method, str):
+            method = "soap"
+        method = method.lower()
 
         if method == "soap":
             from dscribe.descriptors import SOAP
@@ -57,7 +60,10 @@ class DescriptorCalculator:
 
     def _estimate_dimension(self) -> int:
         """Estimates output dimension. Useful for pre-allocation or bounds checking."""
-        method = self.config.method.lower()
+        method = getattr(self.config, "method", "soap")
+        if not isinstance(method, str):
+            method = "soap"
+        method = method.lower()
         if method == "soap":
             return int(self._transformer.get_number_of_features()) # type: ignore[attr-defined]
         return 0

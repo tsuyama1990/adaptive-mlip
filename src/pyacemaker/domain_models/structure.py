@@ -24,7 +24,7 @@ class StrainMode(StrEnum):
 
 
 class StructureConfig(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="allow")
 
     elements: list[str] = Field(
         ..., min_length=1, description="List of elements in the system"

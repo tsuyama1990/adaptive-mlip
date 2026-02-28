@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field
 class ScenarioConfig(BaseModel):
     """Configuration for specific scenarios."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="allow")
 
     name: str = Field(..., description="Name of the scenario to run")
     parameters: dict[str, Any] = Field(

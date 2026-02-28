@@ -45,14 +45,14 @@ def detect_elements(data_path: Path, max_frames: int = 10) -> list[str]:
     Returns:
         List of chemical symbols (sorted alphabetically).
     """
-    symbols = set()
+    symbols: set[str] = set()
     try:
         # Optimization: Use iread to peek. Stop if we have 'enough' frames or symbols stabilize?
         # Difficult to know if symbols stabilize. Just read max_frames.
         gen = iread(str(data_path), index=f":{max_frames}")
         for atoms in gen:
             if isinstance(atoms, Atoms):
-                new_syms = set(atoms.get_chemical_symbols())
+                new_syms = set(atoms.get_chemical_symbols()) # type: ignore[no-untyped-call]
                 # If we found new symbols, update.
                 if not new_syms.issubset(symbols):
                     symbols.update(new_syms)
@@ -106,7 +106,7 @@ def write_lammps_streaming(
     fileobj.write(f"{len(species)} atom types\n\n")
 
     # 2. Box
-    cell = atoms.get_cell()
+    cell = atoms.get_cell() # type: ignore[no-untyped-call]
     if not np.allclose(cell, np.diag(np.diag(cell))):
         raise ValueError("Streaming write currently only supports orthogonal cells")
 
@@ -137,8 +137,8 @@ def write_lammps_streaming(
     # Optimize Atom Writing:
     # Use buffered writing by generating a list of lines and calling writelines once (or in chunks).
 
-    pos = atoms.get_positions() # (N, 3)
-    symbols = atoms.get_chemical_symbols() # List of strings (N)
+    pos = atoms.get_positions() # type: ignore[no-untyped-call]
+    symbols = atoms.get_chemical_symbols() # type: ignore[no-untyped-call]
 
     # Pre-lookup types to avoid dict lookup in tight loop
     try:

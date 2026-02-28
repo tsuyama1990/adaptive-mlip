@@ -1,3 +1,4 @@
+import logging
 import tempfile
 from collections.abc import Iterator
 from pathlib import Path
@@ -9,10 +10,9 @@ from pyacemaker.core.base import BaseGenerator
 from pyacemaker.domain_models.data import AtomStructure
 from pyacemaker.domain_models.defaults import MAX_MEMMAP_CHUNK_SIZE
 from pyacemaker.domain_models.distillation import Step1DirectSamplingConfig
-from pyacemaker.logger import get_logger
 from pyacemaker.utils.descriptors import DescriptorCalculator
 
-logger = get_logger()
+logger = logging.getLogger(__name__)
 
 class DirectSampler:
     """
@@ -170,7 +170,7 @@ class DirectSampler:
                 atoms_list = [s.to_ase() for s in batch]
                 for atoms in atoms_list:
                     # Storing atoms natively in ase.db.
-                    db.write(atoms) # type: ignore[no-untyped-call]
+                    db.write(atoms)
 
                 # Compute descriptors
                 descs = self.descriptor_calc.compute(atoms_list, batch_size=batch_size)
@@ -226,9 +226,9 @@ class DirectSampler:
             selected_set = set(db_ids)
 
             # Iterate through DB once (streaming) and yield matches
-            for row in db.select(): # type: ignore[no-untyped-call]
-                if row.id in selected_set: # type: ignore[attr-defined]
-                    atoms = row.toatoms() # type: ignore[no-untyped-call]
+            for row in db.select():
+                if row.id in selected_set:
+                    atoms = row.toatoms()
                     structure = AtomStructure.from_ase(atoms)
                     structure.provenance["sampling_method"] = "direct_maxmin"
                     structure.provenance["descriptor"] = self.config.descriptor.method

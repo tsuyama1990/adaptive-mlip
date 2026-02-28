@@ -13,7 +13,7 @@ from pyacemaker.modules.sampling import DirectSampler
 
 class MockDescriptorCalculator:
     def __init__(self, config: object) -> None: pass
-    def compute(self, atoms_list: list[Atoms]) -> np.ndarray:
+    def compute(self, atoms_list: list[Atoms], batch_size: int = 100) -> np.ndarray:
         return np.random.rand(len(atoms_list), 10)
 
 def test_direct_sampler_sqlite_flow() -> None:
