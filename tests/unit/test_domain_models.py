@@ -41,10 +41,7 @@ def test_structure_config_invalid_supercell() -> None:
 
 def test_structure_config_policy() -> None:
     config = StructureConfig(
-        elements=["Fe"],
-        supercell_size=[1,1,1],
-        policy_name="random_rattle",
-        rattle_stdev=0.2
+        elements=["Fe"], supercell_size=[1, 1, 1], policy_name="random_rattle", rattle_stdev=0.2
     )
     assert config.policy_name == ExplorationPolicy.RANDOM_RATTLE
     assert config.rattle_stdev == 0.2

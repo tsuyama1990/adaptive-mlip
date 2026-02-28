@@ -22,7 +22,7 @@ def test_lammps_generator_order() -> None:
         potential_path=Path("pot.yace"),
         data_file=Path("data.lmp"),
         dump_file=Path("dump.lammps"),
-        elements=["Fe"]
+        elements=["Fe"],
     )
 
     script = buffer.getvalue()
@@ -48,6 +48,7 @@ def test_lammps_generator_order() -> None:
     assert dump_idx < run_idx, f"dump command is after run: dump={dump_idx}, run={run_idx}"
     assert thermo_idx < run_idx, f"thermo command is after run: thermo={thermo_idx}, run={run_idx}"
 
+
 def test_lammps_generator_gamma_column() -> None:
     config = MDConfig(
         temperature=300,
@@ -64,7 +65,7 @@ def test_lammps_generator_gamma_column() -> None:
         potential_path=Path("pot.yace"),
         data_file=Path("data.lmp"),
         dump_file=Path("dump.lammps"),
-        elements=["Fe"]
+        elements=["Fe"],
     )
     script = buffer.getvalue()
 
