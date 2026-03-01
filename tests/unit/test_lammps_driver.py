@@ -125,11 +125,12 @@ def test_lammps_driver_get_atoms(mock_lammps: Any) -> None:
             return np.zeros(shape)
 
         mock_as_array.side_effect = as_array_side_effect
-        atoms = driver.get_atoms(["Al", "Ni"])
+        atoms_iter = driver.get_atoms(["Fe", "O"])
+        atoms = list(atoms_iter)
 
     assert len(atoms) == 2
-    assert atoms[0].symbol == "Al"
-    assert atoms[1].symbol == "Ni"
+    assert atoms[0]["symbol"] == "Fe"
+    assert atoms[1]["symbol"] == "O"
 
 
 def test_lammps_driver_get_atoms_invalid_type(mock_lammps: Any) -> None:
@@ -153,4 +154,4 @@ def test_lammps_driver_get_atoms_invalid_type(mock_lammps: Any) -> None:
         )
 
         with pytest.raises(ValueError, match="index out of range"):
-            driver.get_atoms(["Al"])
+            list(driver.get_atoms(["Al"]))

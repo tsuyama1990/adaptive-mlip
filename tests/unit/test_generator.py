@@ -11,6 +11,7 @@ from pyacemaker.domain_models.structure import ExplorationPolicy, StructureConfi
 
 def test_generate_empty_iterator() -> None:
     # Test ensuring empty iterator throws correctly for empty generation loops avoiding memory loops blindly
+    # Also verify resource cleanup (like temporary directories)
     from unittest.mock import MagicMock
     config = StructureConfig(
         elements=["Fe"],
@@ -20,16 +21,26 @@ def test_generate_empty_iterator() -> None:
     generator = StructureGenerator(config)
 
     # Mock the internal policy strictly yielding nothing
-    generator.m3gnet.predict_structure = MagicMock(return_value=Atoms("Fe"))
-    import pyacemaker.core.generator as gen_module
+    object.__setattr__(generator.m3gnet, 'predict_structure', MagicMock(return_value=Atoms("Fe")))
+    import pyacemaker.core.policy_factory as pf_module
 
     with pytest.MonkeyPatch.context() as mp:
         mock_policy = MagicMock()
         mock_policy.generate.return_value = iter([])
-        mp.setattr(gen_module.PolicyFactory, "get_policy", lambda c: mock_policy)
+        mp.setattr(pf_module.PolicyFactory, "get_policy", lambda c: mock_policy)
+
+        import tempfile
+        from pathlib import Path
+        tmp_base = Path(tempfile.gettempdir())
+        temp_dir_before = {p.name for p in tmp_base.iterdir()}
 
         with pytest.raises(GeneratorError, match="Generator produced an empty iterator"):
             list(generator.generate(5))
+
+        temp_dir_after = {p.name for p in tmp_base.iterdir()}
+        # Check that no new temporary directories (e.g., m3gnet wrappers) were left behind
+        new_files = temp_dir_after - temp_dir_before
+        assert len(new_files) == 0, f"Temporary files were not cleaned up: {new_files}"
 
 
 def test_cold_start_policy() -> None:
@@ -148,11 +159,9 @@ def test_generator_invalid_composition() -> None:
     )
     generator = StructureGenerator(config)
 
-    def mock_raise(comp: str) -> Atoms:
-        msg = "Simulated failure"
-        raise ValueError(msg)
-
-    generator.m3gnet.predict_structure = mock_raise
+    from unittest.mock import MagicMock
+    mock_raise = MagicMock(side_effect=ValueError("Simulated failure"))
+    object.__setattr__(generator.m3gnet, 'predict_structure', mock_raise)
 
     # Updated error message expectation
     with pytest.raises(GeneratorError, match="Base generator failed"):

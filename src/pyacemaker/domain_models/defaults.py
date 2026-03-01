@@ -151,6 +151,8 @@ DEFAULT_MD_MINIMIZE_TOL = 1e-4
 LAMMPS_MINIMIZE_MAX_ITER = 10000
 LAMMPS_MINIMIZE_STEPS = 10000
 LAMMPS_VELOCITY_SEED = 12345
+MAX_ALLOWED_ATOMS = 1000000
+MAX_PATH_LENGTH = 4096
 # Allowed characters in LAMMPS commands: Alphanumeric, space, common punctuation including *
 LAMMPS_SAFE_CMD_PATTERN = r"^[a-zA-Z0-9\s_\-\.\/=\"\*]+$"
 LAMMPS_SCREEN_ARG = "-screen"
@@ -158,6 +160,22 @@ LAMMPS_MIN_STYLE_CG = "cg"
 LAMMPS_PAIR_STYLE_PACE = "pair_style pace"
 LAMMPS_PAIR_STYLE_HYBRID_PACE_ZBL = "pair_style hybrid/overlay pace zbl {inner} {outer}"
 LAMMPS_FORMAT_STREAMING_HEADER = "LAMMPS data file via pyacemaker streaming\n\n"
+
+LAMMPS_CMD_CLEAR = "clear\n"
+LAMMPS_CMD_UNITS_METAL = "units metal\n"
+LAMMPS_CMD_BOUNDARY_P = "boundary p p p\n"
+LAMMPS_CMD_NEIGHBOR_DELAY = "neigh_modify delay 0 every 1 check yes\n"
+LAMMPS_CMD_MINIMIZE = "minimize {tol} {ftol} {steps} {max_iter}\n"
+LAMMPS_CMD_COMPUTE_GAMMA = "compute gamma all pace {pot}\n"
+LAMMPS_CMD_COMPUTE_MAX_GAMMA = "compute max_gamma all reduce max c_gamma\n"
+LAMMPS_CMD_VAR_MAX_G = "variable max_g equal c_max_gamma\n"
+LAMMPS_CMD_FIX_HALT = "fix halt_check all halt {interval} v_max_g > {threshold} error continue\n"
+LAMMPS_CMD_VELOCITY_CREATE = "velocity all create {temp} {seed}\n"
+LAMMPS_CMD_FIX_NPT = "fix npt all npt temp {t_start} {t_end} {tdamp} iso {p_start} {p_end} {pdamp}\n"
+LAMMPS_CMD_RUN = "run {steps}\n"
+LAMMPS_CMD_THERMO = "thermo {freq}\n"
+LAMMPS_CMD_THERMO_STYLE = "thermo_style custom {style}\n"
+LAMMPS_CMD_DUMP = "dump traj all custom {freq} {dump} {cols}\n"
 
 # Delta Learning
 DEFAULT_LJ_PARAMS: Final[dict[str, float]] = {"sigma": 2.5, "epsilon": 1.0, "cutoff": 5.0}

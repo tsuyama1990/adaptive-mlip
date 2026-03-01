@@ -1,9 +1,10 @@
 import logging
 import re
+from collections.abc import Iterator
 from pathlib import Path
+from typing import Any
 
 import numpy as np
-from ase import Atoms
 from lammps import lammps
 
 from pyacemaker.domain_models.constants import LAMMPS_SAFE_CMD_PATTERN
@@ -120,19 +121,19 @@ class LammpsDriver:
         val = self.lmp.extract_variable(name, None, 0)
         return float(val)
 
-    def get_atoms(self, elements: list[str]) -> Atoms:
+    def get_atoms(self, elements: list[str]) -> Iterator[dict[str, Any]]:
         """
-        Retrieve the current state as an ASE Atoms object.
+        Retrieve the current state as an iterator of atom dictionaries to prevent loading entire structures into memory.
 
         Args:
             elements: List of chemical symbols corresponding to LAMMPS atom types (1-based).
 
-        Returns:
-            ASE Atoms object with current positions, cell, and species.
+        Yields:
+            Dictionary containing atom data (symbol, position, type).
         """
         natoms = self.lmp.get_natoms()
         if natoms == 0:
-            return Atoms()
+            return
 
         x_ptr = self.lmp.gather_atoms("x", 1, 3)
         positions_view = np.ctypeslib.as_array(x_ptr, shape=(natoms, 3))
@@ -140,21 +141,26 @@ class LammpsDriver:
         types_ptr = self.lmp.gather_atoms("type", 0, 1)
         types_view = np.ctypeslib.as_array(types_ptr, shape=(natoms,))
 
-        try:
-            symbols = [elements[t - 1] for t in types_view]
-        except IndexError as e:
-            msg = f"LAMMPS type index out of range for elements list: {e}"
-            raise ValueError(msg) from e
+        for i in range(natoms):
+            try:
+                sym = elements[types_view[i] - 1]
+            except IndexError as e:
+                msg = f"LAMMPS type index out of range for elements list: {e}"
+                raise ValueError(msg) from e
 
+            yield {
+                "symbol": sym,
+                "position": positions_view[i].tolist(),
+                "type": types_view[i],
+            }
+
+    def get_cell(self) -> np.ndarray:
+        """Retrieves the cell from LAMMPS."""
         boxlo, boxhi, xy, yz, xz, periodicity, box_change = self.lmp.extract_box()
-
         lx = boxhi[0] - boxlo[0]
         ly = boxhi[1] - boxlo[1]
         lz = boxhi[2] - boxlo[2]
-
-        cell = np.array([[lx, 0.0, 0.0], [xy, ly, 0.0], [xz, yz, lz]])
-
-        return Atoms(symbols=symbols, positions=positions_view, cell=cell, pbc=periodicity)
+        return np.array([[lx, 0.0, 0.0], [xy, ly, 0.0], [xz, yz, lz]])
 
     def get_forces(self) -> np.ndarray:
         """

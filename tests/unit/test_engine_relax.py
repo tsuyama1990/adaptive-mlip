@@ -23,8 +23,8 @@ def test_lammps_engine_relax(
     driver_instance = driver_class.return_value
 
     # Mock return of get_atoms
-    relaxed_atoms = Atoms("He", positions=[[0, 0, 0]], cell=[10, 10, 10], pbc=True)
-    driver_instance.get_atoms.return_value = relaxed_atoms
+    driver_instance.get_cell.return_value = [[10.0, 0.0, 0.0], [0.0, 10.0, 0.0], [0.0, 0.0, 10.0]]
+    driver_instance.get_atoms.return_value = iter([{"symbol": "He", "position": [0.0, 0.0, 0.0], "type": 1}])
 
     engine = LammpsEngine(mock_md_config)
     initial_atoms = Atoms("He", positions=[[0.1, 0.1, 0.1]], cell=[10, 10, 10], pbc=True)
@@ -45,7 +45,8 @@ def test_lammps_engine_relax(
     result_atoms = engine.relax(initial_atoms, pot_path)
 
     # Verify result
-    assert result_atoms == relaxed_atoms
+    assert len(result_atoms) == 1
+    assert result_atoms[0].symbol == "He"
     assert result_atoms.get_chemical_symbols() == ["He"]
 
     # Verify script content

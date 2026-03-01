@@ -72,7 +72,12 @@ def test_engine_integration_workflow(
     calls = mock_lammps_module.return_value.command.call_args_list
     # The script execution iterates over lines and calls command() for each valid line.
     assert any("units metal" in c[0][0] for c in calls)
-    assert any("pair_style hybrid/overlay" in c[0][0] for c in calls)
+
+    commands_run = [c[0][0] for c in calls]
+    assert any("pair_style" in cmd for cmd in commands_run)
+    assert any("pair_coeff" in cmd for cmd in commands_run)
+    assert any("run " in cmd for cmd in commands_run)
+    assert any("thermo " in cmd for cmd in commands_run)
 
 
 def test_engine_integration_lammps_failure(

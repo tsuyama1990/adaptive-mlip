@@ -1,7 +1,7 @@
 import os
+from collections.abc import Iterator
 from enum import StrEnum
 from pathlib import Path
-from typing import Any
 
 import numpy as np
 from pydantic import BaseModel, ConfigDict, Field, PositiveFloat, PositiveInt, model_validator
@@ -79,10 +79,10 @@ class MCConfig(BaseModel):
 
 
 class MDSimulationResult(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", arbitrary_types_allowed=True)
 
     energy: float = Field(..., description="Final potential energy of the system")
-    forces: list[list[float]] | Any = Field(..., description="Forces on atoms in the final frame (can be generator/iterator for large structs)")
+    forces: Iterator[list[float]] | list[list[float]] = Field(..., description="Forces on atoms in the final frame (can be generator/iterator for large structs)")
     stress: list[float] = Field(
         default_factory=lambda: [0.0] * 6,
         description="Stress tensor (Voigt: xx, yy, zz, yz, xz, xy) in Bar",

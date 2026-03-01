@@ -5,6 +5,7 @@ from pathlib import Path
 
 from ase import Atoms
 
+from pyacemaker.domain_models.constants import MAX_ALLOWED_ATOMS
 from pyacemaker.domain_models.md import MDConfig
 from pyacemaker.utils.io import write_lammps_streaming
 from pyacemaker.utils.structure import get_species_order
@@ -65,8 +66,10 @@ class LammpsFileManager:
 
             else:
                 # It's an Atoms object.
+                if len(structure) > MAX_ALLOWED_ATOMS:
+                    LammpsFileManager._raise_value_error("Structure too large")
                 elements = get_species_order(structure)
-                self._write_structure_memory(structure, data_file, elements)
+                self._write_structure_streaming(structure, data_file, elements)
 
         except Exception:
             # Clean up if setup fails
@@ -79,7 +82,7 @@ class LammpsFileManager:
     def _raise_value_error(msg: str) -> None:
         raise ValueError(msg)
 
-    def _write_structure_memory(
+    def _write_structure_streaming(
         self, structure: Atoms, output_path: Path, elements: list[str]
     ) -> None:
         """Writes structure to disk using streaming writer."""
