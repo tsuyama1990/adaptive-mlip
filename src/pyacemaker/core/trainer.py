@@ -1,7 +1,10 @@
+import random
 import shutil
 import subprocess
 from pathlib import Path
 from typing import Any
+
+from ase.io import read, write
 
 from pyacemaker.core.base import BaseTrainer
 from pyacemaker.core.config_generator import PacemakerConfigGenerator
@@ -99,3 +102,61 @@ class PacemakerTrainer(BaseTrainer):
         if data_path.stat().st_size == 0:
             msg = f"Training data file is empty: {data_path}"
             raise TrainerError(msg)
+
+
+
+
+class IncrementalTrainer(BaseTrainer):
+    """
+    A trainer wrapper that adds Incremental (Delta) Learning capabilities
+    and manages a Replay Buffer to prevent catastrophic forgetting.
+    """
+
+    def __init__(self, base_trainer: BaseTrainer, replay_buffer_size: int = 500) -> None:
+        self.base_trainer = base_trainer
+        self.replay_buffer_size = replay_buffer_size
+
+    def train(
+        self, training_data_path: str | Path, initial_potential: str | Path | None = None
+    ) -> Any:
+        """
+        Trains a potential incrementally.
+
+        1. Reads new structures from training_data_path.
+        2. Appends to master history file (training_history.extxyz).
+        3. Samples up to replay_buffer_size from history.
+        4. Writes sampled structures to a temporary training set.
+        5. Calls base_trainer.train with the temporary set and initial_potential.
+        """
+        data_path = Path(training_data_path).resolve()
+        output_dir = data_path.parent
+        history_path = output_dir / "training_history.extxyz"
+        temp_train_path = output_dir / "training_set_temp.extxyz"
+
+        # Read new structures
+        new_structures = list(read(str(data_path), index=":"))
+
+        # Read history if exists
+        if history_path.exists():
+            try:
+                history_structures = list(read(str(history_path), index=":"))
+            except Exception:
+                history_structures = []
+        else:
+            history_structures = []
+
+        # Append new structures to history and write back to disk
+        all_structures = history_structures + new_structures
+        write(str(history_path), all_structures, format="extxyz")
+
+        # Sample for replay buffer
+        if len(all_structures) > self.replay_buffer_size:
+            sampled_structures = random.sample(all_structures, self.replay_buffer_size)
+        else:
+            sampled_structures = all_structures
+
+        # Write out temp training set
+        write(str(temp_train_path), sampled_structures, format="extxyz")
+
+        # Train using base trainer
+        return self.base_trainer.train(temp_train_path, initial_potential=initial_potential)

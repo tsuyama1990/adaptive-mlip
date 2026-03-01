@@ -86,3 +86,120 @@ def test_uat_03_02_defect_generation() -> None:
     vol_defect = defect_atoms.get_volume()  # type: ignore[no-untyped-call]
     vol_pristine = pristine_atoms.get_volume()  # type: ignore[no-untyped-call]
     assert abs(vol_defect - vol_pristine) < 1e-6
+
+
+from pathlib import Path
+from unittest.mock import MagicMock, patch
+
+from ase.io import read, write
+
+from pyacemaker.core.oracle import MACEManager, TieredOracle
+from pyacemaker.core.trainer import IncrementalTrainer, PacemakerTrainer
+from pyacemaker.domain_models.training import TrainingConfig
+
+
+def test_uat_03_01_incremental_update_and_replay_buffer(tmp_path: Path):
+    """
+    UAT-03-01: Hierarchical Finetuning and Delta Update
+    """
+    # GIVEN a base.yace potential and a training_history.extxyz containing 10 structures (mocking 10,000)
+    history_path = tmp_path / "training_history.extxyz"
+    base_potential = tmp_path / "base.yace"
+    base_potential.touch()
+
+    # Write 10 history structures
+    history_structures = [Atoms("H", positions=[[0, 0, 0]]) for _ in range(10)]
+    write(history_path, history_structures, format="extxyz")
+
+    # AND a newly evaluated DFT cluster structure (surrogates)
+    new_data_path = tmp_path / "new_train.extxyz"
+    new_structures = [Atoms("He", positions=[[0, 0, 0]]) for _ in range(51)]
+    write(new_data_path, new_structures, format="extxyz")
+
+    # Setup the trainer
+    config = TrainingConfig(
+        potential_type="ace",
+        cutoff_radius=5.0,
+        max_basis_size=2,
+        output_filename="current.yace",
+        delta_learning=True,
+        elements=["H", "He"],
+        seed=123,
+    )
+    base_trainer = PacemakerTrainer(config)
+
+    # AND a LoopStrategyConfig with incremental_update = True and replay_buffer_size = 15 (mocking 500)
+    inc_trainer = IncrementalTrainer(base_trainer, replay_buffer_size=15)
+
+    # WHEN the IncrementalTrainer is invoked with the 51 new structures
+    with (
+        patch("pyacemaker.core.trainer.run_command") as mock_run,
+        patch("shutil.which", return_value=True),
+    ):
+        (tmp_path / "current.yace").touch()
+        inc_trainer.train(new_data_path, initial_potential=base_potential)
+
+        # THEN the Trainer samples exactly 15 structures
+        # The temp train path will have exactly 15 structures
+        temp_train_path = tmp_path / "training_set_temp.extxyz"
+        assert temp_train_path.exists()
+        temp_train = list(read(str(temp_train_path), index=":"))
+        assert len(temp_train) == 15
+
+        # Check generated input.yaml correctly points to Delta learning config
+        import yaml
+
+        yaml_path = tmp_path / "input.yaml"
+        assert yaml_path.exists()
+        with open(yaml_path) as f:
+            yaml_config = yaml.safe_load(f)
+
+        assert yaml_config["data"]["filename"] == str(temp_train_path)
+        assert "base_potential" in yaml_config  # delta learning active
+
+        # assert run_command included base.yace
+        cmd = mock_run.call_args[0][0]
+        assert "--initial_potential" in cmd
+        assert str(base_potential) in cmd
+
+
+def test_uat_03_02_tiered_oracle_evaluation():
+    """
+    UAT-03-02: Tiered Oracle Evaluation
+    """
+    from tests.conftest import MockCalculator
+    fast_oracle = MACEManager()
+    fast_oracle._calculator = MockCalculator()
+    slow_oracle = MagicMock()
+    slow_atoms = Atoms("O", positions=[[0, 0, 0]])
+    slow_atoms.info["energy"] = -10.0
+    slow_oracle.compute.return_value = iter([slow_atoms])
+
+    tiered_oracle = TieredOracle(
+        fast_oracle=fast_oracle,
+        slow_oracle=slow_oracle,
+        uncertainty_threshold=0.05,
+        call_dft_threshold=0.05,
+    )
+
+    # Low uncertainty structure
+    low_uncertainty_atoms = Atoms("H", positions=[[0, 0, 0]])
+    low_uncertainty_atoms.info["uncertainty"] = 0.01
+
+    # High uncertainty structure
+    high_uncertainty_atoms = Atoms("He", positions=[[0, 0, 0]])
+    high_uncertainty_atoms.info["uncertainty"] = 0.08
+
+    # Process both
+    gen = tiered_oracle.compute(iter([low_uncertainty_atoms, high_uncertainty_atoms]))
+
+    # 1. First one should be handled by fast_oracle
+    res1 = next(gen)
+    assert res1.symbols == "H"
+    assert res1.info["uncertainty"] == 0.01
+    slow_oracle.compute.assert_not_called()
+
+    # 2. Second one exceeds threshold and must invoke slow_oracle
+    res2 = next(gen)
+    assert res2.symbols == "O"  # Replaced by slow oracle result
+    slow_oracle.compute.assert_called_once()

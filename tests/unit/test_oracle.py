@@ -228,3 +228,55 @@ def test_dft_manager_embedding(mock_dft_config: DFTConfig, monkeypatch: pytest.M
     # DFTManager.compute yields the result of _compute_single(embedded_atoms)
     # _compute_single returns the atom object passed to it (which is embedded_atoms)
     assert result == embedded_atoms
+
+
+from pyacemaker.core.oracle import MACEManager, TieredOracle
+
+
+def test_mace_manager_mock_fallback():
+    from tests.conftest import MockCalculator
+    manager = MACEManager()
+    manager._calculator = MockCalculator()
+    atoms = Atoms("H", cell=[10, 10, 10], pbc=True)
+    # Give it info uncertainty to test the mock behavior logic
+    atoms.info["uncertainty"] = 0.05
+    gen = manager.compute(iter([atoms]))
+    result = next(gen)
+
+    # Uncertainty should be preserved or fetched correctly
+    assert result.info["uncertainty"] == 0.05
+    assert result.get_potential_energy() is not None
+
+
+def test_tiered_oracle_routing():
+    from tests.conftest import MockCalculator
+    fast_manager = MACEManager()
+    fast_manager._calculator = MockCalculator()
+    # Mocking the slow oracle
+    slow_manager = MagicMock()
+    slow_manager.compute.return_value = iter([Atoms("He", cell=[10, 10, 10], pbc=True)])
+
+    tiered = TieredOracle(
+        fast_oracle=fast_manager,
+        slow_oracle=slow_manager,
+        uncertainty_threshold=0.02,
+        call_dft_threshold=0.05,
+    )
+
+    # 1. Low uncertainty -> Keep fast
+    low_atoms = Atoms("H")
+    low_atoms.info["uncertainty"] = 0.01
+
+    gen = tiered.compute(iter([low_atoms]))
+    res1 = next(gen)
+    assert res1.symbols == "H"
+    slow_manager.compute.assert_not_called()
+
+    # 2. High uncertainty -> Call slow
+    high_atoms = Atoms("H")
+    high_atoms.info["uncertainty"] = 0.1
+
+    gen2 = tiered.compute(iter([high_atoms]))
+    res2 = next(gen2)
+    assert res2.symbols == "He"
+    slow_manager.compute.assert_called_once()

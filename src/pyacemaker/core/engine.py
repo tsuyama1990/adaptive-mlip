@@ -63,7 +63,7 @@ class LammpsResultParser:
             step = int(driver.extract_variable("step"))
             forces = driver.get_forces()
             stress_array = driver.get_stress()
-            stress = list(stress_array)
+            stress = list(stress_array) # type: ignore
         except Exception:
             energy = 0.0
             temperature = 0.0
@@ -132,7 +132,7 @@ class LammpsResultParser:
         try:
             for frame in iread(str(dump_file), format="extxyz"):
                 if "c_gamma" in frame.arrays:
-                    gammas = frame.get_array("c_gamma")
+                    gammas = frame.get_array("c_gamma") # type: ignore
                     frame_max = np.max(gammas)
 
                     if frame_max > call_dft_limit:
