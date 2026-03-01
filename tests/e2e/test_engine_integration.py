@@ -57,7 +57,16 @@ def test_engine_integration_workflow(
     # 2. Execution
     import numpy as np
 
-    engine = LammpsEngine(mock_md_config)
+    from pyacemaker.domain_models.workflow import WorkflowConfig
+
+    workflow_config = WorkflowConfig(
+        max_iterations=1,
+        state_file_path=str(tmp_path / "state.json"),
+        data_dir=str(tmp_path / "data"),
+        active_learning_dir=str(tmp_path / "al"),
+        potentials_dir=str(tmp_path / "pots"),
+    )
+    engine = LammpsEngine(mock_md_config, workflow_config)
     with patch(
         "pyacemaker.interfaces.lammps_driver.LammpsDriver.get_forces",
         return_value=np.array([[0.0, 0.0, 0.0]]),
@@ -90,7 +99,16 @@ def test_engine_integration_lammps_failure(
     # Simulate LAMMPS command failure (on command(), not file())
     mock_lammps_module.return_value.command.side_effect = RuntimeError("LAMMPS Error")
 
-    engine = LammpsEngine(mock_md_config)
+    from pyacemaker.domain_models.workflow import WorkflowConfig
+
+    workflow_config = WorkflowConfig(
+        max_iterations=1,
+        state_file_path=str(tmp_path / "state.json"),
+        data_dir=str(tmp_path / "data"),
+        active_learning_dir=str(tmp_path / "al"),
+        potentials_dir=str(tmp_path / "pots"),
+    )
+    engine = LammpsEngine(mock_md_config, workflow_config)
 
     # Updated match string
     with pytest.raises(RuntimeError, match="Simulation execution failed"):

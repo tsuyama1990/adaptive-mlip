@@ -3,7 +3,7 @@ from pyacemaker.core.base import BaseEngine, BaseGenerator, BaseOracle, BaseTrai
 from pyacemaker.core.engine import LammpsEngine
 from pyacemaker.core.exceptions import ConfigError
 from pyacemaker.core.generator import StructureGenerator
-from pyacemaker.core.oracle import DFTManager
+from pyacemaker.core.oracle import DFTManager, TieredOracle
 from pyacemaker.core.report import ReportGenerator
 from pyacemaker.core.trainer import PacemakerTrainer
 from pyacemaker.core.validator import Validator
@@ -50,7 +50,11 @@ class ModuleFactory:
 
         try:
             # Oracle
-            oracle = DFTManager(config.dft)
+            oracle: BaseOracle
+            if config.workflow.loop_strategy.use_tiered_oracle:
+                oracle = TieredOracle(config.dft, config.workflow.loop_strategy)
+            else:
+                oracle = DFTManager(config.dft)
 
             # Generator
             generator = StructureGenerator(config.structure)
@@ -59,7 +63,7 @@ class ModuleFactory:
             trainer = PacemakerTrainer(config.training)
 
             # Engine
-            engine = LammpsEngine(config.md)
+            engine = LammpsEngine(config.md, workflow_config=config.workflow)
 
             # Active Set Selector
             active_set_selector = ActiveSetSelector()

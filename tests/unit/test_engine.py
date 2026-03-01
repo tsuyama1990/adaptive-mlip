@@ -44,8 +44,18 @@ def test_lammps_engine_run(mock_md_config: MDConfig, mock_driver: Any, tmp_path:
     driver_instance.get_atoms.return_value = Atoms("H", cell=[10, 10, 10], pbc=True)
 
     # Enable fix_halt to test gamma extraction
-    config = mock_md_config.model_copy(update={"fix_halt": True})
-    engine = LammpsEngine(config)
+    from pyacemaker.domain_models.workflow import WorkflowConfig
+
+    config = mock_md_config.model_copy()
+    workflow_config = WorkflowConfig(
+        max_iterations=1,
+        state_file_path=str(tmp_path / "state.json"),
+        data_dir=str(tmp_path / "data"),
+        active_learning_dir=str(tmp_path / "al"),
+        potentials_dir=str(tmp_path / "pots"),
+        otf={"fix_halt": True},
+    )
+    engine = LammpsEngine(config, workflow_config)
     atoms = Atoms("H", cell=[10, 10, 10], pbc=True)
 
     # Create dummy potential file
@@ -116,12 +126,23 @@ def test_lammps_engine_halted(mock_md_config: MDConfig, mock_driver: Any, tmp_pa
 
     driver_instance.get_atoms.return_value = Atoms("H", cell=[10, 10, 10], pbc=True)
 
+    from pyacemaker.domain_models.workflow import WorkflowConfig
+
+    workflow_config = WorkflowConfig(
+        max_iterations=1,
+        state_file_path=str(tmp_path / "state.json"),
+        data_dir=str(tmp_path / "data"),
+        active_learning_dir=str(tmp_path / "al"),
+        potentials_dir=str(tmp_path / "pots"),
+        otf={"fix_halt": True},
+    )
     # Enable fix_halt to test halted logic
-    config = mock_md_config.model_copy(update={"fix_halt": True})
-    engine = LammpsEngine(config)
+    config = mock_md_config.model_copy()
+    engine = LammpsEngine(config, workflow_config)
 
     # Mock the parser to return true halt so it's not discarded as thermal noise
     from unittest.mock import patch
+
     with patch.object(engine.parser, "_evaluate_uncertainty_stream", return_value=([0], True)):
         atoms = Atoms("H", cell=[10, 10, 10], pbc=True)
         pot_path = tmp_path / "potential.yace"
@@ -139,12 +160,21 @@ def test_lammps_engine_halted(mock_md_config: MDConfig, mock_driver: Any, tmp_pa
 def test_lammps_engine_hybrid_potential(
     mock_md_config: MDConfig, mock_driver: Any, tmp_path: Path
 ) -> None:
+    from pyacemaker.domain_models.workflow import WorkflowConfig
+
+    workflow_config = WorkflowConfig(
+        max_iterations=1,
+        state_file_path=str(tmp_path / "state.json"),
+        data_dir=str(tmp_path / "data"),
+        active_learning_dir=str(tmp_path / "al"),
+        potentials_dir=str(tmp_path / "pots"),
+    )
     hybrid_params = HybridParams(zbl_cut_inner=1.0, zbl_cut_outer=1.5)
     config = mock_md_config.model_copy(
         update={"hybrid_potential": True, "hybrid_params": hybrid_params}
     )
 
-    engine = LammpsEngine(config)
+    engine = LammpsEngine(config, workflow_config)
     atoms = Atoms("Al", cell=[10, 10, 10], pbc=True)
     pot_path = tmp_path / "potential.yace"
     pot_path.touch()
@@ -175,7 +205,16 @@ def test_lammps_engine_hybrid_potential(
 
 def test_run_empty_structure_error(mock_md_config: MDConfig, tmp_path: Path) -> None:
     """Tests error handling for empty structure."""
-    engine = LammpsEngine(mock_md_config)
+    from pyacemaker.domain_models.workflow import WorkflowConfig
+
+    workflow_config = WorkflowConfig(
+        max_iterations=1,
+        state_file_path=str(tmp_path / "state.json"),
+        data_dir=str(tmp_path / "data"),
+        active_learning_dir=str(tmp_path / "al"),
+        potentials_dir=str(tmp_path / "pots"),
+    )
+    engine = LammpsEngine(mock_md_config, workflow_config)
     atoms = Atoms()  # Empty
     pot_path = tmp_path / "pot.yace"
     pot_path.touch()
@@ -185,9 +224,18 @@ def test_run_empty_structure_error(mock_md_config: MDConfig, tmp_path: Path) -> 
         engine.run(atoms, pot_path)
 
 
-def test_run_missing_potential_error(mock_md_config: MDConfig) -> None:
+def test_run_missing_potential_error(mock_md_config: MDConfig, tmp_path: Path) -> None:
     """Tests error handling for missing potential file."""
-    engine = LammpsEngine(mock_md_config)
+    from pyacemaker.domain_models.workflow import WorkflowConfig
+
+    workflow_config = WorkflowConfig(
+        max_iterations=1,
+        state_file_path=str(tmp_path / "state.json"),
+        data_dir=str(tmp_path / "data"),
+        active_learning_dir=str(tmp_path / "al"),
+        potentials_dir=str(tmp_path / "pots"),
+    )
+    engine = LammpsEngine(mock_md_config, workflow_config)
     atoms = Atoms("H", cell=[10, 10, 10], pbc=True)
 
     with pytest.raises(FileNotFoundError, match="Potential file not found"):
@@ -201,7 +249,16 @@ def test_run_large_structure_warning(
     import logging
 
     caplog.set_level(logging.INFO)
-    engine = LammpsEngine(mock_md_config)
+    from pyacemaker.domain_models.workflow import WorkflowConfig
+
+    workflow_config = WorkflowConfig(
+        max_iterations=1,
+        state_file_path=str(tmp_path / "state.json"),
+        data_dir=str(tmp_path / "data"),
+        active_learning_dir=str(tmp_path / "al"),
+        potentials_dir=str(tmp_path / "pots"),
+    )
+    engine = LammpsEngine(mock_md_config, workflow_config)
     # Create large structure > 10k
     atoms = Atoms(
         symbols=["H"] * 10001, positions=[[0, 0, 0]] * 10001, cell=[100, 100, 100], pbc=True
@@ -232,8 +289,16 @@ def test_run_driver_failure(mock_md_config: MDConfig, mock_driver: Any, tmp_path
     """Tests error handling when LAMMPS execution fails."""
     driver_instance = mock_driver.return_value
     driver_instance.run_file.side_effect = RuntimeError("LAMMPS crashed")
+    from pyacemaker.domain_models.workflow import WorkflowConfig
 
-    engine = LammpsEngine(mock_md_config)
+    workflow_config = WorkflowConfig(
+        max_iterations=1,
+        state_file_path=str(tmp_path / "state.json"),
+        data_dir=str(tmp_path / "data"),
+        active_learning_dir=str(tmp_path / "al"),
+        potentials_dir=str(tmp_path / "pots"),
+    )
+    engine = LammpsEngine(mock_md_config, workflow_config)
     atoms = Atoms("H", cell=[10, 10, 10], pbc=True)
     pot_path = tmp_path / "pot.yace"
     pot_path.touch()

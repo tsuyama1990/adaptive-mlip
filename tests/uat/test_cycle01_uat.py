@@ -43,10 +43,11 @@ md:
     pressure: 0.0
     timestep: 0.001
     n_steps: 1000
-    check_interval: 50
 workflow:
     max_iterations: 10
     state_file_path: uat_state.json
+    otf:
+        check_interval: 50
 """
     path.write_text(config_content)
 

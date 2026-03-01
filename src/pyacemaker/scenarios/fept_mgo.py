@@ -151,7 +151,7 @@ class FePtMgoScenario(BaseScenario):
         deposition_manager: DepositionManager | None = None,
     ) -> None:
         super().__init__(config)
-        self.engine = engine or LammpsEngine(self.config.md)
+        self.engine = engine or LammpsEngine(self.config.md, self.config.workflow)
         self.eon_wrapper = eon_wrapper
         self.deposition_manager = deposition_manager
 

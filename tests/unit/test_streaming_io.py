@@ -97,6 +97,7 @@ def test_stream_extxyz_to_lammps_huge_structure_memory(tmp_path: Path) -> None:
     class MockFileBuffer:
         def __init__(self) -> None:
             self.written_bytes = 0
+
         def write(self, data: str) -> None:
             self.written_bytes += len(data)
 
@@ -107,7 +108,9 @@ def test_stream_extxyz_to_lammps_huge_structure_memory(tmp_path: Path) -> None:
     extxyz_path = tmp_path / "large.extxyz"
     with extxyz_path.open("w") as f:
         f.write(f"{n}\n")
-        f.write('Lattice="10.0 0.0 0.0 0.0 10.0 0.0 0.0 0.0 10.0" Properties=species:S:1:pos:R:3 pbc="T T T"\n')
+        f.write(
+            'Lattice="10.0 0.0 0.0 0.0 10.0 0.0 0.0 0.0 10.0" Properties=species:S:1:pos:R:3 pbc="T T T"\n'
+        )
         for _ in range(n):
             f.write("H 0.0 0.0 0.0\n")
 
@@ -117,7 +120,7 @@ def test_stream_extxyz_to_lammps_huge_structure_memory(tmp_path: Path) -> None:
     gc.collect()
 
     # Run the streaming write
-    stream_extxyz_to_lammps(extxyz_path, buffer, elements) # type: ignore
+    stream_extxyz_to_lammps(extxyz_path, buffer, elements)  # type: ignore
 
     # If it didn't OOM and wrote data, the stream parsing mechanism is working
     assert buffer.written_bytes > 100000

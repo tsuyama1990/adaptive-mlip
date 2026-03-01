@@ -6,14 +6,23 @@ from pyacemaker.domain_models.md import MDConfig
 
 
 def test_lammps_generator_order() -> None:
+    from pyacemaker.domain_models.workflow import WorkflowConfig
+
     config = MDConfig(
         temperature=300,
         pressure=0,
         timestep=0.001,
         n_steps=1000,
-        fix_halt=True,
     )
-    generator = LammpsScriptGenerator(config)
+    workflow_config = WorkflowConfig(
+        max_iterations=1,
+        state_file_path="state.json",
+        data_dir="data",
+        active_learning_dir="al",
+        potentials_dir="pots",
+        otf={"fix_halt": True},
+    )
+    generator = LammpsScriptGenerator(config, workflow_config)
 
     # Use StringIO as buffer
     buffer = StringIO()
@@ -50,14 +59,23 @@ def test_lammps_generator_order() -> None:
 
 
 def test_lammps_generator_gamma_column() -> None:
+    from pyacemaker.domain_models.workflow import WorkflowConfig
+
     config = MDConfig(
         temperature=300,
         pressure=0,
         timestep=0.001,
         n_steps=1000,
-        fix_halt=True,
     )
-    generator = LammpsScriptGenerator(config)
+    workflow_config = WorkflowConfig(
+        max_iterations=1,
+        state_file_path="state.json",
+        data_dir="data",
+        active_learning_dir="al",
+        potentials_dir="pots",
+        otf={"fix_halt": True},
+    )
+    generator = LammpsScriptGenerator(config, workflow_config)
 
     buffer = StringIO()
     generator.write_script(

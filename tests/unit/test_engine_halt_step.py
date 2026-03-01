@@ -9,16 +9,26 @@ from pyacemaker.domain_models.md import MDConfig
 
 
 def test_lammps_engine_halt_step_populated(tmp_path: Path) -> None:
+    from pyacemaker.domain_models.workflow import WorkflowConfig
+
     # Mock config
     config = MDConfig(
         temperature=300,
         pressure=0,
         timestep=0.001,
         n_steps=1000,
-        fix_halt=True,
+    )
+    workflow_config = WorkflowConfig(
+        max_iterations=1,
+        state_file_path=str(tmp_path / "state.json"),
+        data_dir=str(tmp_path / "data"),
+        active_learning_dir=str(tmp_path / "al"),
+        potentials_dir=str(tmp_path / "pots"),
+        otf={"fix_halt": True},
     )
 
     from unittest.mock import patch
+
     with patch("pyacemaker.core.engine.LammpsDriver") as MockDriver:
         driver = MockDriver.return_value
 
@@ -33,7 +43,7 @@ def test_lammps_engine_halt_step_populated(tmp_path: Path) -> None:
         driver.get_forces.return_value = np.zeros((1, 3))
         driver.get_stress.return_value = np.zeros(6)
 
-        engine = LammpsEngine(config)
+        engine = LammpsEngine(config, workflow_config)
 
         with patch.object(engine.parser, "_evaluate_uncertainty_stream", return_value=([0], True)):
             atoms = Atoms("H", cell=[10, 10, 10], pbc=True)
@@ -48,13 +58,22 @@ def test_lammps_engine_halt_step_populated(tmp_path: Path) -> None:
 
 
 def test_lammps_engine_halt_step_none_if_not_halted(tmp_path: Path) -> None:
+    from pyacemaker.domain_models.workflow import WorkflowConfig
+
     # Mock config
     config = MDConfig(
         temperature=300,
         pressure=0,
         timestep=0.001,
         n_steps=1000,
-        fix_halt=True,
+    )
+    workflow_config = WorkflowConfig(
+        max_iterations=1,
+        state_file_path=str(tmp_path / "state.json"),
+        data_dir=str(tmp_path / "data"),
+        active_learning_dir=str(tmp_path / "al"),
+        potentials_dir=str(tmp_path / "pots"),
+        otf={"fix_halt": True},
     )
 
     with patch("pyacemaker.core.engine.LammpsDriver") as MockDriver:
@@ -71,7 +90,7 @@ def test_lammps_engine_halt_step_none_if_not_halted(tmp_path: Path) -> None:
         driver.get_forces.return_value = np.zeros((1, 3))
         driver.get_stress.return_value = np.zeros(6)
 
-        engine = LammpsEngine(config)
+        engine = LammpsEngine(config, workflow_config)
         atoms = Atoms("H", cell=[10, 10, 10], pbc=True)
         pot_path = tmp_path / "pot.yace"
         pot_path.touch()

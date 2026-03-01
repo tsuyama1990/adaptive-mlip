@@ -46,21 +46,21 @@ def test_module_factory_create_modules(mock_config: PyAceConfig) -> None:
     # Actually mock_config fixture creates the pseudo file, so DFTManager init is safe.
     # But QEDriver might check other things.
     # Let's patch DFTManager anyway to isolate Factory test.
-    with patch("pyacemaker.factory.DFTManager") as MockDFTManager:
-        gen, oracle, trainer, engine, active_set, validator = ModuleFactory.create_modules(
-            mock_config
-        )
+    with patch("pyacemaker.factory.DFTManager"):
+        with patch("pyacemaker.factory.TieredOracle") as MockTieredOracle:
+            gen, oracle, trainer, engine, active_set, validator = ModuleFactory.create_modules(
+                mock_config
+            )
 
-        assert isinstance(gen, StructureGenerator)
-        assert isinstance(trainer, PacemakerTrainer)
-        assert isinstance(engine, LammpsEngine)
+            assert isinstance(gen, StructureGenerator)
+            assert isinstance(trainer, PacemakerTrainer)
+            assert isinstance(engine, LammpsEngine)
         assert active_set is not None
 
-        # Oracle should be what DFTManager returns
-        assert oracle == MockDFTManager.return_value
+        # Oracle should be what TieredOracle returns
+        assert oracle == MockTieredOracle.return_value
 
         # Verify initializations
-        MockDFTManager.assert_called_once_with(mock_config.dft)
 
         # Check trainer config
         assert trainer.config == mock_config.training

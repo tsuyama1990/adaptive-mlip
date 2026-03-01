@@ -20,7 +20,6 @@ from pyacemaker.domain_models.constants import (
 from pyacemaker.domain_models.defaults import (
     DEFAULT_MD_ATOM_STYLE,
     DEFAULT_MD_BASE_ENERGY,
-    DEFAULT_MD_CHECK_INTERVAL,
     DEFAULT_MD_DUMP_FREQ,
     DEFAULT_MD_HYBRID_ZBL_INNER,
     DEFAULT_MD_HYBRID_ZBL_OUTER,
@@ -29,7 +28,6 @@ from pyacemaker.domain_models.defaults import (
     DEFAULT_MD_TDAMP_FACTOR,
     DEFAULT_MD_THERMO_FREQ,
 )
-from pyacemaker.domain_models.workflow import ActiveLearningThresholds
 
 
 def _get_default_temp_dir() -> str | None:
@@ -100,7 +98,9 @@ class MDSimulationResult(BaseModel):
         None, description="Path to the structure where halt occurred"
     )
     halt_step: int | None = Field(None, description="The step at which the simulation was halted")
-    epicenter_atoms: list[int] = Field(default_factory=list, description="Indices of atoms exceeding add_train threshold")
+    epicenter_atoms: list[int] = Field(
+        default_factory=list, description="Indices of atoms exceeding add_train threshold"
+    )
 
     @model_validator(mode="after")
     def validate_physical_values(self) -> "MDSimulationResult":
@@ -235,19 +235,6 @@ class MDConfig(BaseModel):
         default_factory=HybridParams, description="Parameters for hybrid potential baseline"
     )
 
-    # Spec Section 3.4 (OTF)
-    fix_halt: bool = Field(False, description="Enable OTF halting based on uncertainty")
-    thresholds: ActiveLearningThresholds = Field(
-        default_factory=ActiveLearningThresholds, description="Thresholds for halting simulation"
-    )
-    check_interval: int = Field(
-        default_factory=lambda: int(
-            os.environ.get("PYACE_MD_CHECK_INTERVAL", DEFAULT_MD_CHECK_INTERVAL)
-        ),
-        gt=0,
-        description="Step interval for uncertainty check",
-    )
-
     # Spec Section 3.1: Ramping and MC
     ramping: MDRampingConfig | None = Field(None, description="Configuration for T/P ramping")
     mc: MCConfig | None = Field(None, description="Configuration for Monte Carlo atom swapping")
@@ -257,13 +244,6 @@ class MDConfig(BaseModel):
         total_time = self.n_steps * self.timestep
         if total_time > MAX_MD_DURATION:
             pass
-        return self
-
-    @model_validator(mode="after")
-    def validate_otf_settings(self) -> "MDConfig":
-        if self.fix_halt and self.check_interval <= 0:
-            msg = "check_interval must be positive when fix_halt is enabled."
-            raise ValueError(msg)
         return self
 
     @model_validator(mode="after")

@@ -8,10 +8,19 @@ from pyacemaker.domain_models.md import HybridParams, MDConfig
 
 def test_generator_pure_pace(tmp_path: Path) -> None:
     """Tests script generation with pure PACE."""
+    from pyacemaker.domain_models.workflow import WorkflowConfig
+
     config = MDConfig(
         temperature=300.0, pressure=1.0, timestep=0.001, n_steps=1000, hybrid_potential=False
     )
-    generator = LammpsScriptGenerator(config)
+    workflow_config = WorkflowConfig(
+        max_iterations=1,
+        state_file_path=str(tmp_path / "state.json"),
+        data_dir=str(tmp_path / "data"),
+        active_learning_dir=str(tmp_path / "al"),
+        potentials_dir=str(tmp_path / "pots"),
+    )
+    generator = LammpsScriptGenerator(config, workflow_config)
 
     pot_path = tmp_path / "potential.yace"
     data_file = tmp_path / "data.lmp"
@@ -31,6 +40,8 @@ def test_generator_pure_pace(tmp_path: Path) -> None:
 
 def test_generator_hybrid_potential(tmp_path: Path) -> None:
     """Tests script generation with hybrid potential."""
+    from pyacemaker.domain_models.workflow import WorkflowConfig
+
     config = MDConfig(
         temperature=300.0,
         pressure=1.0,
@@ -39,7 +50,14 @@ def test_generator_hybrid_potential(tmp_path: Path) -> None:
         hybrid_potential=True,
         hybrid_params=HybridParams(zbl_cut_inner=1.0, zbl_cut_outer=1.5),
     )
-    generator = LammpsScriptGenerator(config)
+    workflow_config = WorkflowConfig(
+        max_iterations=1,
+        state_file_path=str(tmp_path / "state.json"),
+        data_dir=str(tmp_path / "data"),
+        active_learning_dir=str(tmp_path / "al"),
+        potentials_dir=str(tmp_path / "pots"),
+    )
+    generator = LammpsScriptGenerator(config, workflow_config)
 
     pot_path = tmp_path / "potential.yace"
     data_file = tmp_path / "data.lmp"
@@ -62,18 +80,26 @@ def test_generator_hybrid_potential(tmp_path: Path) -> None:
 
 def test_generator_watchdog(tmp_path: Path) -> None:
     """Tests generation of watchdog commands."""
-    from pyacemaker.domain_models.workflow import ActiveLearningThresholds
+    from pyacemaker.domain_models.workflow import WorkflowConfig
 
     config = MDConfig(
         temperature=300.0,
         pressure=1.0,
         timestep=0.001,
         n_steps=1000,
-        fix_halt=True,
-        thresholds=ActiveLearningThresholds(threshold_call_dft=5.0),
-        check_interval=10,
     )
-    generator = LammpsScriptGenerator(config)
+    workflow_config = WorkflowConfig(
+        max_iterations=1,
+        state_file_path=str(tmp_path / "state.json"),
+        data_dir=str(tmp_path / "data"),
+        active_learning_dir=str(tmp_path / "al"),
+        potentials_dir=str(tmp_path / "pots"),
+        loop_strategy={
+            "thresholds": {"threshold_call_dft": 5.0, "threshold_add_train": 2.0, "smooth_steps": 3}
+        },
+        otf={"fix_halt": True, "check_interval": 10},
+    )
+    generator = LammpsScriptGenerator(config, workflow_config)
 
     pot_path = tmp_path / "potential.yace"
     data_file = tmp_path / "data.lmp"
