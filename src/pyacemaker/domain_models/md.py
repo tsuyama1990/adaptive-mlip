@@ -119,11 +119,13 @@ class MDSimulationResult(BaseModel):
         return self
 
 
+import os
+
 class MDConfig(BaseModel):
     """
     Configuration for Molecular Dynamics simulations.
     """
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra=os.environ.get("PYACEMAKER_CONFIG_EXTRA", "forbid")) # type: ignore[misc]
 
     # Basic Physics
     temperature: float = Field(..., ge=0.0, description="Simulation temperature in Kelvin")
@@ -189,6 +191,19 @@ class MDConfig(BaseModel):
     )
     hybrid_params: HybridParams = Field(
         default_factory=HybridParams, description="Parameters for hybrid potential baseline"
+    )
+    allowed_commands: list[str] = Field(
+        default_factory=lambda: [
+            "clear", "units", "atom_style", "boundary", "read_data", "read_restart",
+            "pair_style", "pair_coeff", "neighbor", "neigh_modify", "timestep",
+            "compute", "variable", "fix", "thermo", "thermo_style", "dump",
+            "minimize", "velocity", "run", "restart", "unfix", "min_style", "dump_modify"
+        ],
+        description="Whitelist of allowed LAMMPS commands."
+    )
+    lammps_screen_arg: str = Field(
+        default="none",
+        description="Configuration for LAMMPS screen output logging argument (e.g., none)."
     )
 
     # Spec Section 3.4 (OTF)

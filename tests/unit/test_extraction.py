@@ -2,7 +2,7 @@ import numpy as np
 from ase.build import bulk
 
 from pyacemaker.domain_models.workflow import CutoutConfig
-from pyacemaker.utils.extraction import extract_intelligent_cluster
+from pyacemaker.utils.extraction import ClusterExtractor
 
 
 def test_extract_intelligent_cluster_basic() -> None:
@@ -24,7 +24,8 @@ def test_extract_intelligent_cluster_basic() -> None:
         enable_passivation=False
     )
 
-    cluster = extract_intelligent_cluster(atoms, [center_idx], config)
+    extractor = ClusterExtractor(config)
+    cluster = extractor.extract(atoms, [center_idx])
 
     # Check cluster size
     # 1 center + 6 nearest neighbors (1st shell) + 12 next-nearest (2nd shell) = 19
@@ -62,7 +63,8 @@ def test_extract_intelligent_cluster_pbc() -> None:
         enable_passivation=False
     )
 
-    cluster = extract_intelligent_cluster(atoms, [center_idx], config)
+    extractor = ClusterExtractor(config)
+    cluster = extractor.extract(atoms, [center_idx])
 
     # In 2x2x2 SC (8 atoms), corner atom has exactly 3 neighbors within 2.6 cutoff distance.
     # 1 origin + 3 neighbors = 4

@@ -42,6 +42,7 @@ class LoopStrategyConfig(BaseModel):
     incremental_update: bool = Field(default=True, description="Use Delta Learning for incremental updates.")
     replay_buffer_size: PositiveInt = Field(default=1000, description="Size of the Replay Buffer for incremental learning.")
     baseline_potential_type: str = Field(default="lj", description="Type of the baseline potential (e.g., lj).")
+    uncertainty_key: str = Field(default="mace_uncertainty", description="Array key to evaluate structure uncertainty against.")
 
 
 class OTFConfig(BaseModel):
@@ -67,8 +68,10 @@ class OTFConfig(BaseModel):
     )
 
 
+import os
+
 class WorkflowConfig(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra=os.environ.get("PYACEMAKER_CONFIG_EXTRA", "forbid")) # type: ignore[misc]
 
     max_iterations: PositiveInt = Field(..., description="Maximum number of active learning cycles")
     convergence_energy: float = Field(

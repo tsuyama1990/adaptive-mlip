@@ -13,8 +13,15 @@ from .validation import ValidationConfig
 from .workflow import WorkflowConfig
 
 
+import os
+
 class PyAceConfig(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    @classmethod
+    def __pydantic_init_subclass__(cls, **kwargs):
+        # Determine extra parameter based on env var or config hook in future
+        pass
+
+    model_config = ConfigDict(extra=os.environ.get("PYACEMAKER_CONFIG_EXTRA", "forbid")) # type: ignore[misc]
 
     project_name: str = Field(..., min_length=1, description="Name of the project")
     structure: StructureConfig

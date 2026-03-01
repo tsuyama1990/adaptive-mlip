@@ -22,8 +22,9 @@ class MACEManager(BaseOracle):
     Foundation model Oracle based on MACE.
     """
 
-    def __init__(self, model_path: str) -> None:
+    def __init__(self, model_path: str, device: str = "cpu") -> None:
         self.model_path = model_path
+        self.device = device
         self._calculator = None
 
     def _get_calculator(self) -> "Any":
@@ -32,7 +33,7 @@ class MACEManager(BaseOracle):
                 from mace.calculators import (
                     MACECalculator,
                 )
-                self._calculator = MACECalculator(model_paths=self.model_path, device="cpu")
+                self._calculator = MACECalculator(model_paths=self.model_path, device=self.device)
             except ImportError as e:
                 msg = "MACE is not installed. Please install it to use MACEManager."
                 raise RuntimeError(msg) from e
@@ -58,10 +59,11 @@ class TieredOracle(BaseOracle):
     Evaluates structures with MACE first. Only falls back to DFT if uncertainty exceeds the specified threshold.
     """
 
-    def __init__(self, mace_manager: MACEManager, dft_manager: "DFTManager", uncertainty_threshold: float) -> None:
+    def __init__(self, mace_manager: MACEManager, dft_manager: "DFTManager", uncertainty_threshold: float, uncertainty_key: str = "mace_uncertainty") -> None:
         self.mace_manager = mace_manager
         self.dft_manager = dft_manager
         self.uncertainty_threshold = uncertainty_threshold
+        self.uncertainty_key = uncertainty_key
 
     def compute(self, structures: Iterator[Atoms], batch_size: int = 10) -> Iterator[Atoms]:
         if not isinstance(structures, Iterator):
@@ -74,8 +76,8 @@ class TieredOracle(BaseOracle):
 
         for atoms in self.mace_manager.compute(structures, batch_size):
             uncertainty = 0.0
-            if "mace_uncertainty" in atoms.arrays:
-                 uncertainty = atoms.arrays["mace_uncertainty"].max()
+            if self.uncertainty_key in atoms.arrays:
+                 uncertainty = atoms.arrays[self.uncertainty_key].max()
 
             # Simulated check if arrays does not exist.
             if uncertainty > self.uncertainty_threshold:

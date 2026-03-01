@@ -1,6 +1,6 @@
 import logging
 import shutil
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from pathlib import Path
 from typing import Any
 
@@ -38,7 +38,75 @@ from pyacemaker.domain_models.md import MDSimulationResult
 from pyacemaker.domain_models.workflow import CutoutConfig
 from pyacemaker.factory import ModuleFactory
 from pyacemaker.logger import setup_logger
-from pyacemaker.utils.extraction import extract_intelligent_cluster
+from pyacemaker.utils.extraction import ClusterExtractor
+
+
+class Explorer:
+    """Handles the Exploration logic using a generator."""
+    def __init__(self, generator: BaseGenerator | None, config: PyAceConfig, stream_writer: Callable[..., int]) -> None:
+        self.generator = generator
+        self.config = config
+        self.stream_writer = stream_writer
+
+    def explore(self, paths: dict[str, Path], logger: logging.Logger) -> None:
+        if not self.generator:
+            return
+        n_candidates = self.config.workflow.n_candidates
+        candidates_file = paths["candidates"] / FILENAME_CANDIDATES
+        try:
+            candidate_stream = self.generator.generate(n_candidates=n_candidates)
+            total = self.stream_writer(candidate_stream, candidates_file, batch_size=self.config.workflow.batch_size, append=True)
+            logger.info(LOG_GENERATED_CANDIDATES.format(count=total))
+        except Exception as e:
+            msg = f"Exploration failed: {e}"
+            raise OrchestratorError(msg) from e
+
+class Labeler:
+    """Handles the Labeling logic using an oracle."""
+    def __init__(self, oracle: BaseOracle | None, config: PyAceConfig, stream_writer: Callable[..., int]) -> None:
+        self.oracle = oracle
+        self.config = config
+        self.stream_writer = stream_writer
+
+    def label(self, paths: dict[str, Path], logger: logging.Logger) -> None:
+        if not self.oracle:
+            return
+        candidates_file = paths["candidates"] / FILENAME_CANDIDATES
+        if not candidates_file.exists():
+            logger.warning("No candidates found to label.")
+            return
+        batch_size = self.config.workflow.batch_size
+        training_file = paths["training"] / FILENAME_TRAINING
+        try:
+            candidate_stream = iread(str(candidates_file), index=":", format="extxyz")
+            labelled_stream = self.oracle.compute(candidate_stream, batch_size=batch_size)
+            total = self.stream_writer(labelled_stream, training_file, batch_size=batch_size, append=True)
+            logger.info(LOG_COMPUTED_PROPERTIES.format(count=total))
+        except Exception as e:
+            msg = f"Labeling failed: {e}"
+            raise OrchestratorError(msg) from e
+
+class TrainerManager:
+    """Handles the Training logic using a trainer."""
+    def __init__(self, trainer: BaseTrainer | None, config: PyAceConfig) -> None:
+        self.trainer = trainer
+        self.config = config
+
+    def train(self, paths: dict[str, Path], logger: logging.Logger, initial_potential: Path | None = None) -> Path | None:
+        if not self.trainer:
+            return None
+        training_file = paths["training"] / FILENAME_TRAINING
+        if not training_file.exists():
+            logger.warning("No training data found.")
+            return None
+        try:
+            potential_path = self.trainer.train(training_file, initial_potential)
+        except Exception as e:
+            msg = f"Training failed: {e}"
+            raise OrchestratorError(msg) from e
+        else:
+            logger.info(LOG_POTENTIAL_TRAINED)
+            return potential_path
 
 
 class Orchestrator:
@@ -161,80 +229,19 @@ class Orchestrator:
         return count
 
     def _explore(self, paths: dict[str, Path]) -> None:
-        """
-        Step 1: Exploration (Cold Start).
-        Generates initial candidate structures and writes them to disk using efficient streaming.
-        """
-        if not self.generator:
-            return
-
-        n_candidates = self.config.workflow.n_candidates
-        candidates_file = paths["candidates"] / FILENAME_CANDIDATES
-
-        try:
-            candidate_stream = self.generator.generate(n_candidates=n_candidates)
-            # Use explicit chunked streaming
-            total = self._stream_write(
-                candidate_stream,
-                candidates_file,
-                batch_size=self.config.workflow.batch_size,
-                append=True
-            )
-
-            self.logger.info(LOG_GENERATED_CANDIDATES.format(count=total))
-        except Exception as e:
-            msg = f"Exploration failed: {e}"
-            raise OrchestratorError(msg) from e
+        """Step 1: Exploration (Cold Start)."""
+        explorer = Explorer(self.generator, self.config, self._stream_write)
+        explorer.explore(paths, self.logger)
 
     def _label(self, paths: dict[str, Path]) -> None:
-        """
-        Step 2: Labeling (Oracle).
-        Computes properties for candidates and writes labelled data to training set.
-        """
-        if not self.oracle:
-            return
-
-        candidates_file = paths["candidates"] / FILENAME_CANDIDATES
-        if not candidates_file.exists():
-            self.logger.warning("No candidates found to label.")
-            return
-
-        batch_size = self.config.workflow.batch_size
-        training_file = paths["training"] / FILENAME_TRAINING
-
-        try:
-            # Lazy read of candidates
-            candidate_stream = iread(str(candidates_file), index=":", format="extxyz")
-
-            # Streaming computation
-            labelled_stream = self.oracle.compute(candidate_stream, batch_size=batch_size)
-
-            total = self._stream_write(
-                labelled_stream,
-                training_file,
-                batch_size=batch_size,
-                append=True
-            )
-
-            self.logger.info(LOG_COMPUTED_PROPERTIES.format(count=total))
-        except Exception as e:
-            msg = f"Labeling failed: {e}"
-            raise OrchestratorError(msg) from e
+        """Step 2: Labeling (Oracle)."""
+        labeler = Labeler(self.oracle, self.config, self._stream_write)
+        labeler.label(paths, self.logger)
 
     def _train(self, paths: dict[str, Path], initial_potential: Path | None = None) -> Path | None:
         """Step 3: Training"""
-        if not self.trainer:
-            return None
-
-        training_file = paths["training"] / FILENAME_TRAINING
-        if not training_file.exists():
-            self.logger.warning("No training data found, skipping training.")
-            return None
-
-        result = self.trainer.train(training_data_path=training_file, initial_potential=initial_potential)
-        self.logger.info(LOG_POTENTIAL_TRAINED)
-
-        return Path(result) if isinstance(result, (str, Path)) else None
+        trainer_mgr = TrainerManager(self.trainer, self.config)
+        return trainer_mgr.train(paths, self.logger, initial_potential)
 
     def _check_initial_potential(self) -> None:
         """Checks if initial potential exists, if not generates one (Cold Start)."""
@@ -310,7 +317,8 @@ class Orchestrator:
                     buffer_radius=self.config.structure.local_buffer_radius
                 )
 
-            return extract_intelligent_cluster(halt_structure, [center_idx], cutout_cfg)
+            extractor = ClusterExtractor(cutout_cfg)
+            return extractor.extract(halt_structure, [center_idx])
         except Exception:
             self.logger.exception("Failed to extract local cluster.")
             return None

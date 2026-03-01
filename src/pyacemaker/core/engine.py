@@ -69,19 +69,26 @@ class LammpsEngine(BaseEngine):
         try:
             self._ensure_script_readable(script_path)
 
-            # Security: Validate script content against a whitelist of allowed commands
-            allowed_commands = {
-                "clear", "units", "atom_style", "boundary", "read_data", "read_restart",
-                "pair_style", "pair_coeff", "neighbor", "neigh_modify", "timestep",
-                "compute", "variable", "fix", "thermo", "thermo_style", "dump",
-                "minimize", "velocity", "run", "restart", "unfix", "min_style", "dump_modify"
-            }
+            # Security: Validate script content against a configurable whitelist of allowed commands
+
+            allowed_commands = {c.lower() for c in self.config.allowed_commands}
             with script_path.open("r") as f:
                 for line_idx, line in enumerate(f):
-                    line = line.strip()
-                    if not line or line.startswith("#"):
+                    # Remove inline comments (everything after #)
+                    code_part = line.split('#')[0].strip()
+                    if not code_part:
                         continue
-                    cmd = line.split()[0]
+
+                    # Split by whitespace, but handle potential line continuations or quotes minimally
+                    # for safety, if we just want the base command.
+                    tokens = code_part.split()
+                    if not tokens:
+                        continue
+
+                    # Command is always the first token, case-insensitive in lammps usually,
+                    # but safety check should be rigorous
+                    cmd = tokens[0].lower().strip("\"'")
+
                     if cmd not in allowed_commands:
                         raise ValueError(f"Unsafe or unauthorized LAMMPS command detected on line {line_idx+1}: {cmd}")
 
@@ -126,55 +133,59 @@ class LammpsEngine(BaseEngine):
                     restart_file
                 )
 
-            # Initialize Driver with unique log file
-            driver = LammpsDriver(["-screen", LAMMPS_SCREEN_ARG, "-log", str(log_file)])
+            # Initialize Driver with unique log file and configurable screen argument
+            screen_arg = getattr(self.config, "lammps_screen_arg", LAMMPS_SCREEN_ARG)
+            driver = LammpsDriver(["-screen", screen_arg, "-log", str(log_file)])
 
             try:
                 self._execute_simulation(driver, input_script_path)
-
-                # Extract Results
-                try:
-                    energy = driver.extract_variable("pe")
-                    temperature = driver.extract_variable("temp")
-                    step = int(driver.extract_variable("step"))
-                    forces = driver.get_forces().tolist()
-                    stress = driver.get_stress().tolist()
-                except Exception:
-                    energy = 0.0
-                    temperature = 0.0
-                    step = 0
-                    forces = [[0.0, 0.0, 0.0]]
-                    stress = [0.0] * 6
-
-                max_gamma = 0.0
-                if self.config.fix_halt:
-                    try:
-                        max_gamma = driver.extract_variable("max_g")
-                    except Exception:
-                        max_gamma = 0.0
-
-                halted = False
-                if self.config.fix_halt:
-                    # If using fix halt, checking step count is a proxy for early termination
-                    halted = step < self.config.n_steps
-
-                # Result
-                return MDSimulationResult(
-                    energy=energy,
-                    forces=forces,
-                    stress=stress,
-                    halted=halted,
-                    max_gamma=max_gamma,
-                    n_steps=step,
-                    temperature=temperature,
-                    trajectory_path=str(dump_file),
-                    log_path=str(log_file),
-                    halt_structure_path=str(dump_file) if halted else None,
-                    halt_step=step if halted else None
-                )
+                return self._extract_results(driver, dump_file, log_file)
             finally:
                 if hasattr(driver, "close"):
                     driver.close()
+
+    def _extract_results(self, driver: LammpsDriver, dump_file: Path, log_file: Path) -> MDSimulationResult:
+        try:
+            energy = driver.extract_variable("pe")
+            temperature = driver.extract_variable("temp")
+            step = int(driver.extract_variable("step"))
+            forces = driver.get_forces().tolist()
+            stress = driver.get_stress().tolist()
+        except Exception:
+            energy = 0.0
+            temperature = 0.0
+            step = 0
+            forces = [[0.0, 0.0, 0.0]]
+            stress = [0.0] * 6
+
+        max_gamma = 0.0
+        if self.config.fix_halt:
+            try:
+                max_gamma = driver.extract_variable("max_g")
+            except Exception:
+                max_gamma = 0.0
+
+        halted = self._handle_halt_logic(step)
+
+        return MDSimulationResult(
+            energy=energy,
+            forces=forces,
+            stress=stress,
+            halted=halted,
+            max_gamma=max_gamma,
+            n_steps=step,
+            temperature=temperature,
+            trajectory_path=str(dump_file),
+            log_path=str(log_file),
+            halt_structure_path=str(dump_file) if halted else None,
+            halt_step=step if halted else None
+        )
+
+    def _handle_halt_logic(self, step: int) -> bool:
+        if self.config.fix_halt:
+            # If using fix halt, checking step count is a proxy for early termination
+            return step < self.config.n_steps
+        return False
 
     def compute_static_properties(self, structure: Atoms, potential: Any) -> MDSimulationResult:
         """
@@ -211,7 +222,8 @@ class LammpsEngine(BaseEngine):
                 )
 
             # Execute
-            driver = LammpsDriver(["-screen", LAMMPS_SCREEN_ARG, "-log", str(log_file)])
+            screen_arg = getattr(self.config, "lammps_screen_arg", LAMMPS_SCREEN_ARG)
+            driver = LammpsDriver(["-screen", screen_arg, "-log", str(log_file)])
             try:
                 self._execute_simulation(driver, script_path)
                 return driver.get_atoms(elements)

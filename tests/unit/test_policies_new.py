@@ -46,9 +46,10 @@ def test_composite_policy_distribution() -> None:
     config = StructureConfig(elements=["H"], supercell_size=[1,1,1])
     base = Atoms("H")
 
-    import pytest
-    with pytest.raises(NotImplementedError):
-        list(composite.generate(base_structure=base, config=config, n_structures=10))
+    # With n=10, distribution yields len 10
+    # Because SafeBasePolicy fallback works now
+    results = list(composite.generate(base_structure=base, config=config, n_structures=10))
+    assert len(results) == 10
 
 
 def test_md_micro_burst_policy() -> None:
@@ -57,10 +58,10 @@ def test_md_micro_burst_policy() -> None:
     config = StructureConfig(elements=["H"], supercell_size=[1,1,1])
     base = Atoms("H")
 
-    # Due to correct NotImplementedError in SafeBasePolicy sub-classes, we test for it.
-    import pytest
-    with pytest.raises(NotImplementedError):
-        list(policy.generate(base_structure=base, config=config, n_structures=1))
+    results = list(policy.generate(base_structure=base, config=config, n_structures=1))
+    assert len(results) == 1
+    results = list(policy.generate(base_structure=base, config=config, n_structures=1))
+    assert len(results) == 1
 
 def test_mock():
     pass
@@ -71,6 +72,5 @@ def test_normal_mode_policy_fallback() -> None:
     config = StructureConfig(elements=["H"], supercell_size=[1,1,1])
     base = Atoms("H", positions=[[0,0,0]], cell=[10,10,10])
 
-    import pytest
-    with pytest.raises(NotImplementedError):
-        list(policy.generate(base_structure=base, config=config, n_structures=1))
+    results = list(policy.generate(base_structure=base, config=config, n_structures=1))
+    assert len(results) == 1
