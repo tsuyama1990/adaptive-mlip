@@ -34,13 +34,13 @@ def load_yaml(filepath: Path) -> dict[str, Any]:
 load_config = load_yaml
 
 
-def detect_elements(data_path: Path, max_frames: int = 10) -> list[str]:
+def detect_elements(data_path: Path, max_frames: int = 1) -> list[str]:
     """
     Detects elements present in the dataset by reading frames.
 
     Args:
         data_path: Path to the dataset file (xyz, extxyz, etc).
-        max_frames: Max number of frames to check (default: 10).
+        max_frames: Max number of frames to check (default: 1).
 
     Returns:
         List of chemical symbols (sorted alphabetically).

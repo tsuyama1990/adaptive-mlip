@@ -1,5 +1,5 @@
 import os
-from collections.abc import Iterator
+from collections.abc import Generator, Iterator
 from enum import StrEnum
 from pathlib import Path
 
@@ -92,7 +92,7 @@ class MDSimulationResult(BaseModel):
     model_config = ConfigDict(extra="forbid", arbitrary_types_allowed=True)
 
     energy: float = Field(..., description="Final potential energy of the system")
-    forces: Iterator[list[float]] | list[list[float]] = Field(
+    forces: Generator[list[float], None, None] | Iterator[list[float]] | list[list[float]] = Field(
         ...,
         description="Forces on atoms in the final frame (can be generator/iterator for large structs)",
     )
@@ -206,8 +206,8 @@ class MDConfig(BaseModel):
     base_energy: float = Field(
         default=DEFAULT_MD_BASE_ENERGY, description="Baseline energy for mock simulation"
     )
-    default_forces: list[list[float]] = Field(
-        default=[[0.0, 0.0, 0.0]], min_length=1, description="Default forces for mock simulation"
+    default_forces: list[tuple[float, float, float]] = Field(
+        default=[(0.0, 0.0, 0.0)], min_length=1, description="Default forces for mock simulation"
     )
 
     # Spec Section 3.4 (Hybrid Potential & OTF)
@@ -283,9 +283,6 @@ class MDConfig(BaseModel):
             msg = "Default forces must have at least one element."
             raise ValueError(msg)
         for f in self.default_forces:
-            if len(f) != 3:
-                msg = "Default forces must be a list of 3D vectors (list of 3 floats)"
-                raise ValueError(msg)
             if not all(isinstance(x, (int, float)) for x in f):
                 msg = "Default forces elements must be numeric"
                 raise ValueError(msg)
