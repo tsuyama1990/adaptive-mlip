@@ -58,8 +58,8 @@ class LammpsResultParser:
         self, driver: LammpsDriver, dump_file: Path, log_file: Path
     ) -> MDSimulationResult:
         try:
-            energy = float(driver.extract_variable("pe"))
-            temperature = float(driver.extract_variable("temp"))
+            energy = driver.extract_variable("pe")
+            temperature = driver.extract_variable("temp")
             step = int(driver.extract_variable("step"))
             forces = driver.get_forces()
             stress_array = driver.get_stress()
@@ -68,7 +68,7 @@ class LammpsResultParser:
             energy = 0.0
             temperature = 0.0
             step = 0
-            forces = self.config.default_forces  # type: ignore
+            forces = self.config.default_forces
             stress = [0.0] * 6
 
         # Evaluate uncertainty using the two-tier Python watchdog logic
@@ -79,9 +79,8 @@ class LammpsResultParser:
         if self.config.fix_halt:
             halted = step < self.config.n_steps
             import contextlib
-
             with contextlib.suppress(Exception):
-                max_gamma = float(driver.extract_variable("max_g"))
+                max_gamma = driver.extract_variable("max_g")
 
             # Use the Python-side parser to find epicenters and handle thermal noise explicitly if halted
             if halted:
@@ -116,15 +115,16 @@ class LammpsResultParser:
     def _evaluate_uncertainty_stream(self, dump_file: Path) -> tuple[list[int], bool]:
         """
         Implements the Two-Tier Threshold Watchdog in Python.
-        Reads the dump file incrementally frame-by-frame.
+        Reads the dump file incrementally to find the epicenter atoms that exceed `threshold_add_train`.
+        Also verifies if the `threshold_call_dft` was exceeded for `smooth_steps` consecutively.
         """
         import numpy as np
         from ase.io import iread
 
         epicenter_atoms: list[int] = []
-        call_dft_limit = float(self.config.thresholds.threshold_call_dft)
-        add_train_limit = float(self.config.thresholds.threshold_add_train)
-        smooth_steps = int(self.config.thresholds.smooth_steps)
+        call_dft_limit = self.config.thresholds.threshold_call_dft
+        add_train_limit = self.config.thresholds.threshold_add_train
+        smooth_steps = self.config.thresholds.smooth_steps
 
         consecutive_spikes = 0
         true_halt = False
@@ -132,26 +132,24 @@ class LammpsResultParser:
         try:
             for frame in iread(str(dump_file), format="extxyz"):
                 if "c_gamma" in frame.arrays:
-                    gammas: np.ndarray[Any, Any] = frame.get_array("c_gamma")  # type: ignore[no-untyped-call]
-                    frame_max = float(np.max(gammas))
+                    gammas = frame.get_array("c_gamma")
+                    frame_max = np.max(gammas)
 
                     if frame_max > call_dft_limit:
                         consecutive_spikes += 1
                         if consecutive_spikes >= smooth_steps:
                             true_halt = True
-                            # Extract using generator/iterator to appease strict O(1) checks if needed,
-                            # though gammas is already localized to this frame.
+                            # Find epicenters using the lower tier threshold
                             epicenter_indices = np.where(gammas > add_train_limit)[0]
-                            epicenter_atoms = [int(idx) for idx in epicenter_indices]
+                            epicenter_atoms = list(epicenter_indices)
+                            # Once we find a true halt and its epicenters, we can break
                             break
                     else:
                         consecutive_spikes = 0
         except Exception as e:
+            # If reading fails, assume we use what we have or fallback
             import logging
-
-            logging.getLogger(__name__).warning(
-                f"Error reading dump file for uncertainty evaluation: {e}"
-            )
+            logging.getLogger(__name__).warning(f"Error reading dump file for uncertainty evaluation: {e}")
 
         return epicenter_atoms, true_halt
 
@@ -195,7 +193,6 @@ class LammpsEngine(BaseEngine):
         )
         return ctx, data_file, dump_file, log_file, elements, potential_path
 
-
     def run(
         self, structure: Atoms | None, potential: Any, restart_file: Path | None = None
     ) -> MDSimulationResult:
@@ -216,14 +213,16 @@ class LammpsEngine(BaseEngine):
                     f, potential_path, data_file, dump_file, elements, restart_file
                 )
 
-            # Initialize Driver with unique log file and use try/finally for cleanup
+            # Initialize Driver with unique log file
             driver = LammpsDriver(["-screen", LAMMPS_SCREEN_ARG, "-log", str(log_file)])
+
             try:
                 self.executor.execute_simulation(driver, input_script_path)
                 return self.parser.parse_md_result(driver, dump_file, log_file)
             finally:
                 if hasattr(driver, "close"):
                     driver.close()
+
     def compute_static_properties(self, structure: Atoms, potential: Any) -> MDSimulationResult:
         """
         Computes static properties (energy, forces, stress) for a structure.
@@ -252,7 +251,7 @@ class LammpsEngine(BaseEngine):
             with script_path.open("w") as f:
                 self.generator.write_minimization_script(f, potential_path, data_file, elements)
 
-            # Execute with try/finally
+            # Execute
             driver = LammpsDriver(["-screen", LAMMPS_SCREEN_ARG, "-log", str(log_file)])
             try:
                 self.executor.execute_simulation(driver, script_path)

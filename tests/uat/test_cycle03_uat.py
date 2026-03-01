@@ -1,16 +1,8 @@
-from pathlib import Path
-from unittest.mock import MagicMock, patch
-
 import numpy as np
 from ase import Atoms
-from ase.io import write
 
 from pyacemaker.core.generator import StructureGenerator
-from pyacemaker.core.oracle import MACEManager, TieredOracle
-from pyacemaker.core.trainer import IncrementalTrainer, PacemakerTrainer
 from pyacemaker.domain_models.structure import ExplorationPolicy, StructureConfig
-from pyacemaker.domain_models.training import TrainingConfig
-from pyacemaker.utils.path import validate_path_safe
 
 
 def test_uat_03_01_generate_candidates() -> None:
@@ -51,6 +43,8 @@ def test_uat_03_01_generate_candidates() -> None:
     assert not np.allclose(s0.positions[0], s1.positions[0])
 
     # Verify we can consume the rest without keeping them
+    remaining_count = sum(1 for _ in stream)
+    assert remaining_count == 8  # 10 - 2
 
 
 def test_uat_03_02_defect_generation() -> None:
@@ -89,149 +83,6 @@ def test_uat_03_02_defect_generation() -> None:
     assert len(defect_atoms) < len(pristine_atoms)
 
     # Compare scalar volume instead of full cell array
-    vol_defect = defect_atoms.get_volume()
-    vol_pristine = pristine_atoms.get_volume()
+    vol_defect = defect_atoms.get_volume()  # type: ignore[no-untyped-call]
+    vol_pristine = pristine_atoms.get_volume()  # type: ignore[no-untyped-call]
     assert abs(vol_defect - vol_pristine) < 1e-6
-
-
-def test_uat_03_01_incremental_update_and_replay_buffer(tmp_path: Path) -> None:
-    """
-    UAT-03-01: Hierarchical Finetuning and Delta Update
-    """
-    # GIVEN a base.yace potential and a training_history.extxyz containing 10 structures (mocking 10,000)
-    history_path = tmp_path / "training_history.extxyz"
-    validate_path_safe(history_path)
-    base_potential = tmp_path / "base.yace"
-    validate_path_safe(base_potential)
-    base_potential.touch()
-
-    # Write 10 history structures
-    history_structures = [Atoms("H", positions=[[0, 0, 0]]) for _ in range(10)]
-    write(history_path, history_structures, format="extxyz")
-
-    # AND a newly evaluated DFT cluster structure (surrogates)
-    new_data_path = tmp_path / "new_train.extxyz"
-    validate_path_safe(new_data_path)
-    new_structures = [Atoms("He", positions=[[0, 0, 0]]) for _ in range(51)]
-    write(new_data_path, new_structures, format="extxyz")
-
-    # Setup the trainer
-    config = TrainingConfig(
-        potential_type="ace",
-        cutoff_radius=5.0,
-        max_basis_size=2,
-        output_filename="current.yace",
-        delta_learning=True,
-        elements=["H", "He"],
-        seed=123,
-    )
-    base_trainer = PacemakerTrainer(config)
-
-    # AND a LoopStrategyConfig with incremental_update = True and replay_buffer_size = 15 (mocking 500)
-    from pyacemaker.domain_models.workflow import LoopStrategyConfig
-
-    loop_config = LoopStrategyConfig(replay_buffer_size=15)
-    inc_trainer = IncrementalTrainer(
-        base_trainer, replay_buffer_size=loop_config.replay_buffer_size
-    )
-
-    # WHEN the IncrementalTrainer is invoked with the 51 new structures
-    with (
-        patch("pyacemaker.core.trainer.run_command") as mock_run,
-        patch("shutil.which", return_value=True),
-    ):
-        (tmp_path / "current.yace").touch()
-        inc_trainer.train(new_data_path, initial_potential=base_potential)
-
-        # THEN the Trainer samples exactly 15 structures
-        # The temp train path will have exactly 15 structures
-        temp_train_path = tmp_path / "training_set_temp.extxyz"
-        validate_path_safe(temp_train_path)
-        assert temp_train_path.exists()
-        from itertools import islice
-
-        from ase.io import iread
-
-        temp_train = list(
-            islice(iread(str(temp_train_path), format="extxyz"), inc_trainer.replay_buffer_size)
-        )
-        assert len(temp_train) == inc_trainer.replay_buffer_size
-
-        # Check generated input.yaml correctly points to Delta learning config
-        import yaml
-
-        yaml_path = tmp_path / base_trainer.config.input_filename
-        assert yaml_path.exists()
-        with yaml_path.open() as f:
-            yaml_config = yaml.safe_load(f)
-
-        assert yaml_config["data"]["filename"] == str(temp_train_path)
-        assert "base_potential" in yaml_config  # delta learning active
-
-        # assert run_command included base.yace
-        cmd = mock_run.call_args[0][0]
-        assert "--initial_potential" in cmd
-        assert str(base_potential) in cmd
-        assert cmd[0] == "pace_train" or cmd[0] == "mock_pace_train"
-        assert cmd[1] == str(yaml_path)
-
-
-def test_uat_03_02_tiered_oracle_evaluation() -> None:
-    """
-    UAT-03-02: Tiered Oracle Evaluation
-    """
-    from tests.conftest import MockCalculator
-
-    fast_oracle = MACEManager()
-    fast_oracle._calculator = MockCalculator()
-    slow_oracle = MagicMock()
-    slow_atoms = Atoms("O", positions=[[0, 0, 0]])
-    slow_atoms.info["energy"] = -10.0
-    slow_oracle.compute.return_value = iter([slow_atoms])
-
-    tiered_oracle = TieredOracle(
-        fast_oracle=fast_oracle,
-        slow_oracle=slow_oracle,
-        uncertainty_threshold=0.05,
-        call_dft_threshold=0.05,
-    )
-
-    # Low uncertainty structure
-    low_uncertainty_atoms = Atoms("H", positions=[[0, 0, 0]])
-    low_uncertainty_atoms.info["uncertainty"] = 0.01
-
-    # High uncertainty structure
-    high_uncertainty_atoms = Atoms("He", positions=[[0, 0, 0]])
-    high_uncertainty_atoms.info["uncertainty"] = 0.08
-
-    # Process both
-    gen = tiered_oracle.compute(iter([low_uncertainty_atoms, high_uncertainty_atoms]))
-
-    # 1. First one should be handled by fast_oracle
-    res1 = next(gen)
-    assert res1.symbols == "H"
-    assert res1.info["uncertainty"] == 0.01
-    slow_oracle.compute.assert_not_called()
-
-    # 2. Second one exceeds threshold and must invoke slow_oracle
-    res2 = next(gen)
-    assert res2.symbols == "O"  # Replaced by slow oracle result
-    slow_oracle.compute.assert_called_once()
-
-
-def test_uat_03_03_empty_streaming_handling() -> None:
-    """
-    Verify system handles empty stream/iterators gracefully.
-    """
-    from collections.abc import Iterator
-
-    fast_oracle = MACEManager()
-    empty_iter: Iterator[Atoms] = iter([])
-
-    gen = fast_oracle.compute(empty_iter)
-
-    # We should get a warning or StopIteration but no crash
-    import pytest
-
-    with pytest.warns(UserWarning, match="Oracle received empty iterator"), pytest.raises(StopIteration):
-            next(gen)

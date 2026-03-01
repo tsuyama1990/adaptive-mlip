@@ -5,10 +5,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from ase import Atoms
-from ase.io import read, write
+from ase.io import write
 
 from pyacemaker.core.exceptions import TrainerError
-from pyacemaker.core.trainer import IncrementalTrainer, PacemakerTrainer
+from pyacemaker.core.trainer import PacemakerTrainer
 from pyacemaker.domain_models.training import TrainingConfig
 
 
@@ -149,40 +149,5 @@ def test_train_initial_potential_missing(
 
     initial_pot = tmp_path / "missing.yace"
 
-    with pytest.raises(FileNotFoundError):
+    with pytest.raises(TrainerError, match="Initial potential not found"):
         trainer.train(data_path, initial_potential=initial_pot)
-
-
-def test_incremental_trainer_replay_buffer(trainer: PacemakerTrainer, tmp_path: Path) -> None:
-    data_path = tmp_path / "new_train.extxyz"
-    history_path = tmp_path / "training_history.extxyz"
-
-    # Create mock history with 10 structures
-    history_structures = [Atoms("H", positions=[[0, 0, 0]]) for _ in range(10)]
-    write(history_path, history_structures, format="extxyz")
-
-    # Create 10 new structures
-    new_structures = [Atoms("He", positions=[[0, 0, 0]]) for _ in range(10)]
-    write(data_path, new_structures, format="extxyz")
-
-    # Configure IncrementalTrainer with replay_buffer_size = 15
-    inc_trainer = IncrementalTrainer(base_trainer=trainer, replay_buffer_size=15)
-
-    with patch.object(trainer, "train") as mock_train:
-        mock_train.return_value = tmp_path / "dummy.yace"
-
-        inc_trainer.train(data_path)
-
-        # history should now have 20 structures
-        updated_history = list(read(str(history_path), index=":"))
-        assert len(updated_history) == 20
-
-        # training_set_temp.extxyz should have 15 structures
-        temp_train_path = tmp_path / "training_set_temp.extxyz"
-        assert temp_train_path.exists()
-        temp_train = list(read(str(temp_train_path), index=":"))
-        assert len(temp_train) == 15
-
-        # assert base trainer was called with the temp path
-        mock_train.assert_called_once()
-        assert mock_train.call_args[0][0] == temp_train_path

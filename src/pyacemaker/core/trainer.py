@@ -1,12 +1,7 @@
-import os
 import shutil
 import subprocess
-from collections import deque
 from pathlib import Path
 from typing import Any
-
-from ase import Atoms
-from ase.io import iread, read, write
 
 from pyacemaker.core.base import BaseTrainer
 from pyacemaker.core.config_generator import PacemakerConfigGenerator
@@ -46,36 +41,34 @@ class PacemakerTrainer(BaseTrainer):
         Raises:
             TrainerError: If the training data file does not exist or format is invalid.
         """
-        # Get executable from env var, defaulting to pace_train
-        executable = os.environ.get("PACE_TRAIN_EXECUTABLE", "pace_train")
-        if not shutil.which(executable):
-            msg = f"Executable '{executable}' not found in PATH."
+        # Ensure pace_train is installed
+        if not shutil.which("pace_train"):
+            msg = "Executable 'pace_train' not found in PATH."
             raise TrainerError(msg)
 
-        data_path = Path(training_data_path).resolve(strict=True)
+        data_path = Path(training_data_path).resolve()
         self._validate_training_data(data_path)
 
         # Determine output directory (same as data file)
         output_dir = data_path.parent
-        input_yaml_path = output_dir / self.config.input_filename
+        input_yaml_path = output_dir / "input.yaml"
         potential_path = output_dir / self.config.output_filename
 
         # Generate configuration
         pacemaker_config = self.config_generator.generate(str(data_path), str(potential_path))
         dump_yaml(pacemaker_config, input_yaml_path)
 
-        # Run pace_train safely
-        cmd = [executable, str(input_yaml_path)]
+        # Run pace_train
+        cmd = ["pace_train", str(input_yaml_path)]
 
         if initial_potential:
-            initial_path = Path(initial_potential).resolve(strict=True)
+            initial_path = Path(initial_potential)
             if not initial_path.exists():
                 msg = f"Initial potential not found: {initial_path}"
                 raise TrainerError(msg)
             cmd.extend(["--initial_potential", str(initial_path)])
 
         try:
-            # Use shell=False implicitly (default for list commands)
             run_command(cmd)
         except subprocess.CalledProcessError as e:
             # Capture specific subprocess error
@@ -106,58 +99,3 @@ class PacemakerTrainer(BaseTrainer):
         if data_path.stat().st_size == 0:
             msg = f"Training data file is empty: {data_path}"
             raise TrainerError(msg)
-
-
-class IncrementalTrainer(BaseTrainer):
-    """
-    A trainer wrapper that adds Incremental (Delta) Learning capabilities
-    and manages a Replay Buffer to prevent catastrophic forgetting.
-    """
-
-    def __init__(self, base_trainer: PacemakerTrainer, replay_buffer_size: int = 500) -> None:
-        self.base_trainer: PacemakerTrainer = base_trainer
-        self.replay_buffer_size = replay_buffer_size
-
-    def train(
-        self, training_data_path: str | Path, initial_potential: str | Path | None = None
-    ) -> Any:
-        """
-        Trains a potential incrementally.
-
-        1. Reads new structures from training_data_path.
-        2. Appends to master history file (training_history.extxyz) without loading history into memory.
-        3. Samples up to replay_buffer_size from history using a bounded deque to prevent OOM.
-        4. Writes sampled structures to a temporary training set.
-        5. Calls base_trainer.train with the temporary set and initial_potential.
-        """
-        data_path = Path(training_data_path).resolve(strict=True)
-        output_dir = data_path.parent
-        history_path = output_dir / self.base_trainer.config.history_filename
-        temp_train_path = output_dir / self.base_trainer.config.temp_training_filename
-
-        # Read new structures (assume new_structures is small enough for memory, as it's just candidates)
-        new_structures = list(read(str(data_path), index=":"))
-
-        # Append new structures to history file efficiently
-        write(str(history_path), new_structures, format="extxyz", append=True)
-
-        # Replay buffer sampling via bounded deque to handle memory safety over massive history files
-        buffer: deque[Atoms] = deque(maxlen=self.replay_buffer_size)
-        try:
-            for frame in iread(str(history_path), format="extxyz"):
-                buffer.append(frame)
-        except Exception as e:
-            import logging
-
-            logging.getLogger(__name__).warning(f"Error reading history for replay buffer: {e}")
-
-        sampled_structures = list(buffer)
-
-        # Write out temp training set
-        write(str(temp_train_path), sampled_structures, format="extxyz")
-
-        # Train using base trainer
-        if initial_potential:
-            initial_potential = Path(initial_potential).resolve(strict=True)
-
-        return self.base_trainer.train(temp_train_path, initial_potential=initial_potential)
