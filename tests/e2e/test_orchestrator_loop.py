@@ -135,7 +135,6 @@ def test_cold_start_empty_iterator(orchestrator: Orchestrator, tmp_path: Path) -
     orchestrator.generator.generate = lambda n: iter([])  # type: ignore[assignment]
 
     from pyacemaker.core.exceptions import OrchestratorError
-
     with pytest.raises(OrchestratorError):
         orchestrator._check_initial_potential()
 

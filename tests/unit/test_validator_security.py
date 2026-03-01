@@ -81,9 +81,7 @@ class TestLammpsInputValidator:
         # So it should raise ValueError from validate_path_safe
 
         # Updated match string to be broad enough to catch "Path traversal detected" OR "outside allowed"
-        with pytest.raises(
-            ValueError, match="Path is a symlink, which is not allowed for security reasons"
-        ):
+        with pytest.raises(ValueError, match="Path is a symlink, which is not allowed for security reasons"):
             LammpsInputValidator.validate_potential(symlink)
 
     def test_validate_potential_symlink_internal(self, tmp_path, monkeypatch):
@@ -96,7 +94,5 @@ class TestLammpsInputValidator:
         symlink.symlink_to(real_file)
 
         # Symlinks are now rejected outright for security reasons
-        with pytest.raises(
-            ValueError, match="Path is a symlink, which is not allowed for security reasons"
-        ):
+        with pytest.raises(ValueError, match="Path is a symlink, which is not allowed for security reasons"):
             LammpsInputValidator.validate_potential(symlink)

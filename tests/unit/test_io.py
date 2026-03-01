@@ -38,10 +38,9 @@ def test_detect_elements(tmp_path):
 
     write(xyz_file, [atoms1, atoms2])
 
-    # Now we only check the first frame by default so it will only find H and O
     elements = detect_elements(xyz_file)
-    assert set(elements) == {"H", "O"}
-    assert elements == ["H", "O"]  # sorted
+    assert set(elements) == {"H", "O", "C"}
+    assert elements == ["C", "H", "O"]  # sorted
 
 
 def test_detect_elements_empty(tmp_path):

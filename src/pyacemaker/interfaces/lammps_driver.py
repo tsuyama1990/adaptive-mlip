@@ -1,6 +1,5 @@
 import logging
 import re
-from collections.abc import Generator
 from pathlib import Path
 
 import numpy as np
@@ -171,21 +170,6 @@ class LammpsDriver:
         f_ptr = self.lmp.gather_atoms("f", 1, 3)
         forces_view = np.ctypeslib.as_array(f_ptr, shape=(natoms, 3))
         return forces_view.copy()
-
-    def stream_forces(self) -> Generator[list[float], None, None]:
-        """
-        Stream forces for all atoms row-by-row to avoid materializing the entire Nx3 array.
-        """
-        natoms = self.lmp.get_natoms()
-        if natoms == 0:
-            return
-
-        f_ptr = self.lmp.gather_atoms("f", 1, 3)
-        forces_view = np.ctypeslib.as_array(f_ptr, shape=(natoms, 3))
-
-        # Generator yielding row by row from the ctypes view without copying
-        for i in range(natoms):
-            yield [float(forces_view[i, 0]), float(forces_view[i, 1]), float(forces_view[i, 2])]
 
     def get_stress(self) -> np.ndarray:
         """

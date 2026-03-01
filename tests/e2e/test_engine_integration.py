@@ -56,12 +56,8 @@ def test_engine_integration_workflow(
 
     # 2. Execution
     import numpy as np
-
     engine = LammpsEngine(mock_md_config)
-    with patch(
-        "pyacemaker.interfaces.lammps_driver.LammpsDriver.get_forces",
-        return_value=np.array([[0.0, 0.0, 0.0]]),
-    ):
+    with patch("pyacemaker.interfaces.lammps_driver.LammpsDriver.get_forces", return_value=np.array([[0.0, 0.0, 0.0]])):
         result = engine.run(atoms, potential_path)
 
     # 3. Verification

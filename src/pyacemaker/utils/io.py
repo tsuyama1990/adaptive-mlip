@@ -34,13 +34,13 @@ def load_yaml(filepath: Path) -> dict[str, Any]:
 load_config = load_yaml
 
 
-def detect_elements(data_path: Path, max_frames: int = 1) -> list[str]:
+def detect_elements(data_path: Path, max_frames: int = 10) -> list[str]:
     """
     Detects elements present in the dataset by reading frames.
 
     Args:
         data_path: Path to the dataset file (xyz, extxyz, etc).
-        max_frames: Max number of frames to check (default: 1).
+        max_frames: Max number of frames to check (default: 10).
 
     Returns:
         List of chemical symbols (sorted alphabetically).
@@ -84,6 +84,8 @@ def _get_atomic_mass(symbol: str) -> float:
 
         _ATOMIC_MASSES_CACHE[symbol] = atomic_masses[atomic_numbers[symbol]]
     return _ATOMIC_MASSES_CACHE[symbol]
+
+
 
 
 def write_lammps_streaming(
@@ -163,10 +165,8 @@ def write_lammps_streaming(
 
     fileobj.write("\n")
 
-
 def _parse_and_write_lattice(props_line: str, output_fileobj: TextIO) -> None:
     import re
-
     lattice_match = re.search(r'Lattice="([^"]+)"', props_line)
     if lattice_match:
         try:
@@ -190,7 +190,6 @@ def _parse_and_write_lattice(props_line: str, output_fileobj: TextIO) -> None:
         except (ValueError, IndexError):
             pass
 
-
 def _write_masses(output_fileobj: TextIO, species: list[str], type_map: dict[str, int]) -> None:
     output_fileobj.write("Masses\n\n")
     for s in species:
@@ -199,10 +198,7 @@ def _write_masses(output_fileobj: TextIO, species: list[str], type_map: dict[str
         output_fileobj.write(f"{type_id} {mass:.4f} # {s}\n")
     output_fileobj.write("\n")
 
-
-def _write_atoms(
-    fin: TextIO, output_fileobj: TextIO, natoms: int, species: list[str], type_map: dict[str, int]
-) -> None:
+def _write_atoms(fin: TextIO, output_fileobj: TextIO, natoms: int, species: list[str], type_map: dict[str, int]) -> None:
     output_fileobj.write("Atoms # atomic\n\n")
     for i in range(natoms):
         line = fin.readline()
@@ -219,7 +215,6 @@ def _write_atoms(
             x, y, z = parts[1], parts[2], parts[3]
             output_fileobj.write(f"{i + 1} {t} {x} {y} {z}\n")
 
-
 def _read_natoms(first_line: str, input_path: Path) -> int:
     if not first_line:
         msg = f"Input structure file {input_path} is empty."
@@ -230,18 +225,13 @@ def _read_natoms(first_line: str, input_path: Path) -> int:
         msg = f"Invalid extxyz format, expected integer for atom count on line 1, got: {first_line}"
         raise ValueError(msg) from err
 
-
 def _write_header(output_fileobj: TextIO, natoms: int, num_species: int) -> None:
     from pyacemaker.domain_models.constants import LAMMPS_FORMAT_STREAMING_HEADER
-
     output_fileobj.write(LAMMPS_FORMAT_STREAMING_HEADER)
     output_fileobj.write(f"{natoms} atoms\n")
     output_fileobj.write(f"{num_species} atom types\n\n")
 
-
-def stream_extxyz_to_lammps(
-    input_path: Path, output_fileobj: TextIO, species: list[str]
-) -> list[str]:
+def stream_extxyz_to_lammps(input_path: Path, output_fileobj: TextIO, species: list[str]) -> list[str]:
     """
     Streams an extended XYZ file directly to LAMMPS data format.
     Guarantees O(1) memory usage by never materializing ASE Atoms objects.

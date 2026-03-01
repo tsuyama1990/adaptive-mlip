@@ -102,33 +102,6 @@ __all__ = [
     "FILE_NAME_DEPOSITED",
     "FILE_NAME_EON_POS",
     "FILE_NAME_MGO_SURFACE",
-    "LAMMPS_CMD_ATOM_STYLE",
-    "LAMMPS_CMD_BOUNDARY",
-    "LAMMPS_CMD_CLEAR",
-    "LAMMPS_CMD_COMPUTE_GAMMA",
-    "LAMMPS_CMD_COMPUTE_MAX_GAMMA",
-    "LAMMPS_CMD_DUMP",
-    "LAMMPS_CMD_FIX_HALT",
-    "LAMMPS_CMD_FIX_LANGEVIN",
-    "LAMMPS_CMD_FIX_MC_SWAP",
-    "LAMMPS_CMD_FIX_NPT",
-    "LAMMPS_CMD_FIX_NVE",
-    "LAMMPS_CMD_MINIMIZE",
-    "LAMMPS_CMD_MIN_STYLE",
-    "LAMMPS_CMD_NEIGHBOR",
-    "LAMMPS_CMD_NEIGH_MODIFY",
-    "LAMMPS_CMD_READ_DATA",
-    "LAMMPS_CMD_READ_RESTART",
-    "LAMMPS_CMD_RESTART",
-    "LAMMPS_CMD_RUN",
-    "LAMMPS_CMD_THERMO",
-    "LAMMPS_CMD_THERMO_STYLE",
-    "LAMMPS_CMD_TIMESTEP",
-    "LAMMPS_CMD_UNFIX",
-    "LAMMPS_CMD_UNITS",
-    "LAMMPS_CMD_VARIABLE",
-    "LAMMPS_CMD_VAR_MAX_G",
-    "LAMMPS_CMD_VELOCITY_CREATE",
     "LAMMPS_FORMAT_STREAMING_HEADER",
     "LAMMPS_MINIMIZE_MAX_ITER",
     "LAMMPS_MINIMIZE_STEPS",
@@ -144,36 +117,3 @@ __all__ = [
     "RECIPROCAL_FACTOR",
     "SCENARIO_NAME_FEPT_MGO",
 ]
-
-# LAMMPS Command Templates
-LAMMPS_CMD_NEIGHBOR = "neighbor {skin} bin\n"
-LAMMPS_CMD_NEIGH_MODIFY = "neigh_modify delay 0 every 1 check yes\n"
-LAMMPS_CMD_TIMESTEP = "timestep {ts}\n"
-LAMMPS_CMD_CLEAR = "clear\n"
-LAMMPS_CMD_UNITS = "units metal\n"
-LAMMPS_CMD_ATOM_STYLE = "atom_style {style}\n"
-LAMMPS_CMD_BOUNDARY = "boundary p p p\n"
-LAMMPS_CMD_READ_DATA = "read_data {data}\n"
-LAMMPS_CMD_READ_RESTART = "read_restart {restart}\n"
-LAMMPS_CMD_MIN_STYLE = "min_style {style}\n"
-LAMMPS_CMD_MINIMIZE = "minimize {tol} {ftol} {steps} {max_iter}\n"
-LAMMPS_CMD_VELOCITY_CREATE = "velocity all create {temp} {seed}\n"
-LAMMPS_CMD_FIX_NPT = "fix npt all npt temp {t_start} {t_end} {tdamp} iso {p_start} {p_end} {pdamp}\n"
-LAMMPS_CMD_RUN = "run {steps}\n"
-LAMMPS_CMD_THERMO = "thermo {freq}\n"
-LAMMPS_CMD_THERMO_STYLE = "thermo_style custom {style}\n"
-LAMMPS_CMD_DUMP = "dump traj all custom {freq} {dump} {cols}\n"
-LAMMPS_CMD_RESTART = "restart {freq} {restart}\n"
-LAMMPS_CMD_VARIABLE = "variable {name} equal {name}\n"
-
-# Watchdog & Special
-LAMMPS_CMD_COMPUTE_GAMMA = "compute gamma all pace {pot}\n"
-LAMMPS_CMD_COMPUTE_MAX_GAMMA = "compute max_gamma all reduce max c_gamma\n"
-LAMMPS_CMD_VAR_MAX_G = "variable max_g equal c_max_gamma\n"
-LAMMPS_CMD_FIX_HALT = "fix halt_check all halt {interval} v_max_g > {thresh} error continue\n"
-LAMMPS_CMD_FIX_MC_SWAP = "fix mc_swap all atom/swap {freq} 1 {seed} {temp} ke no types {types}\n"
-
-# Soft start
-LAMMPS_CMD_FIX_LANGEVIN = "fix soft_start_langevin all langevin {t_start} {t_stop} {damp} {seed}\n"
-LAMMPS_CMD_FIX_NVE = "fix soft_start_nve all nve\n"
-LAMMPS_CMD_UNFIX = "unfix {name}\n"
