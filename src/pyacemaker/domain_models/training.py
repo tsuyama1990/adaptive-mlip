@@ -92,6 +92,12 @@ class TrainingConfig(BaseModel):
     )
 
     # Mocking & Output (Audit Requirement)
+
+    # Missing required elements based on audit
+    input_filename: str = Field("input.yaml", description="Filename for the generated pacemaker configuration")
+    history_filename: str = Field("training_history.extxyz", description="Filename for the accumulated history")
+    temp_training_filename: str = Field("training_set_temp.extxyz", description="Filename for temporary extracted training subset")
+
     output_filename: str = Field(
         FILENAME_POTENTIAL, description="Filename for the trained potential"
     )

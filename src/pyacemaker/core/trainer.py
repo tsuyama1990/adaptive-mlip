@@ -57,7 +57,7 @@ class PacemakerTrainer(BaseTrainer):
 
         # Determine output directory (same as data file)
         output_dir = data_path.parent
-        input_yaml_path = output_dir / "input.yaml"
+        input_yaml_path = output_dir / self.config.input_filename
         potential_path = output_dir / self.config.output_filename
 
         # Generate configuration
@@ -114,8 +114,8 @@ class IncrementalTrainer(BaseTrainer):
     and manages a Replay Buffer to prevent catastrophic forgetting.
     """
 
-    def __init__(self, base_trainer: BaseTrainer, replay_buffer_size: int = 500) -> None:
-        self.base_trainer = base_trainer
+    def __init__(self, base_trainer: PacemakerTrainer, replay_buffer_size: int = 500) -> None:
+        self.base_trainer: PacemakerTrainer = base_trainer
         self.replay_buffer_size = replay_buffer_size
 
     def train(
@@ -132,8 +132,8 @@ class IncrementalTrainer(BaseTrainer):
         """
         data_path = Path(training_data_path).resolve(strict=True)
         output_dir = data_path.parent
-        history_path = output_dir / "training_history.extxyz"
-        temp_train_path = output_dir / "training_set_temp.extxyz"
+        history_path = output_dir / self.base_trainer.config.history_filename
+        temp_train_path = output_dir / self.base_trainer.config.temp_training_filename
 
         # Read new structures (assume new_structures is small enough for memory, as it's just candidates)
         new_structures = list(read(str(data_path), index=":"))

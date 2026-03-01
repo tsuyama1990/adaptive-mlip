@@ -104,7 +104,7 @@ src/pyacemaker/domain_models/logging.py           31      9    71%   24-25, 31, 
 src/pyacemaker/domain_models/md.py               131     22    83%   40, 109-110, 116-117, 119-120, 124-125, 127-128, 259, 265-266, 274-275, 281-282, 285-286, 288-289
 src/pyacemaker/domain_models/scenario.py           7      0   100%
 src/pyacemaker/domain_models/structure.py         61      4    93%   89-90, 108-109
-src/pyacemaker/domain_models/training.py          46      0   100%
+src/pyacemaker/domain_models/training.py          49      0   100%
 src/pyacemaker/domain_models/validation.py        17      0   100%
 src/pyacemaker/domain_models/workflow.py          41      0   100%
 src/pyacemaker/factory.py                         32      3    91%   82-84
@@ -130,5 +130,5 @@ src/pyacemaker/utils/phonons.py                   51      2    96%   51, 69
 src/pyacemaker/utils/process.py                   25     21    16%   35-77
 src/pyacemaker/utils/structure.py                  6      2    67%   19-20
 ----------------------------------------------------------------------------
-TOTAL                                           2957    442    85%
-======================== 252 passed, 1 warning in 3.53s ========================
+TOTAL                                           2960    442    85%
+======================== 252 passed, 1 warning in 3.54s ========================
