@@ -149,7 +149,7 @@ def test_train_initial_potential_missing(
 
     initial_pot = tmp_path / "missing.yace"
 
-    with pytest.raises(TrainerError, match="Initial potential not found"):
+    with pytest.raises(FileNotFoundError):
         trainer.train(data_path, initial_potential=initial_pot)
 
 

@@ -3,7 +3,7 @@ import logging
 import tempfile
 from collections.abc import Callable, Iterator
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 from ase import Atoms
 from ase.calculators.calculator import PropertyNotImplementedError
@@ -14,6 +14,24 @@ from pyacemaker.domain_models import DFTConfig
 from pyacemaker.domain_models.constants import ERR_ORACLE_FAILED, ERR_ORACLE_ITERATOR
 from pyacemaker.interfaces.qe_driver import QEDriver
 from pyacemaker.utils.embedding import embed_cluster
+
+try:
+    from mace.calculators import mace_mp
+
+    MACE_AVAILABLE = True
+except ImportError:
+    MACE_AVAILABLE = False
+    mace_mp = None
+
+
+class CalculatorProtocol(Protocol):
+    results: dict[str, Any]
+
+    def calculate(self, atoms: Atoms, properties: list[str], system_changes: list[str]) -> None: ...
+    def get_property(
+        self, name: str, atoms: Atoms | None = None, allow_calculation: bool = True
+    ) -> Any: ...
+
 
 logger = logging.getLogger(__name__)
 
@@ -221,21 +239,17 @@ class MACEManager(BaseOracle):
 
     def __init__(self, model_path: str = "mace-mp-0-medium") -> None:
         self.model_path = model_path
-        self._calculator: Any = None
+        self._calculator: CalculatorProtocol | None = None
 
     @property
-    def calculator(self) -> Any:
+    def calculator(self) -> CalculatorProtocol:
         if self._calculator is None:
-            # Import here to avoid making mace a strict dependency if unused
-            try:
-                from mace.calculators import mace_mp
-
-                # In real scenario, load the correct model.
-                # Use mace_mp(model=self.model_path) if available, else a dummy or standard init.
-                self._calculator = mace_mp(model=self.model_path)
-            except ImportError as e:
+            if not MACE_AVAILABLE:
                 msg = "The 'mace' package is required for MACEManager. Please install it with 'pip install mace-torch'"
-                raise RuntimeError(msg) from e
+                raise RuntimeError(msg)
+
+            # Use mace_mp(model=self.model_path) if available, else a dummy or standard init.
+            self._calculator = mace_mp(model=self.model_path)
         return self._calculator
 
     def compute(

@@ -79,19 +79,19 @@ src/pyacemaker/core/active_set.py                 71      9    87%   46-47, 60-6
 src/pyacemaker/core/base.py                       29      0   100%
 src/pyacemaker/core/config_generator.py           36      3    92%   56-58
 src/pyacemaker/core/directory_manager.py          20      0   100%
-src/pyacemaker/core/engine.py                    136     39    71%   27, 67-72, 91-98, 121-154, 185, 231-236
+src/pyacemaker/core/engine.py                    136     39    71%   27, 67-72, 92-99, 121-156, 187, 232-237
 src/pyacemaker/core/exceptions.py                  8      0   100%
 src/pyacemaker/core/generator.py                  58     10    83%   36-39, 59, 62, 106, 119, 121, 146
 src/pyacemaker/core/io_manager.py                 50     15    70%   43-44, 62-66, 73-76, 82, 91-92, 98-100
 src/pyacemaker/core/lammps_generator.py          145     32    78%   110-126, 137-149, 154, 173-180, 186, 199-200, 246-250
 src/pyacemaker/core/loop.py                       69      3    96%   74-77
 src/pyacemaker/core/m3gnet_wrapper.py             16      4    75%   26-28, 45-47
-src/pyacemaker/core/oracle.py                    172     27    84%   92, 230-238, 255, 258, 265-269, 273, 295-298, 327, 330, 337-341, 358-359, 377-382
+src/pyacemaker/core/oracle.py                    178     26    85%   21, 110, 247-252, 269, 272, 279-283, 287, 309-312, 341, 344, 351-355, 372-373, 391-396
 src/pyacemaker/core/policy.py                     50      1    98%   51
 src/pyacemaker/core/policy_factory.py             28      5    82%   46, 52-53, 80-81
 src/pyacemaker/core/report.py                     12      1    92%   85
 src/pyacemaker/core/state_manager.py              34      2    94%   37-38
-src/pyacemaker/core/trainer.py                    79     13    84%   80-83, 86-87, 94-95, 98-99, 143-146, 156
+src/pyacemaker/core/trainer.py                    82     14    83%   73-74, 84-87, 90-91, 98-99, 102-103, 149-152
 src/pyacemaker/core/validator.py                  76      5    93%   54, 61, 66, 116, 153
 src/pyacemaker/domain_models/__init__.py          12      0   100%
 src/pyacemaker/domain_models/config.py            24      0   100%
@@ -130,5 +130,5 @@ src/pyacemaker/utils/phonons.py                   51      2    96%   51, 69
 src/pyacemaker/utils/process.py                   25     21    16%   35-77
 src/pyacemaker/utils/structure.py                  6      2    67%   19-20
 ----------------------------------------------------------------------------
-TOTAL                                           2948    442    85%
-======================== 252 passed, 1 warning in 3.39s ========================
+TOTAL                                           2957    442    85%
+======================== 252 passed, 1 warning in 3.53s ========================

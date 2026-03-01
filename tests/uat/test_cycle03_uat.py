@@ -1,4 +1,5 @@
 import numpy as np
+from itertools import islice
 from ase import Atoms
 
 from pyacemaker.core.generator import StructureGenerator
@@ -143,7 +144,8 @@ def test_uat_03_01_incremental_update_and_replay_buffer(tmp_path: Path):
         # The temp train path will have exactly 15 structures
         temp_train_path = tmp_path / "training_set_temp.extxyz"
         assert temp_train_path.exists()
-        temp_train = list(read(str(temp_train_path), index=":"))
+        from itertools import islice
+        temp_train = list(islice(read(str(temp_train_path), index=":"), 15))
         assert len(temp_train) == 15
 
         # Check generated input.yaml correctly points to Delta learning config

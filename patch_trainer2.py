@@ -1,4 +1,13 @@
-import os
+import re
+
+with open("src/pyacemaker/core/trainer.py", "r") as f:
+    content = f.read()
+
+# Fix the incorrect replacement that replaced PacemakerTrainer's logic incorrectly.
+# Looking at the errors, I think I injected IncrementalTrainer logic into PacemakerTrainer or replaced the whole thing. Let's restore and do it properly.
+
+original_trainer = """import os
+import random
 import shutil
 import subprocess
 from collections import deque
@@ -17,10 +26,10 @@ from pyacemaker.utils.process import run_command
 
 
 class PacemakerTrainer(BaseTrainer):
-    """
+    \"\"\"
     Pacemaker implementation of BaseTrainer.
     Wraps the 'pace_train' command.
-    """
+    \"\"\"
 
     def __init__(self, config: TrainingConfig) -> None:
         self.config = config
@@ -29,7 +38,7 @@ class PacemakerTrainer(BaseTrainer):
     def train(
         self, training_data_path: str | Path, initial_potential: str | Path | None = None
     ) -> Any:
-        """
+        \"\"\"
         Trains a potential using the provided training data file.
 
         This method wraps the external 'pace_train' command.
@@ -45,7 +54,7 @@ class PacemakerTrainer(BaseTrainer):
 
         Raises:
             TrainerError: If the training data file does not exist or format is invalid.
-        """
+        \"\"\"
         # Get executable from env var, defaulting to pace_train
         executable = os.environ.get("PACE_TRAIN_EXECUTABLE", "pace_train")
         if not shutil.which(executable):
@@ -93,7 +102,7 @@ class PacemakerTrainer(BaseTrainer):
         return potential_path
 
     def _validate_training_data(self, data_path: Path) -> None:
-        """Validates existence and basic format of training data."""
+        \"\"\"Validates existence and basic format of training data.\"\"\"
         if not data_path.exists():
             msg = f"Training data not found: {data_path}"
             raise TrainerError(msg)
@@ -109,10 +118,10 @@ class PacemakerTrainer(BaseTrainer):
 
 
 class IncrementalTrainer(BaseTrainer):
-    """
+    \"\"\"
     A trainer wrapper that adds Incremental (Delta) Learning capabilities
     and manages a Replay Buffer to prevent catastrophic forgetting.
-    """
+    \"\"\"
 
     def __init__(self, base_trainer: BaseTrainer, replay_buffer_size: int = 500) -> None:
         self.base_trainer = base_trainer
@@ -121,7 +130,7 @@ class IncrementalTrainer(BaseTrainer):
     def train(
         self, training_data_path: str | Path, initial_potential: str | Path | None = None
     ) -> Any:
-        """
+        \"\"\"
         Trains a potential incrementally.
 
         1. Reads new structures from training_data_path.
@@ -129,7 +138,7 @@ class IncrementalTrainer(BaseTrainer):
         3. Samples up to replay_buffer_size from history using a bounded deque to prevent OOM.
         4. Writes sampled structures to a temporary training set.
         5. Calls base_trainer.train with the temporary set and initial_potential.
-        """
+        \"\"\"
         data_path = Path(training_data_path).resolve(strict=True)
         output_dir = data_path.parent
         history_path = output_dir / "training_history.extxyz"
@@ -148,7 +157,6 @@ class IncrementalTrainer(BaseTrainer):
                 buffer.append(frame)
         except Exception as e:
             import logging
-
             logging.getLogger(__name__).warning(f"Error reading history for replay buffer: {e}")
 
         sampled_structures = list(buffer)
@@ -161,3 +169,7 @@ class IncrementalTrainer(BaseTrainer):
             initial_potential = Path(initial_potential).resolve(strict=True)
 
         return self.base_trainer.train(temp_train_path, initial_potential=initial_potential)
+"""
+
+with open("src/pyacemaker/core/trainer.py", "w") as f:
+    f.write(original_trainer)

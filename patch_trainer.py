@@ -1,35 +1,17 @@
-import os
-import shutil
-import subprocess
-from collections import deque
-from pathlib import Path
-from typing import Any
+import re
 
-from ase import Atoms
-from ase.io import iread, read, write
+with open("src/pyacemaker/core/trainer.py", "r") as f:
+    content = f.read()
 
-from pyacemaker.core.base import BaseTrainer
-from pyacemaker.core.config_generator import PacemakerConfigGenerator
-from pyacemaker.core.exceptions import TrainerError
-from pyacemaker.domain_models.training import TrainingConfig
-from pyacemaker.utils.io import dump_yaml
-from pyacemaker.utils.process import run_command
+# Fix import
+content = content.replace("from ase.io import read, write", "import os\nimport random\nfrom collections import deque\nfrom ase.io import read, write, iread")
 
-
-class PacemakerTrainer(BaseTrainer):
-    """
-    Pacemaker implementation of BaseTrainer.
-    Wraps the 'pace_train' command.
-    """
-
-    def __init__(self, config: TrainingConfig) -> None:
-        self.config = config
-        self.config_generator = PacemakerConfigGenerator(config)
-
+# Fix PacemakerTrainer path resolving and executable
+pacemaker_train = """
     def train(
         self, training_data_path: str | Path, initial_potential: str | Path | None = None
     ) -> Any:
-        """
+        \"\"\"
         Trains a potential using the provided training data file.
 
         This method wraps the external 'pace_train' command.
@@ -45,7 +27,7 @@ class PacemakerTrainer(BaseTrainer):
 
         Raises:
             TrainerError: If the training data file does not exist or format is invalid.
-        """
+        \"\"\"
         # Get executable from env var, defaulting to pace_train
         executable = os.environ.get("PACE_TRAIN_EXECUTABLE", "pace_train")
         if not shutil.which(executable):
@@ -69,59 +51,20 @@ class PacemakerTrainer(BaseTrainer):
 
         if initial_potential:
             initial_path = Path(initial_potential).resolve(strict=True)
-            if not initial_path.exists():
-                msg = f"Initial potential not found: {initial_path}"
-                raise TrainerError(msg)
             cmd.extend(["--initial_potential", str(initial_path)])
 
         try:
             # Use shell=False implicitly (default for list commands)
             run_command(cmd)
-        except subprocess.CalledProcessError as e:
-            # Capture specific subprocess error
-            msg = f"Training failed with exit code {e.returncode}: {e}"
-            raise TrainerError(msg) from e
-        except Exception as e:
-            # Catch other unexpected errors
-            msg = f"Training failed unexpectedly: {e}"
-            raise TrainerError(msg) from e
+"""
+content = re.sub(r'    def train\([\s\S]*?run_command\(cmd\)', pacemaker_train, content)
 
-        if not potential_path.exists():
-            msg = f"Potential file was not created at {potential_path}"
-            raise TrainerError(msg)
-
-        return potential_path
-
-    def _validate_training_data(self, data_path: Path) -> None:
-        """Validates existence and basic format of training data."""
-        if not data_path.exists():
-            msg = f"Training data not found: {data_path}"
-            raise TrainerError(msg)
-
-        if data_path.suffix not in {".pckl", ".xyz", ".extxyz", ".gzip"}:
-            msg = f"Invalid training data format: {data_path.suffix}"
-            raise TrainerError(msg)
-
-        # Check for empty file
-        if data_path.stat().st_size == 0:
-            msg = f"Training data file is empty: {data_path}"
-            raise TrainerError(msg)
-
-
-class IncrementalTrainer(BaseTrainer):
-    """
-    A trainer wrapper that adds Incremental (Delta) Learning capabilities
-    and manages a Replay Buffer to prevent catastrophic forgetting.
-    """
-
-    def __init__(self, base_trainer: BaseTrainer, replay_buffer_size: int = 500) -> None:
-        self.base_trainer = base_trainer
-        self.replay_buffer_size = replay_buffer_size
-
+# Fix IncrementalTrainer logic
+inc_trainer = """
     def train(
         self, training_data_path: str | Path, initial_potential: str | Path | None = None
     ) -> Any:
-        """
+        \"\"\"
         Trains a potential incrementally.
 
         1. Reads new structures from training_data_path.
@@ -129,7 +72,7 @@ class IncrementalTrainer(BaseTrainer):
         3. Samples up to replay_buffer_size from history using a bounded deque to prevent OOM.
         4. Writes sampled structures to a temporary training set.
         5. Calls base_trainer.train with the temporary set and initial_potential.
-        """
+        \"\"\"
         data_path = Path(training_data_path).resolve(strict=True)
         output_dir = data_path.parent
         history_path = output_dir / "training_history.extxyz"
@@ -141,15 +84,14 @@ class IncrementalTrainer(BaseTrainer):
         # Append new structures to history file efficiently
         write(str(history_path), new_structures, format="extxyz", append=True)
 
-        # Replay buffer sampling via bounded deque to handle memory safety over massive history files
-        buffer: deque[Atoms] = deque(maxlen=self.replay_buffer_size)
+        # Replay buffer sampling via reservoir sampling or bounded deque
+        # Using a simple fixed-size bounded deque over streaming iread to handle memory safety
+        buffer = deque(maxlen=self.replay_buffer_size)
         try:
             for frame in iread(str(history_path), format="extxyz"):
                 buffer.append(frame)
-        except Exception as e:
-            import logging
-
-            logging.getLogger(__name__).warning(f"Error reading history for replay buffer: {e}")
+        except Exception:
+            pass
 
         sampled_structures = list(buffer)
 
@@ -161,3 +103,8 @@ class IncrementalTrainer(BaseTrainer):
             initial_potential = Path(initial_potential).resolve(strict=True)
 
         return self.base_trainer.train(temp_train_path, initial_potential=initial_potential)
+"""
+content = re.sub(r'    def train\(\s+self, training_data_path: str \| Path, initial_potential: str \| Path \| None = None\s+\) -> Any:[\s\S]*?return self.base_trainer.train\(temp_train_path, initial_potential=initial_potential\)', inc_trainer, content)
+
+with open("src/pyacemaker/core/trainer.py", "w") as f:
+    f.write(content)
