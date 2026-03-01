@@ -91,13 +91,18 @@ def test_lammps_engine_halted(mock_md_config: MDConfig, mock_driver: Any, tmp_pa
     # Enable fix_halt to test halted logic
     config = mock_md_config.model_copy(update={"fix_halt": True})
     engine = LammpsEngine(config)
-    atoms = Atoms("H", cell=[10, 10, 10], pbc=True)
-    pot_path = tmp_path / "potential.yace"
-    pot_path.touch()
 
-    result = engine.run(atoms, pot_path)
+    # Mock the parser to return true halt so it's not discarded as thermal noise
+    from unittest.mock import patch
+    with patch.object(engine.parser, "_evaluate_uncertainty_stream", return_value=([0], True)):
+        atoms = Atoms("H", cell=[10, 10, 10], pbc=True)
+        pot_path = tmp_path / "potential.yace"
+        pot_path.touch()
+
+        result = engine.run(atoms, pot_path)
 
     assert result.halted is True
+    assert result.epicenter_atoms == [0]
     assert result.max_gamma == 10.0
     assert result.n_steps == 500
     assert result.halt_structure_path == result.trajectory_path

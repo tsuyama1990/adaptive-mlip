@@ -9,10 +9,50 @@ from pyacemaker.domain_models.defaults import (
     DEFAULT_OTF_LOCAL_N_CANDIDATES,
     DEFAULT_OTF_LOCAL_N_SELECT,
     DEFAULT_OTF_MAX_RETRIES,
-    DEFAULT_OTF_UNCERTAINTY_THRESHOLD,
     DEFAULT_POTENTIALS_DIR,
     DEFAULT_STATE_FILE,
 )
+
+
+class ActiveLearningThresholds(BaseModel):
+    """FLARE-inspired two-tier thresholds"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    threshold_call_dft: float = Field(0.05, description="MD halt and DFT call criteria")
+    threshold_add_train: float = Field(
+        0.02, description="Criteria to select atoms for training set"
+    )
+    smooth_steps: int = Field(
+        3, description="Number of consecutive steps exceeding threshold to exclude thermal noise"
+    )
+
+
+class CutoutConfig(BaseModel):
+    """Phase 3: Intelligent Cutout Settings"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    core_radius: float = Field(4.0, description="Radius for Force Weight 1.0")
+    buffer_radius: float = Field(3.0, description="Thickness of additional relaxation buffer layer")
+    enable_pre_relaxation: bool = True
+    enable_passivation: bool = True
+    passivation_element: str = "H"
+
+
+class LoopStrategyConfig(BaseModel):
+    """Active Learning Loop Strategy Configuration"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    use_tiered_oracle: bool = True
+    incremental_update: bool = True
+    replay_buffer_size: int = Field(
+        500, description="Number of past data points to keep to prevent catastrophic forgetting"
+    )
+    baseline_potential_type: str = Field("LJ", description="Baseline physics potential (e.g., LJ)")
+    thresholds: ActiveLearningThresholds = Field(default_factory=ActiveLearningThresholds)
+    cutout: CutoutConfig = Field(default_factory=CutoutConfig)
 
 
 class OTFConfig(BaseModel):
@@ -20,11 +60,6 @@ class OTFConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    uncertainty_threshold: float = Field(
-        default=DEFAULT_OTF_UNCERTAINTY_THRESHOLD,
-        gt=0,
-        description="Gamma threshold to trigger halt and retraining.",
-    )
     local_n_candidates: PositiveInt = Field(
         default=DEFAULT_OTF_LOCAL_N_CANDIDATES,
         description="Number of local candidates to generate around halt structure.",
@@ -75,3 +110,7 @@ class WorkflowConfig(BaseModel):
     )
 
     otf: OTFConfig = Field(default_factory=OTFConfig, description="Configuration for OTF loop.")
+    loop_strategy: LoopStrategyConfig = Field(
+        default_factory=LoopStrategyConfig,
+        description="Active Learning Loop Strategy configuration",
+    )

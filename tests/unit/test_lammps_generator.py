@@ -62,13 +62,15 @@ def test_generator_hybrid_potential(tmp_path: Path) -> None:
 
 def test_generator_watchdog(tmp_path: Path) -> None:
     """Tests generation of watchdog commands."""
+    from pyacemaker.domain_models.workflow import ActiveLearningThresholds
+
     config = MDConfig(
         temperature=300.0,
         pressure=1.0,
         timestep=0.001,
         n_steps=1000,
         fix_halt=True,
-        uncertainty_threshold=5.0,
+        thresholds=ActiveLearningThresholds(threshold_call_dft=5.0),
         check_interval=10,
     )
     generator = LammpsScriptGenerator(config)

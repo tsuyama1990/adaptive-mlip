@@ -5,7 +5,9 @@ from pydantic import ValidationError
 
 from pyacemaker.domain_models import (
     DFTConfig,
+    DistillationConfig,
     LoggingConfig,
+    LoopStrategyConfig,
     MDConfig,
     PyAceConfig,
     StructureConfig,
@@ -90,6 +92,30 @@ def test_workflow_config_default() -> None:
     assert config.active_learning_dir == "active_learning"
     assert config.potentials_dir == "potentials"
     assert config.checkpoint_interval == 1
+
+
+def test_loop_strategy_config_valid() -> None:
+    config = LoopStrategyConfig()
+    assert config.use_tiered_oracle is True
+    assert config.incremental_update is True
+    assert config.replay_buffer_size == 500
+    assert config.baseline_potential_type == "LJ"
+    assert config.thresholds.threshold_call_dft == 0.05
+    assert config.thresholds.threshold_add_train == 0.02
+    assert config.thresholds.smooth_steps == 3
+    assert config.cutout.core_radius == 4.0
+    assert config.cutout.buffer_radius == 3.0
+    assert config.cutout.enable_pre_relaxation is True
+    assert config.cutout.enable_passivation is True
+    assert config.cutout.passivation_element == "H"
+
+
+def test_distillation_config_valid() -> None:
+    config = DistillationConfig()
+    assert config.enable is True
+    assert config.mace_model_path == "mace-mp-0-medium"
+    assert config.uncertainty_threshold == 0.05
+    assert config.sampling_structures_per_system == 1000
 
 
 def test_logging_config_valid() -> None:

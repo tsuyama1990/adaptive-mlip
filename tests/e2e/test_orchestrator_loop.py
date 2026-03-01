@@ -65,7 +65,11 @@ def mock_config(tmp_path: Path) -> PyAceConfig:
             "pressure": 0.0,
             "timestep": 0.001,
             "n_steps": 1000,
-            "uncertainty_threshold": 5.0,
+            "thresholds": {
+                "threshold_call_dft": 5.0,
+                "threshold_add_train": 2.0,
+                "smooth_steps": 3,
+            },
             "check_interval": 10,
         },
         "workflow": {
@@ -74,6 +78,14 @@ def mock_config(tmp_path: Path) -> PyAceConfig:
             "data_dir": str(tmp_path / "data"),
             "active_learning_dir": str(tmp_path / "active_learning"),
             "potentials_dir": str(tmp_path / "potentials"),
+            "loop_strategy": {
+                "thresholds": {
+                    "threshold_call_dft": 5.0,
+                    "threshold_add_train": 2.0,
+                    "smooth_steps": 3,
+                }
+            },
+            "otf": {"local_n_candidates": 20, "local_n_select": 5, "max_retries": 3},
         },
         "logging": {},
     }
@@ -135,6 +147,7 @@ def test_cold_start_empty_iterator(orchestrator: Orchestrator, tmp_path: Path) -
     orchestrator.generator.generate = lambda n: iter([])  # type: ignore[assignment]
 
     from pyacemaker.core.exceptions import OrchestratorError
+
     with pytest.raises(OrchestratorError):
         orchestrator._check_initial_potential()
 

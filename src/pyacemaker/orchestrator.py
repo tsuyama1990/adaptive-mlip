@@ -36,7 +36,7 @@ from pyacemaker.domain_models.defaults import (
 from pyacemaker.domain_models.md import MDSimulationResult
 from pyacemaker.factory import ModuleFactory
 from pyacemaker.logger import setup_logger
-from pyacemaker.utils.extraction import extract_local_region
+from pyacemaker.utils.extraction import extract_intelligent_cluster
 
 
 class Orchestrator:
@@ -288,10 +288,9 @@ class Orchestrator:
             center_idx = self._get_max_gamma_atom_index(halt_structure)
 
             # Extract local cluster (S0)
-            radius = self.config.structure.local_extraction_radius
-            buffer = self.config.structure.local_buffer_radius
+            cutout_config = self.config.workflow.loop_strategy.cutout
 
-            return extract_local_region(halt_structure, center_idx, radius, buffer)
+            return extract_intelligent_cluster(halt_structure, center_idx, cutout_config)
         except Exception:
             self.logger.exception("Failed to extract local cluster.")
             return None
@@ -349,7 +348,7 @@ class Orchestrator:
         ):
             return None
 
-        threshold = self.config.workflow.otf.uncertainty_threshold
+        threshold = self.config.workflow.loop_strategy.thresholds.threshold_call_dft
         if result.max_gamma <= threshold and not result.halted:
             return None
 

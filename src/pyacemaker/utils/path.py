@@ -17,6 +17,7 @@ def _check_dangerous_chars(path: Path) -> None:
         msg = f"Filename cannot start with '-': {path.name}"
         raise ValueError(msg)
 
+
 def _resolve_path(path: Path) -> Path:
     # Reject symlinks to prevent TOCTOU symlink attacks
     if path.is_symlink():
@@ -41,6 +42,7 @@ def _resolve_path(path: Path) -> Path:
             raise ValueError(msg)
 
         return resolved
+
 
 def _check_allowed_roots(resolved: Path) -> None:
     base_dir = Path.cwd().resolve()
@@ -68,6 +70,7 @@ def _check_allowed_roots(resolved: Path) -> None:
 
     msg = f"Path traversal detected: {resolved} is outside allowed roots {allowed_roots}"
     raise ValueError(msg)
+
 
 def validate_path_safe(path: Path) -> Path:
     """

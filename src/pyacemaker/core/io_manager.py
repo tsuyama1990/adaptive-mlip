@@ -54,6 +54,7 @@ class LammpsFileManager:
             if isinstance(structure, (str, Path)):
                 # Security: Validate input path before processing
                 from pyacemaker.utils.path import validate_path_safe
+
                 safe_structure_path = validate_path_safe(Path(structure))
 
                 # 100% Streaming approach: Do not load any Atoms objects.

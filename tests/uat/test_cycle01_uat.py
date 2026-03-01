@@ -43,7 +43,6 @@ md:
     pressure: 0.0
     timestep: 0.001
     n_steps: 1000
-    uncertainty_threshold: 0.1
     check_interval: 50
 workflow:
     max_iterations: 10
