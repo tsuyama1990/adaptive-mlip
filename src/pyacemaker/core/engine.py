@@ -195,6 +195,7 @@ class LammpsEngine(BaseEngine):
         )
         return ctx, data_file, dump_file, log_file, elements, potential_path
 
+
     def run(
         self, structure: Atoms | None, potential: Any, restart_file: Path | None = None
     ) -> MDSimulationResult:
@@ -223,7 +224,6 @@ class LammpsEngine(BaseEngine):
             finally:
                 if hasattr(driver, "close"):
                     driver.close()
-
     def compute_static_properties(self, structure: Atoms, potential: Any) -> MDSimulationResult:
         """
         Computes static properties (energy, forces, stress) for a structure.

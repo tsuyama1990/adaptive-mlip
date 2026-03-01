@@ -3,7 +3,7 @@ from unittest.mock import MagicMock, patch
 
 import numpy as np
 from ase import Atoms
-from ase.io import read, write
+from ase.io import write
 
 from pyacemaker.core.generator import StructureGenerator
 from pyacemaker.core.oracle import MACEManager, TieredOracle
@@ -51,7 +51,6 @@ def test_uat_03_01_generate_candidates() -> None:
     assert not np.allclose(s0.positions[0], s1.positions[0])
 
     # Verify we can consume the rest without keeping them
-    pass
 
 
 def test_uat_03_02_defect_generation() -> None:
@@ -151,7 +150,11 @@ def test_uat_03_01_incremental_update_and_replay_buffer(tmp_path: Path) -> None:
         assert temp_train_path.exists()
         from itertools import islice
 
-        temp_train = list(islice(read(str(temp_train_path), index=":"), 15))
+        from ase.io import iread
+
+        temp_train = list(
+            islice(iread(str(temp_train_path), format="extxyz"), inc_trainer.replay_buffer_size)
+        )
         assert len(temp_train) == inc_trainer.replay_buffer_size
 
         # Check generated input.yaml correctly points to Delta learning config
@@ -170,6 +173,7 @@ def test_uat_03_01_incremental_update_and_replay_buffer(tmp_path: Path) -> None:
         assert "--initial_potential" in cmd
         assert str(base_potential) in cmd
         assert cmd[0] == "pace_train" or cmd[0] == "mock_pace_train"
+        assert cmd[1] == str(yaml_path)
 
 
 def test_uat_03_02_tiered_oracle_evaluation() -> None:
@@ -213,3 +217,21 @@ def test_uat_03_02_tiered_oracle_evaluation() -> None:
     res2 = next(gen)
     assert res2.symbols == "O"  # Replaced by slow oracle result
     slow_oracle.compute.assert_called_once()
+
+
+def test_uat_03_03_empty_streaming_handling() -> None:
+    """
+    Verify system handles empty stream/iterators gracefully.
+    """
+    from collections.abc import Iterator
+
+    fast_oracle = MACEManager()
+    empty_iter: Iterator[Atoms] = iter([])
+
+    gen = fast_oracle.compute(empty_iter)
+
+    # We should get a warning or StopIteration but no crash
+    import pytest
+
+    with pytest.warns(UserWarning, match="Oracle received empty iterator"), pytest.raises(StopIteration):
+            next(gen)

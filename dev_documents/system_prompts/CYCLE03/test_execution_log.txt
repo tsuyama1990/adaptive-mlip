@@ -4,7 +4,7 @@ rootdir: /app
 configfile: pyproject.toml
 testpaths: tests
 plugins: cov-7.0.0
-collected 252 items
+collected 253 items
 
 tests/e2e/test_engine_integration.py ..                                  [  0%]
 tests/e2e/test_orchestrator.py .......                                   [  3%]
@@ -14,33 +14,33 @@ tests/integration/test_pacemaker_integration.py ..                       [  6%]
 tests/integration/test_scenarios.py .                                    [  7%]
 tests/uat/test_cycle01_uat.py ...                                        [  8%]
 tests/uat/test_cycle02_uat.py ..                                         [  9%]
-tests/uat/test_cycle03_uat.py ....                                       [ 10%]
-tests/uat/test_cycle04_uat.py ...                                        [ 11%]
-tests/uat/test_cycle06_uat.py ..                                         [ 12%]
+tests/uat/test_cycle03_uat.py .....                                      [ 11%]
+tests/uat/test_cycle04_uat.py ...                                        [ 12%]
+tests/uat/test_cycle06_uat.py ..                                         [ 13%]
 tests/uat/test_cycle07_uat.py ..                                         [ 13%]
 tests/unit/test_active_set.py .....                                      [ 15%]
 tests/unit/test_active_set_anchor.py ....                                [ 17%]
 tests/unit/test_delta.py ....                                            [ 18%]
 tests/unit/test_domain_models.py ..............                          [ 24%]
 tests/unit/test_domain_models_dft.py .............                       [ 29%]
-tests/unit/test_domain_models_eon.py ....                                [ 30%]
+tests/unit/test_domain_models_eon.py ....                                [ 31%]
 tests/unit/test_domain_models_md.py ...........                          [ 35%]
 tests/unit/test_domain_models_md_new.py ..                               [ 36%]
-tests/unit/test_domain_models_scenario.py ..                             [ 36%]
+tests/unit/test_domain_models_scenario.py ..                             [ 37%]
 tests/unit/test_domain_models_training.py .......                        [ 39%]
 tests/unit/test_domain_models_validation.py ....                         [ 41%]
-tests/unit/test_elastic.py ....                                          [ 42%]
+tests/unit/test_elastic.py ....                                          [ 43%]
 tests/unit/test_embedding.py .......                                     [ 45%]
-tests/unit/test_engine.py ........                                       [ 48%]
+tests/unit/test_engine.py ........                                       [ 49%]
 tests/unit/test_engine_halt_step.py ..                                   [ 49%]
 tests/unit/test_engine_relax.py ...                                      [ 50%]
 tests/unit/test_eon_driver.py .....                                      [ 52%]
 tests/unit/test_extraction.py ..                                         [ 53%]
 tests/unit/test_factory.py ..                                            [ 54%]
 tests/unit/test_generator.py .......                                     [ 57%]
-tests/unit/test_generator_local.py ..                                    [ 57%]
+tests/unit/test_generator_local.py ..                                    [ 58%]
 tests/unit/test_io.py ........                                           [ 61%]
-tests/unit/test_io_manager.py ..                                         [ 61%]
+tests/unit/test_io_manager.py ..                                         [ 62%]
 tests/unit/test_lammps_driver.py ...........                             [ 66%]
 tests/unit/test_lammps_driver_security.py ...                            [ 67%]
 tests/unit/test_lammps_generator.py ...                                  [ 68%]
@@ -50,7 +50,7 @@ tests/unit/test_main.py ...                                              [ 73%]
 tests/unit/test_oracle.py ..........                                     [ 77%]
 tests/unit/test_oracle_streaming.py .                                    [ 77%]
 tests/unit/test_path_validation.py .....                                 [ 79%]
-tests/unit/test_perturbations.py ...                                     [ 80%]
+tests/unit/test_perturbations.py ...                                     [ 81%]
 tests/unit/test_phonons.py ..                                            [ 81%]
 tests/unit/test_policies_new.py .                                        [ 82%]
 tests/unit/test_policy_factory.py ...                                    [ 83%]
@@ -86,7 +86,7 @@ src/pyacemaker/core/io_manager.py                 50     15    70%   43-44, 62-6
 src/pyacemaker/core/lammps_generator.py          145     32    78%   110-126, 137-149, 154, 173-180, 186, 199-200, 246-250
 src/pyacemaker/core/loop.py                       69      3    96%   74-77
 src/pyacemaker/core/m3gnet_wrapper.py             16      4    75%   26-28, 45-47
-src/pyacemaker/core/oracle.py                    178     26    85%   21, 110, 247-252, 269, 272, 279-283, 287, 309-312, 341, 344, 351-355, 372-373, 391-396
+src/pyacemaker/core/oracle.py                    178     22    88%   21, 110, 247-252, 269, 272, 287, 309-312, 341, 344, 351-355, 372-373, 391-396
 src/pyacemaker/core/policy.py                     50      1    98%   51
 src/pyacemaker/core/policy_factory.py             28      5    82%   46, 52-53, 80-81
 src/pyacemaker/core/report.py                     12      1    92%   85
@@ -130,5 +130,5 @@ src/pyacemaker/utils/phonons.py                   51      2    96%   51, 69
 src/pyacemaker/utils/process.py                   25     21    16%   35-77
 src/pyacemaker/utils/structure.py                  6      2    67%   19-20
 ----------------------------------------------------------------------------
-TOTAL                                           2960    442    85%
-======================== 252 passed, 1 warning in 3.54s ========================
+TOTAL                                           2960    438    85%
+======================== 253 passed, 1 warning in 3.48s ========================
