@@ -26,7 +26,9 @@ class UncertaintyWatchdog:
     def __init__(self, thresholds: ActiveLearningThresholds | None = None) -> None:
         self.thresholds = thresholds
 
-    def _process_atom_line(self, line: str, gamma_idx: int, threshold: float, atoms: list[int], max_g: float) -> float:
+    def _process_atom_line(
+        self, line: str, gamma_idx: int, threshold: float, atoms: list[int], max_g: float
+    ) -> float:
         parts = line.split()
         if len(parts) < 6 or gamma_idx < 0:
             return max_g
@@ -67,7 +69,7 @@ class UncertaintyWatchdog:
                     if is_halt:
                         return cur_step, atoms, cur_step, max_g, atoms, in_atoms, g_idx, c_steps
                 in_atoms = False
-                cur_step = -1 # Sentinel to read next digit as step
+                cur_step = -1  # Sentinel to read next digit as step
                 continue
 
             if not in_atoms and cur_step == -1 and line.isdigit() and len(line) < 15:
@@ -114,8 +116,8 @@ class UncertaintyWatchdog:
                 if not lines:
                     break
 
-                halt_step, epi, cur_step, max_g, atoms, in_atoms, g_idx, c_steps = self._process_chunk(
-                    lines, cur_step, max_g, atoms, in_atoms, g_idx, c_steps
+                halt_step, epi, cur_step, max_g, atoms, in_atoms, g_idx, c_steps = (
+                    self._process_chunk(lines, cur_step, max_g, atoms, in_atoms, g_idx, c_steps)
                 )
                 if halt_step is not None:
                     return halt_step, epi
@@ -170,13 +172,16 @@ class LammpsExecutor:
             msg = f"{ERR_SIM_UNEXPECTED.format(error=e)} - Script Path: {script_path}"
             raise RuntimeError(msg) from e
 
+
 class LammpsResultParser:
     """Handles extracting results from LAMMPS driver."""
 
     def __init__(self, config: MDConfig) -> None:
         self.config = config
 
-    def parse_md_result(self, driver: LammpsDriver, dump_file: Path, log_file: Path) -> MDSimulationResult:
+    def parse_md_result(
+        self, driver: LammpsDriver, dump_file: Path, log_file: Path
+    ) -> MDSimulationResult:
         try:
             energy = driver.extract_variable("pe")
             temperature = driver.extract_variable("temp")
@@ -189,7 +194,11 @@ class LammpsResultParser:
             def _force_generator() -> Iterator[list[float]]:
                 forces_array = driver.get_forces()
                 for i in range(forces_array.shape[0]):
-                    yield [float(forces_array[i, 0]), float(forces_array[i, 1]), float(forces_array[i, 2])]
+                    yield [
+                        float(forces_array[i, 0]),
+                        float(forces_array[i, 1]),
+                        float(forces_array[i, 2]),
+                    ]
 
             forces = _force_generator()
 
@@ -239,7 +248,11 @@ class LammpsPreparationEngine:
         self.file_manager = file_manager
 
     def prepare(
-        self, config: MDConfig, structure: Atoms | None, potential: Any, restart_file: Path | None = None
+        self,
+        config: MDConfig,
+        structure: Atoms | None,
+        potential: Any,
+        restart_file: Path | None = None,
     ) -> tuple[Any, Path, Path, Path, list[str], Path]:
         if structure is None and restart_file is None:
             raise ValueError(ERR_STRUCTURE_NONE)
@@ -253,7 +266,9 @@ class LammpsPreparationEngine:
             self.file_manager = LammpsFileManager(config)
 
         struct_to_pass = structure if structure is not None else Atoms()
-        ctx, data_file, dump_file, log_file, elements = self.file_manager.prepare_workspace(struct_to_pass)
+        ctx, data_file, dump_file, log_file, elements = self.file_manager.prepare_workspace(
+            struct_to_pass
+        )
         return ctx, data_file, dump_file, log_file, elements, potential_path
 
 
@@ -280,7 +295,9 @@ class LammpsEngine(BaseEngine):
         self.watchdog = watchdog or UncertaintyWatchdog(config.active_learning)
         self.preparation_engine = preparation_engine or LammpsPreparationEngine(file_manager)
 
-    def run(self, structure: Atoms | None, potential: Any, restart_file: Path | None = None) -> MDSimulationResult:
+    def run(
+        self, structure: Atoms | None, potential: Any, restart_file: Path | None = None
+    ) -> MDSimulationResult:
         """
         Runs the MD simulation.
         """
@@ -293,7 +310,9 @@ class LammpsEngine(BaseEngine):
             input_script_path = temp_dir / "input.lmp"
 
             with input_script_path.open("w") as f:
-                self.generator.write_script(f, potential_path, data_file, dump_file, elements, restart_file=restart_file)
+                self.generator.write_script(
+                    f, potential_path, data_file, dump_file, elements, restart_file=restart_file
+                )
 
             driver = LammpsDriver(["-screen", LAMMPS_SCREEN_ARG, "-log", str(log_file)])
 
@@ -302,13 +321,16 @@ class LammpsEngine(BaseEngine):
                 result = self.parser.parse_md_result(driver, dump_file, log_file)
 
                 import logging
+
                 logger = logging.getLogger(__name__)
 
                 if self.config.fix_halt and self.config.active_learning:
                     logger.debug(f"Evaluating uncertainty stream from {dump_file}")
                     halt_step, epicenter = self.watchdog.evaluate_stream(dump_file)
                     if halt_step is not None:
-                        logger.info(f"UncertaintyWatchdog triggered halt at step {halt_step} with {len(epicenter)} epicenter atoms.")
+                        logger.info(
+                            f"UncertaintyWatchdog triggered halt at step {halt_step} with {len(epicenter)} epicenter atoms."
+                        )
                         result.halted = True
                         result.halt_step = halt_step
                     else:

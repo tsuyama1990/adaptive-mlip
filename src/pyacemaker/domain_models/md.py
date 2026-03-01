@@ -92,7 +92,10 @@ class MDSimulationResult(BaseModel):
     model_config = ConfigDict(extra="forbid", arbitrary_types_allowed=True)
 
     energy: float = Field(..., description="Final potential energy of the system")
-    forces: Iterator[list[float]] | list[list[float]] = Field(..., description="Forces on atoms in the final frame (can be generator/iterator for large structs)")
+    forces: Iterator[list[float]] | list[list[float]] = Field(
+        ...,
+        description="Forces on atoms in the final frame (can be generator/iterator for large structs)",
+    )
     stress: list[float] = Field(
         default_factory=lambda: [0.0] * 6,
         description="Stress tensor (Voigt: xx, yy, zz, yz, xz, xy) in Bar",
@@ -153,43 +156,34 @@ class MDConfig(BaseModel):
 
     # Output Control
     thermo_freq: PositiveInt = Field(
-        default=DEFAULT_MD_THERMO_FREQ,
-        description="Frequency of thermodynamic output (steps)"
+        default=DEFAULT_MD_THERMO_FREQ, description="Frequency of thermodynamic output (steps)"
     )
     dump_freq: PositiveInt = Field(
-        default=DEFAULT_MD_DUMP_FREQ,
-        description="Frequency of trajectory dump (steps)"
+        default=DEFAULT_MD_DUMP_FREQ, description="Frequency of trajectory dump (steps)"
     )
     minimize: bool = Field(False, description="Perform energy minimization before MD")
     neighbor_skin: PositiveFloat = Field(
-        default=DEFAULT_MD_NEIGHBOR_SKIN,
-        description="Neighbor list skin distance (Angstrom)"
+        default=DEFAULT_MD_NEIGHBOR_SKIN, description="Neighbor list skin distance (Angstrom)"
     )
     atom_style: AtomStyle = Field(
-        default=AtomStyle(DEFAULT_MD_ATOM_STYLE),
-        description="LAMMPS atom style"
+        default=AtomStyle(DEFAULT_MD_ATOM_STYLE), description="LAMMPS atom style"
     )
 
     # Configurable LAMMPS Parameters
     velocity_seed: int = Field(
-        default=LAMMPS_VELOCITY_SEED,
-        description="Random seed for velocity initialization"
+        default=LAMMPS_VELOCITY_SEED, description="Random seed for velocity initialization"
     )
     minimize_steps: int = Field(
-        default=LAMMPS_MINIMIZE_STEPS,
-        description="Max iterations for minimization (steps)"
+        default=LAMMPS_MINIMIZE_STEPS, description="Max iterations for minimization (steps)"
     )
     minimize_max_iter: int = Field(
-        default=LAMMPS_MINIMIZE_MAX_ITER,
-        description="Max force evaluations for minimization"
+        default=LAMMPS_MINIMIZE_MAX_ITER, description="Max force evaluations for minimization"
     )
     minimize_tol: float = Field(
-        default=DEFAULT_MD_MINIMIZE_TOL,
-        description="Energy tolerance for minimization"
+        default=DEFAULT_MD_MINIMIZE_TOL, description="Energy tolerance for minimization"
     )
     minimize_ftol: float = Field(
-        default=DEFAULT_MD_MINIMIZE_FTOL,
-        description="Force tolerance for minimization"
+        default=DEFAULT_MD_MINIMIZE_FTOL, description="Force tolerance for minimization"
     )
 
     # Advanced Settings
@@ -204,13 +198,13 @@ class MDConfig(BaseModel):
     )
     pdamp_factor: float = Field(
         default=DEFAULT_MD_PDAMP_FACTOR,
-        gt=0.0, description="Pressure damping factor (multiplies timestep)"
+        gt=0.0,
+        description="Pressure damping factor (multiplies timestep)",
     )
 
     # Mocking Parameters (Audit Requirement)
     base_energy: float = Field(
-        default=DEFAULT_MD_BASE_ENERGY,
-        description="Baseline energy for mock simulation"
+        default=DEFAULT_MD_BASE_ENERGY, description="Baseline energy for mock simulation"
     )
     default_forces: list[list[float]] = Field(
         default=[[0.0, 0.0, 0.0]], min_length=1, description="Default forces for mock simulation"
@@ -230,19 +224,22 @@ class MDConfig(BaseModel):
         description="Gamma threshold for halting simulation",
     )
     check_interval: int = Field(
-        default=DEFAULT_MD_CHECK_INTERVAL,
-        gt=0, description="Step interval for uncertainty check"
+        default=DEFAULT_MD_CHECK_INTERVAL, gt=0, description="Step interval for uncertainty check"
     )
 
-    active_learning: ActiveLearningThresholds | None = Field(None, description="Active learning uncertainty configurations")
+    active_learning: ActiveLearningThresholds | None = Field(
+        None, description="Active learning uncertainty configurations"
+    )
 
     soft_start_tdamp: float = Field(
         default=DEFAULT_MD_SOFT_START_TDAMP,
-        gt=0.0, description="Damping parameter for soft start Langevin thermostat (ps)"
+        gt=0.0,
+        description="Damping parameter for soft start Langevin thermostat (ps)",
     )
     soft_start_seed: int = Field(
         default=DEFAULT_MD_SOFT_START_SEED,
-        ge=0, description="Random seed for soft start Langevin thermostat"
+        ge=0,
+        description="Random seed for soft start Langevin thermostat",
     )
 
     # Spec Section 3.1: Ramping and MC

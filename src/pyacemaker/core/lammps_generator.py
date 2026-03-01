@@ -188,6 +188,7 @@ class LammpsScriptGenerator:
     def _generate_soft_start_commands(self, buffer: TextIO, temperature: float, steps: int) -> None:
         """Generates soft start commands using Langevin thermostat."""
         import logging
+
         logger = logging.getLogger(__name__)
         logger.debug(f"Generating soft start commands: T={temperature}K for {steps} steps")
 
@@ -195,7 +196,9 @@ class LammpsScriptGenerator:
         tdamp = self.config.soft_start_tdamp
         seed = self.config.soft_start_seed
 
-        buffer.write(f"fix soft_start_langevin all langevin {temperature} {temperature} {tdamp} {seed}\n")
+        buffer.write(
+            f"fix soft_start_langevin all langevin {temperature} {temperature} {tdamp} {seed}\n"
+        )
         buffer.write("fix soft_start_nve all nve\n")
         buffer.write(f"run {steps}\n")
         buffer.write("unfix soft_start_langevin\n")

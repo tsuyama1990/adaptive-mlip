@@ -18,9 +18,9 @@ def mock_driver() -> Any:
         yield mock
 
 
-
-
-def test_lammps_script_generator_restart(mock_md_config: MDConfig, mock_driver: Any, tmp_path: Path) -> None:
+def test_lammps_script_generator_restart(
+    mock_md_config: MDConfig, mock_driver: Any, tmp_path: Path
+) -> None:
     """Test that providing a restart_file replaces read_data with read_restart."""
     config = mock_md_config.model_copy()
     engine = LammpsEngine(config)
@@ -51,7 +51,10 @@ def test_lammps_script_generator_restart(mock_md_config: MDConfig, mock_driver: 
     assert "read_data" not in script
     assert "create_box" not in script
     assert "velocity all create" not in script  # Handled by soft start or omitted in restart
-    assert "fix soft_start_langevin" in script  # Soft start generated because restart_file was provided
+    assert (
+        "fix soft_start_langevin" in script
+    )  # Soft start generated because restart_file was provided
+
 
 def test_watchdog_thermal_noise(tmp_path: Path) -> None:
     """Test that a single spike in uncertainty does not trigger a halt."""
@@ -95,14 +98,13 @@ ITEM: ATOMS id type x y z c_gamma
     dump_file.write_text(dump_content)
 
     thresholds = ActiveLearningThresholds(
-        threshold_call_dft=0.05,
-        threshold_add_train=0.02,
-        smooth_steps=2
+        threshold_call_dft=0.05, threshold_add_train=0.02, smooth_steps=2
     )
 
     watchdog = UncertaintyWatchdog(thresholds)
     halt_step, epicenter = watchdog.evaluate_stream(dump_file)
     assert halt_step is None
+
 
 def test_watchdog_sustained_uncertainty(tmp_path: Path) -> None:
     """Test that sustained uncertainty triggers a halt and identifies epicenter atoms."""
@@ -146,9 +148,7 @@ ITEM: ATOMS id type x y z c_gamma
     dump_file.write_text(dump_content)
 
     thresholds = ActiveLearningThresholds(
-        threshold_call_dft=0.05,
-        threshold_add_train=0.02,
-        smooth_steps=2
+        threshold_call_dft=0.05, threshold_add_train=0.02, smooth_steps=2
     )
 
     watchdog = UncertaintyWatchdog(thresholds)
@@ -240,9 +240,7 @@ ITEM: ATOMS id type x y z c_gamma
     dump_file.write_text(dump_content)
 
     thresholds = ActiveLearningThresholds(
-        threshold_call_dft=0.05,
-        threshold_add_train=0.02,
-        smooth_steps=2
+        threshold_call_dft=0.05, threshold_add_train=0.02, smooth_steps=2
     )
 
     watchdog = UncertaintyWatchdog(thresholds)
@@ -387,7 +385,9 @@ def test_run_driver_failure(mock_md_config: MDConfig, mock_driver: Any, tmp_path
         engine.run(atoms, pot_path)
 
 
-def test_run_driver_missing_file_failure(mock_md_config: MDConfig, mock_driver: Any, tmp_path: Path) -> None:
+def test_run_driver_missing_file_failure(
+    mock_md_config: MDConfig, mock_driver: Any, tmp_path: Path
+) -> None:
     """Tests error handling when LAMMPS execution fails due to a missing script."""
     engine = LammpsEngine(mock_md_config)
     atoms = Atoms("H", cell=[10, 10, 10], pbc=True)
