@@ -1,4 +1,3 @@
-import shlex
 from pathlib import Path
 from typing import TextIO
 
@@ -10,7 +9,7 @@ from pyacemaker.domain_models.constants import (
     LAMMPS_PAIR_STYLE_PACE,
 )
 from pyacemaker.domain_models.md import HybridParams, MDConfig
-from pyacemaker.utils.path import validate_path_safe
+from pyacemaker.utils.path import escape_lammps_path, validate_path_safe
 
 
 class LammpsScriptGenerator:
@@ -39,10 +38,8 @@ class LammpsScriptGenerator:
         if path not in self._quote_cache:
             # Sanitize input path
             safe_path = validate_path_safe(Path(path))
-            # Use shlex.quote for shell safety
-            quoted = shlex.quote(str(safe_path))
-            # Validate the quoted path doesn't introduce vulnerabilities
-            validate_path_safe(Path(quoted.strip("'\"")))
+            # Use escape_lammps_path instead of hardcoded shlex.quote
+            quoted = escape_lammps_path(safe_path)
             self._quote_cache[path] = quoted
         return self._quote_cache[path]
 

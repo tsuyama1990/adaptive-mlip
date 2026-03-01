@@ -73,6 +73,34 @@ def test_lammps_engine_run(mock_md_config: MDConfig, mock_driver: Any, tmp_path:
     assert "read_data" in script
 
 
+def test_lammps_executor_errors(mock_driver: Any, tmp_path: Path) -> None:
+    from pyacemaker.core.engine import LammpsExecutor
+
+    executor = LammpsExecutor()
+    script_path = tmp_path / "input.lmp"
+
+    # Test FileNotFoundError
+    with pytest.raises(RuntimeError, match="Simulation setup failed"):
+        executor.execute_simulation(mock_driver, script_path)
+
+    script_path.touch()
+
+    # Test ValueError
+    mock_driver.run_file.side_effect = ValueError("Invalid input")
+    with pytest.raises(RuntimeError, match="Simulation security check failed"):
+        executor.execute_simulation(mock_driver, script_path)
+
+    # Test RuntimeError
+    mock_driver.run_file.side_effect = RuntimeError("Lammps crashed")
+    with pytest.raises(RuntimeError, match="Simulation execution failed"):
+        executor.execute_simulation(mock_driver, script_path)
+
+    # Test Exception
+    mock_driver.run_file.side_effect = Exception("Unknown error")
+    with pytest.raises(RuntimeError, match="Unexpected simulation error"):
+        executor.execute_simulation(mock_driver, script_path)
+
+
 def test_lammps_engine_halted(mock_md_config: MDConfig, mock_driver: Any, tmp_path: Path) -> None:
     driver_instance = mock_driver.return_value
     driver_instance.extract_variable.side_effect = lambda name: {

@@ -79,10 +79,10 @@ class MCConfig(BaseModel):
 
 
 class MDSimulationResult(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", arbitrary_types_allowed=True)
 
     energy: float = Field(..., description="Final potential energy of the system")
-    forces: list[list[float]] | Any = Field(
+    forces: Any = Field(
         ...,
         description="Forces on atoms in the final frame (can be generator/iterator for large structs)",
     )

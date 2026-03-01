@@ -35,31 +35,9 @@ class LammpsExecutor:
 
     @staticmethod
     def execute_simulation(driver: LammpsDriver, script_path: Path) -> None:
-        import threading
-
         try:
             LammpsExecutor._ensure_script_readable(script_path)
-
-            # Scalability I/O fix: Run driver.run_file in a separate thread to prevent blocking
-            # main execution path entirely if we want to do incremental processing or just decouple I/O.
-            # Using basic thread mapping here to conform to "Use a producer-consumer pattern where
-            # the LAMMPS driver writes to a buffer and a separate thread/stream processes the data incrementally".
-
-            error_holder: list[Exception] = []
-
-            def worker() -> None:
-                try:
-                    driver.run_file(str(script_path))
-                except Exception as ex:
-                    error_holder.append(ex)
-
-            t = threading.Thread(target=worker)
-            t.start()
-            t.join()
-
-            if error_holder:
-                LammpsExecutor._raise_error_static(error_holder[0])
-
+            driver.run_file(str(script_path))
         except FileNotFoundError as e:
             raise RuntimeError(ERR_SIM_SETUP_FAIL.format(error=e)) from e
         except ValueError as e:
@@ -83,21 +61,7 @@ class LammpsResultParser:
             energy = driver.extract_variable("pe")
             temperature = driver.extract_variable("temp")
             step = int(driver.extract_variable("step"))
-            # Scalability fix: convert to simple python lists incrementally to avoid large numpy materializations
-            # if driver supports returning an iterator, but driver.get_forces returns numpy array right now.
-            # Using driver.get_forces().tolist() directly on huge arrays could use 2x memory,
-            # but we need it as a python list for Pydantic. We do it carefully.
-            forces_array = driver.get_forces()
-
-            # To ensure memory safety for massive structures (>1M),
-            # we return an iterator wrapper around the driver's numpy output
-            # instead of materializing the nested python lists immediately.
-            def _force_generator() -> Any:
-                for f in forces_array:
-                    yield list(f)
-
-            forces = _force_generator()
-
+            forces = driver.get_forces()
             stress_array = driver.get_stress()
             stress = list(stress_array)
         except Exception:
@@ -114,10 +78,9 @@ class LammpsResultParser:
 
         if self.config.fix_halt:
             halted = step < self.config.n_steps
-            try:
+            import contextlib
+            with contextlib.suppress(Exception):
                 max_gamma = driver.extract_variable("max_g")
-            except Exception:
-                pass
 
             # Use the Python-side parser to find epicenters and handle thermal noise explicitly if halted
             if halted:
@@ -155,8 +118,8 @@ class LammpsResultParser:
         Reads the dump file incrementally to find the epicenter atoms that exceed `threshold_add_train`.
         Also verifies if the `threshold_call_dft` was exceeded for `smooth_steps` consecutively.
         """
-        from ase.io import iread
         import numpy as np
+        from ase.io import iread
 
         epicenter_atoms: list[int] = []
         call_dft_limit = self.config.thresholds.threshold_call_dft
@@ -183,9 +146,10 @@ class LammpsResultParser:
                             break
                     else:
                         consecutive_spikes = 0
-        except Exception:
+        except Exception as e:
             # If reading fails, assume we use what we have or fallback
-            pass
+            import logging
+            logging.getLogger(__name__).warning(f"Error reading dump file for uncertainty evaluation: {e}")
 
         return epicenter_atoms, true_halt
 

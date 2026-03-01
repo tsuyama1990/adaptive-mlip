@@ -403,10 +403,12 @@ class Orchestrator:
             new_potential = self._refine_potential(result, deployed_potential, paths)
             if new_potential:
                 if not new_potential.exists():
-                    self.logger.error(f"Refined potential path {new_potential} does not exist!")
+                    self.logger.error(f"Refined potential path {new_potential} does not exist! Retaining previous potential.")
                 else:
                     self.state_manager.current_potential = new_potential
                     self.logger.info(f"Potential refined to: {new_potential}")
+            else:
+                self.logger.warning("Refinement failed or returned None. Retaining previous potential.")
         else:
             self.logger.info(
                 LOG_ITERATION_COMPLETED.format(iteration=self.state_manager.iteration + 1)
