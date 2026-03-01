@@ -36,7 +36,7 @@ from pyacemaker.domain_models.defaults import (
 from pyacemaker.domain_models.md import MDSimulationResult
 from pyacemaker.factory import ModuleFactory
 from pyacemaker.logger import setup_logger
-from pyacemaker.utils.extraction import extract_local_region
+from pyacemaker.utils.extraction import extract_intelligent_cluster
 
 
 class Orchestrator:
@@ -288,10 +288,9 @@ class Orchestrator:
             center_idx = self._get_max_gamma_atom_index(halt_structure)
 
             # Extract local cluster (S0)
-            radius = self.config.structure.local_extraction_radius
-            buffer = self.config.structure.local_buffer_radius
+            cutout_config = self.config.workflow.loop_strategy.cutout
 
-            return extract_local_region(halt_structure, center_idx, radius, buffer)
+            return extract_intelligent_cluster(halt_structure, center_idx, cutout_config)
         except Exception:
             self.logger.exception("Failed to extract local cluster.")
             return None
@@ -349,7 +348,7 @@ class Orchestrator:
         ):
             return None
 
-        threshold = self.config.workflow.otf.uncertainty_threshold
+        threshold = self.config.workflow.loop_strategy.thresholds.threshold_call_dft
         if result.max_gamma <= threshold and not result.halted:
             return None
 
@@ -404,10 +403,12 @@ class Orchestrator:
             new_potential = self._refine_potential(result, deployed_potential, paths)
             if new_potential:
                 if not new_potential.exists():
-                    self.logger.error(f"Refined potential path {new_potential} does not exist!")
+                    self.logger.error(f"Refined potential path {new_potential} does not exist! Retaining previous potential.")
                 else:
                     self.state_manager.current_potential = new_potential
                     self.logger.info(f"Potential refined to: {new_potential}")
+            else:
+                self.logger.warning("Refinement failed or returned None. Retaining previous potential.")
         else:
             self.logger.info(
                 LOG_ITERATION_COMPLETED.format(iteration=self.state_manager.iteration + 1)

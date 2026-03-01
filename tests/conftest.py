@@ -158,7 +158,11 @@ def create_test_config_dict(**overrides: Any) -> dict[str, Any]:
             "pressure": 0.0,
             "timestep": 0.001,
             "n_steps": 1000,
-            "uncertainty_threshold": 5.0,
+            "thresholds": {
+                "threshold_call_dft": 5.0,
+                "threshold_add_train": 2.0,
+                "smooth_steps": 3,
+            },
             "check_interval": 10,
         },
         "validation": {},  # Use defaults
@@ -170,10 +174,16 @@ def create_test_config_dict(**overrides: Any) -> dict[str, Any]:
             "n_candidates": 10,
             "batch_size": 5,
             "otf": {
-                "uncertainty_threshold": 5.0,
                 "local_n_candidates": 20,
                 "local_n_select": 5,
                 "max_retries": 3,
+            },
+            "loop_strategy": {
+                "thresholds": {
+                    "threshold_call_dft": 5.0,
+                    "threshold_add_train": 2.0,
+                    "smooth_steps": 3,
+                }
             },
         },
         "logging": {},

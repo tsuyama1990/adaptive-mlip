@@ -18,6 +18,7 @@ def test_lammps_engine_halt_step_populated(tmp_path: Path) -> None:
         fix_halt=True,
     )
 
+    from unittest.mock import patch
     with patch("pyacemaker.core.engine.LammpsDriver") as MockDriver:
         driver = MockDriver.return_value
 
@@ -33,11 +34,13 @@ def test_lammps_engine_halt_step_populated(tmp_path: Path) -> None:
         driver.get_stress.return_value = np.zeros(6)
 
         engine = LammpsEngine(config)
-        atoms = Atoms("H", cell=[10, 10, 10], pbc=True)
-        pot_path = tmp_path / "pot.yace"
-        pot_path.touch()
 
-        result = engine.run(atoms, pot_path)
+        with patch.object(engine.parser, "_evaluate_uncertainty_stream", return_value=([0], True)):
+            atoms = Atoms("H", cell=[10, 10, 10], pbc=True)
+            pot_path = tmp_path / "pot.yace"
+            pot_path.touch()
+
+            result = engine.run(atoms, pot_path)
 
         assert result.halted is True
         assert result.halt_step == 500

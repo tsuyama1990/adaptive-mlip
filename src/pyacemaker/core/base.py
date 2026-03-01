@@ -161,13 +161,16 @@ class BaseEngine(ABC):
     """
 
     @abstractmethod
-    def run(self, structure: Atoms | None, potential: Any) -> MDSimulationResult:
+    def run(
+        self, structure: Atoms | None, potential: Any, restart_file: Path | None = None
+    ) -> MDSimulationResult:
         """
         Runs a simulation using the given structure and potential.
 
         Args:
             structure: Initial structure. May be None if engine loads from file/config.
             potential: Trained potential. May be None if engine loads from file/config.
+            restart_file: Optional restart file for resuming MD precisely.
 
         Returns:
             MDSimulationResult containing trajectory path, halt status, etc.

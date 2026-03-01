@@ -17,6 +17,7 @@ def _check_dangerous_chars(path: Path) -> None:
         msg = f"Filename cannot start with '-': {path.name}"
         raise ValueError(msg)
 
+
 def _resolve_path(path: Path) -> Path:
     # Reject symlinks to prevent TOCTOU symlink attacks
     if path.is_symlink():
@@ -41,6 +42,7 @@ def _resolve_path(path: Path) -> Path:
             raise ValueError(msg)
 
         return resolved
+
 
 def _check_allowed_roots(resolved: Path) -> None:
     base_dir = Path.cwd().resolve()
@@ -68,6 +70,26 @@ def _check_allowed_roots(resolved: Path) -> None:
 
     msg = f"Path traversal detected: {resolved} is outside allowed roots {allowed_roots}"
     raise ValueError(msg)
+
+
+def escape_lammps_path(path: Path) -> str:
+    """
+    Safely formats a path for inclusion in a LAMMPS script.
+    LAMMPS commands expect unquoted string literals, but paths with spaces or special
+    characters might cause parsing errors if not quoted correctly. LAMMPS generally
+    prefers paths with spaces to be enclosed in double quotes.
+
+    Args:
+        path: Validated Path object.
+
+    Returns:
+        String formatted for LAMMPS.
+    """
+    s = str(path)
+    if " " in s and not s.startswith('"') and not s.endswith('"'):
+        return f'"{s}"'
+    return s
+
 
 def validate_path_safe(path: Path) -> Path:
     """

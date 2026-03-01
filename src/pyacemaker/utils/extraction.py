@@ -2,17 +2,16 @@ import numpy as np
 from ase import Atoms
 from ase.neighborlist import neighbor_list
 
+from pyacemaker.domain_models.workflow import CutoutConfig
 from pyacemaker.utils.embedding import embed_cluster
 
 
-def extract_local_region(
-    structure: Atoms, center_index: int, radius: float, buffer: float
-) -> Atoms:
+def extract_intelligent_cluster(structure: Atoms, center_index: int, config: CutoutConfig) -> Atoms:
     """
-    Extracts a local cluster around a specific atom from a structure.
+    Extracts a local cluster around a specific atom from a structure using intelligent configuration.
 
-    The cluster includes all atoms within (radius + buffer).
-    Atoms within 'radius' are marked with force_weight=1.0 (core).
+    The cluster includes all atoms within (config.core_radius + config.buffer_radius).
+    Atoms within 'config.core_radius' are marked with force_weight=1.0 (core).
     Atoms in the buffer region are marked with force_weight=0.0 (mask).
 
     The cluster is unwrapped (made contiguous) and then embedded in a new periodic box
@@ -21,12 +20,13 @@ def extract_local_region(
     Args:
         structure: The source atomic structure (usually periodic).
         center_index: The index of the central atom.
-        radius: The radius of the core region (Angstrom).
-        buffer: The thickness of the buffer region (Angstrom).
+        config: CutoutConfig with parameters.
 
     Returns:
         Atoms: The embedded cluster with 'force_weight' array in arrays.
     """
+    radius = config.core_radius
+    buffer = config.buffer_radius
     total_cutoff = radius + buffer
 
     # Use ASE's neighbor_list to find neighbors respecting PBC

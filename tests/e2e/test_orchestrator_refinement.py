@@ -89,7 +89,14 @@ def test_orchestrator_refinement_logic(tmp_path: Path) -> None:
             encut=400.0,
         ),
         training=TrainingConfig(potential_type="ace", cutoff_radius=4.0, max_basis_size=100),
-        md=MDConfig(temperature=300.0, pressure=0.0, timestep=0.001, n_steps=100, fix_halt=True),
+        md=MDConfig(
+            temperature=300.0,
+            pressure=0.0,
+            timestep=0.001,
+            n_steps=100,
+            fix_halt=True,
+            thresholds={"threshold_call_dft": 5.0, "threshold_add_train": 2.0, "smooth_steps": 3},
+        ),
         workflow=WorkflowConfig(
             max_iterations=1,
             state_file_path=str(tmp_path / "state.json"),
@@ -211,13 +218,13 @@ def test_orchestrator_refinement_extraction_failure(tmp_path: Path, caplog: Any)
     )
 
     with pytest.MonkeyPatch.context() as m:
-        # Patch extract_local_region to raise exception
+        # Patch extract_intelligent_cluster to raise exception
         def mock_fail(*args: Any, **kwargs: Any) -> None:
             msg = "Boom"
             raise ValueError(msg)
 
         # Need to patch where it is IMPORTED in orchestrator.py
-        m.setattr("pyacemaker.orchestrator.extract_local_region", mock_fail)
+        m.setattr("pyacemaker.orchestrator.extract_intelligent_cluster", mock_fail)
 
         new_pot = orch._refine_potential(result, Path("p"), {})
 

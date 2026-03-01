@@ -37,6 +37,12 @@ class LammpsFileManager:
             log_file: Path to output log file (in CWD).
             elements: List of element symbols in order.
         """
+        # Security: Validate input path immediately upon entry before any processing
+        safe_structure_path = None
+        if isinstance(structure, (str, Path)):
+            from pyacemaker.utils.path import validate_path_safe
+            safe_structure_path = validate_path_safe(Path(structure))
+
         # RAM disk usage optimization via config
         temp_dir_ctx = tempfile.TemporaryDirectory(dir=self.config.temp_dir)
         try:
@@ -51,11 +57,7 @@ class LammpsFileManager:
             log_file = cwd / f"log_{run_id}.lammps"
 
             # Handle different input types
-            if isinstance(structure, (str, Path)):
-                # Security: Validate input path before processing
-                from pyacemaker.utils.path import validate_path_safe
-                safe_structure_path = validate_path_safe(Path(structure))
-
+            if safe_structure_path is not None:
                 # 100% Streaming approach: Do not load any Atoms objects.
                 from pyacemaker.utils.io import detect_elements, stream_extxyz_to_lammps
 
