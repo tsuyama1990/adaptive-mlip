@@ -5,7 +5,7 @@ import pytest
 from ase import Atoms
 from ase.io import read
 
-from pyacemaker.utils.io import detect_elements, dump_yaml, load_yaml, write_lammps_streaming
+from pyacemaker.utils.io import detect_elements, dump_yaml, load_yaml, write_lammps_data_file
 
 
 def test_load_yaml_success(tmp_path):
@@ -52,7 +52,7 @@ def test_write_lammps_streaming_basic():
     species = ["H"]
 
     with tempfile.NamedTemporaryFile(mode="w+", delete=False) as f:
-        write_lammps_streaming(f, atoms, species)
+        write_lammps_data_file(f, atoms, species)
         f.flush()
         path = Path(f.name)
 
@@ -78,7 +78,7 @@ def test_write_lammps_streaming_multiple_species():
     species = ["H", "O"]
 
     with tempfile.NamedTemporaryFile(mode="w+", delete=False) as f:
-        write_lammps_streaming(f, atoms, species)
+        write_lammps_data_file(f, atoms, species)
         f.flush()
         path = Path(f.name)
 
@@ -94,7 +94,7 @@ def test_write_lammps_streaming_missing_species():
 
     with tempfile.NamedTemporaryFile(mode="w+", delete=False) as f:
         with pytest.raises(KeyError):
-            write_lammps_streaming(f, atoms, species)
+            write_lammps_data_file(f, atoms, species)
         path = Path(f.name)
 
     path.unlink()

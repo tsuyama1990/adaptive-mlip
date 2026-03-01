@@ -1,3 +1,4 @@
+from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any
 
@@ -6,7 +7,6 @@ from ase import Atoms
 from ase.data import atomic_numbers
 
 from pyacemaker.domain_models.constants import (
-    ERR_POTENTIAL_NOT_FOUND,
     ERR_VAL_POT_NONE,
     ERR_VAL_POT_NOT_FILE,
     ERR_VAL_REQ_STRUCT,
@@ -20,9 +20,7 @@ from pyacemaker.domain_models.constants import (
     ERR_VAL_STRUCT_ZERO_VOL,
 )
 from pyacemaker.domain_models.validation import ValidationConfig, ValidationResult
-from pyacemaker.utils.elastic import ElasticCalculator
 from pyacemaker.utils.path import validate_path_safe
-from pyacemaker.utils.phonons import PhononCalculator
 
 
 class LammpsInputValidator:
@@ -101,13 +99,31 @@ class LammpsInputValidator:
         path = validate_path_safe(p)
 
         # Additional checks for existence (validate_path_safe ensures safety, not existence)
-        if not path.exists():
-            raise FileNotFoundError(ERR_POTENTIAL_NOT_FOUND.format(path=path))
+        # Note: validate_path_safe uses strict resolution for existing files to avoid TOCTOU
+        # But if the file was created between calls or we just want to ensure it is still a file
 
+        # It's already resolved securely, just check type
         if not path.is_file():
             raise ValueError(ERR_VAL_POT_NOT_FILE.format(path=path))
 
         return path
+
+
+
+class BasePhononCalculator(ABC):
+    @abstractmethod
+    def check_stability(self, structure: Atoms, potential_path: Path) -> tuple[bool, str | None]:
+        ...
+
+class BaseElasticCalculator(ABC):
+    @property
+    @abstractmethod
+    def engine(self) -> Any:
+        ...
+
+    @abstractmethod
+    def calculate_properties(self, structure: Atoms, potential_path: Path) -> tuple[bool, dict[str, float], float, str | None]:
+        ...
 
 
 class Validator:
@@ -118,8 +134,8 @@ class Validator:
     def __init__(
         self,
         config: ValidationConfig,
-        phonon_calculator: PhononCalculator,
-        elastic_calculator: ElasticCalculator,
+        phonon_calculator: BasePhononCalculator,
+        elastic_calculator: BaseElasticCalculator,
         report_generator: Any,
     ) -> None:
         self.config = config

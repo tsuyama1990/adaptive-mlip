@@ -107,6 +107,12 @@ class WorkflowConfig(BaseModel):
         description="Configuration for OTF loop."
     )
 
-    thresholds: ActiveLearningThresholds | None = Field(None, description="Active learning thresholds for two-tier evaluation.")
-    cutout: CutoutConfig | None = Field(None, description="Configuration for cluster cutout.")
+    thresholds: ActiveLearningThresholds = Field(
+        default_factory=lambda: ActiveLearningThresholds(threshold_call_dft=5.0, threshold_add_train=6.0, smooth_steps=3),
+        description="Active learning thresholds for two-tier evaluation."
+    )
+    cutout: CutoutConfig = Field(
+        default_factory=lambda: CutoutConfig(core_radius=5.0, buffer_radius=3.0, enable_pre_relaxation=True, enable_passivation=True),
+        description="Configuration for cluster cutout."
+    )
     strategy: LoopStrategyConfig = Field(default_factory=LoopStrategyConfig, description="Strategy for the learning loop.")

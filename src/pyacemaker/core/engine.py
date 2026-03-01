@@ -68,16 +68,41 @@ class LammpsEngine(BaseEngine):
         """
         try:
             self._ensure_script_readable(script_path)
+
+            # Security: Validate script content against a whitelist of allowed commands
+            allowed_commands = {
+                "clear", "units", "atom_style", "boundary", "read_data", "read_restart",
+                "pair_style", "pair_coeff", "neighbor", "neigh_modify", "timestep",
+                "compute", "variable", "fix", "thermo", "thermo_style", "dump",
+                "minimize", "velocity", "run", "restart", "unfix", "min_style", "dump_modify"
+            }
+            with script_path.open("r") as f:
+                for line_idx, line in enumerate(f):
+                    line = line.strip()
+                    if not line or line.startswith("#"):
+                        continue
+                    cmd = line.split()[0]
+                    if cmd not in allowed_commands:
+                        raise ValueError(f"Unsafe or unauthorized LAMMPS command detected on line {line_idx+1}: {cmd}")
+
             # Scalability: Use run_file to stream script execution
             driver.run_file(str(script_path))
 
         except FileNotFoundError as e:
+            import logging
+            logging.error(f"Setup failure: {e}", exc_info=True)
             raise RuntimeError(ERR_SIM_SETUP_FAIL.format(error=e)) from e
         except ValueError as e:
+            import logging
+            logging.error(f"Security failure: {e}", exc_info=True)
             raise RuntimeError(ERR_SIM_SECURITY_FAIL.format(error=e)) from e
         except RuntimeError as e:
+            import logging
+            logging.error(f"Execution failure: {e}", exc_info=True)
             raise RuntimeError(ERR_SIM_EXEC_FAIL.format(error=e)) from e
         except Exception as e:
+            import logging
+            logging.error(f"Unexpected execution failure: {e}", exc_info=True)
             raise RuntimeError(ERR_SIM_UNEXPECTED.format(error=e)) from e
 
     def run(self, structure: Atoms | None, potential: Any, restart_file: Path | None = None) -> MDSimulationResult:

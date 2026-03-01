@@ -81,7 +81,7 @@ def _get_atomic_mass(symbol: str) -> float:
     return _ATOMIC_MASSES_CACHE[symbol]
 
 
-def write_lammps_streaming(
+def write_lammps_data_file(
     fileobj: Any,
     atoms: Atoms,
     species: list[str],
@@ -89,33 +89,49 @@ def write_lammps_streaming(
 ) -> None:
     """
     Writes a single frame in LAMMPS data format to an open file object.
-    Optimized for streaming large trajectories using minimal memory and vectorized formatting.
+    Optimized for single frame generation using minimal memory and vectorized formatting.
 
     Args:
         fileobj: An open file object (in write mode).
         atoms: The ASE Atoms object to write.
         species: List of chemical symbols mapping to types 1..N.
-        atom_style: LAMMPS atom style (currently only 'atomic' supported for streaming).
+        atom_style: LAMMPS atom style (currently only 'atomic' supported).
     """
     natoms = len(atoms)
 
     # 1. Header
-    fileobj.write("LAMMPS data file via pyacemaker streaming\n\n")
+    fileobj.write("LAMMPS data file via pyacemaker generation\n\n")
     fileobj.write(f"{natoms} atoms\n")
     fileobj.write(f"{len(species)} atom types\n\n")
 
     # 2. Box
     cell = atoms.get_cell()
-    if not np.allclose(cell, np.diag(np.diag(cell))):
-        raise ValueError("Streaming write currently only supports orthogonal cells")
 
-    xlo, xhi = 0.0, cell[0, 0]
-    ylo, yhi = 0.0, cell[1, 1]
-    zlo, zhi = 0.0, cell[2, 2]
+    # Extract cell parameters supporting triclinic geometries
+    a, b, c = cell[0], cell[1], cell[2]
+
+    # Standard LAMMPS convention expects cell aligned such that a is along x, b is in xy plane
+    xlo, xhi = 0.0, np.linalg.norm(a)
+    ylo = 0.0
+
+    # Calculate non-orthogonal components (xy, xz, yz)
+    xy = np.dot(a, b) / xhi if xhi > 0 else 0.0
+    yhi = np.sqrt(np.linalg.norm(b)**2 - xy**2) if np.linalg.norm(b)**2 > xy**2 else 0.0
+
+    xz = np.dot(a, c) / xhi if xhi > 0 else 0.0
+    yz = (np.dot(b, c) - xy * xz) / yhi if yhi > 0 else 0.0
+    zhi = np.sqrt(np.linalg.norm(c)**2 - xz**2 - yz**2) if np.linalg.norm(c)**2 > (xz**2 + yz**2) else 0.0
+    zlo = 0.0
 
     fileobj.write(f"{xlo:.6f} {xhi:.6f} xlo xhi\n")
     fileobj.write(f"{ylo:.6f} {yhi:.6f} ylo yhi\n")
-    fileobj.write(f"{zlo:.6f} {zhi:.6f} zlo zhi\n\n")
+    fileobj.write(f"{zlo:.6f} {zhi:.6f} zlo zhi\n")
+
+    # Write triclinic tilt factors if non-orthogonal
+    if not np.allclose([xy, xz, yz], [0, 0, 0], atol=1e-6):
+        fileobj.write(f"{xy:.6f} {xz:.6f} {yz:.6f} xy xz yz\n")
+
+    fileobj.write("\n")
 
     # 3. Masses
     fileobj.write("Masses\n\n")

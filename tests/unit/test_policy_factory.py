@@ -1,4 +1,4 @@
-from pyacemaker.core.policy import CompositePolicy, MDMicroBurstPolicy, RattlePolicy, StrainPolicy
+from pyacemaker.core.policy import CompositePolicy, MDMicroBurstPolicy, RattlePolicy
 from pyacemaker.core.policy_factory import PolicyFactory
 from pyacemaker.domain_models.structure import (
     ExplorationPolicy,

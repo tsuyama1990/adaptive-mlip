@@ -1,3 +1,4 @@
+import logging
 import shutil
 from collections.abc import Iterable
 from pathlib import Path
@@ -46,19 +47,29 @@ class Orchestrator:
     Manages the lifecycle of the active learning loop, error handling, and state persistence.
     """
 
-    def __init__(self, config: PyAceConfig) -> None:
+    def __init__(
+        self,
+        config: PyAceConfig,
+        logger: logging.Logger | None = None,
+        state_manager: StateManager | None = None,
+        dir_manager: DirectoryManager | None = None
+    ) -> None:
         """
         Initializes the Orchestrator with a configuration.
 
         Args:
             config: Validated PyAceConfig object.
+            logger: Injected logger.
+            state_manager: Injected StateManager.
+            dir_manager: Injected DirectoryManager.
         """
         self.config = config
-        self.logger = setup_logger(config=config.logging, project_name=config.project_name)
+
+        self.logger = logger if logger is not None else setup_logger(config=config.logging, project_name=config.project_name)
 
         # Initialize Managers
-        self.state_manager = StateManager(Path(config.workflow.state_file_path), self.logger)
-        self.dir_manager = DirectoryManager(Path(config.workflow.active_learning_dir), self.logger)
+        self.state_manager = state_manager if state_manager is not None else StateManager(Path(config.workflow.state_file_path), self.logger)
+        self.dir_manager = dir_manager if dir_manager is not None else DirectoryManager(Path(config.workflow.active_learning_dir), self.logger)
 
         self.data_dir = Path(config.workflow.data_dir)
         self.data_dir.mkdir(exist_ok=True)
@@ -137,15 +148,15 @@ class Orchestrator:
 
         # Open file once
         with filepath.open(mode) as f:
-            # Write frames one by one or in small internal chunks if needed by ASE.
-            # ASE write(filename, atoms) can handle a list or single atom.
-            # writing to file handle supports multiple frames for extxyz.
-
-            # Optimization: Buffering is handled by file object.
-            # We just iterate and write.
-            for atoms in generator:
-                write(f, atoms, format="extxyz")
-                count += 1
+            # Write frames in controlled memory chunks to balance I/O calls and RAM.
+            from itertools import islice
+            iterator = iter(generator)
+            while True:
+                chunk = list(islice(iterator, batch_size))
+                if not chunk:
+                    break
+                write(f, chunk, format="extxyz")
+                count += len(chunk)
 
         return count
 

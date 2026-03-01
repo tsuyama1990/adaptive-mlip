@@ -1,4 +1,3 @@
-import shlex
 from pathlib import Path
 from typing import TextIO
 
@@ -28,14 +27,14 @@ class LammpsScriptGenerator:
 
     def _quote(self, path: str) -> str:
         """
-        Quotes a path for LAMMPS script safety after validation.
-        Uses caching to avoid redundant validation calls.
+        Escapes paths for LAMMPS script safety without using shell quoting.
         """
         # Sanitize input path
-        # Note: path must be string for lru_cache
         safe_path = validate_path_safe(Path(path))
-        # Use shlex.quote for shell safety
-        return shlex.quote(str(safe_path))
+        # LAMMPS requires escaping spaces with backslashes
+        escaped_path = str(safe_path).replace(" ", "\\ ")
+        # Do not use shlex.quote, as LAMMPS handles raw strings, not bash syntax
+        return escaped_path
 
     def _gen_potential_pure(self, buffer: TextIO, potential_path: Path, elements: list[str]) -> None:
         """Generates pure PACE potential commands."""
@@ -121,22 +120,14 @@ class LammpsScriptGenerator:
             f"{temp} ke no types {types_str}\n"
         )
 
-    def _gen_execution(self, buffer: TextIO, elements: list[str], is_resume: bool = False) -> None:
-        """Generates minimization and MD run commands."""
+    def _gen_minimization(self, buffer: TextIO, is_resume: bool) -> None:
         if self.config.minimize and not is_resume:
             buffer.write(
                 f"minimize {self.config.minimize_tol} {self.config.minimize_ftol} "
                 f"{self.config.minimize_steps} {self.config.minimize_max_iter}\n"
             )
 
-        # MC
-        self._gen_mc(buffer, elements)
-
-        # Calculate damping parameters
-        tdamp = self.config.tdamp_factor * self.config.timestep
-        pdamp = self.config.pdamp_factor * self.config.timestep
-
-        # Determine T/P start/end
+    def _get_ramping_params(self) -> tuple[float, float, float, float]:
         temp_start = self.config.temperature
         temp_end = self.config.temperature
         press_start = self.config.pressure
@@ -151,24 +142,40 @@ class LammpsScriptGenerator:
                 press_start = self.config.ramping.press_start
             if self.config.ramping.press_end is not None:
                 press_end = self.config.ramping.press_end
+        return temp_start, temp_end, press_start, press_end
 
+    def _gen_velocity_initialization(self, buffer: TextIO, temp_start: float, is_resume: bool) -> None:
         if not is_resume:
-            # Use configurable velocity seed
             buffer.write(f"velocity all create {temp_start} {self.config.velocity_seed}\n")
 
+    def _gen_soft_start_protocol(self, buffer: TextIO, temp_start: float, temp_end: float, tdamp: float, is_resume: bool) -> None:
         if is_resume:
-            # Soft Start Protocol: apply short heavily damped Langevin thermostat
             buffer.write(f"fix soft_start all langevin {temp_start} {temp_end} {tdamp / 10.0} {self.config.velocity_seed}\n")
             buffer.write("fix soft_nve all nve\n")
             buffer.write("run 100\n")
             buffer.write("unfix soft_start\n")
             buffer.write("unfix soft_nve\n")
 
+    def _gen_npt_ensemble(self, buffer: TextIO, temp_start: float, temp_end: float, press_start: float, press_end: float, tdamp: float, pdamp: float) -> None:
         buffer.write(
             f"fix npt all npt temp {temp_start} {temp_end} {tdamp} "
             f"iso {press_start} {press_end} {pdamp}\n"
         )
         buffer.write(f"run {self.config.n_steps}\n")
+
+    def _gen_execution(self, buffer: TextIO, elements: list[str], is_resume: bool = False) -> None:
+        """Generates minimization and MD run commands by composing specific stages."""
+        self._gen_minimization(buffer, is_resume)
+        self._gen_mc(buffer, elements)
+
+        tdamp = self.config.tdamp_factor * self.config.timestep
+        pdamp = self.config.pdamp_factor * self.config.timestep
+
+        temp_s, temp_e, press_s, press_e = self._get_ramping_params()
+
+        self._gen_velocity_initialization(buffer, temp_s, is_resume)
+        self._gen_soft_start_protocol(buffer, temp_s, temp_e, tdamp, is_resume)
+        self._gen_npt_ensemble(buffer, temp_s, temp_e, press_s, press_e, tdamp, pdamp)
 
     def _gen_output_setup(self, buffer: TextIO, dump_file: Path) -> None:
         """Generates output settings (thermo and dump)."""

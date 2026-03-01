@@ -7,13 +7,14 @@ import numpy as np
 from ase import Atoms
 
 from pyacemaker.core.base import BaseEngine
+from pyacemaker.core.validator import BaseElasticCalculator
 from pyacemaker.domain_models.defaults import (
     DEFAULT_VALIDATION_ELASTIC_STEPS,
     DEFAULT_VALIDATION_ELASTIC_STRAIN,
 )
 
 
-class ElasticCalculator:
+class ElasticCalculator(BaseElasticCalculator):
     """
     Calculates elastic constants (C_ij) and checks Born stability criteria.
     Currently supports Cubic symmetry (C11, C12, C44).
@@ -25,9 +26,13 @@ class ElasticCalculator:
         strain: float = DEFAULT_VALIDATION_ELASTIC_STRAIN,
         steps: int = DEFAULT_VALIDATION_ELASTIC_STEPS,
     ) -> None:
-        self.engine = engine
+        self._engine = engine
         self.strain = strain
         self.steps = steps
+
+    @property
+    def engine(self) -> BaseEngine:
+        return self._engine
 
     def _get_stress(self, atoms: Atoms, potential_path: Path) -> np.ndarray:
         """Helper to get stress from engine (Voigt: xx, yy, zz, yz, xz, xy)."""

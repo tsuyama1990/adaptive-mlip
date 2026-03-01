@@ -210,7 +210,8 @@ class MDConfig(BaseModel):
     def validate_simulation_physics(self) -> "MDConfig":
         total_time = self.n_steps * self.timestep
         if total_time > MAX_MD_DURATION:
-             pass
+             msg = f"Total simulation duration ({total_time} ps) exceeds maximum allowed ({MAX_MD_DURATION} ps)"
+             raise ValueError(msg)
         return self
 
     @model_validator(mode="after")

@@ -64,10 +64,12 @@ def test_extract_intelligent_cluster_pbc() -> None:
 
     cluster = extract_intelligent_cluster(atoms, [center_idx], config)
 
-    # NN of corner 0 in 2x2x2 SC are 3 (along axes) + ?
-    # In periodic 2x2x2, each atom has 6 NN.
-    # So we expect 1 + 6 = 7 atoms in cluster.
-    assert len(cluster) == 7
+    # In 2x2x2 SC (8 atoms), corner atom has exactly 3 neighbors within 2.6 cutoff distance.
+    # 1 origin + 3 neighbors = 4
+    assert len(cluster) == 4
 
     weights = cluster.get_array("force_weight")  # type: ignore[no-untyped-call]
+
+    # Since we extract based on MIC distances which map everything relative to origin
+    # the weights for all atoms inside the radius should be 1.0
     assert np.all(weights == 1.0) # All are within radius

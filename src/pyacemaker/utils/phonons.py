@@ -9,10 +9,11 @@ from phonopy import Phonopy
 from phonopy.structure.atoms import PhonopyAtoms
 
 from pyacemaker.core.base import BaseEngine
+from pyacemaker.core.validator import BasePhononCalculator
 from pyacemaker.domain_models.defaults import DEFAULT_VALIDATION_PHONON_IMAGINARY_TOL
 
 
-class PhononCalculator:
+class PhononCalculator(BasePhononCalculator):
     """
     Calculates phonon band structures and checks for dynamical stability using Phonopy.
     """
