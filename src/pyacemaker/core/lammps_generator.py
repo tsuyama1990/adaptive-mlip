@@ -9,6 +9,7 @@ from pyacemaker.domain_models.constants import (
     LAMMPS_PAIR_STYLE_PACE,
 )
 from pyacemaker.domain_models.md import HybridParams, MDConfig
+from pyacemaker.domain_models.workflow import WorkflowConfig
 from pyacemaker.utils.path import escape_lammps_path, validate_path_safe
 
 
@@ -19,8 +20,9 @@ class LammpsScriptGenerator:
     Supports writing directly to a file-like object to handle large scripts efficiently.
     """
 
-    def __init__(self, config: MDConfig) -> None:
+    def __init__(self, config: MDConfig, workflow_config: WorkflowConfig) -> None:
         self.config = config
+        self.workflow_config = workflow_config
         self._atomic_numbers_cache: dict[str, int] = {}
         self._quote_cache: dict[str, str] = {}
 
@@ -89,8 +91,11 @@ class LammpsScriptGenerator:
 
     def _gen_watchdog(self, buffer: TextIO, potential_path: Path) -> None:
         """Generates Uncertainty Watchdog commands."""
-        if not self.config.fix_halt:
+        if not self.workflow_config.otf.fix_halt:
             return
+
+        check_interval = self.workflow_config.otf.check_interval
+        threshold_call_dft = self.workflow_config.loop_strategy.thresholds.threshold_call_dft
 
         quoted_pot = self._quote(str(potential_path))
         buffer.write(f"compute gamma all pace {quoted_pot}\n")
@@ -98,8 +103,8 @@ class LammpsScriptGenerator:
         buffer.write("variable max_g equal c_max_gamma\n")
 
         buffer.write(
-            f"fix halt_check all halt {self.config.check_interval} "
-            f"v_max_g > {self.config.thresholds.threshold_call_dft} error continue\n"
+            f"fix halt_check all halt {check_interval} "
+            f"v_max_g > {threshold_call_dft} error continue\n"
         )
 
     def _gen_mc(self, buffer: TextIO, elements: list[str]) -> None:
@@ -208,7 +213,7 @@ class LammpsScriptGenerator:
         style_parts = ["step", "temp", "pe", "press"]
         dump_parts = ["id", "type", "x", "y", "z"]
 
-        if self.config.fix_halt:
+        if self.workflow_config.otf.fix_halt:
             style_parts.append("v_max_g")
             dump_parts.append("c_gamma")
 

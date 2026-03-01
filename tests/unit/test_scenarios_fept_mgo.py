@@ -25,6 +25,8 @@ def mock_config() -> Any:
         )
         mock_conf.eon = EONConfig(potential_path=path)
         mock_conf.md = MagicMock()  # Mock MD config
+        mock_conf.workflow = MagicMock()
+        mock_conf.workflow.otf.fix_halt = False
         yield mock_conf
 
 

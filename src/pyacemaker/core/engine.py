@@ -16,6 +16,7 @@ from pyacemaker.domain_models.constants import (
     LAMMPS_SCREEN_ARG,
 )
 from pyacemaker.domain_models.md import MDConfig, MDSimulationResult
+from pyacemaker.domain_models.workflow import WorkflowConfig
 from pyacemaker.interfaces.lammps_driver import LammpsDriver
 
 
@@ -51,8 +52,9 @@ class LammpsExecutor:
 class LammpsResultParser:
     """Handles extracting results from LAMMPS driver."""
 
-    def __init__(self, config: MDConfig) -> None:
+    def __init__(self, config: MDConfig, workflow_config: WorkflowConfig) -> None:
         self.config = config
+        self.workflow_config = workflow_config
 
     def parse_md_result(
         self, driver: LammpsDriver, dump_file: Path, log_file: Path
@@ -76,9 +78,10 @@ class LammpsResultParser:
         max_gamma = 0.0
         epicenter_atoms: list[int] = []
 
-        if self.config.fix_halt:
+        if self.workflow_config.otf.fix_halt:
             halted = step < self.config.n_steps
             import contextlib
+
             with contextlib.suppress(Exception):
                 max_gamma = driver.extract_variable("max_g")
 
@@ -122,9 +125,9 @@ class LammpsResultParser:
         from ase.io import iread
 
         epicenter_atoms: list[int] = []
-        call_dft_limit = self.config.thresholds.threshold_call_dft
-        add_train_limit = self.config.thresholds.threshold_add_train
-        smooth_steps = self.config.thresholds.smooth_steps
+        call_dft_limit = self.workflow_config.loop_strategy.thresholds.threshold_call_dft
+        add_train_limit = self.workflow_config.loop_strategy.thresholds.threshold_add_train
+        smooth_steps = self.workflow_config.loop_strategy.thresholds.smooth_steps
 
         consecutive_spikes = 0
         true_halt = False
@@ -149,7 +152,10 @@ class LammpsResultParser:
         except Exception as e:
             # If reading fails, assume we use what we have or fallback
             import logging
-            logging.getLogger(__name__).warning(f"Error reading dump file for uncertainty evaluation: {e}")
+
+            logging.getLogger(__name__).warning(
+                f"Error reading dump file for uncertainty evaluation: {e}"
+            )
 
         return epicenter_atoms, true_halt
 
@@ -163,16 +169,18 @@ class LammpsEngine(BaseEngine):
     def __init__(
         self,
         config: MDConfig,
+        workflow_config: WorkflowConfig,
         generator: LammpsScriptGenerator | None = None,
         file_manager: LammpsFileManager | None = None,
         executor: LammpsExecutor | None = None,
         parser: LammpsResultParser | None = None,
     ) -> None:
         self.config = config
-        self.generator = generator or LammpsScriptGenerator(config)
+        self.workflow_config = workflow_config
+        self.generator = generator or LammpsScriptGenerator(config, workflow_config)
         self.file_manager = file_manager or LammpsFileManager(config)
         self.executor = executor or LammpsExecutor()
-        self.parser = parser or LammpsResultParser(config)
+        self.parser = parser or LammpsResultParser(config, workflow_config)
 
     def _prepare_simulation_env(
         self, structure: Atoms | None, potential: Any
@@ -232,7 +240,7 @@ class LammpsEngine(BaseEngine):
             update={"n_steps": 0, "minimize": False, "thermo_freq": 1, "dump_freq": 0}
         )
 
-        engine = LammpsEngine(static_config)
+        engine = LammpsEngine(static_config, self.workflow_config)
         return engine.run(structure, potential)
 
     def relax(self, structure: Atoms, potential: Any) -> Atoms:

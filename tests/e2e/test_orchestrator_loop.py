@@ -65,12 +65,6 @@ def mock_config(tmp_path: Path) -> PyAceConfig:
             "pressure": 0.0,
             "timestep": 0.001,
             "n_steps": 1000,
-            "thresholds": {
-                "threshold_call_dft": 5.0,
-                "threshold_add_train": 2.0,
-                "smooth_steps": 3,
-            },
-            "check_interval": 10,
         },
         "workflow": {
             "max_iterations": 2,
@@ -85,7 +79,12 @@ def mock_config(tmp_path: Path) -> PyAceConfig:
                     "smooth_steps": 3,
                 }
             },
-            "otf": {"local_n_candidates": 20, "local_n_select": 5, "max_retries": 3},
+            "otf": {
+                "check_interval": 10,
+                "local_n_candidates": 20,
+                "local_n_select": 5,
+                "max_retries": 3,
+            },
         },
         "logging": {},
     }

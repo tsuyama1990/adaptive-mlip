@@ -11,6 +11,7 @@ from pyacemaker.core.base import BaseOracle
 from pyacemaker.core.exceptions import OracleError
 from pyacemaker.domain_models import DFTConfig
 from pyacemaker.domain_models.constants import ERR_ORACLE_FAILED, ERR_ORACLE_ITERATOR
+from pyacemaker.domain_models.workflow import LoopStrategyConfig
 from pyacemaker.interfaces.qe_driver import QEDriver
 from pyacemaker.utils.embedding import embed_cluster
 
@@ -211,3 +212,105 @@ class DFTManager(BaseOracle):
         # Try to get stress (optional)
         with contextlib.suppress(PropertyNotImplementedError, RuntimeError):
             atoms.get_stress()  # type: ignore[no-untyped-call]
+
+
+class MACEManager(BaseOracle):
+    """
+    Manages MACE model inferences.
+    """
+
+    def __init__(self, mace_model_path: str = "mace-mp-0-medium") -> None:
+        self.mace_model_path = mace_model_path
+        self._load_calculator()
+
+    def _load_calculator(self) -> None:
+        try:
+            from mace.calculators import mace_mp
+        except ImportError as e:
+            msg = "mace package is not installed."
+            raise RuntimeError(msg) from e
+
+        self.calc = mace_mp(model=self.mace_model_path)
+
+    def compute(
+        self, structures: Iterator[Atoms], batch_size: int | None = None
+    ) -> Iterator[Atoms]:
+        if isinstance(structures, (list, tuple)):
+            raise TypeError(ERR_ORACLE_ITERATOR.format(type=type(structures)))
+
+        if not isinstance(structures, Iterator):
+            raise TypeError(ERR_ORACLE_ITERATOR.format(type=type(structures)))
+
+        return self._compute_generator(structures)
+
+    def _compute_generator(self, structures: Iterator[Atoms]) -> Iterator[Atoms]:
+        for atoms in structures:
+            atoms.calc = self.calc
+
+            # Extract uncertainty
+            if hasattr(self.calc, "get_property"):
+                try:
+                    uncertainty = self.calc.get_property("energy_variance", atoms)
+                    atoms.info["mace_uncertainty"] = (
+                        float(uncertainty) if uncertainty is not None else 0.0
+                    )
+                except (PropertyNotImplementedError, KeyError):
+                    atoms.info["mace_uncertainty"] = 0.0
+
+            atoms.get_potential_energy()  # type: ignore[no-untyped-call]
+            atoms.get_forces()  # type: ignore[no-untyped-call]
+
+            with contextlib.suppress(PropertyNotImplementedError, RuntimeError):
+                atoms.get_stress()  # type: ignore[no-untyped-call]
+
+            yield atoms
+
+
+class TieredOracle(BaseOracle):
+    """
+    Routes structures to either MACEManager or DFTManager based on uncertainty threshold.
+    """
+
+    def __init__(self, dft_config: DFTConfig, strategy_config: LoopStrategyConfig) -> None:
+        self.dft_manager = DFTManager(dft_config)
+        self.mace_manager = MACEManager()
+        self.strategy_config = strategy_config
+        self.threshold_call_dft = self.strategy_config.thresholds.threshold_call_dft
+
+    def compute(
+        self, structures: Iterator[Atoms], batch_size: int | None = None
+    ) -> Iterator[Atoms]:
+        if isinstance(structures, (list, tuple)):
+            raise TypeError(ERR_ORACLE_ITERATOR.format(type=type(structures)))
+
+        if not isinstance(structures, Iterator):
+            raise TypeError(ERR_ORACLE_ITERATOR.format(type=type(structures)))
+
+        return self._compute_generator(structures)
+
+    def _compute_generator(self, structures: Iterator[Atoms]) -> Iterator[Atoms]:
+        for atoms in structures:
+            # First, pass to MACEManager to evaluate
+            mace_atoms_gen = self.mace_manager.compute(iter([atoms]))
+            try:
+                mace_atoms = next(mace_atoms_gen)
+            except StopIteration:
+                continue
+
+            uncertainty = mace_atoms.info.get("mace_uncertainty", 0.0)
+
+            # If uncertainty exceeds threshold, fallback to DFT
+            if uncertainty > self.threshold_call_dft:
+                logger.info(
+                    f"Uncertainty {uncertainty:.4f} > {self.threshold_call_dft}. Routing to DFT."
+                )
+                dft_atoms_gen = self.dft_manager.compute(iter([atoms]))
+                try:
+                    yield next(dft_atoms_gen)
+                except StopIteration:
+                    continue
+            else:
+                logger.debug(
+                    f"Uncertainty {uncertainty:.4f} <= {self.threshold_call_dft}. Using MACE."
+                )
+                yield mace_atoms

@@ -41,6 +41,7 @@ class LammpsFileManager:
         safe_structure_path = None
         if isinstance(structure, (str, Path)):
             from pyacemaker.utils.path import validate_path_safe
+
             safe_structure_path = validate_path_safe(Path(structure))
 
         # RAM disk usage optimization via config

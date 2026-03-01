@@ -8,7 +8,6 @@ from pyacemaker.domain_models.md import (
     MDRampingConfig,
     MDSimulationResult,
 )
-from pyacemaker.domain_models.workflow import ActiveLearningThresholds
 
 
 def test_hybrid_params_valid() -> None:
@@ -34,14 +33,12 @@ def test_md_config_valid() -> None:
         dump_freq=100,
         thermo_freq=10,
         hybrid_potential=True,
-        thresholds=ActiveLearningThresholds(threshold_call_dft=0.1),
     )
     assert config.temperature == 300.0
     assert config.hybrid_potential is True
     assert isinstance(config.hybrid_params, HybridParams)
     assert config.dump_freq == 100
     assert config.thermo_freq == 10
-    assert config.thresholds.threshold_call_dft == 0.1
 
 
 def test_md_config_with_hybrid_params() -> None:

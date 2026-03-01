@@ -1,10 +1,13 @@
-from pydantic import BaseModel, ConfigDict, Field, PositiveInt
+import os
+
+from pydantic import BaseModel, ConfigDict, Field, PositiveInt, model_validator
 
 from pyacemaker.domain_models.defaults import (
     DEFAULT_ACTIVE_LEARNING_DIR,
     DEFAULT_BATCH_SIZE,
     DEFAULT_CHECKPOINT_INTERVAL,
     DEFAULT_DATA_DIR,
+    DEFAULT_MD_CHECK_INTERVAL,
     DEFAULT_N_CANDIDATES,
     DEFAULT_OTF_LOCAL_N_CANDIDATES,
     DEFAULT_OTF_LOCAL_N_SELECT,
@@ -60,6 +63,15 @@ class OTFConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    fix_halt: bool = Field(False, description="Enable OTF halting based on uncertainty")
+    check_interval: int = Field(
+        default_factory=lambda: int(
+            os.environ.get("PYACE_MD_CHECK_INTERVAL", DEFAULT_MD_CHECK_INTERVAL)
+        ),
+        gt=0,
+        description="Step interval for uncertainty check",
+    )
+
     local_n_candidates: PositiveInt = Field(
         default=DEFAULT_OTF_LOCAL_N_CANDIDATES,
         description="Number of local candidates to generate around halt structure.",
@@ -72,6 +84,13 @@ class OTFConfig(BaseModel):
         default=DEFAULT_OTF_MAX_RETRIES,
         description="Maximum number of retraining attempts per iteration.",
     )
+
+    @model_validator(mode="after")
+    def validate_otf_settings(self) -> "OTFConfig":
+        if self.fix_halt and self.check_interval <= 0:
+            msg = "check_interval must be positive when fix_halt is enabled."
+            raise ValueError(msg)
+        return self
 
 
 class WorkflowConfig(BaseModel):
