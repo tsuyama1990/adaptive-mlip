@@ -1,7 +1,7 @@
 import os
+from collections.abc import Iterator
 from enum import StrEnum
 from pathlib import Path
-from typing import Any
 
 import numpy as np
 from pydantic import BaseModel, ConfigDict, Field, PositiveFloat, PositiveInt, model_validator
@@ -26,10 +26,13 @@ from pyacemaker.domain_models.defaults import (
     DEFAULT_MD_HYBRID_ZBL_OUTER,
     DEFAULT_MD_NEIGHBOR_SKIN,
     DEFAULT_MD_PDAMP_FACTOR,
+    DEFAULT_MD_SOFT_START_SEED,
+    DEFAULT_MD_SOFT_START_TDAMP,
     DEFAULT_MD_TDAMP_FACTOR,
     DEFAULT_MD_THERMO_FREQ,
     DEFAULT_OTF_UNCERTAINTY_THRESHOLD,
 )
+from pyacemaker.domain_models.workflow import ActiveLearningThresholds
 
 
 def _get_default_temp_dir() -> str | None:
@@ -56,6 +59,13 @@ class HybridParams(BaseModel):
         DEFAULT_MD_HYBRID_ZBL_OUTER, description="Outer cutoff radius for ZBL potential (Angstrom)"
     )
 
+    @model_validator(mode="after")
+    def validate_cutoffs(self) -> "HybridParams":
+        if self.zbl_cut_inner >= self.zbl_cut_outer:
+            msg = f"zbl_cut_inner ({self.zbl_cut_inner}) must be strictly less than zbl_cut_outer ({self.zbl_cut_outer})."
+            raise ValueError(msg)
+        return self
+
 
 class MDRampingConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -79,10 +89,10 @@ class MCConfig(BaseModel):
 
 
 class MDSimulationResult(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", arbitrary_types_allowed=True)
 
     energy: float = Field(..., description="Final potential energy of the system")
-    forces: list[list[float]] | Any = Field(..., description="Forces on atoms in the final frame (can be generator/iterator for large structs)")
+    forces: Iterator[list[float]] | list[list[float]] = Field(..., description="Forces on atoms in the final frame (can be generator/iterator for large structs)")
     stress: list[float] = Field(
         default_factory=lambda: [0.0] * 6,
         description="Stress tensor (Voigt: xx, yy, zz, yz, xz, xy) in Bar",
@@ -143,42 +153,42 @@ class MDConfig(BaseModel):
 
     # Output Control
     thermo_freq: PositiveInt = Field(
-        default_factory=lambda: int(os.environ.get("PYACE_MD_THERMO_FREQ", DEFAULT_MD_THERMO_FREQ)),
+        default=DEFAULT_MD_THERMO_FREQ,
         description="Frequency of thermodynamic output (steps)"
     )
     dump_freq: PositiveInt = Field(
-        default_factory=lambda: int(os.environ.get("PYACE_MD_DUMP_FREQ", DEFAULT_MD_DUMP_FREQ)),
+        default=DEFAULT_MD_DUMP_FREQ,
         description="Frequency of trajectory dump (steps)"
     )
     minimize: bool = Field(False, description="Perform energy minimization before MD")
     neighbor_skin: PositiveFloat = Field(
-        default_factory=lambda: float(os.environ.get("PYACE_MD_NEIGHBOR_SKIN", DEFAULT_MD_NEIGHBOR_SKIN)),
+        default=DEFAULT_MD_NEIGHBOR_SKIN,
         description="Neighbor list skin distance (Angstrom)"
     )
     atom_style: AtomStyle = Field(
-        default_factory=lambda: AtomStyle(os.environ.get("PYACE_MD_ATOM_STYLE", DEFAULT_MD_ATOM_STYLE)),
+        default=AtomStyle(DEFAULT_MD_ATOM_STYLE),
         description="LAMMPS atom style"
     )
 
     # Configurable LAMMPS Parameters
     velocity_seed: int = Field(
-        default_factory=lambda: int(os.environ.get("PYACE_MD_VELOCITY_SEED", LAMMPS_VELOCITY_SEED)),
+        default=LAMMPS_VELOCITY_SEED,
         description="Random seed for velocity initialization"
     )
     minimize_steps: int = Field(
-        default_factory=lambda: int(os.environ.get("PYACE_MD_MINIMIZE_STEPS", LAMMPS_MINIMIZE_STEPS)),
+        default=LAMMPS_MINIMIZE_STEPS,
         description="Max iterations for minimization (steps)"
     )
     minimize_max_iter: int = Field(
-        default_factory=lambda: int(os.environ.get("PYACE_MD_MINIMIZE_MAX_ITER", LAMMPS_MINIMIZE_MAX_ITER)),
+        default=LAMMPS_MINIMIZE_MAX_ITER,
         description="Max force evaluations for minimization"
     )
     minimize_tol: float = Field(
-        default_factory=lambda: float(os.environ.get("PYACE_MD_MINIMIZE_TOL", DEFAULT_MD_MINIMIZE_TOL)),
+        default=DEFAULT_MD_MINIMIZE_TOL,
         description="Energy tolerance for minimization"
     )
     minimize_ftol: float = Field(
-        default_factory=lambda: float(os.environ.get("PYACE_MD_MINIMIZE_FTOL", DEFAULT_MD_MINIMIZE_FTOL)),
+        default=DEFAULT_MD_MINIMIZE_FTOL,
         description="Force tolerance for minimization"
     )
 
@@ -188,18 +198,18 @@ class MDConfig(BaseModel):
         description="Directory for temporary files (e.g., /dev/shm for RAM disk)",
     )
     tdamp_factor: float = Field(
-        default_factory=lambda: float(os.environ.get("PYACE_MD_TDAMP_FACTOR", DEFAULT_MD_TDAMP_FACTOR)),
+        default=DEFAULT_MD_TDAMP_FACTOR,
         gt=0.0,
         description="Temperature damping factor (multiplies timestep)",
     )
     pdamp_factor: float = Field(
-        default_factory=lambda: float(os.environ.get("PYACE_MD_PDAMP_FACTOR", DEFAULT_MD_PDAMP_FACTOR)),
+        default=DEFAULT_MD_PDAMP_FACTOR,
         gt=0.0, description="Pressure damping factor (multiplies timestep)"
     )
 
     # Mocking Parameters (Audit Requirement)
     base_energy: float = Field(
-        default_factory=lambda: float(os.environ.get("PYACE_MD_BASE_ENERGY", DEFAULT_MD_BASE_ENERGY)),
+        default=DEFAULT_MD_BASE_ENERGY,
         description="Baseline energy for mock simulation"
     )
     default_forces: list[list[float]] = Field(
@@ -215,13 +225,24 @@ class MDConfig(BaseModel):
     # Spec Section 3.4 (OTF)
     fix_halt: bool = Field(False, description="Enable OTF halting based on uncertainty")
     uncertainty_threshold: float = Field(
-        default_factory=lambda: float(os.environ.get("PYACE_MD_UNCERTAINTY_THRESHOLD", DEFAULT_OTF_UNCERTAINTY_THRESHOLD)),
+        default=DEFAULT_OTF_UNCERTAINTY_THRESHOLD,
         gt=0.0,
         description="Gamma threshold for halting simulation",
     )
     check_interval: int = Field(
-        default_factory=lambda: int(os.environ.get("PYACE_MD_CHECK_INTERVAL", DEFAULT_MD_CHECK_INTERVAL)),
+        default=DEFAULT_MD_CHECK_INTERVAL,
         gt=0, description="Step interval for uncertainty check"
+    )
+
+    active_learning: ActiveLearningThresholds | None = Field(None, description="Active learning uncertainty configurations")
+
+    soft_start_tdamp: float = Field(
+        default=DEFAULT_MD_SOFT_START_TDAMP,
+        gt=0.0, description="Damping parameter for soft start Langevin thermostat (ps)"
+    )
+    soft_start_seed: int = Field(
+        default=DEFAULT_MD_SOFT_START_SEED,
+        ge=0, description="Random seed for soft start Langevin thermostat"
     )
 
     # Spec Section 3.1: Ramping and MC
@@ -232,7 +253,8 @@ class MDConfig(BaseModel):
     def validate_simulation_physics(self) -> "MDConfig":
         total_time = self.n_steps * self.timestep
         if total_time > MAX_MD_DURATION:
-            pass
+            msg = f"Total simulation time ({total_time} ps) exceeds maximum allowed duration ({MAX_MD_DURATION} ps)."
+            raise ValueError(msg)
         return self
 
     @model_validator(mode="after")
@@ -245,6 +267,13 @@ class MDConfig(BaseModel):
     @model_validator(mode="after")
     def validate_temp_dir(self) -> "MDConfig":
         if self.temp_dir:
+            from pyacemaker.domain_models.constants import DANGEROUS_PATH_CHARS
+
+            # Check for invalid characters first
+            if any(char in self.temp_dir for char in DANGEROUS_PATH_CHARS):
+                msg = f"Temporary directory path contains invalid characters: {self.temp_dir}"
+                raise ValueError(msg)
+
             p = Path(self.temp_dir)
             if not p.exists() or not os.access(p, os.W_OK):
                 msg = f"Temporary directory {p} does not exist or is not writable."

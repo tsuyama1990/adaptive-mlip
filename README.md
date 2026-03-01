@@ -91,17 +91,23 @@ cp .env.example .env
     loop_strategy:
         incremental_update: true
         replay_buffer_size: 500
-        thresholds:
-            threshold_call_dft: 0.05
-            threshold_add_train: 0.02
-            smooth_steps: 3
     cutout:
         core_radius: 4.0
         buffer_radius: 3.0
         enable_pre_relaxation: true
         enable_passivation: true
         passivation_element: "H"
-    # ... (DFT, MD, and Training settings remain similar to v1)
+    md:
+        temperature: 300.0
+        pressure: 1.0
+        timestep: 0.001
+        n_steps: 1000000
+        fix_halt: true
+        active_learning:
+            threshold_call_dft: 0.05
+            threshold_add_train: 0.02
+            smooth_steps: 3
+    # ... (DFT and Training settings remain similar to v1)
     ```
 
 2.  **Run the Orchestrator**:
