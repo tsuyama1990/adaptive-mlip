@@ -1,10 +1,11 @@
 import numpy as np
 from ase.build import bulk
 
-from pyacemaker.utils.extraction import extract_local_region
+from pyacemaker.domain_models.workflow import CutoutConfig
+from pyacemaker.utils.extraction import extract_intelligent_cluster
 
 
-def test_extract_local_region_basic() -> None:
+def test_extract_intelligent_cluster_basic() -> None:
     # Create a simple cubic lattice
     atoms = bulk('Cu', 'sc', a=2.5).repeat((3, 3, 3))  # type: ignore[no-untyped-call]
 
@@ -16,10 +17,14 @@ def test_extract_local_region_basic() -> None:
     # 2nd neighbor dist = sqrt(2.5^2 + 2.5^2) = 3.535
     # 3rd neighbor dist = sqrt(2.5^2 + 2.5^2 + 2.5^2) = 4.33
 
-    radius = 2.6  # Includes 1st shell
-    buffer = 1.0  # Total cutoff 3.6 (Includes 2nd shell)
+    config = CutoutConfig(
+        core_radius=2.6,
+        buffer_radius=1.0,
+        enable_pre_relaxation=False,
+        enable_passivation=False
+    )
 
-    cluster = extract_local_region(atoms, center_idx, radius, buffer)
+    cluster = extract_intelligent_cluster(atoms, [center_idx], config)
 
     # Check cluster size
     # 1 center + 6 nearest neighbors (1st shell) + 12 next-nearest (2nd shell) = 19
@@ -42,7 +47,7 @@ def test_extract_local_region_basic() -> None:
     assert n_core == 7  # 1 center + 6 NN
     assert n_buffer == 12 # 12 NNN
 
-def test_extract_local_region_pbc() -> None:
+def test_extract_intelligent_cluster_pbc() -> None:
     # Test extraction across PBC
     atoms = bulk('Cu', 'sc', a=2.5).repeat((2, 2, 2))  # type: ignore[no-untyped-call]
     # 8 atoms.
@@ -50,10 +55,14 @@ def test_extract_local_region_pbc() -> None:
     # Radius covers nearest neighbors (which are wrapped).
 
     center_idx = 0
-    radius = 2.6
-    buffer = 0.1
+    config = CutoutConfig(
+        core_radius=2.6,
+        buffer_radius=0.1,
+        enable_pre_relaxation=False,
+        enable_passivation=False
+    )
 
-    cluster = extract_local_region(atoms, center_idx, radius, buffer)
+    cluster = extract_intelligent_cluster(atoms, [center_idx], config)
 
     # NN of corner 0 in 2x2x2 SC are 3 (along axes) + ?
     # In periodic 2x2x2, each atom has 6 NN.

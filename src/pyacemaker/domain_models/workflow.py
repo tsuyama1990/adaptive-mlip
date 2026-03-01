@@ -15,6 +15,35 @@ from pyacemaker.domain_models.defaults import (
 )
 
 
+class ActiveLearningThresholds(BaseModel):
+    """Manages the two-tier evaluation thresholds."""
+    model_config = ConfigDict(extra="forbid")
+
+    threshold_call_dft: float = Field(..., gt=0, description="Gamma threshold to trigger a halt and check DFT.")
+    threshold_add_train: float = Field(..., gt=0, description="Gamma threshold to trigger adding a structure to the training set.")
+    smooth_steps: PositiveInt = Field(default=3, description="Number of consecutive steps exceeding threshold to filter thermal noise.")
+
+
+class CutoutConfig(BaseModel):
+    """Configuration for Phase 3: Intelligent Cutout."""
+    model_config = ConfigDict(extra="forbid")
+
+    core_radius: float = Field(..., gt=0, description="Radius of the core region (Angstrom).")
+    buffer_radius: float = Field(..., gt=0, description="Thickness of the buffer region (Angstrom).")
+    enable_pre_relaxation: bool = Field(default=True, description="Use MACE to pre-relax buffer atoms.")
+    enable_passivation: bool = Field(default=True, description="Auto-passivate broken bonds.")
+
+
+class LoopStrategyConfig(BaseModel):
+    """Configuration for Active Learning Loop Strategy."""
+    model_config = ConfigDict(extra="forbid")
+
+    use_tiered_oracle: bool = Field(default=True, description="Enable MACE and DFT two-tier oracle.")
+    incremental_update: bool = Field(default=True, description="Use Delta Learning for incremental updates.")
+    replay_buffer_size: PositiveInt = Field(default=1000, description="Size of the Replay Buffer for incremental learning.")
+    baseline_potential_type: str = Field(default="lj", description="Type of the baseline potential (e.g., lj).")
+
+
 class OTFConfig(BaseModel):
     """Configuration for On-The-Fly (OTF) Active Learning loop."""
     model_config = ConfigDict(extra="forbid")
@@ -77,3 +106,7 @@ class WorkflowConfig(BaseModel):
         default_factory=OTFConfig,
         description="Configuration for OTF loop."
     )
+
+    thresholds: ActiveLearningThresholds | None = Field(None, description="Active learning thresholds for two-tier evaluation.")
+    cutout: CutoutConfig | None = Field(None, description="Configuration for cluster cutout.")
+    strategy: LoopStrategyConfig = Field(default_factory=LoopStrategyConfig, description="Strategy for the learning loop.")

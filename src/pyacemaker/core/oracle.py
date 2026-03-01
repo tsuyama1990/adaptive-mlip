@@ -1,8 +1,10 @@
 import contextlib
+import logging
 import tempfile
 from collections.abc import Callable, Iterator
 from itertools import islice
 from pathlib import Path
+from typing import Any
 
 from ase import Atoms
 from ase.calculators.calculator import PropertyNotImplementedError
@@ -13,9 +15,82 @@ from pyacemaker.domain_models import DFTConfig
 from pyacemaker.domain_models.constants import ERR_ORACLE_FAILED, ERR_ORACLE_ITERATOR
 from pyacemaker.interfaces.qe_driver import QEDriver
 from pyacemaker.utils.embedding import embed_cluster
-import logging
 
 logger = logging.getLogger(__name__)
+
+class MACEManager(BaseOracle):
+    """
+    Foundation model Oracle based on MACE.
+    """
+
+    def __init__(self, model_path: str) -> None:
+        self.model_path = model_path
+        self._calculator = None
+
+    def _get_calculator(self) -> "Any":
+        if self._calculator is None:
+            try:
+                from mace.calculators import (
+                    MACECalculator,
+                )
+                self._calculator = MACECalculator(model_paths=self.model_path, device="cpu")
+            except ImportError as e:
+                msg = "MACE is not installed. Please install it to use MACEManager."
+                raise RuntimeError(msg) from e
+        return self._calculator
+
+    def compute(self, structures: Iterator[Atoms], batch_size: int = 10) -> Iterator[Atoms]:
+        if not isinstance(structures, Iterator):
+            raise TypeError(ERR_ORACLE_ITERATOR.format(type=type(structures)))
+
+        for atoms in structures:
+            atoms.calc = self._get_calculator()
+            try:
+                atoms.get_potential_energy()  # type: ignore[no-untyped-call]
+                atoms.get_forces()  # type: ignore[no-untyped-call]
+            except Exception as e:
+                raise OracleError(ERR_ORACLE_FAILED.format(error=e)) from e
+            yield atoms
+
+
+class TieredOracle(BaseOracle):
+    """
+    Manages query routing between a fast Oracle (MACEManager) and a slow Oracle (DFTManager).
+    Evaluates structures with MACE first. Only falls back to DFT if uncertainty exceeds the specified threshold.
+    """
+
+    def __init__(self, mace_manager: MACEManager, dft_manager: "DFTManager", uncertainty_threshold: float) -> None:
+        self.mace_manager = mace_manager
+        self.dft_manager = dft_manager
+        self.uncertainty_threshold = uncertainty_threshold
+
+    def compute(self, structures: Iterator[Atoms], batch_size: int = 10) -> Iterator[Atoms]:
+        if not isinstance(structures, Iterator):
+            raise TypeError(ERR_ORACLE_ITERATOR.format(type=type(structures)))
+
+        return self._compute_generator(structures, batch_size)
+
+    def _compute_generator(self, structures: Iterator[Atoms], batch_size: int) -> Iterator[Atoms]:
+        dft_queue: list[Atoms] = []
+
+        for atoms in self.mace_manager.compute(structures, batch_size):
+            uncertainty = 0.0
+            if "mace_uncertainty" in atoms.arrays:
+                 uncertainty = atoms.arrays["mace_uncertainty"].max()
+
+            # Simulated check if arrays does not exist.
+            if uncertainty > self.uncertainty_threshold:
+                 dft_queue.append(atoms)
+            else:
+                 yield atoms
+
+            if len(dft_queue) >= batch_size:
+                yield from self.dft_manager.compute(iter(dft_queue), batch_size=batch_size)
+                dft_queue = []
+
+        if dft_queue:
+            yield from self.dft_manager.compute(iter(dft_queue), batch_size=batch_size)
+
 
 class DFTManager(BaseOracle):
     """

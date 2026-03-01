@@ -1,7 +1,6 @@
-from functools import lru_cache
+import shlex
 from pathlib import Path
 from typing import TextIO
-import shlex
 
 from ase.data import atomic_numbers
 
@@ -19,15 +18,14 @@ class LammpsScriptGenerator:
 
     def __init__(self, config: MDConfig) -> None:
         self.config = config
-        # Use lru_cache for methods instead of manual dict
-        self._atomic_numbers_cache = {}
+        self._atomic_numbers_cache: dict[str, int] = {}
 
-    @lru_cache(maxsize=128)
     def _get_atomic_number(self, symbol: str) -> int:
         """Cached atomic number lookup."""
-        return atomic_numbers[symbol]
+        if symbol not in self._atomic_numbers_cache:
+            self._atomic_numbers_cache[symbol] = atomic_numbers[symbol]
+        return self._atomic_numbers_cache[symbol]
 
-    @lru_cache(maxsize=128)
     def _quote(self, path: str) -> str:
         """
         Quotes a path for LAMMPS script safety after validation.
@@ -123,9 +121,9 @@ class LammpsScriptGenerator:
             f"{temp} ke no types {types_str}\n"
         )
 
-    def _gen_execution(self, buffer: TextIO, elements: list[str]) -> None:
+    def _gen_execution(self, buffer: TextIO, elements: list[str], is_resume: bool = False) -> None:
         """Generates minimization and MD run commands."""
-        if self.config.minimize:
+        if self.config.minimize and not is_resume:
             buffer.write(
                 f"minimize {self.config.minimize_tol} {self.config.minimize_ftol} "
                 f"{self.config.minimize_steps} {self.config.minimize_max_iter}\n"
@@ -154,8 +152,18 @@ class LammpsScriptGenerator:
             if self.config.ramping.press_end is not None:
                 press_end = self.config.ramping.press_end
 
-        # Use configurable velocity seed
-        buffer.write(f"velocity all create {temp_start} {self.config.velocity_seed}\n")
+        if not is_resume:
+            # Use configurable velocity seed
+            buffer.write(f"velocity all create {temp_start} {self.config.velocity_seed}\n")
+
+        if is_resume:
+            # Soft Start Protocol: apply short heavily damped Langevin thermostat
+            buffer.write(f"fix soft_start all langevin {temp_start} {temp_end} {tdamp / 10.0} {self.config.velocity_seed}\n")
+            buffer.write("fix soft_nve all nve\n")
+            buffer.write("run 100\n")
+            buffer.write("unfix soft_start\n")
+            buffer.write("unfix soft_nve\n")
+
         buffer.write(
             f"fix npt all npt temp {temp_start} {temp_end} {tdamp} "
             f"iso {press_start} {press_end} {pdamp}\n"
@@ -195,6 +203,7 @@ class LammpsScriptGenerator:
         data_file: Path,
         dump_file: Path,
         elements: list[str],
+        restart_file: Path | None = None
     ) -> None:
         """
         Writes the LAMMPS input script to the provided buffer.
@@ -203,19 +212,28 @@ class LammpsScriptGenerator:
 
         buffer.write("clear\n")
         buffer.write("units metal\n")
-        # Use .value to ensure we get the string value "atomic", "charge" etc.
-        buffer.write(f"atom_style {self.config.atom_style.value}\n")
-        buffer.write("boundary p p p\n")
-        buffer.write(f"read_data {quoted_data}\n")
+
+        if restart_file:
+             quoted_restart = self._quote(str(restart_file))
+             buffer.write(f"read_restart {quoted_restart}\n")
+        else:
+             # Use .value to ensure we get the string value "atomic", "charge" etc.
+             buffer.write(f"atom_style {self.config.atom_style.value}\n")
+             buffer.write("boundary p p p\n")
+             buffer.write(f"read_data {quoted_data}\n")
 
         self._gen_potential(buffer, potential_path, elements)
         self._gen_settings(buffer)
         self._gen_watchdog(buffer, potential_path)
 
+        # Configure write_restart before run to save states
+        quoted_restart_out = self._quote(str(dump_file.with_suffix(".restart")))
+        buffer.write(f"restart 1000 {quoted_restart_out}\n")
+
         # Output setup MUST come before run
         self._gen_output_setup(buffer, dump_file)
 
-        self._gen_execution(buffer, elements)
+        self._gen_execution(buffer, elements, is_resume=(restart_file is not None))
 
         self._gen_post_run_diagnostics(buffer)
 

@@ -4,8 +4,12 @@ import pytest
 from pydantic import ValidationError
 
 from pyacemaker.domain_models import (
+    ActiveLearningThresholds,
+    CutoutConfig,
     DFTConfig,
+    DistillationConfig,
     LoggingConfig,
+    LoopStrategyConfig,
     MDConfig,
     PyAceConfig,
     StructureConfig,
@@ -14,6 +18,56 @@ from pyacemaker.domain_models import (
 )
 from pyacemaker.domain_models.structure import ExplorationPolicy
 from tests.conftest import create_dummy_pseudopotentials
+
+
+def test_distillation_config_valid() -> None:
+    config = DistillationConfig(
+        enable=True,
+        mace_model_path="mace_model.pt",
+        uncertainty_threshold=0.1,
+        sampling_counts=1000,
+    )
+    assert config.enable is True
+    assert config.mace_model_path == "mace_model.pt"
+    assert config.uncertainty_threshold == 0.1
+    assert config.sampling_counts == 1000
+
+
+def test_active_learning_thresholds_valid() -> None:
+    config = ActiveLearningThresholds(
+        threshold_call_dft=5.0,
+        threshold_add_train=6.0,
+        smooth_steps=3,
+    )
+    assert config.threshold_call_dft == 5.0
+    assert config.threshold_add_train == 6.0
+    assert config.smooth_steps == 3
+
+
+def test_cutout_config_valid() -> None:
+    config = CutoutConfig(
+        core_radius=3.0,
+        buffer_radius=5.0,
+        enable_pre_relaxation=True,
+        enable_passivation=True,
+    )
+    assert config.core_radius == 3.0
+    assert config.buffer_radius == 5.0
+    assert config.enable_pre_relaxation is True
+    assert config.enable_passivation is True
+
+
+def test_loop_strategy_config_valid() -> None:
+    config = LoopStrategyConfig(
+        use_tiered_oracle=True,
+        incremental_update=True,
+        replay_buffer_size=1000,
+        baseline_potential_type="lj",
+    )
+    assert config.use_tiered_oracle is True
+    assert config.incremental_update is True
+    assert config.replay_buffer_size == 1000
+    assert config.baseline_potential_type == "lj"
 
 
 def test_structure_config_valid() -> None:
@@ -117,6 +171,7 @@ def test_pyace_config_valid(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
     md = MDConfig(temperature=300.0, pressure=0.0, timestep=0.001, n_steps=1000)
     workflow = WorkflowConfig(max_iterations=10)
     logging = LoggingConfig()
+    distillation = DistillationConfig(mace_model_path="mace_model.pt")
 
     config = PyAceConfig(
         project_name="TestProject",
@@ -126,6 +181,7 @@ def test_pyace_config_valid(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
         md=md,
         workflow=workflow,
         logging=logging,
+        distillation=distillation,
     )
     assert config.project_name == "TestProject"
     assert config.structure.elements == ["Al"]

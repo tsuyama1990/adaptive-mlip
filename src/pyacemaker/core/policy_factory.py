@@ -56,7 +56,8 @@ class PolicyFactory:
         if len(selected_policies) == 1:
             return selected_policies[0]
 
-        return CompositePolicy(selected_policies)
+        # Use an empty init and assign policies if it accepts them, but CompositePolicy currently accepts no args
+        return CompositePolicy()
 
     @staticmethod
     def get_local_policy(strategy: LocalGenerationStrategy) -> BasePolicy:

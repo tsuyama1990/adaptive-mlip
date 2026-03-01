@@ -80,7 +80,7 @@ class LammpsEngine(BaseEngine):
         except Exception as e:
             raise RuntimeError(ERR_SIM_UNEXPECTED.format(error=e)) from e
 
-    def run(self, structure: Atoms | None, potential: Any) -> MDSimulationResult:
+    def run(self, structure: Atoms | None, potential: Any, restart_file: Path | None = None) -> MDSimulationResult:
         """
         Runs the MD simulation.
         """
@@ -97,7 +97,8 @@ class LammpsEngine(BaseEngine):
                     potential_path,
                     data_file,
                     dump_file,
-                    elements
+                    elements,
+                    restart_file
                 )
 
             # Initialize Driver with unique log file

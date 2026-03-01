@@ -1,8 +1,9 @@
+import os
 from enum import Enum
 from pathlib import Path
 
-from pydantic import BaseModel, ConfigDict, Field, PositiveFloat, PositiveInt, model_validator
 import numpy as np
+from pydantic import BaseModel, ConfigDict, Field, PositiveFloat, PositiveInt, model_validator
 
 from pyacemaker.domain_models.constants import (
     DEFAULT_MC_SEED,
@@ -28,7 +29,6 @@ from pyacemaker.domain_models.defaults import (
     DEFAULT_MD_THERMO_FREQ,
     DEFAULT_OTF_UNCERTAINTY_THRESHOLD,
 )
-import os
 
 
 def _get_default_temp_dir() -> str | None:

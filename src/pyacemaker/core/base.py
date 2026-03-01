@@ -158,7 +158,7 @@ class BaseEngine(ABC):
     """
 
     @abstractmethod
-    def run(self, structure: Atoms | None, potential: Any) -> MDSimulationResult:
+    def run(self, structure: Atoms | None, potential: Any, restart_file: Any | None = None) -> MDSimulationResult:
         """
         Runs a simulation using the given structure and potential.
 
