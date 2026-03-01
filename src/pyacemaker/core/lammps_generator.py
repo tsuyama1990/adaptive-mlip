@@ -5,6 +5,33 @@ from typing import TextIO
 from ase.data import atomic_numbers
 
 from pyacemaker.domain_models.constants import (
+    LAMMPS_CMD_ATOM_STYLE,
+    LAMMPS_CMD_BOUNDARY,
+    LAMMPS_CMD_CLEAR,
+    LAMMPS_CMD_COMPUTE_GAMMA,
+    LAMMPS_CMD_COMPUTE_MAX_GAMMA,
+    LAMMPS_CMD_DUMP,
+    LAMMPS_CMD_FIX_HALT,
+    LAMMPS_CMD_FIX_LANGEVIN,
+    LAMMPS_CMD_FIX_MC_SWAP,
+    LAMMPS_CMD_FIX_NPT,
+    LAMMPS_CMD_FIX_NVE,
+    LAMMPS_CMD_MIN_STYLE,
+    LAMMPS_CMD_MINIMIZE,
+    LAMMPS_CMD_NEIGH_MODIFY,
+    LAMMPS_CMD_NEIGHBOR,
+    LAMMPS_CMD_READ_DATA,
+    LAMMPS_CMD_READ_RESTART,
+    LAMMPS_CMD_RESTART,
+    LAMMPS_CMD_RUN,
+    LAMMPS_CMD_THERMO,
+    LAMMPS_CMD_THERMO_STYLE,
+    LAMMPS_CMD_TIMESTEP,
+    LAMMPS_CMD_UNFIX,
+    LAMMPS_CMD_UNITS,
+    LAMMPS_CMD_VAR_MAX_G,
+    LAMMPS_CMD_VARIABLE,
+    LAMMPS_CMD_VELOCITY_CREATE,
     LAMMPS_MIN_STYLE_CG,
     LAMMPS_PAIR_STYLE_HYBRID_PACE_ZBL,
     LAMMPS_PAIR_STYLE_PACE,
@@ -102,9 +129,9 @@ class LammpsScriptGenerator:
 
     def _gen_settings(self, buffer: TextIO) -> None:
         """Generates general MD settings."""
-        buffer.write(f"neighbor {self.config.neighbor_skin} bin\n")
-        buffer.write("neigh_modify delay 0 every 1 check yes\n")
-        buffer.write(f"timestep {self.config.timestep}\n")
+        buffer.write(LAMMPS_CMD_NEIGHBOR.format(skin=self.config.neighbor_skin))
+        buffer.write(LAMMPS_CMD_NEIGH_MODIFY)
+        buffer.write(LAMMPS_CMD_TIMESTEP.format(ts=self.config.timestep))
 
     def _gen_watchdog(self, buffer: TextIO, potential_path: Path) -> None:
         """Generates Uncertainty Watchdog commands."""
@@ -112,12 +139,13 @@ class LammpsScriptGenerator:
             return
 
         quoted_pot = self._quote(str(potential_path))
-        buffer.write(f"compute gamma all pace {quoted_pot}\n")
-        buffer.write("compute max_gamma all reduce max c_gamma\n")
-        buffer.write("variable max_g equal c_max_gamma\n")
+        buffer.write(LAMMPS_CMD_COMPUTE_GAMMA.format(pot=quoted_pot))
+        buffer.write(LAMMPS_CMD_COMPUTE_MAX_GAMMA)
+        buffer.write(LAMMPS_CMD_VAR_MAX_G)
         buffer.write(
-            f"fix halt_check all halt {self.config.check_interval} "
-            f"v_max_g > {self.config.uncertainty_threshold} error continue\n"
+            LAMMPS_CMD_FIX_HALT.format(
+                interval=self.config.check_interval, thresh=self.config.uncertainty_threshold
+            )
         )
 
     def _gen_mc(self, buffer: TextIO, elements: list[str]) -> None:
@@ -142,16 +170,21 @@ class LammpsScriptGenerator:
             temp = self.config.ramping.temp_start
 
         buffer.write(
-            f"fix mc_swap all atom/swap {self.config.mc.swap_freq} 1 {self.config.mc.seed} "
-            f"{temp} ke no types {types_str}\n"
+            LAMMPS_CMD_FIX_MC_SWAP.format(
+                freq=self.config.mc.swap_freq, seed=self.config.mc.seed, temp=temp, types=types_str
+            )
         )
 
     def _gen_execution(self, buffer: TextIO, elements: list[str]) -> None:
         """Generates minimization and MD run commands."""
         if self.config.minimize:
             buffer.write(
-                f"minimize {self.config.minimize_tol} {self.config.minimize_ftol} "
-                f"{self.config.minimize_steps} {self.config.minimize_max_iter}\n"
+                LAMMPS_CMD_MINIMIZE.format(
+                    tol=self.config.minimize_tol,
+                    ftol=self.config.minimize_ftol,
+                    steps=self.config.minimize_steps,
+                    max_iter=self.config.minimize_max_iter,
+                )
             )
 
         # MC
@@ -178,16 +211,23 @@ class LammpsScriptGenerator:
                 press_end = self.config.ramping.press_end
 
         # Use configurable velocity seed
-        buffer.write(f"velocity all create {temp_start} {self.config.velocity_seed}\n")
+        buffer.write(LAMMPS_CMD_VELOCITY_CREATE.format(temp=temp_start, seed=self.config.velocity_seed))
         buffer.write(
-            f"fix npt all npt temp {temp_start} {temp_end} {tdamp} "
-            f"iso {press_start} {press_end} {pdamp}\n"
+            LAMMPS_CMD_FIX_NPT.format(
+                t_start=temp_start,
+                t_end=temp_end,
+                tdamp=tdamp,
+                p_start=press_start,
+                p_end=press_end,
+                pdamp=pdamp,
+            )
         )
-        buffer.write(f"run {self.config.n_steps}\n")
+        buffer.write(LAMMPS_CMD_RUN.format(steps=self.config.n_steps))
 
     def _generate_soft_start_commands(self, buffer: TextIO, temperature: float, steps: int) -> None:
         """Generates soft start commands using Langevin thermostat."""
         import logging
+
         logger = logging.getLogger(__name__)
         logger.debug(f"Generating soft start commands: T={temperature}K for {steps} steps")
 
@@ -195,15 +235,19 @@ class LammpsScriptGenerator:
         tdamp = self.config.soft_start_tdamp
         seed = self.config.soft_start_seed
 
-        buffer.write(f"fix soft_start_langevin all langevin {temperature} {temperature} {tdamp} {seed}\n")
-        buffer.write("fix soft_start_nve all nve\n")
-        buffer.write(f"run {steps}\n")
-        buffer.write("unfix soft_start_langevin\n")
-        buffer.write("unfix soft_start_nve\n")
+        buffer.write(
+            LAMMPS_CMD_FIX_LANGEVIN.format(
+                t_start=temperature, t_stop=temperature, damp=tdamp, seed=seed
+            )
+        )
+        buffer.write(LAMMPS_CMD_FIX_NVE)
+        buffer.write(LAMMPS_CMD_RUN.format(steps=steps))
+        buffer.write(LAMMPS_CMD_UNFIX.format(name="soft_start_langevin"))
+        buffer.write(LAMMPS_CMD_UNFIX.format(name="soft_start_nve"))
 
     def _gen_output_setup(self, buffer: TextIO, dump_file: Path) -> None:
         """Generates output settings (thermo and dump)."""
-        buffer.write(f"thermo {self.config.thermo_freq}\n")
+        buffer.write(LAMMPS_CMD_THERMO.format(freq=self.config.thermo_freq))
 
         style_parts = ["step", "temp", "pe", "press"]
         dump_parts = ["id", "type", "x", "y", "z"]
@@ -216,18 +260,20 @@ class LammpsScriptGenerator:
         dump_cols = " ".join(dump_parts)
 
         quoted_dump = self._quote(str(dump_file))
-        buffer.write(f"thermo_style custom {style}\n")
-        buffer.write(f"dump traj all custom {self.config.dump_freq} {quoted_dump} {dump_cols}\n")
+        buffer.write(LAMMPS_CMD_THERMO_STYLE.format(style=style))
+        buffer.write(
+            LAMMPS_CMD_DUMP.format(freq=self.config.dump_freq, dump=quoted_dump, cols=dump_cols)
+        )
 
         # Checkpointing
         restart_file = dump_file.parent / f"{dump_file.stem}.restart"
         quoted_restart = self._quote(str(restart_file))
-        buffer.write(f"restart {self.config.dump_freq} {quoted_restart}\n")
+        buffer.write(LAMMPS_CMD_RESTART.format(freq=self.config.dump_freq, restart=quoted_restart))
 
         # Define variables for extraction via Python interface
         vars_to_export = ["pe", "temp", "step", "pxx", "pyy", "pzz", "pxy", "pxz", "pyz"]
         for v in vars_to_export:
-            buffer.write(f"variable {v} equal {v}\n")
+            buffer.write(LAMMPS_CMD_VARIABLE.format(name=v))
 
     def _gen_post_run_diagnostics(self, buffer: TextIO) -> None:
         """Generates post-run diagnostic prints."""
@@ -244,17 +290,17 @@ class LammpsScriptGenerator:
         """
         Writes the LAMMPS input script to the provided buffer.
         """
-        buffer.write("clear\n")
+        buffer.write(LAMMPS_CMD_CLEAR)
         if restart_file:
             quoted_restart = self._quote(str(restart_file))
-            buffer.write(f"read_restart {quoted_restart}\n")
+            buffer.write(LAMMPS_CMD_READ_RESTART.format(restart=quoted_restart))
         else:
             quoted_data = self._quote(str(data_file))
-            buffer.write("units metal\n")
+            buffer.write(LAMMPS_CMD_UNITS)
             # Use .value to ensure we get the string value "atomic", "charge" etc.
-            buffer.write(f"atom_style {self.config.atom_style.value}\n")
-            buffer.write("boundary p p p\n")
-            buffer.write(f"read_data {quoted_data}\n")
+            buffer.write(LAMMPS_CMD_ATOM_STYLE.format(style=self.config.atom_style.value))
+            buffer.write(LAMMPS_CMD_BOUNDARY)
+            buffer.write(LAMMPS_CMD_READ_DATA.format(data=quoted_data))
 
         self._gen_potential(buffer, potential_path, elements)
         self._gen_settings(buffer)
@@ -269,7 +315,7 @@ class LammpsScriptGenerator:
         if not restart_file:
             self._gen_execution(buffer, elements)
         else:
-            buffer.write(f"run {self.config.n_steps}\n")
+            buffer.write(LAMMPS_CMD_RUN.format(steps=self.config.n_steps))
 
         self._gen_post_run_diagnostics(buffer)
 
@@ -285,18 +331,22 @@ class LammpsScriptGenerator:
         """
         quoted_data = self._quote(str(data_file))
 
-        buffer.write("clear\n")
-        buffer.write("units metal\n")
-        buffer.write(f"atom_style {self.config.atom_style.value}\n")
-        buffer.write("boundary p p p\n")
-        buffer.write(f"read_data {quoted_data}\n")
+        buffer.write(LAMMPS_CMD_CLEAR)
+        buffer.write(LAMMPS_CMD_UNITS)
+        buffer.write(LAMMPS_CMD_ATOM_STYLE.format(style=self.config.atom_style.value))
+        buffer.write(LAMMPS_CMD_BOUNDARY)
+        buffer.write(LAMMPS_CMD_READ_DATA.format(data=quoted_data))
 
         self._gen_potential(buffer, potential_path, elements)
 
-        buffer.write(f"neighbor {self.config.neighbor_skin} bin\n")
-        buffer.write("neigh_modify delay 0 every 1 check yes\n")
-        buffer.write(f"min_style {LAMMPS_MIN_STYLE_CG}\n")
+        buffer.write(LAMMPS_CMD_NEIGHBOR.format(skin=self.config.neighbor_skin))
+        buffer.write(LAMMPS_CMD_NEIGH_MODIFY)
+        buffer.write(LAMMPS_CMD_MIN_STYLE.format(style=LAMMPS_MIN_STYLE_CG))
         buffer.write(
-            f"minimize {self.config.minimize_tol} {self.config.minimize_ftol} "
-            f"{self.config.minimize_steps} {self.config.minimize_max_iter}\n"
+            LAMMPS_CMD_MINIMIZE.format(
+                tol=self.config.minimize_tol,
+                ftol=self.config.minimize_ftol,
+                steps=self.config.minimize_steps,
+                max_iter=self.config.minimize_max_iter,
+            )
         )

@@ -12,6 +12,7 @@ from pyacemaker.domain_models.structure import ExplorationPolicy, StructureConfi
 def test_generate_empty_iterator() -> None:
     # Test ensuring empty iterator throws correctly for empty generation loops avoiding memory loops blindly
     from unittest.mock import MagicMock
+
     config = StructureConfig(
         elements=["Fe"],
         supercell_size=[1, 1, 1],

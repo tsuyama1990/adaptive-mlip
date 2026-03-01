@@ -55,7 +55,7 @@ flowchart TD
 
 ## Prerequisites
 
-*   **Python**: >= 3.11
+*   **Python**: >= 3.10
 *   **Package Manager**: `uv` (recommended)
 *   **DFT Code**: Quantum Espresso (`pw.x` in PATH)
 *   **MLIP Frameworks**:
@@ -72,68 +72,34 @@ cd pyacemaker
 
 # 2. Install dependencies using uv
 uv sync
-
-# 3. Setup configuration
-cp .env.example .env
 ```
 
 ## Usage
 
 1.  **Prepare Configuration**:
-    Create a `config.yaml` leveraging the new Version 2.1.0 schemas.
+    Create a `config.yaml` using the new schemas.
 
     ```yaml
-    project_name: "FePt_Alloy_NextGen"
-    distillation:
-        enable: true
-        mace_model_path: "mace-mp-0-medium"
-        uncertainty_threshold: 0.05
-    loop_strategy:
-        incremental_update: true
-        replay_buffer_size: 500
-    cutout:
-        core_radius: 4.0
-        buffer_radius: 3.0
-        enable_pre_relaxation: true
-        enable_passivation: true
-        passivation_element: "H"
     md:
-        temperature: 300.0
-        pressure: 1.0
-        timestep: 0.001
-        n_steps: 1000000
-        fix_halt: true
-        active_learning:
-            threshold_call_dft: 0.05
-            threshold_add_train: 0.02
-            smooth_steps: 3
-    # ... (DFT and Training settings remain similar to v1)
+      temperature: 300.0
+      pressure: 1.0
+      timestep: 0.001
+      n_steps: 1000000
+      fix_halt: true
+      check_interval: 10
+      active_learning:
+        threshold_call_dft: 0.05
+        threshold_add_train: 0.02
+        smooth_steps: 3
+      soft_start_tdamp: 0.1
+      soft_start_seed: 48279
     ```
 
 2.  **Run the Orchestrator**:
 
     ```bash
-    # Run the full 4-Phase pipeline
+    # Run the pipeline
     uv run pyacemaker --config config.yaml
-    ```
-
-## Development Workflow
-
-This project enforces strict code quality using a 4-cycle development approach.
-
-*   **Run Tests**:
-    ```bash
-    uv run pytest
-    ```
-*   **Run Linters & Type Checks**:
-    ```bash
-    uv run ruff check
-    uv run mypy src
-    ```
-*   **Interactive Tutorials (UAT)**:
-    Launch the User Acceptance Testing scenarios using Marimo:
-    ```bash
-    uv run marimo edit tutorials/UAT_AND_TUTORIAL.py
     ```
 
 ## Project Structure

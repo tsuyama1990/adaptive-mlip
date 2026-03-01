@@ -17,11 +17,17 @@ from pyacemaker.domain_models.defaults import (
 
 class ActiveLearningThresholds(BaseModel):
     """Two-tier thresholds for thermal noise exclusion during active learning."""
+
     model_config = ConfigDict(extra="forbid")
 
     threshold_call_dft: float = Field(0.05, description="Threshold to halt MD and call DFT")
-    threshold_add_train: float = Field(0.02, description="Threshold to select atoms for training set")
-    smooth_steps: int = Field(3, description="Consecutive steps required over threshold to filter noise")
+    threshold_add_train: float = Field(
+        0.02, description="Threshold to select atoms for training set"
+    )
+    smooth_steps: int = Field(
+        3, description="Consecutive steps required over threshold to filter noise"
+    )
+
 
 class OTFConfig(BaseModel):
     """Configuration for On-The-Fly (OTF) Active Learning loop."""

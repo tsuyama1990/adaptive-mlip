@@ -182,7 +182,7 @@ def create_test_config_dict(**overrides: Any) -> dict[str, Any]:
     # 2. Apply overrides (Deep merge)
     for key, value in overrides.items():
         if key in defaults and isinstance(defaults[key], dict) and isinstance(value, dict):
-            defaults[key].update(value)
+            defaults[key].update(value)  # type: ignore[attr-defined]
         else:
             defaults[key] = value
 

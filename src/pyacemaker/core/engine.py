@@ -26,7 +26,9 @@ class UncertaintyWatchdog:
     def __init__(self, thresholds: ActiveLearningThresholds | None = None) -> None:
         self.thresholds = thresholds
 
-    def _process_atom_line(self, line: str, gamma_idx: int, threshold: float, atoms: list[int], max_g: float) -> float:
+    def _process_atom_line(
+        self, line: str, gamma_idx: int, threshold: float, atoms: list[int], max_g: float
+    ) -> float:
         parts = line.split()
         if len(parts) < 6 or gamma_idx < 0:
             return max_g
@@ -46,61 +48,36 @@ class UncertaintyWatchdog:
         is_halt = c_steps >= self.thresholds.smooth_steps
         return is_halt, c_steps
 
-    def _process_chunk(
-        self,
-        lines: list[str],
-        cur_step: int | None,
-        max_g: float,
-        atoms: list[int],
-        in_atoms: bool,
-        g_idx: int,
-        c_steps: int,
-    ) -> tuple[int | None, list[int], int | None, float, list[int], bool, int, int]:
-        halt_step: int | None = None
-        epi: list[int] = []
-
-        for raw_line in lines:
-            line = raw_line.strip()
-            if line.startswith("ITEM: TIMESTEP"):
-                if cur_step is not None:
-                    is_halt, c_steps = self._evaluate_step(max_g, c_steps)
-                    if is_halt:
-                        return cur_step, atoms, cur_step, max_g, atoms, in_atoms, g_idx, c_steps
-                in_atoms = False
-                cur_step = -1 # Sentinel to read next digit as step
-                continue
-
-            if not in_atoms and cur_step == -1 and line.isdigit() and len(line) < 15:
-                cur_step = int(line)
-                max_g = 0.0
-                atoms = []
-                continue
-
-            if line.startswith("ITEM: ATOMS"):
-                in_atoms = True
-                parts = line.split()
-                g_idx = parts.index("c_gamma") - 2 if "c_gamma" in parts else -1
-                continue
-
-            if in_atoms and self.thresholds is not None:
-                max_g = self._process_atom_line(
-                    line, g_idx, self.thresholds.threshold_add_train, atoms, max_g
-                )
-
-        return halt_step, epi, cur_step, max_g, atoms, in_atoms, g_idx, c_steps
+    def _parse_line(self, line: str, in_atoms: bool, cur_step: int | None, max_g: float, atoms: list[int], g_idx: int, c_steps: int) -> tuple[bool, bool, int | None, float, list[int], int, int]:
+        is_halt_triggered = False
+        if line.startswith("ITEM: TIMESTEP"):
+            if cur_step is not None and cur_step >= 0:
+                is_halt, c_steps = self._evaluate_step(max_g, c_steps)
+                if is_halt:
+                    is_halt_triggered = True
+            in_atoms = False
+            cur_step = -1
+        elif not in_atoms and cur_step == -1 and line.isdigit():
+            cur_step = int(line)
+            max_g = 0.0
+            atoms.clear()
+        elif line.startswith("ITEM: ATOMS"):
+            in_atoms = True
+            parts = line.split()
+            g_idx = parts.index("c_gamma") - 2 if "c_gamma" in parts else -1
+        elif in_atoms and self.thresholds is not None:
+            max_g = self._process_atom_line(line, g_idx, self.thresholds.threshold_add_train, atoms, max_g)
+        return is_halt_triggered, in_atoms, cur_step, max_g, atoms, g_idx, c_steps
 
     def evaluate_stream(self, dump_file: Path) -> tuple[int | None, list[int]]:
         """
-        Parses a LAMMPS dump file to evaluate uncertainty.
+        Parses a LAMMPS dump file to evaluate uncertainty via a true line-by-line streaming generator.
         Returns: (halt_step, [list of atom IDs exceeding threshold_add_train])
         """
         if not self.thresholds or not dump_file.exists():
             return None, []
 
         c_steps = 0
-        halt_step: int | None = None
-        epi: list[int] = []
-
         with dump_file.open("r", buffering=8192) as f:
             cur_step: int | None = None
             max_g = 0.0
@@ -108,24 +85,22 @@ class UncertaintyWatchdog:
             in_atoms = False
             g_idx = -1
 
-            # Scalability: Read in chunks of 10,000 lines
-            while True:
-                lines = f.readlines(10000)
-                if not lines:
-                    break
-
-                halt_step, epi, cur_step, max_g, atoms, in_atoms, g_idx, c_steps = self._process_chunk(
-                    lines, cur_step, max_g, atoms, in_atoms, g_idx, c_steps
+            for raw_line in f:
+                line = raw_line.strip()
+                # we need a previous step state to return if halt is triggered
+                prev_step = cur_step
+                is_halt, in_atoms, cur_step, max_g, atoms, g_idx, c_steps = self._parse_line(
+                    line, in_atoms, cur_step, max_g, atoms, g_idx, c_steps
                 )
-                if halt_step is not None:
-                    return halt_step, epi
+                if is_halt and prev_step is not None and prev_step >= 0:
+                    return prev_step, atoms
 
-            if cur_step is not None:
-                is_halt, c_steps = self._evaluate_step(max_g, c_steps)
-                if is_halt:
+            if cur_step is not None and cur_step >= 0:
+                is_halt_final, c_steps = self._evaluate_step(max_g, c_steps)
+                if is_halt_final:
                     return cur_step, atoms
 
-        return halt_step, epi
+        return None, []
 
 
 class LammpsExecutor:
@@ -170,26 +145,27 @@ class LammpsExecutor:
             msg = f"{ERR_SIM_UNEXPECTED.format(error=e)} - Script Path: {script_path}"
             raise RuntimeError(msg) from e
 
+
 class LammpsResultParser:
     """Handles extracting results from LAMMPS driver."""
 
     def __init__(self, config: MDConfig) -> None:
         self.config = config
 
-    def parse_md_result(self, driver: LammpsDriver, dump_file: Path, log_file: Path) -> MDSimulationResult:
+    def parse_md_result(
+        self, driver: LammpsDriver, dump_file: Path, log_file: Path
+    ) -> MDSimulationResult:
         try:
             energy = driver.extract_variable("pe")
             temperature = driver.extract_variable("temp")
             step = int(driver.extract_variable("step"))
 
-            from collections.abc import Iterator
+            from collections.abc import Generator
 
-            # Scalability fix: Implement streaming generator for forces instead of materializing the full list
+            # Scalability fix: Implement streaming generator for forces without materializing a full Nx3 copy
             # We must return the generator itself so it isn't evaluated eagerly into a list.
-            def _force_generator() -> Iterator[list[float]]:
-                forces_array = driver.get_forces()
-                for i in range(forces_array.shape[0]):
-                    yield [float(forces_array[i, 0]), float(forces_array[i, 1]), float(forces_array[i, 2])]
+            def _force_generator() -> Generator[list[float], None, None]:
+                yield from driver.stream_forces()
 
             forces = _force_generator()
 
@@ -200,8 +176,11 @@ class LammpsResultParser:
             temperature = 0.0
             step = 0
 
-            def _default_force_generator() -> Iterator[list[float]]:
-                yield from self.config.default_forces
+            from collections.abc import Generator
+
+            def _default_force_generator() -> Generator[list[float], None, None]:
+                for f in self.config.default_forces:
+                    yield list(f)
 
             forces = _default_force_generator()
             stress = [0.0] * 6
@@ -239,7 +218,11 @@ class LammpsPreparationEngine:
         self.file_manager = file_manager
 
     def prepare(
-        self, config: MDConfig, structure: Atoms | None, potential: Any, restart_file: Path | None = None
+        self,
+        config: MDConfig,
+        structure: Atoms | None,
+        potential: Any,
+        restart_file: Path | None = None,
     ) -> tuple[Any, Path, Path, Path, list[str], Path]:
         if structure is None and restart_file is None:
             raise ValueError(ERR_STRUCTURE_NONE)
@@ -253,7 +236,9 @@ class LammpsPreparationEngine:
             self.file_manager = LammpsFileManager(config)
 
         struct_to_pass = structure if structure is not None else Atoms()
-        ctx, data_file, dump_file, log_file, elements = self.file_manager.prepare_workspace(struct_to_pass)
+        ctx, data_file, dump_file, log_file, elements = self.file_manager.prepare_workspace(
+            struct_to_pass
+        )
         return ctx, data_file, dump_file, log_file, elements, potential_path
 
 
@@ -280,7 +265,9 @@ class LammpsEngine(BaseEngine):
         self.watchdog = watchdog or UncertaintyWatchdog(config.active_learning)
         self.preparation_engine = preparation_engine or LammpsPreparationEngine(file_manager)
 
-    def run(self, structure: Atoms | None, potential: Any, restart_file: Path | None = None) -> MDSimulationResult:
+    def run(
+        self, structure: Atoms | None, potential: Any, restart_file: Path | None = None
+    ) -> MDSimulationResult:
         """
         Runs the MD simulation.
         """
@@ -293,7 +280,9 @@ class LammpsEngine(BaseEngine):
             input_script_path = temp_dir / "input.lmp"
 
             with input_script_path.open("w") as f:
-                self.generator.write_script(f, potential_path, data_file, dump_file, elements, restart_file=restart_file)
+                self.generator.write_script(
+                    f, potential_path, data_file, dump_file, elements, restart_file=restart_file
+                )
 
             driver = LammpsDriver(["-screen", LAMMPS_SCREEN_ARG, "-log", str(log_file)])
 
@@ -302,13 +291,16 @@ class LammpsEngine(BaseEngine):
                 result = self.parser.parse_md_result(driver, dump_file, log_file)
 
                 import logging
+
                 logger = logging.getLogger(__name__)
 
                 if self.config.fix_halt and self.config.active_learning:
                     logger.debug(f"Evaluating uncertainty stream from {dump_file}")
                     halt_step, epicenter = self.watchdog.evaluate_stream(dump_file)
                     if halt_step is not None:
-                        logger.info(f"UncertaintyWatchdog triggered halt at step {halt_step} with {len(epicenter)} epicenter atoms.")
+                        logger.info(
+                            f"UncertaintyWatchdog triggered halt at step {halt_step} with {len(epicenter)} epicenter atoms."
+                        )
                         result.halted = True
                         result.halt_step = halt_step
                     else:

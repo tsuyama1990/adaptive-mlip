@@ -18,9 +18,9 @@ def mock_driver() -> Any:
         yield mock
 
 
-
-
-def test_lammps_script_generator_restart(mock_md_config: MDConfig, mock_driver: Any, tmp_path: Path) -> None:
+def test_lammps_script_generator_restart(
+    mock_md_config: MDConfig, mock_driver: Any, tmp_path: Path
+) -> None:
     """Test that providing a restart_file replaces read_data with read_restart."""
     config = mock_md_config.model_copy()
     engine = LammpsEngine(config)
@@ -51,7 +51,10 @@ def test_lammps_script_generator_restart(mock_md_config: MDConfig, mock_driver: 
     assert "read_data" not in script
     assert "create_box" not in script
     assert "velocity all create" not in script  # Handled by soft start or omitted in restart
-    assert "fix soft_start_langevin" in script  # Soft start generated because restart_file was provided
+    assert (
+        "fix soft_start_langevin" in script
+    )  # Soft start generated because restart_file was provided
+
 
 def test_watchdog_thermal_noise(tmp_path: Path) -> None:
     """Test that a single spike in uncertainty does not trigger a halt."""
@@ -95,14 +98,13 @@ ITEM: ATOMS id type x y z c_gamma
     dump_file.write_text(dump_content)
 
     thresholds = ActiveLearningThresholds(
-        threshold_call_dft=0.05,
-        threshold_add_train=0.02,
-        smooth_steps=2
+        threshold_call_dft=0.05, threshold_add_train=0.02, smooth_steps=2
     )
 
     watchdog = UncertaintyWatchdog(thresholds)
     halt_step, epicenter = watchdog.evaluate_stream(dump_file)
     assert halt_step is None
+
 
 def test_watchdog_sustained_uncertainty(tmp_path: Path) -> None:
     """Test that sustained uncertainty triggers a halt and identifies epicenter atoms."""
@@ -146,9 +148,7 @@ ITEM: ATOMS id type x y z c_gamma
     dump_file.write_text(dump_content)
 
     thresholds = ActiveLearningThresholds(
-        threshold_call_dft=0.05,
-        threshold_add_train=0.02,
-        smooth_steps=2
+        threshold_call_dft=0.05, threshold_add_train=0.02, smooth_steps=2
     )
 
     watchdog = UncertaintyWatchdog(thresholds)
@@ -240,9 +240,7 @@ ITEM: ATOMS id type x y z c_gamma
     dump_file.write_text(dump_content)
 
     thresholds = ActiveLearningThresholds(
-        threshold_call_dft=0.05,
-        threshold_add_train=0.02,
-        smooth_steps=2
+        threshold_call_dft=0.05, threshold_add_train=0.02, smooth_steps=2
     )
 
     watchdog = UncertaintyWatchdog(thresholds)
@@ -387,7 +385,9 @@ def test_run_driver_failure(mock_md_config: MDConfig, mock_driver: Any, tmp_path
         engine.run(atoms, pot_path)
 
 
-def test_run_driver_missing_file_failure(mock_md_config: MDConfig, mock_driver: Any, tmp_path: Path) -> None:
+def test_run_driver_missing_file_failure(
+    mock_md_config: MDConfig, mock_driver: Any, tmp_path: Path
+) -> None:
     """Tests error handling when LAMMPS execution fails due to a missing script."""
     engine = LammpsEngine(mock_md_config)
     atoms = Atoms("H", cell=[10, 10, 10], pbc=True)
@@ -399,3 +399,98 @@ def test_run_driver_missing_file_failure(mock_md_config: MDConfig, mock_driver: 
         mock_ensure.side_effect = FileNotFoundError("Input script not found")
         with pytest.raises(RuntimeError, match="Simulation setup failed.*Input script not found"):
             engine.run(atoms, pot_path)
+
+def test_uncertainty_watchdog_evaluate_stream_large_file(tmp_path: Path) -> None:
+    """Test UncertaintyWatchdog correctly streams a large file without OOM."""
+    from pyacemaker.core.engine import UncertaintyWatchdog
+    from pyacemaker.domain_models.workflow import ActiveLearningThresholds
+
+    large_file = tmp_path / "large.dump"
+    # Write a multi-step dump directly
+    with large_file.open("w") as f:
+        for i in range(10):
+            f.write(f"ITEM: TIMESTEP\n{i * 100}\n")
+            f.write("ITEM: NUMBER OF ATOMS\n1\n")
+            f.write("ITEM: BOX BOUNDS pp pp pp\n0 10\n0 10\n0 10\n")
+            f.write("ITEM: ATOMS id type x y z c_gamma\n")
+            f.write(f"1 1 0 0 0 {0.01 + i * 0.01}\n")  # gamma increases
+
+    thresholds = ActiveLearningThresholds(threshold_call_dft=0.05, threshold_add_train=0.02, smooth_steps=3)
+    watchdog = UncertaintyWatchdog(thresholds)
+
+    halt_step, epis = watchdog.evaluate_stream(large_file)
+
+    # gamma = 0.01 + i * 0.01
+    # step 0: 0.01
+    # step 100: 0.02
+    # step 200: 0.03
+    # step 300: 0.04
+    # step 400: 0.05
+    # step 500: 0.06 (consecutive 1)
+    # step 600: 0.07 (consecutive 2)
+    # step 700: 0.08 (consecutive 3) -> halt_step should be 700? No, let's see.
+    # Actually `> 0.05` means 0.06 is the first.
+    # c_steps increments when > threshold.
+    # i=5 (500) -> 0.06 > 0.05 -> c_steps = 1
+    # i=6 (600) -> 0.07 > 0.05 -> c_steps = 2
+    # i=7 (700) -> 0.08 > 0.05 -> c_steps = 3 -> halt
+    assert halt_step == 700
+    assert 1 in epis
+
+
+def test_lammps_result_parser_stream_forces(mock_md_config: MDConfig, tmp_path: Path) -> None:
+    """Test LammpsResultParser successfully uses a generator for forces to avoid OOM."""
+    import types
+    from unittest.mock import MagicMock
+
+    from pyacemaker.core.engine import LammpsResultParser
+
+    mock_driver = MagicMock()
+    mock_driver.extract_variable.side_effect = lambda x: 100 if x == "step" else 1.0
+    mock_driver.get_stress.return_value = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+
+    from collections.abc import Generator
+
+    def mock_stream() -> Generator[list[float], None, None]:
+        yield [1.0, 2.0, 3.0]
+        yield [4.0, 5.0, 6.0]
+
+    mock_driver.stream_forces.return_value = mock_stream()
+
+    parser = LammpsResultParser(mock_md_config)
+    res = parser.parse_md_result(mock_driver, tmp_path / "d.dump", tmp_path / "l.log")
+
+    # Check it's an iterator/generator
+    # Note: Pydantic ValidatorIterator might wrap it, so we check using str representation or materializing
+    forces = list(res.forces)
+
+    assert len(forces) == 2
+    assert forces[0] == [1.0, 2.0, 3.0]
+    assert forces[1] == [4.0, 5.0, 6.0]
+
+def test_engine_run_file_not_found(mock_md_config: MDConfig, tmp_path: Path) -> None:
+    """Test engine handles missing file execution correctly."""
+    from unittest.mock import MagicMock
+
+    from pyacemaker.core.engine import LammpsExecutor
+    from pyacemaker.interfaces.lammps_driver import LammpsDriver
+
+    executor = LammpsExecutor()
+    mock_driver = MagicMock(spec=LammpsDriver)
+
+    with pytest.raises(RuntimeError, match="Simulation setup failed"):
+        executor.execute_simulation(mock_driver, tmp_path / "non_existent.lmp")
+
+
+def test_engine_run_file_not_found(mock_md_config: MDConfig, tmp_path: Path) -> None:
+    """Test engine handles missing file execution correctly."""
+    from unittest.mock import MagicMock
+
+    from pyacemaker.core.engine import LammpsExecutor
+    from pyacemaker.interfaces.lammps_driver import LammpsDriver
+
+    executor = LammpsExecutor()
+    mock_driver = MagicMock(spec=LammpsDriver)
+
+    with pytest.raises(RuntimeError, match="Simulation setup failed"):
+        executor.execute_simulation(mock_driver, tmp_path / "non_existent.lmp")
