@@ -8,7 +8,7 @@ from ase import Atoms
 from ase.io import write
 
 from pyacemaker.domain_models.md import MDConfig
-from pyacemaker.utils.io import write_lammps_streaming
+from pyacemaker.utils.io import write_lammps_data_file
 from pyacemaker.utils.structure import get_species_order
 
 logger = logging.getLogger(__name__)
@@ -87,11 +87,11 @@ class LammpsFileManager:
             if self.config.atom_style == "atomic":
                 try:
                     with output_path.open("w") as f:
-                        write_lammps_streaming(f, structure, elements)
+                        write_lammps_data_file(f, structure, elements)
                     streaming_success = True
-                    logger.debug("Successfully wrote LAMMPS data file using streaming.")
+                    logger.debug("Successfully wrote LAMMPS data file using optimized writer.")
                 except ValueError as e:
-                    logger.debug("Streaming write skipped: %s. Falling back to ASE.", e)
+                    logger.debug("Optimized write skipped: %s. Falling back to ASE.", e)
 
             if not streaming_success:
                 if len(structure) > 1000000:

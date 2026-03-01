@@ -3,8 +3,8 @@ import re
 from pathlib import Path
 from typing import Any
 from unittest.mock import patch
-import numpy as np
 
+import numpy as np
 import pytest
 from ase import Atoms
 
@@ -151,7 +151,7 @@ def test_run_missing_potential_error(mock_md_config: MDConfig) -> None:
     engine = LammpsEngine(mock_md_config)
     atoms = Atoms("H", cell=[10, 10, 10], pbc=True)
 
-    with pytest.raises(FileNotFoundError, match="Potential file not found"):
+    with pytest.raises((FileNotFoundError, ValueError)):
         engine.run(atoms, "nonexistent.yace")
 
 

@@ -13,7 +13,7 @@ class BasePolicy(ABC):
     Abstract base class for exploration policies.
     """
     @abstractmethod
-    def generate(self, **kwargs: Any) -> None:
+    def generate(self, base_structure: Atoms, config: Any, n_structures: int = 1, **kwargs: Any) -> Iterator[Atoms]:
         """
         Generates new candidates based on policy logic.
         """
@@ -75,6 +75,9 @@ class BaseGenerator(ABC):
 
         Returns:
             Iterator yielding ASE Atoms objects.
+            The returned Atoms objects MUST have their 'energy', 'forces', and ideally 'stress'
+            properties calculated and accessible via `atoms.get_potential_energy()`,
+            `atoms.get_forces()`, etc.
         """
 
 
@@ -122,7 +125,7 @@ class BaseTrainer(ABC):
         self,
         training_data_path: str | Path,
         initial_potential: str | Path | None = None
-    ) -> Any:
+    ) -> Path:
         """
         Trains a potential using the provided training data file.
 
@@ -158,7 +161,7 @@ class BaseEngine(ABC):
     """
 
     @abstractmethod
-    def run(self, structure: Atoms | None, potential: Any) -> MDSimulationResult:
+    def run(self, structure: Atoms | None, potential: Any, restart_file: Any | None = None) -> MDSimulationResult:
         """
         Runs a simulation using the given structure and potential.
 

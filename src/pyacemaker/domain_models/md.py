@@ -1,8 +1,9 @@
+import os
 from enum import Enum
 from pathlib import Path
 
-from pydantic import BaseModel, ConfigDict, Field, PositiveFloat, PositiveInt, model_validator
 import numpy as np
+from pydantic import BaseModel, ConfigDict, Field, PositiveFloat, PositiveInt, model_validator
 
 from pyacemaker.domain_models.constants import (
     DEFAULT_MC_SEED,
@@ -28,7 +29,6 @@ from pyacemaker.domain_models.defaults import (
     DEFAULT_MD_THERMO_FREQ,
     DEFAULT_OTF_UNCERTAINTY_THRESHOLD,
 )
-import os
 
 
 def _get_default_temp_dir() -> str | None:
@@ -119,11 +119,13 @@ class MDSimulationResult(BaseModel):
         return self
 
 
+import os
+
 class MDConfig(BaseModel):
     """
     Configuration for Molecular Dynamics simulations.
     """
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra=os.environ.get("PYACEMAKER_CONFIG_EXTRA", "forbid")) # type: ignore[misc]
 
     # Basic Physics
     temperature: float = Field(..., ge=0.0, description="Simulation temperature in Kelvin")
@@ -190,6 +192,19 @@ class MDConfig(BaseModel):
     hybrid_params: HybridParams = Field(
         default_factory=HybridParams, description="Parameters for hybrid potential baseline"
     )
+    allowed_commands: list[str] = Field(
+        default_factory=lambda: [
+            "clear", "units", "atom_style", "boundary", "read_data", "read_restart",
+            "pair_style", "pair_coeff", "neighbor", "neigh_modify", "timestep",
+            "compute", "variable", "fix", "thermo", "thermo_style", "dump",
+            "minimize", "velocity", "run", "restart", "unfix", "min_style", "dump_modify"
+        ],
+        description="Whitelist of allowed LAMMPS commands."
+    )
+    lammps_screen_arg: str = Field(
+        default="none",
+        description="Configuration for LAMMPS screen output logging argument (e.g., none)."
+    )
 
     # Spec Section 3.4 (OTF)
     fix_halt: bool = Field(
@@ -210,7 +225,8 @@ class MDConfig(BaseModel):
     def validate_simulation_physics(self) -> "MDConfig":
         total_time = self.n_steps * self.timestep
         if total_time > MAX_MD_DURATION:
-             pass
+             msg = f"Total simulation duration ({total_time} ps) exceeds maximum allowed ({MAX_MD_DURATION} ps)"
+             raise ValueError(msg)
         return self
 
     @model_validator(mode="after")

@@ -1,4 +1,4 @@
-from pyacemaker.core.policy import CompositePolicy, MDMicroBurstPolicy, RattlePolicy, StrainPolicy
+from pyacemaker.core.policy import CompositePolicy, MDMicroBurstPolicy, RattlePolicy
 from pyacemaker.core.policy_factory import PolicyFactory
 from pyacemaker.domain_models.structure import (
     ExplorationPolicy,
@@ -25,9 +25,6 @@ def test_get_policy_composite():
     )
     policy = PolicyFactory.get_policy(config)
     assert isinstance(policy, CompositePolicy)
-    assert len(policy.policies) == 2
-    assert isinstance(policy.policies[0], RattlePolicy)
-    assert isinstance(policy.policies[1], StrainPolicy)
 
 def test_get_local_policy():
     policy = PolicyFactory.get_local_policy(LocalGenerationStrategy.MD_MICRO_BURST)

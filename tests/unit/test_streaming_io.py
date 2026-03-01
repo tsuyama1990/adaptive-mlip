@@ -1,28 +1,26 @@
 from io import StringIO
-from unittest.mock import MagicMock, patch
 
-import numpy as np
 import pytest
 from ase import Atoms
 
-from pyacemaker.utils.io import write_lammps_streaming
+from pyacemaker.utils.io import write_lammps_data_file
 
 
 def test_write_lammps_streaming_format() -> None:
-    """Verifies that write_lammps_streaming produces correct LAMMPS data format."""
+    """Verifies that write_lammps_data_file produces correct LAMMPS data format."""
     buffer = StringIO()
 
     # Create simple structure: 2 atoms, cubic box
     structure = Atoms("LiH", positions=[[0, 0, 0], [0.5, 0.5, 0.5]], cell=[4.0, 4.0, 4.0], pbc=True)
     elements = ["H", "Li"] # Sorted order: H (Z=1), Li (Z=3)
 
-    write_lammps_streaming(buffer, structure, elements)
+    write_lammps_data_file(buffer, structure, elements)
 
     content = buffer.getvalue()
     lines = content.splitlines()
 
     # Verify exact format
-    assert lines[0] == "LAMMPS data file via pyacemaker streaming"
+    assert lines[0] == "LAMMPS data file via pyacemaker generation"
     assert lines[1] == ""
     assert lines[2] == "2 atoms"
     assert lines[3] == "2 atom types"
@@ -63,16 +61,19 @@ def test_write_lammps_streaming_invalid_elements() -> None:
     elements = ["H"]
 
     with pytest.raises(KeyError, match="not in provided species list"):
-        write_lammps_streaming(buffer, structure, elements)
+        write_lammps_data_file(buffer, structure, elements)
 
 
 def test_write_lammps_streaming_non_orthogonal() -> None:
-    """Test validation of non-orthogonal cells (not supported by simple streaming yet)."""
+    """Test support for non-orthogonal cells."""
     buffer = StringIO()
     # Non-orthogonal cell
     cell = [[10, 0, 0], [5, 8.66, 0], [0, 0, 10]]
     structure = Atoms("H", positions=[[0, 0, 0]], cell=cell, pbc=True)
     elements = ["H"]
 
-    with pytest.raises(ValueError, match="Streaming write currently only supports orthogonal cells"):
-        write_lammps_streaming(buffer, structure, elements)
+    write_lammps_data_file(buffer, structure, elements)
+    content = buffer.getvalue()
+
+    assert "xy xz yz" in content
+    assert "xlo xhi" in content

@@ -1,5 +1,6 @@
+import logging
 import shutil
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from pathlib import Path
 from typing import Any
 
@@ -34,9 +35,78 @@ from pyacemaker.domain_models.defaults import (
     TEMPLATE_POTENTIAL_FILE,
 )
 from pyacemaker.domain_models.md import MDSimulationResult
+from pyacemaker.domain_models.workflow import CutoutConfig
 from pyacemaker.factory import ModuleFactory
 from pyacemaker.logger import setup_logger
-from pyacemaker.utils.extraction import extract_local_region
+from pyacemaker.utils.extraction import ClusterExtractor
+
+
+class Explorer:
+    """Handles the Exploration logic using a generator."""
+    def __init__(self, generator: BaseGenerator | None, config: PyAceConfig, stream_writer: Callable[..., int]) -> None:
+        self.generator = generator
+        self.config = config
+        self.stream_writer = stream_writer
+
+    def explore(self, paths: dict[str, Path], logger: logging.Logger) -> None:
+        if not self.generator:
+            return
+        n_candidates = self.config.workflow.n_candidates
+        candidates_file = paths["candidates"] / FILENAME_CANDIDATES
+        try:
+            candidate_stream = self.generator.generate(n_candidates=n_candidates)
+            total = self.stream_writer(candidate_stream, candidates_file, batch_size=self.config.workflow.batch_size, append=True)
+            logger.info(LOG_GENERATED_CANDIDATES.format(count=total))
+        except Exception as e:
+            msg = f"Exploration failed: {e}"
+            raise OrchestratorError(msg) from e
+
+class Labeler:
+    """Handles the Labeling logic using an oracle."""
+    def __init__(self, oracle: BaseOracle | None, config: PyAceConfig, stream_writer: Callable[..., int]) -> None:
+        self.oracle = oracle
+        self.config = config
+        self.stream_writer = stream_writer
+
+    def label(self, paths: dict[str, Path], logger: logging.Logger) -> None:
+        if not self.oracle:
+            return
+        candidates_file = paths["candidates"] / FILENAME_CANDIDATES
+        if not candidates_file.exists():
+            logger.warning("No candidates found to label.")
+            return
+        batch_size = self.config.workflow.batch_size
+        training_file = paths["training"] / FILENAME_TRAINING
+        try:
+            candidate_stream = iread(str(candidates_file), index=":", format="extxyz")
+            labelled_stream = self.oracle.compute(candidate_stream, batch_size=batch_size)
+            total = self.stream_writer(labelled_stream, training_file, batch_size=batch_size, append=True)
+            logger.info(LOG_COMPUTED_PROPERTIES.format(count=total))
+        except Exception as e:
+            msg = f"Labeling failed: {e}"
+            raise OrchestratorError(msg) from e
+
+class TrainerManager:
+    """Handles the Training logic using a trainer."""
+    def __init__(self, trainer: BaseTrainer | None, config: PyAceConfig) -> None:
+        self.trainer = trainer
+        self.config = config
+
+    def train(self, paths: dict[str, Path], logger: logging.Logger, initial_potential: Path | None = None) -> Path | None:
+        if not self.trainer:
+            return None
+        training_file = paths["training"] / FILENAME_TRAINING
+        if not training_file.exists():
+            logger.warning("No training data found.")
+            return None
+        try:
+            potential_path = self.trainer.train(training_file, initial_potential)
+        except Exception as e:
+            msg = f"Training failed: {e}"
+            raise OrchestratorError(msg) from e
+        else:
+            logger.info(LOG_POTENTIAL_TRAINED)
+            return potential_path
 
 
 class Orchestrator:
@@ -45,19 +115,29 @@ class Orchestrator:
     Manages the lifecycle of the active learning loop, error handling, and state persistence.
     """
 
-    def __init__(self, config: PyAceConfig) -> None:
+    def __init__(
+        self,
+        config: PyAceConfig,
+        logger: logging.Logger | None = None,
+        state_manager: StateManager | None = None,
+        dir_manager: DirectoryManager | None = None
+    ) -> None:
         """
         Initializes the Orchestrator with a configuration.
 
         Args:
             config: Validated PyAceConfig object.
+            logger: Injected logger.
+            state_manager: Injected StateManager.
+            dir_manager: Injected DirectoryManager.
         """
         self.config = config
-        self.logger = setup_logger(config=config.logging, project_name=config.project_name)
+
+        self.logger = logger if logger is not None else setup_logger(config=config.logging, project_name=config.project_name)
 
         # Initialize Managers
-        self.state_manager = StateManager(Path(config.workflow.state_file_path), self.logger)
-        self.dir_manager = DirectoryManager(Path(config.workflow.active_learning_dir), self.logger)
+        self.state_manager = state_manager if state_manager is not None else StateManager(Path(config.workflow.state_file_path), self.logger)
+        self.dir_manager = dir_manager if dir_manager is not None else DirectoryManager(Path(config.workflow.active_learning_dir), self.logger)
 
         self.data_dir = Path(config.workflow.data_dir)
         self.data_dir.mkdir(exist_ok=True)
@@ -136,93 +216,32 @@ class Orchestrator:
 
         # Open file once
         with filepath.open(mode) as f:
-            # Write frames one by one or in small internal chunks if needed by ASE.
-            # ASE write(filename, atoms) can handle a list or single atom.
-            # writing to file handle supports multiple frames for extxyz.
-
-            # Optimization: Buffering is handled by file object.
-            # We just iterate and write.
-            for atoms in generator:
-                write(f, atoms, format="extxyz")
-                count += 1
+            # Write frames in controlled memory chunks to balance I/O calls and RAM.
+            from itertools import islice
+            iterator = iter(generator)
+            while True:
+                chunk = list(islice(iterator, batch_size))
+                if not chunk:
+                    break
+                write(f, chunk, format="extxyz")
+                count += len(chunk)
 
         return count
 
     def _explore(self, paths: dict[str, Path]) -> None:
-        """
-        Step 1: Exploration (Cold Start).
-        Generates initial candidate structures and writes them to disk using efficient streaming.
-        """
-        if not self.generator:
-            return
-
-        n_candidates = self.config.workflow.n_candidates
-        candidates_file = paths["candidates"] / FILENAME_CANDIDATES
-
-        try:
-            candidate_stream = self.generator.generate(n_candidates=n_candidates)
-            # Use explicit chunked streaming
-            total = self._stream_write(
-                candidate_stream,
-                candidates_file,
-                batch_size=self.config.workflow.batch_size,
-                append=True
-            )
-
-            self.logger.info(LOG_GENERATED_CANDIDATES.format(count=total))
-        except Exception as e:
-            msg = f"Exploration failed: {e}"
-            raise OrchestratorError(msg) from e
+        """Step 1: Exploration (Cold Start)."""
+        explorer = Explorer(self.generator, self.config, self._stream_write)
+        explorer.explore(paths, self.logger)
 
     def _label(self, paths: dict[str, Path]) -> None:
-        """
-        Step 2: Labeling (Oracle).
-        Computes properties for candidates and writes labelled data to training set.
-        """
-        if not self.oracle:
-            return
-
-        candidates_file = paths["candidates"] / FILENAME_CANDIDATES
-        if not candidates_file.exists():
-            self.logger.warning("No candidates found to label.")
-            return
-
-        batch_size = self.config.workflow.batch_size
-        training_file = paths["training"] / FILENAME_TRAINING
-
-        try:
-            # Lazy read of candidates
-            candidate_stream = iread(str(candidates_file), index=":", format="extxyz")
-
-            # Streaming computation
-            labelled_stream = self.oracle.compute(candidate_stream, batch_size=batch_size)
-
-            total = self._stream_write(
-                labelled_stream,
-                training_file,
-                batch_size=batch_size,
-                append=True
-            )
-
-            self.logger.info(LOG_COMPUTED_PROPERTIES.format(count=total))
-        except Exception as e:
-            msg = f"Labeling failed: {e}"
-            raise OrchestratorError(msg) from e
+        """Step 2: Labeling (Oracle)."""
+        labeler = Labeler(self.oracle, self.config, self._stream_write)
+        labeler.label(paths, self.logger)
 
     def _train(self, paths: dict[str, Path], initial_potential: Path | None = None) -> Path | None:
         """Step 3: Training"""
-        if not self.trainer:
-            return None
-
-        training_file = paths["training"] / FILENAME_TRAINING
-        if not training_file.exists():
-            self.logger.warning("No training data found, skipping training.")
-            return None
-
-        result = self.trainer.train(training_data_path=training_file, initial_potential=initial_potential)
-        self.logger.info(LOG_POTENTIAL_TRAINED)
-
-        return Path(result) if isinstance(result, (str, Path)) else None
+        trainer_mgr = TrainerManager(self.trainer, self.config)
+        return trainer_mgr.train(paths, self.logger, initial_potential)
 
     def _check_initial_potential(self) -> None:
         """Checks if initial potential exists, if not generates one (Cold Start)."""
@@ -289,10 +308,17 @@ class Orchestrator:
             center_idx = self._get_max_gamma_atom_index(halt_structure)
 
             # Extract local cluster (S0)
-            radius = self.config.structure.local_extraction_radius
-            buffer = self.config.structure.local_buffer_radius
+            if self.config.workflow.cutout:
+                cutout_cfg = self.config.workflow.cutout
+            else:
+                # Fallback to structure config if cutout is not set
+                cutout_cfg = CutoutConfig(
+                    core_radius=self.config.structure.local_extraction_radius,
+                    buffer_radius=self.config.structure.local_buffer_radius
+                )
 
-            return extract_local_region(halt_structure, center_idx, radius, buffer)
+            extractor = ClusterExtractor(cutout_cfg)
+            return extractor.extract(halt_structure, [center_idx])
         except Exception:
             self.logger.exception("Failed to extract local cluster.")
             return None
@@ -422,7 +448,6 @@ class Orchestrator:
         Note: This method is intended to implement the "Adaptive Exploration Policy" described in the Spec.
         Currently, it is a no-op as the complex adaptation logic requires further requirements analysis.
         """
-        pass
 
     def _execute_iteration_logic(self, iteration: int, paths: dict[str, Path]) -> None:
         """
