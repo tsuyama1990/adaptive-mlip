@@ -26,9 +26,7 @@ class StrainMode(StrEnum):
 class StructureConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    elements: list[str] = Field(
-        ..., min_length=1, description="List of elements in the system"
-    )
+    elements: list[str] = Field(..., min_length=1, description="List of elements in the system")
     supercell_size: list[int] = Field(
         ..., min_length=3, max_length=3, description="Supercell size [nx, ny, nz]"
     )
@@ -37,14 +35,13 @@ class StructureConfig(BaseModel):
     # Refactored to support multiple policies (Composite Policy)
     active_policies: list[ExplorationPolicy] = Field(
         default=[ExplorationPolicy.COLD_START],
-        description="List of exploration policies to apply sequentially"
+        description="List of exploration policies to apply sequentially",
     )
 
     # Deprecated single policy field, kept for compatibility.
     # It syncs with the first element of active_policies.
     policy_name: ExplorationPolicy | None = Field(
-        default=None,
-        description="Deprecated: Use active_policies instead."
+        default=None, description="Deprecated: Use active_policies instead."
     )
 
     rattle_stdev: float = Field(
@@ -66,13 +63,17 @@ class StructureConfig(BaseModel):
     # Local Active Learning Settings
     local_generation_strategy: LocalGenerationStrategy = Field(
         default=LocalGenerationStrategy.RANDOM_DISPLACEMENT,
-        description="Strategy for generating local candidates around halt structures"
+        description="Strategy for generating local candidates around halt structures",
     )
     local_extraction_radius: float = Field(
-        default=6.0, gt=0.0, description="Radius for extracting local clusters around high uncertainty atoms (Angstrom)"
+        default=6.0,
+        gt=0.0,
+        description="Radius for extracting local clusters around high uncertainty atoms (Angstrom)",
     )
     local_buffer_radius: float = Field(
-        default=4.0, ge=0.0, description="Buffer radius added to extraction for force masking (Angstrom)"
+        default=4.0,
+        ge=0.0,
+        description="Buffer radius added to extraction for force masking (Angstrom)",
     )
     local_md_steps: int = Field(
         default=50, gt=0, description="Number of MD steps for local micro-burst generation"
@@ -90,8 +91,8 @@ class StructureConfig(BaseModel):
 
         # Check for duplicates
         if len(v) != len(set(v)):
-             msg = "Elements list cannot contain duplicates"
-             raise ValueError(msg)
+            msg = "Elements list cannot contain duplicates"
+            raise ValueError(msg)
 
         valid_symbols = set(chemical_symbols)
         for el in v:

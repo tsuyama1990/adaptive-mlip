@@ -8,7 +8,6 @@ from ase import Atoms
 from ase.io import write
 
 from pyacemaker.core.base import BaseGenerator
-from pyacemaker.core.loop import LoopState
 from pyacemaker.domain_models import PyAceConfig
 from pyacemaker.domain_models.md import MDSimulationResult
 from pyacemaker.orchestrator import Orchestrator
@@ -26,7 +25,9 @@ class FakeGenerator(BaseGenerator):
             symbol = self.elements[0]
             yield Atoms(f"{symbol}2", positions=[[0, 0, 0], [0, 0, 0.74]])
 
-    def generate_local(self, base_structure: Atoms, n_candidates: int, **kwargs: Any) -> Iterator[Atoms]:
+    def generate_local(
+        self, base_structure: Atoms, n_candidates: int, **kwargs: Any
+    ) -> Iterator[Atoms]:
         for _ in range(n_candidates):
             yield base_structure.copy()  # type: ignore[no-untyped-call]
 
@@ -102,7 +103,7 @@ def orchestrator(mock_config: PyAceConfig, tmp_path: Path) -> Orchestrator:
 def test_cold_start(orchestrator: Orchestrator, tmp_path: Path) -> None:
     # Inject loop_state
     if not hasattr(orchestrator, "loop_state"):
-        orchestrator.loop_state = LoopState()
+        pass
 
     # Setup mocks
     assert orchestrator.oracle is not None
@@ -119,7 +120,7 @@ def test_cold_start(orchestrator: Orchestrator, tmp_path: Path) -> None:
     orchestrator.trainer.train.return_value = initial_pot
 
     # Execute
-    orchestrator._check_initial_potential()
+    orchestrator._phase1_distillation()
 
     # Verify
     assert orchestrator.loop_state.current_potential == initial_pot
@@ -135,7 +136,9 @@ def test_resume_capability(mock_config: PyAceConfig, tmp_path: Path) -> None:
     pot_path = tmp_path / "pot.yace"
     # Ensure pot file exists for validation
     pot_path.touch()
-    state_file.write_text(f'{{"iteration": 1, "status": "RUNNING", "current_potential": "{pot_path}"}}')
+    state_file.write_text(
+        f'{{"iteration": 1, "status": "RUNNING", "current_potential": "{pot_path}"}}'
+    )
 
     # Re-initialize orchestrator to load state
     with pytest.MonkeyPatch.context() as mp:
@@ -152,7 +155,7 @@ def test_resume_capability(mock_config: PyAceConfig, tmp_path: Path) -> None:
 def test_run_loop_iteration_halt(orchestrator: Orchestrator, tmp_path: Path) -> None:
     # Inject loop_state
     if not hasattr(orchestrator, "loop_state"):
-        orchestrator.loop_state = LoopState()
+        pass
 
     orchestrator.loop_state.current_potential = tmp_path / "current.yace"
     orchestrator.loop_state.current_potential.touch()
@@ -168,7 +171,7 @@ def test_run_loop_iteration_halt(orchestrator: Orchestrator, tmp_path: Path) -> 
         n_steps=50,
         max_gamma=10.0,
         halted=True,
-        halt_structure_path=str(halt_path)
+        halt_structure_path=str(halt_path),
     )
 
     assert orchestrator.engine is not None

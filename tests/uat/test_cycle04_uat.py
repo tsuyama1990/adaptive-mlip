@@ -10,8 +10,7 @@ def test_cycle04_hierarchical_fine_tuning():
         use_tiered_oracle=True,
         incremental_update=True,
         replay_buffer_size=500,
-        baseline_potential_type="LJ"
+        baseline_potential_type="LJ",
     )
     assert config.incremental_update is True
     assert config.replay_buffer_size == 500
-

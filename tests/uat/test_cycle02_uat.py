@@ -10,8 +10,7 @@ def test_cycle02_loop_strategy():
         use_tiered_oracle=True,
         incremental_update=False,
         replay_buffer_size=2000,
-        baseline_potential_type="LJ"
+        baseline_potential_type="LJ",
     )
     assert config.use_tiered_oracle is True
     assert config.replay_buffer_size == 2000
-

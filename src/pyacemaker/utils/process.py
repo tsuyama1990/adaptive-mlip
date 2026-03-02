@@ -3,6 +3,7 @@ import subprocess
 
 logger = logging.getLogger(__name__)
 
+
 def run_command(
     cmd: list[str],
     cwd: str | None = None,
@@ -42,8 +43,8 @@ def run_command(
     dangerous_chars = re.compile(r"[;&|`$]")
     for arg in cmd:
         if dangerous_chars.search(arg):
-             msg = f"Argument contains potentially dangerous characters: {arg}"
-             raise ValueError(msg)
+            msg = f"Argument contains potentially dangerous characters: {arg}"
+            raise ValueError(msg)
 
     # Mask potentially sensitive arguments (basic heuristic)
     # We redact arguments that look like they might be sensitive keys or very long strings
@@ -67,7 +68,9 @@ def run_command(
             shell=False,  # Enforce security
         )
     except subprocess.CalledProcessError as e:
-        logger.exception(f"Command failed: {safe_cmd_str}. Exit code: {e.returncode}. Stderr: {e.stderr}")
+        logger.exception(
+            f"Command failed: {safe_cmd_str}. Exit code: {e.returncode}. Stderr: {e.stderr}"
+        )
         raise
     except FileNotFoundError:
         logger.exception(f"Executable not found: {cmd[0]}")
