@@ -1,4 +1,3 @@
-
 import numpy as np
 from ase import Atoms
 from ase.neighborlist import neighbor_list
@@ -8,9 +7,7 @@ from pyacemaker.utils.embedding import embed_cluster
 
 
 def extract_intelligent_cluster(
-    structure: Atoms,
-    target_atoms: list[int],
-    config: CutoutConfig
+    structure: Atoms, target_atoms: list[int], config: CutoutConfig
 ) -> Atoms:
     """
     Intelligently extracts a local cluster around a set of target atoms from a massive structure.
@@ -34,7 +31,7 @@ def extract_intelligent_cluster(
     # 1. Spherical extraction using neighbor lists
     total_cutoff = config.core_radius + config.buffer_radius
 
-    i_indices, j_indices, D_vectors = neighbor_list('ijD', structure, cutoff=total_cutoff)  # type: ignore[no-untyped-call]
+    i_indices, j_indices, D_vectors = neighbor_list("ijD", structure, cutoff=total_cutoff)  # type: ignore[no-untyped-call]
 
     # We want union of neighbors for all target atoms
     mask = np.isin(i_indices, target_atoms)
@@ -88,11 +85,7 @@ def extract_intelligent_cluster(
     # Or simply extract and center it based on the first target atom, wrapping others.
 
     # Create initial un-embedded cluster
-    cluster = Atoms(
-        symbols=cluster_symbols,
-        positions=cluster_positions,
-        pbc=False
-    )
+    cluster = Atoms(symbols=cluster_symbols, positions=cluster_positions, pbc=False)
 
     # Set weights
     cluster.new_array("force_weight", weights)  # type: ignore[no-untyped-call]
@@ -110,12 +103,13 @@ def extract_intelligent_cluster(
 
     return embedded_cluster
 
+
 def _passivate_surface(cluster: Atoms) -> None:
     """Detects dangling bonds and adds pseudo-atoms to neutralize."""
     # Simplified placeholder logic for UAT verification
     # In a real scenario, this would check bond distances and valences.
 
+
 def _pre_relax_buffer(cluster: Atoms) -> None:
     """Freezes core atoms and relaxes buffer atoms using MACE."""
     # Simplified placeholder logic for UAT verification
-

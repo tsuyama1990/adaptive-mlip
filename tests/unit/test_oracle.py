@@ -1,4 +1,3 @@
-
 import os
 import tempfile
 
@@ -20,6 +19,7 @@ def test_mace_manager():
     assert "forces" in result.arrays
     assert "mace_uncertainty" in result.arrays
 
+
 def test_tiered_oracle_low_uncertainty():
     mace = MACEManager()
 
@@ -31,8 +31,11 @@ def test_tiered_oracle_low_uncertainty():
     try:
         # Create dummy DFT config and manager
         dft_config = DFTConfig(
-            code="qe", functional="pbe", kpoints_density=0.1, encut=400,
-            pseudopotentials={"Cu": dummy_upf}
+            code="qe",
+            functional="pbe",
+            kpoints_density=0.1,
+            encut=400,
+            pseudopotentials={"Cu": dummy_upf},
         )
         dft = DFTManager(config=dft_config)
 

@@ -17,10 +17,12 @@ from pyacemaker.utils.embedding import embed_cluster
 
 logger = logging.getLogger(__name__)
 
+
 class MACEManager(BaseOracle):
     """
     Wrapper to execute MACE-MP-0 inference.
     """
+
     def __init__(self, model_path: str = "MACE-MP-0") -> None:
         self.model_path = model_path
 
@@ -37,17 +39,22 @@ class MACEManager(BaseOracle):
 
             # Mocking the inference for tests and UAT
             import numpy as np
+
             atoms.info["energy"] = -5.0 * len(atoms)
             atoms.arrays["forces"] = np.zeros((len(atoms), 3))
             atoms.arrays["mace_uncertainty"] = np.random.uniform(0.0, 1.0, len(atoms))
 
             yield atoms
 
+
 class TieredOracle(BaseOracle):
     """
     Manages query routing between fast (MACE) and slow (DFT) oracles based on uncertainty.
     """
-    def __init__(self, mace_manager: MACEManager, dft_manager: "DFTManager", threshold: float) -> None:
+
+    def __init__(
+        self, mace_manager: MACEManager, dft_manager: "DFTManager", threshold: float
+    ) -> None:
         self.mace = mace_manager
         self.dft = dft_manager
         self.threshold = threshold
@@ -66,7 +73,9 @@ class TieredOracle(BaseOracle):
             # Check uncertainty
             uncertainties = atoms.arrays.get("mace_uncertainty")
             if uncertainties is not None and uncertainties.max() > self.threshold:
-                logger.info(f"Uncertainty {uncertainties.max():.2f} > {self.threshold}. Falling back to DFT.")
+                logger.info(
+                    f"Uncertainty {uncertainties.max():.2f} > {self.threshold}. Falling back to DFT."
+                )
 
                 # We need to pass it as an iterator to DFTManager
                 def _single_iterator(a: Atoms = atoms) -> Iterator[Atoms]:
@@ -78,10 +87,12 @@ class TieredOracle(BaseOracle):
             else:
                 yield atoms
 
+
 class DFTManager(BaseOracle):
     """
     Manages DFT calculations with self-healing capabilities.
     """
+
     def __init__(self, config: DFTConfig, driver: QEDriver | None = None) -> None:
         self.config = config
         self.driver = driver or QEDriver()
@@ -90,7 +101,7 @@ class DFTManager(BaseOracle):
             None,
             self._strategy_reduce_beta,
             self._strategy_increase_smearing,
-            self._strategy_use_cg
+            self._strategy_use_cg,
         ]
 
     def compute(self, structures: Iterator[Atoms], batch_size: int = 10) -> Iterator[Atoms]:
@@ -153,7 +164,7 @@ class DFTManager(BaseOracle):
                 last_error = e
                 atoms.calc = None
                 logger.warning(
-                    f"DFT calculation attempt {i+1} ({strategy_name}) failed. Error: {e!s}. Retrying..."
+                    f"DFT calculation attempt {i + 1} ({strategy_name}) failed. Error: {e!s}. Retrying..."
                 )
                 continue
             else:

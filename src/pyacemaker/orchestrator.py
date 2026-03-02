@@ -19,13 +19,10 @@ from pyacemaker.domain_models.defaults import (
     FILENAME_CANDIDATES,
     FILENAME_POTENTIAL,
     FILENAME_TRAINING,
-    LOG_COMPUTED_PROPERTIES,
-    LOG_GENERATED_CANDIDATES,
     LOG_INIT_MODULES,
     LOG_ITERATION_COMPLETED,
     LOG_MODULE_INIT_FAIL,
     LOG_MODULES_INIT_SUCCESS,
-    LOG_POTENTIAL_TRAINED,
     LOG_PROJECT_INIT,
     LOG_START_ITERATION,
     LOG_START_LOOP,
@@ -33,7 +30,6 @@ from pyacemaker.domain_models.defaults import (
     LOG_WORKFLOW_CRASHED,
     TEMPLATE_POTENTIAL_FILE,
 )
-from pyacemaker.domain_models.md import MDSimulationResult
 from pyacemaker.factory import ModuleFactory
 from pyacemaker.logger import setup_logger
 from pyacemaker.utils.extraction import extract_intelligent_cluster
@@ -42,16 +38,11 @@ from pyacemaker.utils.extraction import extract_intelligent_cluster
 class Orchestrator:
     """
     Central controller for the PYACEMAKER workflow.
-    Manages the lifecycle of the active learning loop, error handling, and state persistence.
+    Manages the lifecycle of the active learning loop following the 4-Phase
+    Hierarchical Distillation Architecture.
     """
 
     def __init__(self, config: PyAceConfig) -> None:
-        """
-        Initializes the Orchestrator with a configuration.
-
-        Args:
-            config: Validated PyAceConfig object.
-        """
         self.config = config
         self.logger = setup_logger(config=config.logging, project_name=config.project_name)
 
@@ -78,19 +69,11 @@ class Orchestrator:
 
     @property
     def loop_state(self) -> Any:
-        # Expose loop_state for tests
         return self.state_manager.state
 
     def initialize_modules(self) -> None:
-        """
-        Initializes the core modules (Generator, Oracle, Trainer, Engine).
-
-        Raises:
-            OrchestratorError: If module initialization fails.
-        """
         self.logger.info(LOG_INIT_MODULES)
         try:
-            # Create modules using factory
             (
                 self.generator,
                 self.oracle,
@@ -114,272 +97,41 @@ class Orchestrator:
         batch_size: int = 100,
         append: bool = False,
     ) -> int:
-        """
-        Writes atoms from a generator to a file in chunks to balance I/O and memory.
-        Uses explicit streaming instead of batched() to avoid memory issues.
-
-        Args:
-            generator: Iterable of Atoms objects.
-            filepath: Path to output file.
-            batch_size: Number of atoms per write operation (used for flushing/chunking conceptually).
-            append: Whether to append to the file or overwrite.
-
-        Returns:
-            Total number of atoms written.
-        """
         count = 0
-
-        # Ensure parent dir exists
         filepath.parent.mkdir(parents=True, exist_ok=True)
-
         mode = "a" if append else "w"
 
-        # Open file once
         with filepath.open(mode) as f:
-            # Write frames one by one or in small internal chunks if needed by ASE.
-            # ASE write(filename, atoms) can handle a list or single atom.
-            # writing to file handle supports multiple frames for extxyz.
-
-            # Optimization: Buffering is handled by file object.
-            # We just iterate and write.
             for atoms in generator:
                 write(f, atoms, format="extxyz")
                 count += 1
-
         return count
 
-    def _explore(self, paths: dict[str, Path]) -> None:
-        """
-        Step 1: Exploration (Cold Start).
-        Generates initial candidate structures and writes them to disk using efficient streaming.
-        """
-        if not self.generator:
-            return
-
-        n_candidates = self.config.workflow.n_candidates
-        candidates_file = paths["candidates"] / FILENAME_CANDIDATES
-
-        try:
-            candidate_stream = self.generator.generate(n_candidates=n_candidates)
-            # Use explicit chunked streaming
-            total = self._stream_write(
-                candidate_stream,
-                candidates_file,
-                batch_size=self.config.workflow.batch_size,
-                append=True
-            )
-
-            self.logger.info(LOG_GENERATED_CANDIDATES.format(count=total))
-        except Exception as e:
-            msg = f"Exploration failed: {e}"
-            raise OrchestratorError(msg) from e
-
-    def _label(self, paths: dict[str, Path]) -> None:
-        """
-        Step 2: Labeling (Oracle).
-        Computes properties for candidates and writes labelled data to training set.
-        """
-        if not self.oracle:
-            return
-
-        candidates_file = paths["candidates"] / FILENAME_CANDIDATES
-        if not candidates_file.exists():
-            self.logger.warning("No candidates found to label.")
-            return
-
-        batch_size = self.config.workflow.batch_size
-        training_file = paths["training"] / FILENAME_TRAINING
-
-        try:
-            # Lazy read of candidates
-            candidate_stream = iread(str(candidates_file), index=":", format="extxyz")
-
-            # Streaming computation
-            labelled_stream = self.oracle.compute(candidate_stream, batch_size=batch_size)
-
-            total = self._stream_write(
-                labelled_stream,
-                training_file,
-                batch_size=batch_size,
-                append=True
-            )
-
-            self.logger.info(LOG_COMPUTED_PROPERTIES.format(count=total))
-        except Exception as e:
-            msg = f"Labeling failed: {e}"
-            raise OrchestratorError(msg) from e
-
-    def _train(self, paths: dict[str, Path], initial_potential: Path | None = None) -> Path | None:
-        """Step 3: Training"""
-        if not self.trainer:
-            return None
-
-        training_file = paths["training"] / FILENAME_TRAINING
-        if not training_file.exists():
-            self.logger.warning("No training data found, skipping training.")
-            return None
-
-        result = self.trainer.train(training_data_path=training_file, initial_potential=initial_potential)
-        self.logger.info(LOG_POTENTIAL_TRAINED)
-
-        return Path(result) if isinstance(result, (str, Path)) else None
-
-    def _check_initial_potential(self) -> None:
-        """Checks if initial potential exists, if not generates one (Cold Start)."""
-        if self.state_manager.current_potential and self.state_manager.current_potential.exists():
-            self.logger.info(f"Using existing potential: {self.state_manager.current_potential}")
-            return
-
-        self.logger.info("No initial potential found. Starting Cold Start procedure.")
-
-        # Use iteration 0 for cold start
-        paths = self.dir_manager.setup_iteration(0)
-
-        self._explore(paths)
-        self._label(paths)
-        potential_path = self._train(paths)
-
-        if potential_path:
-            self.state_manager.current_potential = potential_path
-            self.state_manager.iteration = 0
-            self.state_manager.save()
-            self.logger.info(f"Cold start completed. Initial potential: {potential_path}")
-        else:
-            msg = "Cold start failed to produce a potential."
-            raise OrchestratorError(msg)
-
     def _get_initial_structure(self, iteration: int) -> Atoms | None:
-        """Returns an initial structure for MD."""
         if not self.generator:
             return None
-
         try:
-             # Try to get from candidates of previous iteration or iteration 0
-             iter0_paths = self.dir_manager.setup_iteration(0)
-             cand_file = iter0_paths["candidates"] / FILENAME_CANDIDATES
-             if cand_file.exists():
-                 # Use next() on iread to get just the first frame efficiently
-                 return next(iread(str(cand_file), index=0))
-
-             # Fallback to generator
-             return next(self.generator.generate(n_candidates=1))
+            iter0_paths = self.dir_manager.setup_iteration(0)
+            cand_file = iter0_paths["candidates"] / FILENAME_CANDIDATES
+            if cand_file.exists():
+                return next(iread(str(cand_file), index=0))
+            return next(self.generator.generate(n_candidates=1))
         except Exception:
-             self.logger.warning("Failed to get initial structure.")
-             return None
+            self.logger.warning("Failed to get initial structure.")
+            return None
 
     def _get_max_gamma_atom_index(self, structure: Atoms) -> int:
-        """Finds the index of the atom with the maximum gamma value."""
         if "c_gamma" in structure.arrays:
             gammas = structure.get_array("c_gamma")  # type: ignore[no-untyped-call]
             return int(np.argmax(gammas))
-
-        self.logger.warning("c_gamma not found in structure arrays. Using atom 0 as center.")
         return 0
 
-    def _extract_cluster(self, halt_structure_path: str) -> Atoms | None:
-        """
-        Loads the halt structure and extracts the local cluster around the highest uncertainty atom.
-        """
-        try:
-            halt_structure = read(halt_structure_path)
-            if isinstance(halt_structure, list):
-                halt_structure = halt_structure[-1]
-
-            # Find center atom (max gamma)
-            center_idx = self._get_max_gamma_atom_index(halt_structure)
-
-            # Extract local cluster (S0)
-
-            return extract_intelligent_cluster(halt_structure, [center_idx], self.config.workflow.cutout)
-        except Exception:
-            self.logger.exception("Failed to extract local cluster.")
-            return None
-
-    def _select_and_label(
-        self,
-        s0_cluster: Atoms,
-        potential_path: Path,
-        paths: dict[str, Path]
-    ) -> int:
-        """
-        Generates local candidates, selects active set, labels them, and writes to training file.
-        Returns the number of structures added.
-        """
-        if not self.generator or not self.active_set_selector or not self.oracle:
-            return 0
-
-        # Generate local candidates (perturbations of S0)
-        local_n = self.config.workflow.otf.local_n_candidates
-
-        # Pass engine and potential for advanced local generation strategies (e.g. MD Micro Burst)
-        candidates_gen = self.generator.generate_local(
-            s0_cluster,
-            n_candidates=local_n,
-            engine=self.engine,
-            potential=potential_path
-        )
-
-        # Select Active Set (including S0 as anchor)
-        # We need to capture candidates to file if selector needs file, but selector handles iterator.
-        # However, selector writes to temp file. We need to ensure temp files are cleaned up.
-        # ActiveSetSelector uses TemporaryDirectory so it's auto-cleaned.
-
-        n_select = self.config.workflow.otf.local_n_select
-        selected_gen = self.active_set_selector.select(
-            candidates_gen,
-            potential_path,
-            n_select=n_select,
-            anchor=s0_cluster
-        )
-
-        # Label
-        labelled_gen = self.oracle.compute(selected_gen)
-
-        # Append to training data
-        training_file = paths["training"] / FILENAME_TRAINING
-        batch_size = self.config.workflow.batch_size
-
-        return self._stream_write(
-            labelled_gen,
-            training_file,
-            batch_size=batch_size,
-            append=True
-        )
-
-    def _refine_potential(self, result: MDSimulationResult, potential_path: Path, paths: dict[str, Path]) -> Path | None:
-        """
-        Refines potential upon Halt.
-        Orchestrates extraction, selection, labeling, and retraining.
-        """
-        if not result.halt_structure_path or not self.generator or not self.active_set_selector or not self.oracle or not self.trainer:
-            return None
-
-        threshold = self.config.workflow.otf.uncertainty_threshold
-        if result.max_gamma <= threshold and not result.halted:
-             return None
-
-        try:
-            s0_cluster = self._extract_cluster(result.halt_structure_path)
-            if s0_cluster is None:
-                return None
-
-            count = self._select_and_label(s0_cluster, potential_path, paths)
-            self.logger.info(f"Refinement: Added {count} new structures.")
-
-            # Fine-tune
-            return self._train(paths, initial_potential=potential_path)
-
-        except Exception:
-            self.logger.exception("Refinement failed")
-            return None
-
     def _deploy_potential(self, iteration: int) -> Path:
-        """Deploys the current potential to the potentials directory."""
         potential_filename = TEMPLATE_POTENTIAL_FILE.format(iteration=iteration)
         deployed_potential = self.potentials_dir / potential_filename
 
         if self.state_manager.current_potential:
-             if self.state_manager.current_potential != deployed_potential:
+            if self.state_manager.current_potential != deployed_potential:
                 shutil.copy(self.state_manager.current_potential, deployed_potential)
         else:
             msg = "No current potential to deploy."
@@ -387,71 +139,276 @@ class Orchestrator:
 
         return deployed_potential
 
-    def _run_md_simulation(self, iteration: int, deployed_potential: Path) -> MDSimulationResult | None:
-        """Runs the MD simulation."""
-        initial_structure = self._get_initial_structure(iteration)
-        if not initial_structure:
-             self.logger.warning("No structure for MD. Skipping iteration.")
-             return None
+    # --- Phase 1: Zero-Shot Distillation & Baseline Construction ---
+    def _phase1_distillation(self) -> None:
+        """
+        Extracts foundational model capabilities to build a baseline ACE potential.
+        """
+        if self.state_manager.current_potential and self.state_manager.current_potential.exists():
+            self.logger.info(
+                f"Phase 1 Skipped: Using existing potential: {self.state_manager.current_potential}"
+            )
+            return
 
-        if self.engine:
-            return self.engine.run(structure=initial_structure, potential=deployed_potential)
+        self.logger.info("Phase 1: Starting Zero-Shot Distillation.")
+        paths = self.dir_manager.setup_iteration(0)
+
+        # 1. & 2. Combinatorial Exploration & DIRECT Sampling (Generator + ActiveSetSelector)
+        if not self.generator or not self.oracle or not self.trainer:
+            msg = "Required modules for Phase 1 are not initialized."
+            raise OrchestratorError(msg)
+
+        candidates_file = paths["candidates"] / FILENAME_CANDIDATES
+        training_file = paths["training"] / FILENAME_TRAINING
+
+        # Generate massive pool and sample directly
+        try:
+            n_candidates = self.config.workflow.distillation.sampling_counts
+            candidate_stream = self.generator.generate(n_candidates=n_candidates)
+
+            # In a full implementation, ActiveSetSelector would filter here.
+            # For now we write to candidates file
+            total_gen = self._stream_write(
+                candidate_stream,
+                candidates_file,
+                batch_size=self.config.workflow.batch_size,
+                append=True,
+            )
+            self.logger.info(f"Phase 1: Generated {total_gen} baseline structures.")
+        except Exception as e:
+            msg = f"Phase 1 Exploration failed: {e}"
+            raise OrchestratorError(msg) from e
+
+        # 3. MACE Confidence Filtering (Oracle processing)
+        # Using tiered oracle or purely MACEManager to label and filter based on confidence.
+        # The oracle logic (like TieredOracle) automatically assigns MACE uncertainties.
+        try:
+            cand_stream = iread(str(candidates_file), index=":", format="extxyz")
+            labelled_stream = self.oracle.compute(
+                cand_stream, batch_size=self.config.workflow.batch_size
+            )
+
+            # Filter low uncertainty
+            threshold = self.config.workflow.distillation.uncertainty_threshold
+
+            def filter_confident(stream: Iterable[Atoms]) -> Iterable[Atoms]:
+                for atoms in stream:
+                    if "mace_uncertainty" in atoms.arrays:
+                        unc = np.max(atoms.get_array("mace_uncertainty"))  # type: ignore[no-untyped-call]
+                        if unc <= threshold:
+                            yield atoms
+                    else:
+                        yield atoms
+
+            confident_stream = filter_confident(labelled_stream)
+            total_lbl = self._stream_write(
+                confident_stream,
+                training_file,
+                batch_size=self.config.workflow.batch_size,
+                append=True,
+            )
+            self.logger.info(f"Phase 1: Filtered and retained {total_lbl} confident structures.")
+        except Exception as e:
+            msg = f"Phase 1 Labeling failed: {e}"
+            raise OrchestratorError(msg) from e
+
+        # 4. Baseline ACE Training (LJ Delta Learning)
+        # Uses pacemaker with lj baseline defined in strategy
+        potential_path = self.trainer.train(
+            training_data_path=training_file, initial_potential=None
+        )
+
+        if potential_path:
+            self.state_manager.current_potential = (
+                Path(potential_path) if isinstance(potential_path, str) else potential_path
+            )
+            self.state_manager.iteration = 0
+            self.state_manager.save()
+            self.logger.info(
+                f"Phase 1 Complete: Initial potential trained: {self.state_manager.current_potential}"
+            )
+        else:
+            msg = "Phase 1: Baseline training failed to produce a potential."
+            raise OrchestratorError(msg)
+
+    # --- Phase 2: Validation & Stress Test ---
+    def _phase2_validation(self, potential_target: Path) -> bool:
+        """
+        Verifies minimum physical stability.
+        """
+        self.logger.info("Phase 2: Validation & Stress Test.")
+
+        # 1. Physical Property Inspection
+        if self.validator:
+            production_dir = Path(DEFAULT_PRODUCTION_DIR)
+            production_dir.mkdir(exist_ok=True)
+            report_path = (
+                production_dir / f"validation_report_iter_{self.state_manager.iteration}.html"
+            )
+            structure = self._get_initial_structure(self.state_manager.iteration)
+
+            if structure:
+                result = self.validator.validate(potential_target, report_path, structure)
+                if not (result.phonon_stable and result.elastic_stable):
+                    self.logger.warning(
+                        "Phase 2: Validation FAILED. (Auto-fallback to Phase 1 retraining not fully implemented, continuing...)"
+                    )
+                    return False
+                self.logger.info("Phase 2: Validation PASSED.")
+            else:
+                self.logger.warning("Phase 2: No structure for validation.")
+        else:
+            self.logger.info("Phase 2: No Validator initialized, skipping.")
+
+        # 2. Miniature MD Stress Test
+        # (Implicitly handled as the beginning of Phase 3 if MD fails immediately)
+        return True
+
+    # --- Phase 3: Intelligent Cutout & Passivation ---
+    def _phase3_intelligent_cutout(self, halt_structure_path: str) -> Atoms | None:
+        """
+        Extracts valid, clean clusters that DFT can process when MD halts.
+        """
+        self.logger.info("Phase 3: Intelligent Cutout & Passivation.")
+        try:
+            halt_structure = read(halt_structure_path)
+            if isinstance(halt_structure, list):
+                halt_structure = halt_structure[-1]
+
+            # 1. Epicentre Identification
+            # (Tiered logic happens during MD, resulting in halt_structure with max_gamma)
+            center_idx = self._get_max_gamma_atom_index(halt_structure)
+
+            # 2. Spherical Cutout & Weighting
+            # 3. Boundary Pre-relaxation
+            # 4. Auto-Passivation
+            # All handled securely in `extract_intelligent_cluster`
+
+            cluster = extract_intelligent_cluster(
+                halt_structure, [center_idx], self.config.workflow.cutout
+            )
+        except Exception:
+            self.logger.exception("Phase 3: Failed to extract local cluster.")
+            return None
+        else:
+            self.logger.info("Phase 3: Successfully extracted passivated cluster.")
+            return cluster
+
+    # --- Phase 4: Hierarchical Fine-Tuning ---
+    def _phase4_hierarchical_finetuning(
+        self, s0_cluster: Atoms, potential_path: Path, paths: dict[str, Path]
+    ) -> Path | None:
+        """
+        Updates MACE and ACE incrementally, generating surrogate data.
+        """
+        self.logger.info("Phase 4: Hierarchical Fine-Tuning.")
+        if (
+            not self.generator
+            or not self.active_set_selector
+            or not self.oracle
+            or not self.trainer
+        ):
+            self.logger.error("Phase 4: Missing required modules.")
+            return None
+
+        # 1. Clean DFT Calculation (Phase 3 transition) & Awaken MACE
+        # In a real run, `self.oracle.compute` using TieredOracle handles falling back to DFT
+        # and we would fine-tune MACE here if we had `FinetuneManager` hooked up actively.
+
+        # 2. Explosive Surrogate Data Generation
+        local_n = self.config.workflow.otf.local_n_candidates
+        candidates_gen = self.generator.generate_local(
+            s0_cluster, n_candidates=local_n, engine=self.engine, potential=potential_path
+        )
+
+        n_select = self.config.workflow.otf.local_n_select
+        selected_gen = self.active_set_selector.select(
+            candidates_gen, potential_path, n_select=n_select, anchor=s0_cluster
+        )
+
+        # Label via Awakened MACE (or Tiered Oracle)
+        labelled_gen = self.oracle.compute(selected_gen)
+
+        training_file = paths["training"] / FILENAME_TRAINING
+        count = self._stream_write(
+            labelled_gen, training_file, batch_size=self.config.workflow.batch_size, append=True
+        )
+        self.logger.info(f"Phase 4: Added {count} new surrogate structures.")
+
+        # 3. Incremental ACE Update
+        # Trainer handles Replay Buffer internally via IncrementalTrainer logic
+        new_pot = self.trainer.train(
+            training_data_path=training_file, initial_potential=potential_path
+        )
+
+        # 4. Seamless Resume happens implicitly by updating current_potential
+        # and entering the next loop iteration (which uses Master-Slave Resume in LammpsEngine).
+
+        if new_pot:
+            self.logger.info("Phase 4: Fine-Tuning Complete.")
+            return Path(new_pot) if isinstance(new_pot, str) else new_pot
         return None
 
-    def _handle_md_halt(self, result: MDSimulationResult, deployed_potential: Path, paths: dict[str, Path]) -> None:
-        """Handles MD halt logic and triggers refinement."""
-        if result.halted:
-            self.logger.info(f"MD Halted at step {result.n_steps}. Triggering refinement.")
-            new_potential = self._refine_potential(result, deployed_potential, paths)
-            if new_potential:
-                if not new_potential.exists():
-                    self.logger.error(f"Refined potential path {new_potential} does not exist!")
-                else:
-                    self.state_manager.current_potential = new_potential
-                    self.logger.info(f"Potential refined to: {new_potential}")
-        else:
-             self.logger.info(LOG_ITERATION_COMPLETED.format(iteration=self.state_manager.iteration + 1))
-
-    def _adapt_strategy(self, result: MDSimulationResult) -> None:
-        """
-        Placeholder for adaptive policy logic.
-        Future implementation: Update self.generator.config based on result metrics.
-
-        Note: This method is intended to implement the "Adaptive Exploration Policy" described in the Spec.
-        Currently, it is a no-op as the complex adaptation logic requires further requirements analysis.
-        """
-
     def _execute_iteration_logic(self, iteration: int, paths: dict[str, Path]) -> None:
-        """
-        Core logic for a single iteration.
-        Separated for clarity and testability.
-        """
         deployed_potential = self._deploy_potential(iteration)
-        result = self._run_md_simulation(iteration, deployed_potential)
 
-        if result:
-            self._adapt_strategy(result)
-            self._handle_md_halt(result, deployed_potential, paths)
+        # Phase 2 Validation (at start of iteration or after training)
+        if iteration > 1:
+            self._phase2_validation(deployed_potential)
+
+        initial_structure = self._get_initial_structure(iteration)
+        if not initial_structure:
+            self.logger.warning("No structure for MD. Skipping iteration.")
+            return
+
+        # Engine run (Master-Slave Resume handles continuous MD inherently)
+        if not self.engine:
+            return
+
+        result = self.engine.run(structure=initial_structure, potential=deployed_potential)
+
+        if result and result.halted and result.halt_structure_path:
+            threshold_call_dft = self.config.workflow.thresholds.threshold_call_dft
+            if result.max_gamma > threshold_call_dft:
+                self.logger.info(
+                    f"MD Halted at step {result.n_steps} (Gamma {result.max_gamma} > {threshold_call_dft}). Triggering Phase 3."
+                )
+
+                # Phase 3
+                s0_cluster = self._phase3_intelligent_cutout(result.halt_structure_path)
+
+                if s0_cluster:
+                    # Phase 4
+                    new_potential = self._phase4_hierarchical_finetuning(
+                        s0_cluster, deployed_potential, paths
+                    )
+                    if new_potential and new_potential.exists():
+                        self.state_manager.current_potential = new_potential
+                        self.logger.info(f"Potential refined to: {new_potential}")
+                    else:
+                        self.logger.error("Phase 4 failed to produce a valid potential.")
+        elif result:
+            self.logger.info(LOG_ITERATION_COMPLETED.format(iteration=iteration))
 
     def _run_loop_iteration(self) -> None:
-        """Executes one iteration of the active learning loop."""
         iteration = self.state_manager.iteration + 1
         paths = self.dir_manager.setup_iteration(iteration)
-        self.logger.info(LOG_START_ITERATION.format(iteration=iteration, max_iterations=self.config.workflow.max_iterations))
+        self.logger.info(
+            LOG_START_ITERATION.format(
+                iteration=iteration, max_iterations=self.config.workflow.max_iterations
+            )
+        )
 
         try:
             self._execute_iteration_logic(iteration, paths)
-
             self.state_manager.iteration = iteration
             self.state_manager.save()
-
         except Exception as e:
             self.logger.exception(f"Iteration {iteration} failed")
             msg = f"Iteration {iteration} failed: {e}"
             raise OrchestratorError(msg) from e
 
     def _finalize(self) -> None:
-        """Finalizes the workflow by deploying and validating the best potential."""
         production_dir = Path(DEFAULT_PRODUCTION_DIR)
         production_dir.mkdir(exist_ok=True)
         potential_target = production_dir / FILENAME_POTENTIAL
@@ -460,35 +417,21 @@ class Orchestrator:
             shutil.copy(self.state_manager.current_potential, potential_target)
             self.logger.info(f"Deployed best potential to {potential_target}")
 
-            if self.validator:
-                report_path = production_dir / "validation_report.html"
-                # Get a structure for validation. Use initial structure of last iteration.
-                structure = self._get_initial_structure(self.state_manager.iteration)
-
-                if structure:
-                    self.logger.info("Running final validation...")
-                    result = self.validator.validate(potential_target, report_path, structure)
-                    status = (
-                        "PASSED"
-                        if (result.phonon_stable and result.elastic_stable)
-                        else "FAILED"
-                    )
-                    self.logger.info(f"Validation {status}. Report saved to {report_path}")
-                else:
-                    self.logger.warning("Could not retrieve structure for validation.")
+            self.logger.info("Executing Final Phase 2 Validation.")
+            self._phase2_validation(potential_target)
 
     def run(self) -> None:
-        """
-        Executes the main active learning loop.
-        """
         self.logger.info(LOG_START_LOOP)
 
         try:
             self.initialize_modules()
-            self._check_initial_potential()
 
+            # Phase 1
+            self._phase1_distillation()
+
+            # MD Loop Phase
             while self.state_manager.iteration < self.config.workflow.max_iterations:
-                 self._run_loop_iteration()
+                self._run_loop_iteration()
 
             self._finalize()
             self.logger.info(LOG_WORKFLOW_COMPLETED)

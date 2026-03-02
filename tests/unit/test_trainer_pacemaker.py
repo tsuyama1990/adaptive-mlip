@@ -16,6 +16,7 @@ def test_finetune_manager():
         assert "finetuned_MACE-MP-0.pt" in new_model.name
         assert new_model.exists()
 
+
 def test_incremental_trainer():
     # Mock base trainer
     class MockTrainer:
@@ -23,7 +24,7 @@ def test_incremental_trainer():
             return path
 
     base = MockTrainer()
-    trainer = IncrementalTrainer(base, replay_buffer_size=2) # type: ignore
+    trainer = IncrementalTrainer(base, replay_buffer_size=2)  # type: ignore
 
     a1 = bulk("Cu")
     a2 = bulk("Ag")

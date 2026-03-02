@@ -45,7 +45,7 @@ class LoopState(BaseModel):
                     # Exception: Allow /tmp or temp directories for testing/runtime
                     temp_dir = Path(tempfile.gettempdir()).resolve()
                     if not path.is_relative_to(temp_dir):
-                         _raise_traversal_error(path, cwd)
+                        _raise_traversal_error(path, cwd)
             except ValueError as e:
                 # is_relative_to raises ValueError if not relative
                 _raise_traversal_error(path, cwd, e)

@@ -17,55 +17,82 @@ from pyacemaker.domain_models.defaults import (
 
 class OTFConfig(BaseModel):
     """Configuration for On-The-Fly (OTF) Active Learning loop."""
+
     model_config = ConfigDict(extra="forbid")
 
     uncertainty_threshold: float = Field(
         default=DEFAULT_OTF_UNCERTAINTY_THRESHOLD,
         gt=0,
-        description="Gamma threshold to trigger halt and retraining."
+        description="Gamma threshold to trigger halt and retraining.",
     )
     local_n_candidates: PositiveInt = Field(
         default=DEFAULT_OTF_LOCAL_N_CANDIDATES,
-        description="Number of local candidates to generate around halt structure."
+        description="Number of local candidates to generate around halt structure.",
     )
     local_n_select: PositiveInt = Field(
         default=DEFAULT_OTF_LOCAL_N_SELECT,
-        description="Number of candidates to select via active set optimization."
+        description="Number of candidates to select via active set optimization.",
     )
     max_retries: PositiveInt = Field(
         default=DEFAULT_OTF_MAX_RETRIES,
-        description="Maximum number of retraining attempts per iteration."
+        description="Maximum number of retraining attempts per iteration.",
     )
-
-
 
 
 class DistillationConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
     enable: bool = Field(False, description="Enable Phase 1 Zero-Shot Distillation")
-    mace_model_path: str = Field(default="MACE-MP-0", description="Path or name of MACE foundation model")
-    uncertainty_threshold: float = Field(default=0.1, description="Uncertainty threshold for retaining structures")
-    sampling_counts: PositiveInt = Field(default=1000, description="Number of structures to sample via DIRECT")
+    mace_model_path: str = Field(
+        default="MACE-MP-0", description="Path or name of MACE foundation model"
+    )
+    uncertainty_threshold: float = Field(
+        default=0.1, description="Uncertainty threshold for retaining structures"
+    )
+    sampling_counts: PositiveInt = Field(
+        default=1000, description="Number of structures to sample via DIRECT"
+    )
+
 
 class ActiveLearningThresholds(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    threshold_call_dft: float = Field(default=2.0, description="Threshold to trigger halt and call DFT")
-    threshold_add_train: float = Field(default=5.0, description="Threshold to add data to training set (epicentre)")
-    smooth_steps: PositiveInt = Field(default=3, description="Consecutive steps required to filter thermal noise")
+    threshold_call_dft: float = Field(
+        default=2.0, description="Threshold to trigger halt and call DFT"
+    )
+    threshold_add_train: float = Field(
+        default=5.0, description="Threshold to add data to training set (epicentre)"
+    )
+    smooth_steps: PositiveInt = Field(
+        default=3, description="Consecutive steps required to filter thermal noise"
+    )
+
 
 class CutoutConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
     core_radius: float = Field(default=4.0, description="Radius for core atoms (force_weight=1.0)")
-    buffer_radius: float = Field(default=8.0, description="Radius for buffer atoms (force_weight=0.0)")
-    enable_pre_relaxation: bool = Field(default=True, description="Enable pre-relaxation of buffer using MACE")
-    enable_passivation: bool = Field(default=True, description="Enable auto-passivation of broken bonds")
+    buffer_radius: float = Field(
+        default=8.0, description="Radius for buffer atoms (force_weight=0.0)"
+    )
+    enable_pre_relaxation: bool = Field(
+        default=True, description="Enable pre-relaxation of buffer using MACE"
+    )
+    enable_passivation: bool = Field(
+        default=True, description="Enable auto-passivation of broken bonds"
+    )
+
 
 class LoopStrategyConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
     use_tiered_oracle: bool = Field(default=True, description="Route queries through TieredOracle")
-    incremental_update: bool = Field(default=True, description="Use Delta Learning for incremental updates")
-    replay_buffer_size: PositiveInt = Field(default=1000, description="Max size of replay buffer for historical data")
-    baseline_potential_type: str = Field(default="LJ", description="Type of baseline potential (e.g., LJ)")
+    incremental_update: bool = Field(
+        default=True, description="Use Delta Learning for incremental updates"
+    )
+    replay_buffer_size: PositiveInt = Field(
+        default=1000, description="Max size of replay buffer for historical data"
+    )
+    baseline_potential_type: str = Field(
+        default="LJ", description="Type of baseline potential (e.g., LJ)"
+    )
+
 
 class WorkflowConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -102,24 +129,18 @@ class WorkflowConfig(BaseModel):
         default=DEFAULT_POTENTIALS_DIR, description="Directory for storing trained potentials"
     )
 
-
     distillation: DistillationConfig = Field(
-        default_factory=DistillationConfig,
-        description="Configuration for Distillation Phase."
+        default_factory=DistillationConfig, description="Configuration for Distillation Phase."
     )
     thresholds: ActiveLearningThresholds = Field(
         default_factory=ActiveLearningThresholds,
-        description="Configuration for Active Learning Thresholds."
+        description="Configuration for Active Learning Thresholds.",
     )
     cutout: CutoutConfig = Field(
         default_factory=CutoutConfig,
-        description="Configuration for Cluster Cutout and Passivation."
+        description="Configuration for Cluster Cutout and Passivation.",
     )
     strategy: LoopStrategyConfig = Field(
-        default_factory=LoopStrategyConfig,
-        description="Configuration for Loop Strategy."
+        default_factory=LoopStrategyConfig, description="Configuration for Loop Strategy."
     )
-    otf: OTFConfig = Field(
-        default_factory=OTFConfig,
-        description="Configuration for OTF loop."
-    )
+    otf: OTFConfig = Field(default_factory=OTFConfig, description="Configuration for OTF loop.")
