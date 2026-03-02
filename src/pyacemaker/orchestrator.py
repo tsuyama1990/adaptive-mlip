@@ -36,7 +36,7 @@ from pyacemaker.domain_models.defaults import (
 from pyacemaker.domain_models.md import MDSimulationResult
 from pyacemaker.factory import ModuleFactory
 from pyacemaker.logger import setup_logger
-from pyacemaker.utils.extraction import extract_local_region
+from pyacemaker.utils.extraction import extract_intelligent_cluster
 
 
 class Orchestrator:
@@ -289,10 +289,8 @@ class Orchestrator:
             center_idx = self._get_max_gamma_atom_index(halt_structure)
 
             # Extract local cluster (S0)
-            radius = self.config.structure.local_extraction_radius
-            buffer = self.config.structure.local_buffer_radius
 
-            return extract_local_region(halt_structure, center_idx, radius, buffer)
+            return extract_intelligent_cluster(halt_structure, [center_idx], self.config.workflow.cutout)
         except Exception:
             self.logger.exception("Failed to extract local cluster.")
             return None
@@ -422,7 +420,6 @@ class Orchestrator:
         Note: This method is intended to implement the "Adaptive Exploration Policy" described in the Spec.
         Currently, it is a no-op as the complex adaptation logic requires further requirements analysis.
         """
-        pass
 
     def _execute_iteration_logic(self, iteration: int, paths: dict[str, Path]) -> None:
         """

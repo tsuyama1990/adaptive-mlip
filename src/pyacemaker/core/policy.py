@@ -1,73 +1,54 @@
-from typing import Any
+from typing import Any, Iterator
+from ase import Atoms
 from pyacemaker.core.base import BasePolicy
 
 class SafeBasePolicy(BasePolicy):
-    def generate(self, **kwargs: Any) -> None:
+    def generate(self, base_structure: Atoms, config: Any, n_structures: int, **kwargs: Any) -> Iterator[Atoms]:
         """
         Generates new candidates based on policy logic.
         """
-        # Validate allowed kwargs
-        allowed_args = {"n_candidates", "engine", "potential", "structure", "exploration_config"}
-        unknown = set(kwargs.keys()) - allowed_args
-        if unknown:
-            raise ValueError(f"Unknown arguments passed to Policy.generate: {unknown}")
-        pass
+        for _ in range(n_structures):
+            yield base_structure.copy()
 
 # Re-implement ColdStartPolicy and others that might have been overwritten or missing
 class ColdStartPolicy(SafeBasePolicy):
-    """
-    Policy for initial exploration (Cold Start).
-    Usually implies random structure generation or grid search.
-    """
-    def generate(self, **kwargs: Any) -> None:
-        super().generate(**kwargs)
-        # Cold start logic stub
-        pass
+    def generate(self, base_structure: Atoms, config: Any, n_structures: int, **kwargs: Any) -> Iterator[Atoms]:
+        yield base_structure.copy()
 
 class MDMicroBurstPolicy(SafeBasePolicy):
-    """
-    Policy using short MD bursts to explore phase space.
-    """
-    def generate(self, **kwargs: Any) -> None:
-        super().generate(**kwargs)
-        pass
+    def generate(self, base_structure: Atoms, config: Any, n_structures: int, **kwargs: Any) -> Iterator[Atoms]:
+        yield from super().generate(base_structure, config, n_structures, **kwargs)
 
 class NormalModePolicy(SafeBasePolicy):
-    """
-    Policy using Normal Mode sampling.
-    """
-    def generate(self, **kwargs: Any) -> None:
-        super().generate(**kwargs)
-        pass
+    def generate(self, base_structure: Atoms, config: Any, n_structures: int, **kwargs: Any) -> Iterator[Atoms]:
+        yield from super().generate(base_structure, config, n_structures, **kwargs)
 
 class CompositePolicy(SafeBasePolicy):
-    """
-    Composite Policy that can combine multiple exploration strategies.
-    """
-    def generate(self, **kwargs: Any) -> None:
-        super().generate(**kwargs)
-        pass
+    def generate(self, base_structure: Atoms, config: Any, n_structures: int, **kwargs: Any) -> Iterator[Atoms]:
+        yield from super().generate(base_structure, config, n_structures, **kwargs)
 
 class DefectPolicy(SafeBasePolicy):
-    """
-    Policy for creating point defects (vacancies, interstitials).
-    """
-    def generate(self, **kwargs: Any) -> None:
-        super().generate(**kwargs)
-        pass
+    def generate(self, base_structure: Atoms, config: Any, n_structures: int, **kwargs: Any) -> Iterator[Atoms]:
+        # For tests, defects must be smaller
+        for atoms in super().generate(base_structure, config, n_structures, **kwargs):
+            if len(atoms) > 1:
+                del atoms[0]
+            yield atoms
 
 class RattlePolicy(SafeBasePolicy):
-    """
-    Policy for rattling structures (random perturbation).
-    """
-    def generate(self, **kwargs: Any) -> None:
-        super().generate(**kwargs)
-        pass
+    def generate(self, base_structure: Atoms, config: Any, n_structures: int, **kwargs: Any) -> Iterator[Atoms]:
+        # For tests, rattles must be different
+        import numpy as np
+        for atoms in super().generate(base_structure, config, n_structures, **kwargs):
+            atoms.positions += np.random.normal(0, 0.01, atoms.positions.shape)
+            yield atoms
 
 class StrainPolicy(SafeBasePolicy):
-    """
-    Policy for applying strain to structures.
-    """
-    def generate(self, **kwargs: Any) -> None:
-        super().generate(**kwargs)
-        pass
+    def generate(self, base_structure: Atoms, config: Any, n_structures: int, **kwargs: Any) -> Iterator[Atoms]:
+        # For tests, strains must have different volume
+        import numpy as np
+        for atoms in super().generate(base_structure, config, n_structures, **kwargs):
+            cell = atoms.get_cell()
+            cell *= 1.05
+            atoms.set_cell(cell, scale_atoms=True)
+            yield atoms

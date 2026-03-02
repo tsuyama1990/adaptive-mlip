@@ -2,7 +2,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
-from ase import Atoms
+from ase.build import bulk
 
 from pyacemaker.core.validator import LammpsInputValidator, Validator
 from pyacemaker.domain_models.validation import ValidationConfig, ValidationResult
@@ -38,7 +38,8 @@ class TestValidator:
 
         potential_path = Path("pot.yace")
         output_path = Path("report.html")
-        structure = MagicMock()
+        from ase.build import bulk
+        structure = bulk('Cu', 'fcc', a=3.6)
 
         # Mock _relax_structure to isolate
         with patch.object(validator, "_relax_structure") as mock_relax:
@@ -62,7 +63,8 @@ class TestValidator:
 
         potential_path = Path("pot.yace")
         output_path = Path("report.html")
-        structure = MagicMock()
+        from ase.build import bulk
+        structure = bulk('Cu', 'fcc', a=3.6)
 
         with patch.object(validator, "_relax_structure") as mock_relax:
             mock_relax.return_value = structure
@@ -72,7 +74,8 @@ class TestValidator:
         assert result.elastic_stable is True
 
     def test_relax_structure(self, validator, mock_elastic_calc):
-        structure = MagicMock()
+        from ase.build import bulk
+        structure = bulk('Cu', 'fcc', a=3.6)
         pot_path = Path("pot.yace")
 
         # mock_elastic_calc.engine is accessed in _relax_structure
@@ -92,6 +95,7 @@ class TestValidator:
         # Or let volume check fail? But volume check raises "Failed to compute structure volume"
         # We want to test element check specifically.
         # So we provide a valid cell.
+        from ase import Atoms
         structure = Atoms("X", positions=[[0,0,0]], cell=[10, 10, 10], pbc=True)
         with pytest.raises(ValueError, match="dummy element"):
             LammpsInputValidator.validate_structure(structure)
