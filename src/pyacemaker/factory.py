@@ -1,3 +1,6 @@
+from collections.abc import Callable
+from typing import Any
+
 from pyacemaker.core.active_set import ActiveSetSelector
 from pyacemaker.core.base import BaseEngine, BaseGenerator, BaseOracle, BaseTrainer
 from pyacemaker.core.engine import LammpsEngine
@@ -6,10 +9,77 @@ from pyacemaker.core.generator import StructureGenerator
 from pyacemaker.core.oracle import DFTManager
 from pyacemaker.core.report import ReportGenerator
 from pyacemaker.core.trainer import PacemakerTrainer
-from pyacemaker.core.validator import Validator
+from pyacemaker.core.validator import ValidationContext, Validator
 from pyacemaker.domain_models import PyAceConfig
 from pyacemaker.utils.elastic import ElasticCalculator
 from pyacemaker.utils.phonons import PhononCalculator
+
+
+class DIContainer:
+    """Dependency Injection Container with lifecycle management."""
+
+    def __init__(self) -> None:
+        self._transient_providers: dict[str, Callable[[PyAceConfig], Any]] = {}
+        self._singleton_providers: dict[str, Callable[[PyAceConfig], Any]] = {}
+        self._singleton_instances: dict[str, Any] = {}
+
+    def register_transient(self, name: str, provider: Callable[[PyAceConfig], Any]) -> None:
+        """Register a dependency that creates a new instance every time it is resolved."""
+        self._transient_providers[name] = provider
+
+    def register_singleton(self, name: str, provider: Callable[[PyAceConfig], Any]) -> None:
+        """Register a dependency that creates a single instance and caches it."""
+        self._singleton_providers[name] = provider
+
+    def resolve(self, name: str, config: PyAceConfig) -> Any:
+        """Resolve a dependency by name."""
+        if name in self._transient_providers:
+            return self._transient_providers[name](config)
+        if name in self._singleton_providers:
+            if name not in self._singleton_instances:
+                self._singleton_instances[name] = self._singleton_providers[name](config)
+            return self._singleton_instances[name]
+        msg = f"No provider registered for {name}"
+        raise KeyError(msg)
+
+
+_default_container = DIContainer()
+_default_container.register_transient("oracle", lambda c: DFTManager(c.dft))
+_default_container.register_transient("generator", lambda c: StructureGenerator(c.structure))
+_default_container.register_transient("trainer", lambda c: PacemakerTrainer(c.training))
+_default_container.register_singleton("engine", lambda c: LammpsEngine(c.md))
+_default_container.register_transient("active_set_selector", lambda c: ActiveSetSelector())
+_default_container.register_singleton("report_gen", lambda c: ReportGenerator())
+_default_container.register_transient(
+    "phonon_calc",
+    lambda c: PhononCalculator(
+        _default_container.resolve("engine", c),
+        c.validation.phonon_supercell,
+        c.validation.phonon_displacement,
+        c.validation.phonon_imaginary_tol,
+    ),
+)
+_default_container.register_transient(
+    "elastic_calc",
+    lambda c: ElasticCalculator(
+        _default_container.resolve("engine", c),
+        c.validation.elastic_strain,
+        c.validation.elastic_steps,
+    ),
+)
+
+
+def _create_validator(c: PyAceConfig) -> Validator:
+    context = ValidationContext(
+        config=c.validation,
+        phonon_calculator=_default_container.resolve("phonon_calc", c),
+        elastic_calculator=_default_container.resolve("elastic_calc", c),
+        report_generator=_default_container.resolve("report_gen", c),
+    )
+    return Validator(context)
+
+
+_default_container.register_transient("validator", _create_validator)
 
 
 class ModuleFactory:
@@ -17,8 +87,11 @@ class ModuleFactory:
     Factory for creating core modules based on configuration.
     """
 
-    @staticmethod
+    container: DIContainer = _default_container
+
+    @classmethod
     def create_modules(
+        cls,
         config: PyAceConfig,
     ) -> tuple[BaseGenerator, BaseOracle, BaseTrainer, BaseEngine, ActiveSetSelector, Validator]:
         """
@@ -49,37 +122,12 @@ class ModuleFactory:
             raise ConfigError(msg)
 
         try:
-            # Oracle
-            oracle = DFTManager(config.dft)
-
-            # Generator
-            generator = StructureGenerator(config.structure)
-
-            # Trainer
-            trainer = PacemakerTrainer(config.training)
-
-            # Engine
-            engine = LammpsEngine(config.md)
-
-            # Active Set Selector
-            active_set_selector = ActiveSetSelector()
-
-            # Validator
-            report_gen = ReportGenerator()
-            phonon_calc = PhononCalculator(
-                engine,
-                config.validation.phonon_supercell,
-                config.validation.phonon_displacement,
-                config.validation.phonon_imaginary_tol,
-            )
-            elastic_calc = ElasticCalculator(
-                engine,
-                config.validation.elastic_strain,
-                config.validation.elastic_steps,
-            )
-            validator = Validator(
-                config.validation, phonon_calc, elastic_calc, report_gen
-            )
+            oracle = cls.container.resolve("oracle", config)
+            generator = cls.container.resolve("generator", config)
+            trainer = cls.container.resolve("trainer", config)
+            engine = cls.container.resolve("engine", config)
+            active_set_selector = cls.container.resolve("active_set_selector", config)
+            validator = cls.container.resolve("validator", config)
 
         except Exception as e:
             msg = f"Failed to create modules: {e}"

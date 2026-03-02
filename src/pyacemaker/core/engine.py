@@ -30,7 +30,7 @@ class LammpsEngine(BaseEngine):
         self,
         config: MDConfig,
         generator: LammpsScriptGenerator | None = None,
-        file_manager: LammpsFileManager | None = None
+        file_manager: LammpsFileManager | None = None,
     ) -> None:
         self.config = config
         self.generator = generator or LammpsScriptGenerator(config)
@@ -41,7 +41,7 @@ class LammpsEngine(BaseEngine):
         self, structure: Atoms | None, potential: Any, use_restart: bool = False
     ) -> tuple[Any, Path, Path, Path, list[str], Path]:
         if structure is None and not use_restart:
-             raise ValueError(ERR_STRUCTURE_NONE)
+            raise ValueError(ERR_STRUCTURE_NONE)
 
         if structure is not None:
             LammpsInputValidator.validate_structure(structure)
@@ -52,9 +52,13 @@ class LammpsEngine(BaseEngine):
         if use_restart and self._restart_file_path:
             # If resuming, we don't need a data file from atoms.
             # We just need a dummy workspace.
-            ctx, data_file, dump_file, log_file, elements = self.file_manager.prepare_workspace(Atoms("H"))
+            ctx, data_file, dump_file, log_file, elements = self.file_manager.prepare_workspace(
+                Atoms("H")
+            )
         else:
-            ctx, data_file, dump_file, log_file, elements = self.file_manager.prepare_workspace(structure if structure is not None else Atoms("H"))
+            ctx, data_file, dump_file, log_file, elements = self.file_manager.prepare_workspace(
+                structure if structure is not None else Atoms("H")
+            )
 
         return ctx, data_file, dump_file, log_file, elements, potential_path
 
@@ -80,9 +84,13 @@ class LammpsEngine(BaseEngine):
         """
         Runs the MD simulation. If a restart file is cached, resumes seamlessly.
         """
-        use_restart = self._restart_file_path is not None
-        ctx, data_file, dump_file, log_file, elements, potential_path = self._prepare_simulation_env(
-            structure, potential, use_restart
+        if self._restart_file_path is not None:
+            return self.run_resume(structure, potential)
+        return self.run_normal(structure, potential)
+
+    def run_normal(self, structure: Atoms | None, potential: Any) -> MDSimulationResult:
+        ctx, data_file, dump_file, log_file, elements, potential_path = (
+            self._prepare_simulation_env(structure, potential, False)
         )
 
         with ctx:
@@ -91,118 +99,111 @@ class LammpsEngine(BaseEngine):
             restart_out_file = temp_dir / "checkpoint.restart"
 
             with input_script_path.open("w") as f:
-                if use_restart and self._restart_file_path:
-                    # Soft Start generation
-                    self._write_resume_script(
-                        f, potential_path, Path(self._restart_file_path), restart_out_file, dump_file
-                    )
-                else:
-                    self.generator.write_script(
-                        f, potential_path, data_file, dump_file, elements
-                    )
-                    # Tell LAMMPS to write a restart file periodically
-                    f.write(f"restart 1000 {restart_out_file}\n")
+                self.generator.write_script(f, potential_path, data_file, dump_file, elements)
+                f.write(f"restart 1000 {restart_out_file}\n")
 
-            driver = LammpsDriver(["-screen", LAMMPS_SCREEN_ARG, "-log", str(log_file)])
+            return self._execute_and_parse(input_script_path, restart_out_file, log_file, dump_file)
+
+    def run_resume(self, structure: Atoms | None, potential: Any) -> MDSimulationResult:
+        ctx, data_file, dump_file, log_file, elements, potential_path = (
+            self._prepare_simulation_env(structure, potential, True)
+        )
+
+        with ctx:
+            temp_dir = Path(ctx.name) if hasattr(ctx, "name") else data_file.parent
+            input_script_path = temp_dir / "input.lmp"
+            restart_out_file = temp_dir / "checkpoint.restart"
+
+            with input_script_path.open("w") as f:
+                self.generator.write_resume_script(
+                    f,
+                    potential_path,
+                    Path(self._restart_file_path),  # type: ignore[arg-type]
+                    restart_out_file,
+                    dump_file,
+                    elements,
+                )
+
+            return self._execute_and_parse(input_script_path, restart_out_file, log_file, dump_file)
+
+    def _execute_and_parse(
+        self, input_script_path: Path, restart_out_file: Path, log_file: Path, dump_file: Path
+    ) -> MDSimulationResult:
+        driver = LammpsDriver(["-screen", LAMMPS_SCREEN_ARG, "-log", str(log_file)])
+
+        try:
+            self._execute_simulation(driver, input_script_path)
+
+            if restart_out_file.exists():
+                safe_restart_dir = (
+                    Path(tempfile.gettempdir()) / f"lammps_restarts_{int(time.time())}"
+                )
+                safe_restart_dir.mkdir(parents=True, exist_ok=True)
+                safe_restart = safe_restart_dir / "latest.restart"
+                safe_restart.write_bytes(restart_out_file.read_bytes())
+                self._restart_file_path = str(safe_restart)
 
             try:
-                self._execute_simulation(driver, input_script_path)
+                energy = driver.extract_variable("pe")
+                temperature = driver.extract_variable("temp")
+                step = int(driver.extract_variable("step"))
+                forces = driver.get_forces().tolist()
+                stress = driver.get_stress().tolist()
+            except Exception:
+                energy = 0.0
+                temperature = 0.0
+                step = 0
+                forces = [[0.0, 0.0, 0.0]]
+                stress = [0.0] * 6
 
-                # Save the latest restart file to an isolated path so it survives tempdir cleanup
-                if restart_out_file.exists():
-                    safe_restart_dir = Path(tempfile.gettempdir()) / f"lammps_restarts_{int(time.time())}"
-                    safe_restart_dir.mkdir(parents=True, exist_ok=True)
-                    safe_restart = safe_restart_dir / "latest.restart"
-                    # We copy manually since Python 3.8+ shutil can be slow, but here read/write is fine.
-                    safe_restart.write_bytes(restart_out_file.read_bytes())
-                    self._restart_file_path = str(safe_restart)
-
+            max_gamma = 0.0
+            if self.config.fix_halt:
                 try:
-                    energy = driver.extract_variable("pe")
-                    temperature = driver.extract_variable("temp")
-                    step = int(driver.extract_variable("step"))
-                    forces = driver.get_forces().tolist()
-                    stress = driver.get_stress().tolist()
+                    max_gamma = driver.extract_variable("max_g")
                 except Exception:
-                    energy = 0.0
-                    temperature = 0.0
-                    step = 0
-                    forces = [[0.0, 0.0, 0.0]]
-                    stress = [0.0] * 6
+                    max_gamma = 0.0
 
-                max_gamma = 0.0
-                if self.config.fix_halt:
-                    try:
-                        max_gamma = driver.extract_variable("max_g")
-                    except Exception:
-                        max_gamma = 0.0
+            halted = False
+            if self.config.fix_halt:
+                halted = step < self.config.n_steps
 
-                halted = False
-                if self.config.fix_halt:
-                    halted = step < self.config.n_steps
-
-                return MDSimulationResult(
-                    energy=energy,
-                    forces=forces,
-                    stress=stress,
-                    halted=halted,
-                    max_gamma=max_gamma,
-                    n_steps=step,
-                    temperature=temperature,
-                    trajectory_path=str(dump_file),
-                    log_path=str(log_file),
-                    halt_structure_path=str(dump_file) if halted else None,
-                    halt_step=step if halted else None
-                )
-            finally:
-                if hasattr(driver, "close"):
-                    driver.close()
-
-    def _write_resume_script(
-        self, f: Any, potential_path: Path, restart_in: Path, restart_out: Path, dump_file: Path
-    ) -> None:
-        """Writes a LAMMPS script that seamlessly resumes using read_restart and Soft Start protocol."""
-        f.write(f"read_restart {restart_in}\n")
-        f.write("pair_style pace\n")
-        # In actual implementation, we'd need elements string here.
-        f.write(f"pair_coeff * * {potential_path} *\n")
-
-        # Soft Start Protocol: Heavy damping Langevin for 100 steps
-        f.write("fix soft_start all langevin 300.0 300.0 10.0 12345\n")
-        f.write("fix nve_soft all nve\n")
-        f.write("run 100\n")
-        f.write("unfix soft_start\n")
-        f.write("unfix nve_soft\n")
-
-        # Resume main ensemble (placeholder for actual config)
-        f.write("fix main_nve all nve\n")
-        f.write(f"dump 1 all custom {self.config.dump_freq} {dump_file} id type x y z fx fy fz\n")
-        f.write(f"restart 1000 {restart_out}\n")
-        f.write(f"run {self.config.n_steps}\n")
+            return MDSimulationResult(
+                energy=energy,
+                forces=forces,
+                stress=stress,
+                halted=halted,
+                max_gamma=max_gamma,
+                n_steps=step,
+                temperature=temperature,
+                trajectory_path=str(dump_file),
+                log_path=str(log_file),
+                halt_structure_path=str(dump_file) if halted else None,
+                halt_step=step if halted else None,
+            )
+        finally:
+            if hasattr(driver, "close"):
+                driver.close()
 
     def compute_static_properties(self, structure: Atoms, potential: Any) -> MDSimulationResult:
-        static_config = self.config.model_copy(update={
-            "n_steps": 0,
-            "minimize": False,
-            "thermo_freq": 1,
-            "dump_freq": 0
-        })
+        static_config = self.config.model_copy(
+            update={"n_steps": 0, "minimize": False, "thermo_freq": 1, "dump_freq": 0}
+        )
         engine = LammpsEngine(static_config)
         return engine.run(structure, potential)
 
     def relax(self, structure: Atoms, potential: Any) -> Atoms:
-        ctx, data_file, dump_file, log_file, elements, potential_path = self._prepare_simulation_env(structure, potential)
+        ctx, data_file, dump_file, log_file, elements, potential_path = (
+            self._prepare_simulation_env(structure, potential)
+        )
         with ctx:
             temp_dir = Path(ctx.name) if hasattr(ctx, "name") else data_file.parent
             script_path = temp_dir / "relax.lmp"
             with script_path.open("w") as f:
-                self.generator.write_minimization_script(
-                    f, potential_path, data_file, elements
-                )
+                self.generator.write_minimization_script(f, potential_path, data_file, elements)
             driver = LammpsDriver(["-screen", LAMMPS_SCREEN_ARG, "-log", str(log_file)])
             try:
                 self._execute_simulation(driver, script_path)
                 return driver.get_atoms(elements)
             finally:
-                 if hasattr(driver, "close"):
-                     driver.close()
+                if hasattr(driver, "close"):
+                    driver.close()

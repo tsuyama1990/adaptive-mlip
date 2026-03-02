@@ -4,15 +4,21 @@ import numpy as np
 from ase import Atoms
 
 
-def rattle(atoms: Atoms, stdev: float, rng: np.random.Generator | None = None) -> Atoms:
+def rattle(
+    atoms: Atoms,
+    stdev: float,
+    rng: np.random.Generator | None = None,
+    distribution: str = "gaussian",
+) -> Atoms:
     """
-    Apply random Gaussian noise to atomic positions.
+    Apply random noise to atomic positions.
     Returns a new Atoms object.
 
     Args:
         atoms: Input Atoms object.
-        stdev: Standard deviation of Gaussian noise in Angstroms.
+        stdev: Standard deviation of noise in Angstroms.
         rng: Optional NumPy random number generator for reproducibility/efficiency.
+        distribution: Noise distribution type ('gaussian', 'uniform', 'exponential').
     """
     if stdev < 0:
         msg = "Standard deviation must be non-negative"
@@ -23,7 +29,18 @@ def rattle(atoms: Atoms, stdev: float, rng: np.random.Generator | None = None) -
         if rng is None:
             rng = np.random.default_rng()
 
-        displacement = rng.normal(scale=stdev, size=new_atoms.positions.shape)
+        if distribution == "gaussian":
+            displacement = rng.normal(scale=stdev, size=new_atoms.positions.shape)
+        elif distribution == "uniform":
+            displacement = rng.uniform(-stdev, stdev, size=new_atoms.positions.shape)
+        elif distribution == "exponential":
+            displacement = rng.exponential(stdev, size=new_atoms.positions.shape) * rng.choice(
+                [-1, 1], size=new_atoms.positions.shape
+            )
+        else:
+            msg = f"Unsupported distribution: {distribution}"
+            raise ValueError(msg)
+
         new_atoms.positions += displacement
     return new_atoms
 

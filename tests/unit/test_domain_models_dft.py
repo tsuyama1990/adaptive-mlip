@@ -49,7 +49,9 @@ def test_dft_config_defaults(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
 
 
 @pytest.mark.parametrize("beta", [1.5, -0.1, 0.0])
-def test_dft_config_invalid_mixing_beta(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, beta: float) -> None:
+def test_dft_config_invalid_mixing_beta(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, beta: float
+) -> None:
     """Test invalid mixing_beta (must be 0 < beta <= 1)."""
     monkeypatch.chdir(tmp_path)
     create_dummy_pseudopotentials(tmp_path, ["Fe"])
@@ -66,7 +68,9 @@ def test_dft_config_invalid_mixing_beta(tmp_path: Path, monkeypatch: pytest.Monk
 
 
 @pytest.mark.parametrize("width", [-0.1, 0.0])
-def test_dft_config_invalid_smearing_width(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, width: float) -> None:
+def test_dft_config_invalid_smearing_width(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, width: float
+) -> None:
     """Test invalid smearing_width (must be > 0)."""
     monkeypatch.chdir(tmp_path)
     create_dummy_pseudopotentials(tmp_path, ["Fe"])
@@ -178,6 +182,7 @@ def test_dft_config_symlinks_forbidden(tmp_path: Path, monkeypatch: pytest.Monke
             pseudopotentials={"Fe": "link.UPF"},
         )
 
+
 def test_dft_config_file_not_found(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Test that non-existent file raises error."""
     monkeypatch.chdir(tmp_path)
@@ -190,6 +195,7 @@ def test_dft_config_file_not_found(tmp_path: Path, monkeypatch: pytest.MonkeyPat
             encut=500.0,
             pseudopotentials={"Fe": "missing.UPF"},
         )
+
 
 def test_dft_config_embedding_buffer(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Test validation of embedding_buffer."""

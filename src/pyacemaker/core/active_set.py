@@ -110,7 +110,9 @@ class ActiveSetSelector:
             raise ActiveSetError(msg) from e
         return count
 
-    def _execute_selection(self, candidates_file: Path, potential_path: Path, output_file: Path, n_select: int) -> None:
+    def _execute_selection(
+        self, candidates_file: Path, potential_path: Path, output_file: Path, n_select: int
+    ) -> None:
         """Constructs and runs the selection command."""
         self._validate_path_safe(candidates_file)
         self._validate_path_safe(potential_path)

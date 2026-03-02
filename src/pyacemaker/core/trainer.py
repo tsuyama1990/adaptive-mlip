@@ -18,6 +18,7 @@ class FinetuneManager:
     """
     Wraps the short-duration training of the MACE PyTorch readout layer.
     """
+
     def __init__(self, model_path: str = "MACE-MP-0") -> None:
         self.model_path = model_path
 
@@ -44,9 +45,7 @@ class PacemakerTrainer(BaseTrainer):
         self.config_generator = PacemakerConfigGenerator(config)
 
     def train(
-        self,
-        training_data_path: str | Path,
-        initial_potential: str | Path | None = None
+        self, training_data_path: str | Path, initial_potential: str | Path | None = None
     ) -> Any:
         # Get pace_train executable securely
         executable = os.environ.get("PACE_TRAIN_EXECUTABLE", "pace_train")
@@ -101,23 +100,31 @@ class PacemakerTrainer(BaseTrainer):
             msg = f"Training data file is empty: {data_path}"
             raise TrainerError(msg)
 
+
 class IncrementalTrainer:
     """
     Wraps an existing trainer to enable Delta Learning and manages a fixed-size Replay Buffer.
+    Includes persistence support for the buffer.
     """
+
     def __init__(self, base_trainer: BaseTrainer, replay_buffer_size: int = 1000) -> None:
         self.base_trainer = base_trainer
         self.replay_buffer_size = replay_buffer_size
         self._buffer: list[Atoms] = []
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self.base_trainer, name)
 
     def add_to_buffer(self, atoms: Atoms) -> None:
         """Adds structures to the replay buffer, maintaining fixed size."""
         # Simple FIFO buffer for UAT
         self._buffer.append(atoms)
         if len(self._buffer) > self.replay_buffer_size:
-            self._buffer = self._buffer[-self.replay_buffer_size:]
+            self._buffer = self._buffer[-self.replay_buffer_size :]
 
-    def train(self, training_data_path: str | Path, initial_potential: str | Path | None = None) -> Any:
+    def train(
+        self, training_data_path: str | Path, initial_potential: str | Path | None = None
+    ) -> Any:
         """
         Mixes current dataset with Replay Buffer and trains incrementally.
         O(1) cost since buffer size is fixed and initial_potential provides starting weights.
@@ -127,4 +134,3 @@ class IncrementalTrainer:
         # For simplicity and UAT verification, we just delegate to base_trainer.
 
         return self.base_trainer.train(training_data_path, initial_potential)
-

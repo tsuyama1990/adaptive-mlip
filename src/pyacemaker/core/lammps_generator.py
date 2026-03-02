@@ -1,5 +1,4 @@
 import shlex
-from functools import lru_cache
 from pathlib import Path
 from typing import TextIO
 
@@ -19,40 +18,47 @@ class LammpsScriptGenerator:
 
     def __init__(self, config: MDConfig) -> None:
         self.config = config
-        # Use lru_cache for methods instead of manual dict
-        self._atomic_numbers_cache = {}
+        self._atomic_numbers_cache: dict[str, int] = {}
+        self._quote_cache: dict[str, str] = {}
 
-    @lru_cache(maxsize=128)
     def _get_atomic_number(self, symbol: str) -> int:
         """Cached atomic number lookup."""
-        return atomic_numbers[symbol]
+        if symbol not in self._atomic_numbers_cache:
+            self._atomic_numbers_cache[symbol] = atomic_numbers[symbol]
+        return self._atomic_numbers_cache[symbol]
 
-    @lru_cache(maxsize=128)
     def _quote(self, path: str) -> str:
         """
         Quotes a path for LAMMPS script safety after validation.
         Uses caching to avoid redundant validation calls.
         """
-        # Sanitize input path
-        # Note: path must be string for lru_cache
-        safe_path = validate_path_safe(Path(path))
-        # Use shlex.quote for shell safety
-        return shlex.quote(str(safe_path))
+        if path not in self._quote_cache:
+            # Sanitize input path
+            safe_path = validate_path_safe(Path(path))
+            # Use shlex.quote for shell safety
+            self._quote_cache[path] = shlex.quote(str(safe_path))
+        return self._quote_cache[path]
 
-    def _gen_potential_pure(self, buffer: TextIO, potential_path: Path, elements: list[str]) -> None:
+    def _gen_potential_pure(
+        self, buffer: TextIO, potential_path: Path, elements: list[str]
+    ) -> None:
         """Generates pure PACE potential commands."""
         species_str = " ".join(elements)
         quoted_pot = self._quote(str(potential_path))
         buffer.write("pair_style pace\n")
         buffer.write(f"pair_coeff * * pace {quoted_pot} {species_str}\n")
 
-    def _gen_potential_hybrid(self, buffer: TextIO, potential_path: Path, elements: list[str]) -> None:
+    def _gen_potential_hybrid(
+        self, buffer: TextIO, potential_path: Path, elements: list[str]
+    ) -> None:
         """Generates hybrid PACE + ZBL potential commands."""
         species_str = " ".join(elements)
         quoted_pot = self._quote(str(potential_path))
         params = self.config.hybrid_params
 
-        buffer.write(f"pair_style hybrid/overlay pace zbl {params.zbl_cut_inner} {params.zbl_cut_outer}\n")
+        buffer.write(
+            f"pair_style hybrid/overlay pace zbl {params.zbl_cut_inner} {params.zbl_cut_outer}\n"
+        )
         buffer.write(f"pair_coeff * * pace {quoted_pot} {species_str}\n")
 
         n_types = len(elements)
@@ -66,7 +72,7 @@ class LammpsScriptGenerator:
             for j in range(i, n_types):
                 el_j = elements[j]
                 z_j = self._get_atomic_number(el_j)
-                zbl_lines.append(f"pair_coeff {i+1} {j+1} zbl {z_i} {z_j}\n")
+                zbl_lines.append(f"pair_coeff {i + 1} {j + 1} zbl {z_i} {z_j}\n")
 
         buffer.writelines(zbl_lines)
 
@@ -116,7 +122,7 @@ class LammpsScriptGenerator:
 
         temp = self.config.temperature
         if self.config.ramping and self.config.ramping.temp_start is not None:
-             temp = self.config.ramping.temp_start
+            temp = self.config.ramping.temp_start
 
         buffer.write(
             f"fix mc_swap all atom/swap {self.config.mc.swap_freq} 1 {self.config.mc.seed} "
@@ -218,6 +224,41 @@ class LammpsScriptGenerator:
         self._gen_execution(buffer, elements)
 
         self._gen_post_run_diagnostics(buffer)
+
+    def write_resume_script(
+        self,
+        buffer: TextIO,
+        potential_path: Path,
+        restart_in: Path,
+        restart_out: Path,
+        dump_file: Path,
+        elements: list[str],
+    ) -> None:
+        """Writes a LAMMPS script that seamlessly resumes using read_restart and Soft Start protocol."""
+        quoted_restart_in = self._quote(str(restart_in))
+        quoted_restart_out = self._quote(str(restart_out))
+        quoted_dump = self._quote(str(dump_file))
+
+        buffer.write(f"read_restart {quoted_restart_in}\n")
+        self._gen_potential(buffer, potential_path, elements)
+
+        # Soft Start Protocol: Heavy damping Langevin for 100 steps
+        buffer.write("fix soft_start all langevin 300.0 300.0 10.0 12345\n")
+        buffer.write("fix nve_soft all nve\n")
+        buffer.write("run 100\n")
+        buffer.write("unfix soft_start\n")
+        buffer.write("unfix nve_soft\n")
+
+        # Output setup
+        self._gen_output_setup(buffer, Path(quoted_dump.strip("'\"")))
+
+        # Original ensemble
+        buffer.write(
+            f"fix npt all npt temp {self.config.temperature} {self.config.temperature} {self.config.tdamp_factor * self.config.timestep} iso {self.config.pressure} {self.config.pressure} {self.config.pdamp_factor * self.config.timestep}\n"
+        )
+
+        buffer.write(f"restart 1000 {quoted_restart_out}\n")
+        buffer.write(f"run {self.config.n_steps}\n")
 
     def write_minimization_script(
         self,

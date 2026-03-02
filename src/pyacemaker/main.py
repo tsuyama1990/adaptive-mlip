@@ -1,6 +1,8 @@
 import argparse
 import logging
 import sys
+from collections.abc import Callable
+from enum import Enum
 from pathlib import Path
 
 from pyacemaker.domain_models.config import PyAceConfig
@@ -16,12 +18,28 @@ from pyacemaker.scenarios.fept_mgo import FePtMgoScenario
 from pyacemaker.utils.io import load_config
 
 
+class ScenarioName(str, Enum):  # noqa: UP042
+    FEPT_MGO = "fept_mgo"
+
+
+SCENARIO_REGISTRY: dict[str, Callable[[PyAceConfig], BaseScenario]] = {}
+
+
+def register_scenario(name: str, scenario_class: Callable[[PyAceConfig], BaseScenario]) -> None:
+    """Dynamically register a scenario for execution."""
+    SCENARIO_REGISTRY[name] = scenario_class
+
+
+# Register default scenarios
+register_scenario(ScenarioName.FEPT_MGO.value, FePtMgoScenario)
+
+
 def get_scenario_runner(name: str, config: PyAceConfig) -> BaseScenario:
     """Factory method to get the appropriate scenario runner."""
-    if name == "fept_mgo":
-        return FePtMgoScenario(config)
-    msg = f"Unknown scenario: {name}"
-    raise ValueError(msg)
+    if name not in SCENARIO_REGISTRY:
+        msg = f"Unknown scenario: {name}"
+        raise ValueError(msg)
+    return SCENARIO_REGISTRY[name](config)
 
 
 def main() -> None:
@@ -30,9 +48,7 @@ def main() -> None:
     parser.add_argument(
         "--dry-run", action="store_true", help="Validate config and exit without running"
     )
-    parser.add_argument(
-        "--scenario", type=str, help="Run a specific scenario (e.g., fept_mgo)"
-    )
+    parser.add_argument("--scenario", type=str, help="Run a specific scenario (e.g., fept_mgo)")
 
     args = parser.parse_args()
     config_path = Path(args.config)
