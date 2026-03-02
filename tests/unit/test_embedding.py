@@ -56,7 +56,7 @@ def test_embed_cluster_invalid_buffer() -> None:
     """Test negative buffer raises error."""
     cluster = Atoms("H", positions=[[0, 0, 0]])
     with pytest.raises(ValueError, match="Buffer must be positive"):
-         embed_cluster(cluster, buffer=-5.0)
+        embed_cluster(cluster, buffer=-5.0)
 
 
 def test_embed_cluster_large() -> None:
@@ -67,6 +67,7 @@ def test_embed_cluster_large() -> None:
 
     assert len(embedded) == 100
     assert np.all(embedded.get_pbc())  # type: ignore[no-untyped-call]
+
 
 def test_embed_cluster_boundary_conditions() -> None:
     """Test cluster with atoms at extreme coordinates."""

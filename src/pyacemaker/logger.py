@@ -7,6 +7,7 @@ from pyacemaker.domain_models.logging import LoggingConfig
 
 _LOGGER_REGISTRY = {}
 
+
 def setup_logger(config: LoggingConfig, project_name: str) -> logging.Logger:
     """
     Sets up the logger based on the configuration.

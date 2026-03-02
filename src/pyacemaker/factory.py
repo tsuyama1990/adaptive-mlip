@@ -17,6 +17,7 @@ from pyacemaker.utils.phonons import PhononCalculator
 
 class DIContainer:
     """Simple Dependency Injection Container for testing and flexibility."""
+
     def __init__(self) -> None:
         self._providers: dict[str, Callable[[PyAceConfig], Any]] = {}
 
@@ -29,6 +30,7 @@ class DIContainer:
             raise KeyError(msg)
         return self._providers[name](config)
 
+
 _default_container = DIContainer()
 _default_container.register("oracle", lambda c: DFTManager(c.dft))
 _default_container.register("generator", lambda c: StructureGenerator(c.structure))
@@ -36,23 +38,33 @@ _default_container.register("trainer", lambda c: PacemakerTrainer(c.training))
 _default_container.register("engine", lambda c: LammpsEngine(c.md))
 _default_container.register("active_set_selector", lambda c: ActiveSetSelector())
 _default_container.register("report_gen", lambda c: ReportGenerator())
-_default_container.register("phonon_calc", lambda c: PhononCalculator(
-    _default_container.resolve("engine", c),
-    c.validation.phonon_supercell,
-    c.validation.phonon_displacement,
-    c.validation.phonon_imaginary_tol,
-))
-_default_container.register("elastic_calc", lambda c: ElasticCalculator(
-    _default_container.resolve("engine", c),
-    c.validation.elastic_strain,
-    c.validation.elastic_steps,
-))
-_default_container.register("validator", lambda c: Validator(
-    c.validation,
-    _default_container.resolve("phonon_calc", c),
-    _default_container.resolve("elastic_calc", c),
-    _default_container.resolve("report_gen", c)
-))
+_default_container.register(
+    "phonon_calc",
+    lambda c: PhononCalculator(
+        _default_container.resolve("engine", c),
+        c.validation.phonon_supercell,
+        c.validation.phonon_displacement,
+        c.validation.phonon_imaginary_tol,
+    ),
+)
+_default_container.register(
+    "elastic_calc",
+    lambda c: ElasticCalculator(
+        _default_container.resolve("engine", c),
+        c.validation.elastic_strain,
+        c.validation.elastic_steps,
+    ),
+)
+_default_container.register(
+    "validator",
+    lambda c: Validator(
+        c.validation,
+        _default_container.resolve("phonon_calc", c),
+        _default_container.resolve("elastic_calc", c),
+        _default_container.resolve("report_gen", c),
+    ),
+)
+
 
 class ModuleFactory:
     """

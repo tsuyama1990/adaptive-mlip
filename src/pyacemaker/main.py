@@ -15,17 +15,17 @@ from pyacemaker.logger import setup_logger
 from pyacemaker.orchestrator import Orchestrator
 from pyacemaker.scenarios.base_scenario import BaseScenario
 from pyacemaker.scenarios.fept_mgo import FePtMgoScenario
-from enum import StrEnum
-
 from pyacemaker.utils.io import load_config
 
 
-class ScenarioName(StrEnum):
+class ScenarioName(str, Enum):  # noqa: UP042
     FEPT_MGO = "fept_mgo"
+
 
 SCENARIO_REGISTRY: dict[str, Callable[[PyAceConfig], BaseScenario]] = {
     ScenarioName.FEPT_MGO.value: FePtMgoScenario,
 }
+
 
 def get_scenario_runner(name: str, config: PyAceConfig) -> BaseScenario:
     """Factory method to get the appropriate scenario runner."""
@@ -41,9 +41,7 @@ def main() -> None:
     parser.add_argument(
         "--dry-run", action="store_true", help="Validate config and exit without running"
     )
-    parser.add_argument(
-        "--scenario", type=str, help="Run a specific scenario (e.g., fept_mgo)"
-    )
+    parser.add_argument("--scenario", type=str, help="Run a specific scenario (e.g., fept_mgo)")
 
     args = parser.parse_args()
     config_path = Path(args.config)
