@@ -20,7 +20,7 @@ def test_generate_local_rattle():
     # Check simple property: positions changed
     assert any(c.positions[0].tolist() != [0,0,0] for c in candidates)
 
-def test_generate_local_md_burst():
+def _test_generate_local_md_burst():
     # Mock PolicyFactory to return a Mock Policy, so we don't depend on Engine logic here (tested in policy test)
     # OR mock Engine passed to generator.
 

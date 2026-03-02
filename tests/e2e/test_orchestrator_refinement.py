@@ -187,7 +187,7 @@ def test_orchestrator_refinement_extraction_failure(tmp_path: Path, caplog: Any)
             raise ValueError(msg)
 
         # Need to patch where it is IMPORTED in orchestrator.py
-        m.setattr("pyacemaker.orchestrator.extract_local_region", mock_fail)
+        m.setattr("pyacemaker.orchestrator.extract_intelligent_cluster", mock_fail)
 
         new_pot = orch._refine_potential(result, Path("p"), {})
 
