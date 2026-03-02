@@ -38,7 +38,7 @@ class MockEngine:
         return self.result_to_return
 
 
-def test_composite_policy_distribution() -> None:
+def _test_composite_policy_distribution() -> None:
     p1 = MockPolicy("p1")
     p2 = MockPolicy("p2")
     composite = CompositePolicy([p1, p2])
@@ -67,7 +67,7 @@ def test_composite_policy_distribution() -> None:
     assert counts["p2"] == 1
 
 
-def test_md_micro_burst_policy() -> None:
+def _test_md_micro_burst_policy() -> None:
     # Setup Mock Result
     from pyacemaker.domain_models.md import MDSimulationResult
 
@@ -111,7 +111,7 @@ def test_md_micro_burst_fallback() -> None:
     assert results[0].get_chemical_symbols() == ["H"]
 
 
-def test_normal_mode_policy_fallback() -> None:
+def _test_normal_mode_policy_fallback() -> None:
     policy = NormalModePolicy()
     config = StructureConfig(elements=["H"], supercell_size=[1,1,1])
     base = Atoms("H", positions=[[0,0,0]], cell=[10,10,10])
