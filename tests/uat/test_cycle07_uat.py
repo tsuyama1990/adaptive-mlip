@@ -15,13 +15,15 @@ def validator_dependencies():
 
 @pytest.fixture
 def validator(validator_dependencies):
+    from pyacemaker.core.validator import ValidationContext
     config = ValidationConfig()
-    return Validator(
-        config,
-        validator_dependencies["phonon"],
-        validator_dependencies["elastic"],
-        validator_dependencies["report"],
+    context = ValidationContext(
+        config=config,
+        phonon_calculator=validator_dependencies["phonon"],
+        elastic_calculator=validator_dependencies["elastic"],
+        report_generator=validator_dependencies["report"],
     )
+    return Validator(context)
 
 
 def test_uat_07_01_validate_potential_pass(validator, validator_dependencies):

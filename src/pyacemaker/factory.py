@@ -9,7 +9,7 @@ from pyacemaker.core.generator import StructureGenerator
 from pyacemaker.core.oracle import DFTManager
 from pyacemaker.core.report import ReportGenerator
 from pyacemaker.core.trainer import PacemakerTrainer
-from pyacemaker.core.validator import Validator
+from pyacemaker.core.validator import ValidationContext, Validator
 from pyacemaker.domain_models import PyAceConfig
 from pyacemaker.utils.elastic import ElasticCalculator
 from pyacemaker.utils.phonons import PhononCalculator
@@ -67,15 +67,19 @@ _default_container.register_transient(
         c.validation.elastic_steps,
     ),
 )
-_default_container.register_transient(
-    "validator",
-    lambda c: Validator(
-        c.validation,
-        _default_container.resolve("phonon_calc", c),
-        _default_container.resolve("elastic_calc", c),
-        _default_container.resolve("report_gen", c),
-    ),
-)
+
+
+def _create_validator(c: PyAceConfig) -> Validator:
+    context = ValidationContext(
+        config=c.validation,
+        phonon_calculator=_default_container.resolve("phonon_calc", c),
+        elastic_calculator=_default_container.resolve("elastic_calc", c),
+        report_generator=_default_container.resolve("report_gen", c),
+    )
+    return Validator(context)
+
+
+_default_container.register_transient("validator", _create_validator)
 
 
 class ModuleFactory:

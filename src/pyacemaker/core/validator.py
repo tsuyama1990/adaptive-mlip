@@ -110,10 +110,8 @@ class LammpsInputValidator:
         return path
 
 
-class Validator:
-    """
-    Coordinates the validation of potentials using Phonopy and Elastic checks.
-    """
+class ValidationContext:
+    """Encapsulates all dependencies required for validation."""
 
     def __init__(
         self,
@@ -123,9 +121,21 @@ class Validator:
         report_generator: Any,
     ) -> None:
         self.config = config
-        self.phonon_calc = phonon_calculator
-        self.elastic_calc = elastic_calculator
-        self.report_gen = report_generator
+        self.phonon_calculator = phonon_calculator
+        self.elastic_calculator = elastic_calculator
+        self.report_generator = report_generator
+
+
+class Validator:
+    """
+    Coordinates the validation of potentials using Phonopy and Elastic checks.
+    """
+
+    def __init__(self, context: ValidationContext) -> None:
+        self.config = context.config
+        self.phonon_calc = context.phonon_calculator
+        self.elastic_calc = context.elastic_calculator
+        self.report_gen = context.report_generator
 
     def _relax_structure(self, structure: Atoms, potential_path: Path) -> Atoms:
         """

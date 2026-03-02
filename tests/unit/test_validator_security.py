@@ -63,7 +63,7 @@ class TestLammpsInputValidator:
         except Exception as e:
             import logging
 
-            logging.error("Validation failed", exc_info=e)
+            logging.exception("Validation failed", exc_info=e)
 
     def test_validate_potential_symlink_traversal(self, tmp_path):
         """Test symlink resolving to outside (should fail)."""

@@ -23,14 +23,15 @@ class TestValidator:
 
     @pytest.fixture
     def validator(self, mock_phonon_calc, mock_elastic_calc, mock_report_gen):
+        from pyacemaker.core.validator import ValidationContext
         config = ValidationConfig()
-        # Assuming Validator takes instances of calculators and report generator
-        return Validator(
+        context = ValidationContext(
             config=config,
             phonon_calculator=mock_phonon_calc,
             elastic_calculator=mock_elastic_calc,
             report_generator=mock_report_gen,
         )
+        return Validator(context)
 
     def test_validate_pass(self, validator, mock_phonon_calc, mock_elastic_calc, mock_report_gen):
         mock_phonon_calc.check_stability.return_value = (True, "base64_phonon")

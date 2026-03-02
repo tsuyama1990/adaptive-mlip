@@ -112,6 +112,9 @@ class IncrementalTrainer:
         self.replay_buffer_size = replay_buffer_size
         self._buffer: list[Atoms] = []
 
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self.base_trainer, name)
+
     def add_to_buffer(self, atoms: Atoms) -> None:
         """Adds structures to the replay buffer, maintaining fixed size."""
         # Simple FIFO buffer for UAT
