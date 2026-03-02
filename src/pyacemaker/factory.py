@@ -1,3 +1,6 @@
+from collections.abc import Callable
+from typing import Any
+
 from pyacemaker.core.active_set import ActiveSetSelector
 from pyacemaker.core.base import BaseEngine, BaseGenerator, BaseOracle, BaseTrainer
 from pyacemaker.core.engine import LammpsEngine
@@ -12,13 +15,55 @@ from pyacemaker.utils.elastic import ElasticCalculator
 from pyacemaker.utils.phonons import PhononCalculator
 
 
+class DIContainer:
+    """Simple Dependency Injection Container for testing and flexibility."""
+    def __init__(self) -> None:
+        self._providers: dict[str, Callable[[PyAceConfig], Any]] = {}
+
+    def register(self, name: str, provider: Callable[[PyAceConfig], Any]) -> None:
+        self._providers[name] = provider
+
+    def resolve(self, name: str, config: PyAceConfig) -> Any:
+        if name not in self._providers:
+            msg = f"No provider registered for {name}"
+            raise KeyError(msg)
+        return self._providers[name](config)
+
+_default_container = DIContainer()
+_default_container.register("oracle", lambda c: DFTManager(c.dft))
+_default_container.register("generator", lambda c: StructureGenerator(c.structure))
+_default_container.register("trainer", lambda c: PacemakerTrainer(c.training))
+_default_container.register("engine", lambda c: LammpsEngine(c.md))
+_default_container.register("active_set_selector", lambda c: ActiveSetSelector())
+_default_container.register("report_gen", lambda c: ReportGenerator())
+_default_container.register("phonon_calc", lambda c: PhononCalculator(
+    _default_container.resolve("engine", c),
+    c.validation.phonon_supercell,
+    c.validation.phonon_displacement,
+    c.validation.phonon_imaginary_tol,
+))
+_default_container.register("elastic_calc", lambda c: ElasticCalculator(
+    _default_container.resolve("engine", c),
+    c.validation.elastic_strain,
+    c.validation.elastic_steps,
+))
+_default_container.register("validator", lambda c: Validator(
+    c.validation,
+    _default_container.resolve("phonon_calc", c),
+    _default_container.resolve("elastic_calc", c),
+    _default_container.resolve("report_gen", c)
+))
+
 class ModuleFactory:
     """
     Factory for creating core modules based on configuration.
     """
 
-    @staticmethod
+    container: DIContainer = _default_container
+
+    @classmethod
     def create_modules(
+        cls,
         config: PyAceConfig,
     ) -> tuple[BaseGenerator, BaseOracle, BaseTrainer, BaseEngine, ActiveSetSelector, Validator]:
         """
@@ -49,37 +94,12 @@ class ModuleFactory:
             raise ConfigError(msg)
 
         try:
-            # Oracle
-            oracle = DFTManager(config.dft)
-
-            # Generator
-            generator = StructureGenerator(config.structure)
-
-            # Trainer
-            trainer = PacemakerTrainer(config.training)
-
-            # Engine
-            engine = LammpsEngine(config.md)
-
-            # Active Set Selector
-            active_set_selector = ActiveSetSelector()
-
-            # Validator
-            report_gen = ReportGenerator()
-            phonon_calc = PhononCalculator(
-                engine,
-                config.validation.phonon_supercell,
-                config.validation.phonon_displacement,
-                config.validation.phonon_imaginary_tol,
-            )
-            elastic_calc = ElasticCalculator(
-                engine,
-                config.validation.elastic_strain,
-                config.validation.elastic_steps,
-            )
-            validator = Validator(
-                config.validation, phonon_calc, elastic_calc, report_gen
-            )
+            oracle = cls.container.resolve("oracle", config)
+            generator = cls.container.resolve("generator", config)
+            trainer = cls.container.resolve("trainer", config)
+            engine = cls.container.resolve("engine", config)
+            active_set_selector = cls.container.resolve("active_set_selector", config)
+            validator = cls.container.resolve("validator", config)
 
         except Exception as e:
             msg = f"Failed to create modules: {e}"

@@ -5,6 +5,7 @@ from pathlib import Path
 
 from pyacemaker.domain_models.logging import LoggingConfig
 
+_LOGGER_REGISTRY = {}
 
 def setup_logger(config: LoggingConfig, project_name: str) -> logging.Logger:
     """
@@ -18,11 +19,15 @@ def setup_logger(config: LoggingConfig, project_name: str) -> logging.Logger:
     Returns:
         Configured Logger instance.
     """
+    if project_name in _LOGGER_REGISTRY:
+        return _LOGGER_REGISTRY[project_name]
+
     logger = logging.getLogger(project_name)
 
     # If handlers already exist, assume it's already configured and return.
     # This prevents duplicate logs if setup_logger is called multiple times.
     if logger.handlers:
+        _LOGGER_REGISTRY[project_name] = logger
         return logger
 
     logger.setLevel(config.level)
@@ -47,4 +52,5 @@ def setup_logger(config: LoggingConfig, project_name: str) -> logging.Logger:
         file_handler.setFormatter(formatter)
         logger.addHandler(file_handler)
 
+    _LOGGER_REGISTRY[project_name] = logger
     return logger
