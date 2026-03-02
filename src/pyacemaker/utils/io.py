@@ -151,7 +151,7 @@ def write_lammps_streaming(
                 t = type_map[s]
             except KeyError:
                  msg = f"Symbol {s} not in provided species list: {species}"
-                 raise KeyError(msg)
+                 raise KeyError(msg) from None
 
             # 1-based index
             yield f"{i+1} {t} {pos[i, 0]:.6f} {pos[i, 1]:.6f} {pos[i, 2]:.6f}\n"

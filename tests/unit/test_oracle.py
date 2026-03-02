@@ -1,5 +1,4 @@
 
-import os
 import tempfile
 
 from ase.build import bulk
@@ -45,4 +44,5 @@ def test_tiered_oracle_low_uncertainty():
 
         assert "mace_uncertainty" in result.arrays
     finally:
-        os.remove(dummy_upf)
+        from pathlib import Path
+        Path(dummy_upf).unlink()

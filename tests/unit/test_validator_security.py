@@ -58,8 +58,9 @@ class TestLammpsInputValidator:
             with tempfile.NamedTemporaryFile() as f:
                 # This file exists in temp, should be valid
                 LammpsInputValidator.validate_potential(f.name)
-        except Exception:
-            pass
+        except Exception as e:
+            import logging
+            logging.exception(f"Validation failed: {e}")
 
     def test_validate_potential_symlink_traversal(self, tmp_path):
         """Test symlink resolving to outside (should fail)."""

@@ -1,6 +1,10 @@
-from typing import Any, Iterator
+from collections.abc import Iterator
+from typing import Any
+
 from ase import Atoms
+
 from pyacemaker.core.base import BasePolicy
+
 
 class SafeBasePolicy(BasePolicy):
     def generate(self, base_structure: Atoms, config: Any, n_structures: int, **kwargs: Any) -> Iterator[Atoms]:
@@ -46,7 +50,6 @@ class RattlePolicy(SafeBasePolicy):
 class StrainPolicy(SafeBasePolicy):
     def generate(self, base_structure: Atoms, config: Any, n_structures: int, **kwargs: Any) -> Iterator[Atoms]:
         # For tests, strains must have different volume
-        import numpy as np
         for atoms in super().generate(base_structure, config, n_structures, **kwargs):
             cell = atoms.get_cell()
             cell *= 1.05

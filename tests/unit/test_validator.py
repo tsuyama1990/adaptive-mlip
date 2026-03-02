@@ -38,7 +38,6 @@ class TestValidator:
 
         potential_path = Path("pot.yace")
         output_path = Path("report.html")
-        from ase.build import bulk
         structure = bulk('Cu', 'fcc', a=3.6)
 
         # Mock _relax_structure to isolate
@@ -63,7 +62,6 @@ class TestValidator:
 
         potential_path = Path("pot.yace")
         output_path = Path("report.html")
-        from ase.build import bulk
         structure = bulk('Cu', 'fcc', a=3.6)
 
         with patch.object(validator, "_relax_structure") as mock_relax:
@@ -74,7 +72,6 @@ class TestValidator:
         assert result.elastic_stable is True
 
     def test_relax_structure(self, validator, mock_elastic_calc):
-        from ase.build import bulk
         structure = bulk('Cu', 'fcc', a=3.6)
         pot_path = Path("pot.yace")
 
