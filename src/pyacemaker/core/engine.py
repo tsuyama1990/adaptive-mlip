@@ -96,13 +96,13 @@ class LammpsEngine(BaseEngine):
 
             with input_script_path.open("w") as f:
                 if use_restart and self._restart_file_path:
-                    # Soft Start generation
-                    self._write_resume_script(
+                    self.generator.write_resume_script(
                         f,
                         potential_path,
                         Path(self._restart_file_path),
                         restart_out_file,
                         dump_file,
+                        elements,
                     )
                 else:
                     self.generator.write_script(f, potential_path, data_file, dump_file, elements)
@@ -165,28 +165,6 @@ class LammpsEngine(BaseEngine):
             finally:
                 if hasattr(driver, "close"):
                     driver.close()
-
-    def _write_resume_script(
-        self, f: Any, potential_path: Path, restart_in: Path, restart_out: Path, dump_file: Path
-    ) -> None:
-        """Writes a LAMMPS script that seamlessly resumes using read_restart and Soft Start protocol."""
-        f.write(f"read_restart {restart_in}\n")
-        f.write("pair_style pace\n")
-        # In actual implementation, we'd need elements string here.
-        f.write(f"pair_coeff * * {potential_path} *\n")
-
-        # Soft Start Protocol: Heavy damping Langevin for 100 steps
-        f.write("fix soft_start all langevin 300.0 300.0 10.0 12345\n")
-        f.write("fix nve_soft all nve\n")
-        f.write("run 100\n")
-        f.write("unfix soft_start\n")
-        f.write("unfix nve_soft\n")
-
-        # Resume main ensemble (placeholder for actual config)
-        f.write("fix main_nve all nve\n")
-        f.write(f"dump 1 all custom {self.config.dump_freq} {dump_file} id type x y z fx fy fz\n")
-        f.write(f"restart 1000 {restart_out}\n")
-        f.write(f"run {self.config.n_steps}\n")
 
     def compute_static_properties(self, structure: Atoms, potential: Any) -> MDSimulationResult:
         static_config = self.config.model_copy(

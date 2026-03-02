@@ -225,6 +225,41 @@ class LammpsScriptGenerator:
 
         self._gen_post_run_diagnostics(buffer)
 
+    def write_resume_script(
+        self,
+        buffer: TextIO,
+        potential_path: Path,
+        restart_in: Path,
+        restart_out: Path,
+        dump_file: Path,
+        elements: list[str],
+    ) -> None:
+        """Writes a LAMMPS script that seamlessly resumes using read_restart and Soft Start protocol."""
+        quoted_restart_in = self._quote(str(restart_in))
+        quoted_restart_out = self._quote(str(restart_out))
+        quoted_dump = self._quote(str(dump_file))
+
+        buffer.write(f"read_restart {quoted_restart_in}\n")
+        self._gen_potential(buffer, potential_path, elements)
+
+        # Soft Start Protocol: Heavy damping Langevin for 100 steps
+        buffer.write("fix soft_start all langevin 300.0 300.0 10.0 12345\n")
+        buffer.write("fix nve_soft all nve\n")
+        buffer.write("run 100\n")
+        buffer.write("unfix soft_start\n")
+        buffer.write("unfix nve_soft\n")
+
+        # Output setup
+        self._gen_output_setup(buffer, Path(quoted_dump.strip("'\"")))
+
+        # Original ensemble
+        buffer.write(
+            f"fix npt all npt temp {self.config.temperature} {self.config.temperature} {self.config.tdamp_factor * self.config.timestep} iso {self.config.pressure} {self.config.pressure} {self.config.pdamp_factor * self.config.timestep}\n"
+        )
+
+        buffer.write(f"restart 1000 {quoted_restart_out}\n")
+        buffer.write(f"run {self.config.n_steps}\n")
+
     def write_minimization_script(
         self,
         buffer: TextIO,

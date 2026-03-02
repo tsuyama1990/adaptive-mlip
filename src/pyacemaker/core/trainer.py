@@ -104,6 +104,7 @@ class PacemakerTrainer(BaseTrainer):
 class IncrementalTrainer:
     """
     Wraps an existing trainer to enable Delta Learning and manages a fixed-size Replay Buffer.
+    Includes persistence support for the buffer.
     """
 
     def __init__(self, base_trainer: BaseTrainer, replay_buffer_size: int = 1000) -> None:

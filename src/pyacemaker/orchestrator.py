@@ -136,15 +136,18 @@ class Orchestrator:
 
         # Open file once
         with filepath.open(mode) as f:
-            # Write frames one by one or in small internal chunks if needed by ASE.
-            # ASE write(filename, atoms) can handle a list or single atom.
-            # writing to file handle supports multiple frames for extxyz.
+            import itertools
 
-            # Optimization: Buffering is handled by file object.
-            # We just iterate and write.
-            for atoms in generator:
-                write(f, atoms, format="extxyz")
-                count += 1
+            iterator = iter(generator)
+            while True:
+                # Use islice to extract a batch of atoms
+                batch = list(itertools.islice(iterator, batch_size))
+                if not batch:
+                    break
+
+                # Write the entire batch in a single operation
+                write(f, batch, format="extxyz")
+                count += len(batch)
 
         return count
 

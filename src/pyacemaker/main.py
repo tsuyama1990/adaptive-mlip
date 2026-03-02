@@ -22,9 +22,16 @@ class ScenarioName(str, Enum):  # noqa: UP042
     FEPT_MGO = "fept_mgo"
 
 
-SCENARIO_REGISTRY: dict[str, Callable[[PyAceConfig], BaseScenario]] = {
-    ScenarioName.FEPT_MGO.value: FePtMgoScenario,
-}
+SCENARIO_REGISTRY: dict[str, Callable[[PyAceConfig], BaseScenario]] = {}
+
+
+def register_scenario(name: str, scenario_class: Callable[[PyAceConfig], BaseScenario]) -> None:
+    """Dynamically register a scenario for execution."""
+    SCENARIO_REGISTRY[name] = scenario_class
+
+
+# Register default scenarios
+register_scenario(ScenarioName.FEPT_MGO.value, FePtMgoScenario)
 
 
 def get_scenario_runner(name: str, config: PyAceConfig) -> BaseScenario:
