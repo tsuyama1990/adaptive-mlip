@@ -6,7 +6,7 @@ import numpy as np
 from ase import Atoms
 from lammps import lammps
 
-from pyacemaker.domain_models.constants import LAMMPS_SAFE_CMD_PATTERN
+from pyacemaker.domain_models.defaults import LAMMPS_SAFE_CMD_PATTERN
 
 logger = logging.getLogger(__name__)
 

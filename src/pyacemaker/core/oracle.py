@@ -11,7 +11,7 @@ from ase.calculators.calculator import PropertyNotImplementedError
 from pyacemaker.core.base import BaseOracle
 from pyacemaker.core.exceptions import OracleError
 from pyacemaker.domain_models import DFTConfig
-from pyacemaker.domain_models.constants import ERR_ORACLE_FAILED, ERR_ORACLE_ITERATOR
+from pyacemaker.domain_models.defaults import ERR_ORACLE_FAILED, ERR_ORACLE_ITERATOR
 from pyacemaker.interfaces.qe_driver import QEDriver
 from pyacemaker.utils.embedding import embed_cluster
 

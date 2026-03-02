@@ -9,7 +9,7 @@ from pyacemaker.core.base import BaseEngine
 from pyacemaker.core.io_manager import LammpsFileManager
 from pyacemaker.core.lammps_generator import LammpsScriptGenerator
 from pyacemaker.core.validator import LammpsInputValidator
-from pyacemaker.domain_models.constants import (
+from pyacemaker.domain_models.defaults import (
     ERR_SIM_EXEC_FAIL,
     ERR_SIM_SECURITY_FAIL,
     ERR_SIM_SETUP_FAIL,

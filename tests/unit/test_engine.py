@@ -8,7 +8,7 @@ import pytest
 from ase import Atoms
 
 from pyacemaker.core.engine import LammpsEngine
-from pyacemaker.domain_models.md import HybridParams, MDConfig, MDSimulationResult
+from pyacemaker.domain_models.md import  MDConfig, MDSimulationResult
 
 
 @pytest.fixture
@@ -106,7 +106,7 @@ def test_lammps_engine_halted(mock_md_config: MDConfig, mock_driver: Any, tmp_pa
 def test_lammps_engine_hybrid_potential(
     mock_md_config: MDConfig, mock_driver: Any, tmp_path: Path
 ) -> None:
-    hybrid_params = HybridParams(zbl_cut_inner=1.0, zbl_cut_outer=1.5)
+    hybrid_params = MDConfig.HybridParams(zbl_cut_inner=1.0, zbl_cut_outer=1.5)
     config = mock_md_config.model_copy(
         update={"hybrid_potential": True, "hybrid_params": hybrid_params}
     )

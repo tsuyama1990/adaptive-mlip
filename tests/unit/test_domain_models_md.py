@@ -1,26 +1,20 @@
 import pytest
 from pydantic import ValidationError
 
-from pyacemaker.domain_models.md import (
-    HybridParams,
-    MCConfig,
-    MDConfig,
-    MDRampingConfig,
-    MDSimulationResult,
-)
+from pyacemaker.domain_models.md import MDConfig, MDSimulationResult
 
 
 def test_hybrid_params_valid() -> None:
-    """Tests valid HybridParams."""
-    params = HybridParams(zbl_cut_inner=1.5, zbl_cut_outer=2.0)
+    """Tests valid MDConfig.HybridParams."""
+    params = MDConfig.HybridParams(zbl_cut_inner=1.5, zbl_cut_outer=2.0)
     assert params.zbl_cut_inner == 1.5
     assert params.zbl_cut_outer == 2.0
 
 
 def test_hybrid_params_invalid() -> None:
-    """Tests invalid HybridParams (negative cutoff)."""
+    """Tests invalid MDConfig.HybridParams (negative cutoff)."""
     with pytest.raises(ValidationError):
-        HybridParams(zbl_cut_inner=-1.0)
+        MDConfig.HybridParams(zbl_cut_inner=-1.0)
 
 
 def test_md_config_valid() -> None:
@@ -37,14 +31,14 @@ def test_md_config_valid() -> None:
     )
     assert config.temperature == 300.0
     assert config.hybrid_potential is True
-    assert isinstance(config.hybrid_params, HybridParams)
+    assert isinstance(config.hybrid_params, MDConfig.HybridParams)
     assert config.dump_freq == 100
     assert config.thermo_freq == 10
 
 
 def test_md_config_with_hybrid_params() -> None:
-    """Tests MDConfig with custom HybridParams."""
-    hybrid_params = HybridParams(zbl_cut_inner=1.0, zbl_cut_outer=1.5)
+    """Tests MDConfig with custom MDConfig.HybridParams."""
+    hybrid_params = MDConfig.HybridParams(zbl_cut_inner=1.0, zbl_cut_outer=1.5)
     config = MDConfig(
         temperature=300.0,
         pressure=1.0,
@@ -113,37 +107,37 @@ def test_md_simulation_result_halted() -> None:
 
 
 def test_md_ramping_config() -> None:
-    """Tests MDRampingConfig validation."""
+    """Tests MDConfig.MDRampingConfig validation."""
     # Valid
-    config = MDRampingConfig(temp_start=300.0, temp_end=1000.0, press_start=1.0, press_end=100.0)
+    config = MDConfig.MDRampingConfig(temp_start=300.0, temp_end=1000.0, press_start=1.0, press_end=100.0)
     assert config.temp_start == 300.0
     assert config.press_end == 100.0
 
     # Test invalid temperature
     with pytest.raises(ValidationError):
-        MDRampingConfig(temp_start=-50.0)
+        MDConfig.MDRampingConfig(temp_start=-50.0)
 
 
 def test_mc_config() -> None:
-    """Tests MCConfig validation."""
+    """Tests MDConfig.MCConfig validation."""
     # Valid
-    config = MCConfig(swap_freq=100, swap_prob=0.5, seed=123)
+    config = MDConfig.MCConfig(swap_freq=100, swap_prob=0.5, seed=123)
     assert config.swap_freq == 100
     assert config.swap_prob == 0.5
 
     # Test invalid probability (prob > 1.0)
     with pytest.raises(ValidationError):
-        MCConfig(swap_freq=10, swap_prob=1.5)
+        MDConfig.MCConfig(swap_freq=10, swap_prob=1.5)
 
     # Test invalid frequency (freq <= 0)
     with pytest.raises(ValidationError):
-        MCConfig(swap_freq=0, swap_prob=0.5)
+        MDConfig.MCConfig(swap_freq=0, swap_prob=0.5)
 
 
 def test_md_config_with_ramping_and_mc() -> None:
     """Tests MDConfig integration with Ramping and MC."""
-    ramping = MDRampingConfig(temp_start=100.0, temp_end=500.0)
-    mc = MCConfig(swap_freq=50, swap_prob=0.1)
+    ramping = MDConfig.MDRampingConfig(temp_start=100.0, temp_end=500.0)
+    mc = MDConfig.MCConfig(swap_freq=50, swap_prob=0.1)
 
     config = MDConfig(
         temperature=300.0,

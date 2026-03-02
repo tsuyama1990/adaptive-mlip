@@ -1,6 +1,6 @@
 from ase import Atoms
 
-from pyacemaker.domain_models.constants import ERR_M3GNET_PRED_FAIL
+from pyacemaker.domain_models.defaults import ERR_M3GNET_PRED_FAIL
 
 
 class M3GNetWrapper:

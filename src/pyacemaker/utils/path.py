@@ -2,7 +2,7 @@ import os
 import tempfile
 from pathlib import Path
 
-from pyacemaker.domain_models.constants import DANGEROUS_PATH_CHARS, DEFAULT_RAM_DISK_PATH
+from pyacemaker.domain_models.defaults import DANGEROUS_PATH_CHARS, DEFAULT_RAM_DISK_PATH
 
 
 def _check_dangerous_chars(path: Path) -> None:

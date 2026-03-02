@@ -3,7 +3,7 @@ from io import StringIO
 from pathlib import Path
 
 from pyacemaker.core.lammps_generator import LammpsScriptGenerator
-from pyacemaker.domain_models.md import HybridParams, MDConfig
+from pyacemaker.domain_models.md import MDConfig
 
 
 def test_generator_pure_pace(tmp_path: Path) -> None:
@@ -37,7 +37,7 @@ def test_generator_hybrid_potential(tmp_path: Path) -> None:
         timestep=0.001,
         n_steps=1000,
         hybrid_potential=True,
-        hybrid_params=HybridParams(zbl_cut_inner=1.0, zbl_cut_outer=1.5),
+        hybrid_params=MDConfig.HybridParams(zbl_cut_inner=1.0, zbl_cut_outer=1.5),
     )
     generator = LammpsScriptGenerator(config)
 

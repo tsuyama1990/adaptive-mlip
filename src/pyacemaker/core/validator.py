@@ -5,7 +5,7 @@ import numpy as np
 from ase import Atoms
 from ase.data import atomic_numbers
 
-from pyacemaker.domain_models.constants import (
+from pyacemaker.domain_models.defaults import (
     ERR_POTENTIAL_NOT_FOUND,
     ERR_VAL_POT_NONE,
     ERR_VAL_POT_NOT_FILE,

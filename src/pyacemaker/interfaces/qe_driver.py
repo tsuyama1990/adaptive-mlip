@@ -7,7 +7,7 @@ from ase.calculators.espresso import Espresso
 from ase.data import chemical_symbols
 
 from pyacemaker.domain_models import DFTConfig
-from pyacemaker.domain_models.constants import RECIPROCAL_FACTOR
+from pyacemaker.domain_models.defaults import RECIPROCAL_FACTOR
 
 
 class QEDriver:

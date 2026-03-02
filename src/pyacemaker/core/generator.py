@@ -7,7 +7,7 @@ from pyacemaker.core.base import BaseGenerator
 from pyacemaker.core.exceptions import GeneratorError
 from pyacemaker.core.m3gnet_wrapper import M3GNetWrapper
 from pyacemaker.core.policy_factory import PolicyFactory
-from pyacemaker.domain_models.constants import ERR_GEN_BASE_FAIL, ERR_GEN_NCAND_NEG
+from pyacemaker.domain_models.defaults import ERR_GEN_BASE_FAIL, ERR_GEN_NCAND_NEG
 from pyacemaker.domain_models.structure import StructureConfig
 
 
