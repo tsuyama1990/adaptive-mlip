@@ -46,6 +46,7 @@ def _check_allowed_roots(resolved: Path) -> None:
 
 
 def validate_path_safe(path: Path) -> Path:
+    """Ensures path is safe."""
     """
     Ensures path is safe using strict resolution and character allowlisting.
     Centralized utility for path validation.
