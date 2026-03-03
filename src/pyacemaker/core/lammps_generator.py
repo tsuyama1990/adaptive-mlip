@@ -4,7 +4,7 @@ from typing import TextIO
 
 from ase.data import atomic_numbers
 
-from pyacemaker.domain_models.constants import LAMMPS_MIN_STYLE_CG
+from pyacemaker.domain_models.defaults import LAMMPS_MIN_STYLE_CG
 from pyacemaker.domain_models.md import MDConfig
 from pyacemaker.utils.path import validate_path_safe
 

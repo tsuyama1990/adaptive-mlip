@@ -47,14 +47,14 @@ def detect_elements(data_path: Path, max_frames: int = 10) -> list[str]:
     Returns:
         List of chemical symbols (sorted alphabetically).
     """
-    symbols = set()
+    symbols: set[str] = set()
     try:
         # Optimization: Use iread to peek. Stop if we have 'enough' frames or symbols stabilize?
         # Difficult to know if symbols stabilize. Just read max_frames.
         gen = iread(str(data_path), index=f":{max_frames}")
         for atoms in gen:
             if isinstance(atoms, Atoms):
-                new_syms = set(atoms.get_chemical_symbols())
+                new_syms = set(atoms.get_chemical_symbols())  # type: ignore[no-untyped-call]
                 # If we found new symbols, update.
                 if not new_syms.issubset(symbols):
                     symbols.update(new_syms)
@@ -108,7 +108,7 @@ def write_lammps_streaming(
     fileobj.write(f"{len(species)} atom types\n\n")
 
     # 2. Box
-    cell = atoms.get_cell()
+    cell = atoms.get_cell()  # type: ignore[no-untyped-call]
     if not np.allclose(cell, np.diag(np.diag(cell))):
         msg = "Streaming write currently only supports orthogonal cells"
         raise ValueError(msg)
@@ -138,11 +138,17 @@ def write_lammps_streaming(
     fileobj.write("Atoms # atomic\n\n")
 
     # Optimize Atom Writing:
-    # Use direct array access and iterators to avoid creating large intermediate lists/arrays if possible.
-    # But atoms.get_positions() returns a copy anyway.
+    # We access arrays natively without copying to avoid Memory Exhaustion for massive systems
+    pos = atoms.arrays.get("positions")
+    if pos is None:
+        pos = atoms.get_positions()  # type: ignore[no-untyped-call]  # Fallback
 
-    pos = atoms.get_positions()  # (N, 3)
-    symbols = atoms.get_chemical_symbols()  # List of strings (N)
+    numbers = atoms.arrays.get("numbers")
+    if numbers is None:
+        symbols = atoms.get_chemical_symbols()  # type: ignore[no-untyped-call]
+    else:
+        from ase.data import chemical_symbols
+        symbols = [chemical_symbols[n] for n in numbers]
 
     # Generator for lines to keep memory usage O(1) per line (after pos array overhead)
     # This avoids creating a huge string buffer or list of strings.

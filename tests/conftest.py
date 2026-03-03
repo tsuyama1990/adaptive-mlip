@@ -12,7 +12,6 @@ from ase.calculators.calculator import Calculator, CalculatorSetupError  # noqa:
 
 from pyacemaker.domain_models import (  # noqa: E402
     DFTConfig,
-    HybridParams,
     MDConfig,
     StructureConfig,
     TrainingConfig,
@@ -73,7 +72,7 @@ def mock_md_config() -> MDConfig:
         timestep=0.001,
         n_steps=1000,
         hybrid_potential=True,
-        hybrid_params=HybridParams(zbl_cut_inner=2.0, zbl_cut_outer=2.5),
+        hybrid_params=MDConfig.HybridParams(zbl_cut_inner=2.0, zbl_cut_outer=2.5),
     )
 
 

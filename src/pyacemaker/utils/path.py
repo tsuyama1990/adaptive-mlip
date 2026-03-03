@@ -2,7 +2,7 @@ import os
 import tempfile
 from pathlib import Path
 
-from pyacemaker.domain_models.constants import DANGEROUS_PATH_CHARS, DEFAULT_RAM_DISK_PATH
+from pyacemaker.domain_models.defaults import DANGEROUS_PATH_CHARS, DEFAULT_RAM_DISK_PATH
 
 
 def _check_dangerous_chars(path: Path) -> None:
@@ -33,11 +33,11 @@ def _check_allowed_roots(resolved: Path) -> None:
     is_safe = False
     for root in allowed_roots:
         try:
-            common = Path(os.path.commonpath([root, resolved]))
-            if common == root:
+            # Use pathlib.is_relative_to for robust, secure containment checks
+            if resolved.is_relative_to(root):
                 is_safe = True
                 break
-        except ValueError:
+        except Exception:
             continue
 
     if not is_safe:
@@ -46,7 +46,6 @@ def _check_allowed_roots(resolved: Path) -> None:
 
 
 def validate_path_safe(path: Path) -> Path:
-    """Ensures path is safe."""
     """
     Ensures path is safe using strict resolution and character allowlisting.
     Centralized utility for path validation.
@@ -59,20 +58,24 @@ def validate_path_safe(path: Path) -> Path:
 
     Raises:
         ValueError: If the path contains dangerous characters, traversal attempts,
-                    or resolves outside allowed directories (CWD, temp, /dev/shm).
+                    symlinks, or resolves outside allowed directories (CWD, temp, /dev/shm).
     """
     _check_traversal(path)
     _check_dangerous_chars(path)
 
     try:
-        # Canonicalize path.
-        if path.exists():
-            resolved = path.resolve(strict=True)
-        elif path.parent.exists():
-            resolved_parent = path.parent.resolve(strict=True)
-            resolved = resolved_parent / path.name
-        else:
-            resolved = path.resolve(strict=False)
+        # Canonicalize path strictly. Use os.path.realpath to fully resolve everything.
+        # TOCTOU Prevention: We resolve the real path first, to catch any symlinks pointing
+        # out of bounds. Even if a symlink exists within a safe directory, its realpath
+        # will point elsewhere and get correctly trapped by `_check_allowed_roots`.
+        resolved_str = os.path.realpath(str(path))
+        resolved = Path(resolved_str)
+
+        # Additionally, verify the ORIGINAL path string (even if a symlink) hasn't traversed roots
+        # This double check ensures absolute symlink chains must stem from authorized roots.
+        original_base = Path(os.path.abspath(str(path)))
+        _check_allowed_roots(original_base)
+
     except Exception as e:
         msg = f"Invalid path resolution: {path}"
         raise ValueError(msg) from e

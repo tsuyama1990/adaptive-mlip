@@ -1,7 +1,7 @@
 from pyacemaker.domain_models.workflow import ActiveLearningThresholds, CutoutConfig
 
 
-def test_cycle03_thermal_noise_and_cutout():
+def test_cycle03_thermal_noise_and_cutout() -> None:
     """
     Scenario 3: Phase 3 - Thermal Noise Rejection & Intelligent Cutout
     Verify the two-tier threshold schema and CutoutConfig.

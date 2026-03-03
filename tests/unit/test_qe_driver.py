@@ -6,7 +6,7 @@ import pytest
 from ase import Atoms
 
 from pyacemaker.domain_models import DFTConfig
-from pyacemaker.domain_models.constants import RECIPROCAL_FACTOR
+from pyacemaker.domain_models.defaults import RECIPROCAL_FACTOR
 from pyacemaker.interfaces.qe_driver import QEDriver
 from tests.conftest import create_dummy_pseudopotentials
 

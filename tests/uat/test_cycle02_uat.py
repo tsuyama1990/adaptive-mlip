@@ -1,7 +1,7 @@
 from pyacemaker.domain_models.workflow import LoopStrategyConfig
 
 
-def test_cycle02_loop_strategy():
+def test_cycle02_loop_strategy() -> None:
     """
     Scenario 2: Phase 2 - Physical Validation & Auto-Retraining
     Verify that LoopStrategyConfig manages replay_buffer_size and uses TieredOracle.

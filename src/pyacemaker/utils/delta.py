@@ -1,7 +1,7 @@
 import numpy as np
 from ase.data import atomic_numbers
 
-from pyacemaker.domain_models.constants import DEFAULT_LJ_PARAMS, FALLBACK_LJ_PARAMS
+from pyacemaker.domain_models.defaults import DEFAULT_LJ_PARAMS, FALLBACK_LJ_PARAMS
 
 
 def get_lj_params(element: str) -> dict[str, float]:
@@ -15,7 +15,7 @@ def get_lj_params(element: str) -> dict[str, float]:
     Returns:
         Dictionary with "sigma" (Angstrom) and "epsilon" (eV).
     """
-    return DEFAULT_LJ_PARAMS.get(element, FALLBACK_LJ_PARAMS.copy())
+    return DEFAULT_LJ_PARAMS.get(element, FALLBACK_LJ_PARAMS.copy()) # type: ignore[return-value]
 
 
 def compute_zbl_energy(el1: str, el2: str, r: float) -> float:

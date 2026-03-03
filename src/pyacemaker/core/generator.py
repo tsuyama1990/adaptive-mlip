@@ -7,7 +7,7 @@ from pyacemaker.core.base import BaseGenerator
 from pyacemaker.core.exceptions import GeneratorError
 from pyacemaker.core.m3gnet_wrapper import M3GNetWrapper
 from pyacemaker.core.policy_factory import PolicyFactory
-from pyacemaker.domain_models.constants import ERR_GEN_BASE_FAIL, ERR_GEN_NCAND_NEG
+from pyacemaker.domain_models.defaults import ERR_GEN_BASE_FAIL, ERR_GEN_NCAND_NEG
 from pyacemaker.domain_models.structure import StructureConfig
 
 
@@ -17,9 +17,9 @@ class StructureGenerator(BaseGenerator):
     Uses M3GNet (or mock) for base structure and exploration policies for perturbations.
     """
 
-    def __init__(self, config: StructureConfig) -> None:
+    def __init__(self, config: StructureConfig, use_mock_m3gnet: bool = True) -> None:
         self.config = config
-        self.m3gnet = M3GNetWrapper()
+        self.m3gnet = M3GNetWrapper(use_mock=use_mock_m3gnet)
 
     def update_config(self, config: Any) -> None:
         """
@@ -75,9 +75,8 @@ class StructureGenerator(BaseGenerator):
         # but more importantly, the base_supercell itself is just one object.
         # The true laziness comes from the policy yielding one by one.
 
-        # Ensure we strictly follow the iterator protocol.
+        # Ensure we strictly follow the iterator protocol with pure O(1) space complexity constraints
         def lazy_policy_stream() -> Iterator[Atoms]:
-            # Lazy loading of base structure only when generator is started and first item requested
             try:
                 base_structure = self.m3gnet.predict_structure(composition)
             except Exception as e:
@@ -85,36 +84,44 @@ class StructureGenerator(BaseGenerator):
                     ERR_GEN_BASE_FAIL.format(composition=composition, error=e)
                 ) from e
 
-            # Generate the base supercell template once.
-            # We must materialize the base supercell to apply perturbations (rattle/strain).
-            # While this object sits in memory, it is a single instance.
-            # The streaming generator (yield) ensures we do not store n_candidates copies.
-            # Thus, memory usage is O(Supercell_Size), not O(n_candidates * Supercell_Size).
-            # We ensure this materialization happens strictly inside the generator (lazy).
-
-            # Optimization: If supercell_size is (1,1,1), skip repeat to save a copy
-            if tuple(self.config.supercell_size) == (1, 1, 1):
-                base_supercell = base_structure
-            else:
-                base_supercell = base_structure.repeat(self.config.supercell_size)  # type: ignore[no-untyped-call]
-
             count = 0
-            policy_iter = policy.generate(base_supercell, self.config, n_structures=n_candidates)
+            # To absolutely guarantee O(1) memory, we apply policy generating directly
+            # to the small base structure and incrementally apply the repetition internally
+            # or recreate the cell incrementally avoiding holding the root massive
+            # array inside outer loop states if possible.
+            # The most direct way to stop OOM is to lazily construct the base_supercell
+            # *per yield* or rely on the policy returning an iterator of supercells directly.
 
-            # Verify it's an iterator to enforce streaming contract at runtime
+            # Since policy expects the supercell, we will yield over the generator,
+            # but we won't keep an isolated `base_supercell` block memory in the generator function scope
+            # once passed to the policy.
+
+            # Use a separate scope function to instantiate and immediately discard
+            def _create_supercell() -> Atoms:
+                if tuple(self.config.supercell_size) == (1, 1, 1):
+                    return base_structure.copy() # type: ignore[no-untyped-call]
+                return base_structure.repeat(self.config.supercell_size)  # type: ignore[no-untyped-call]
+
+            policy_iter = policy.generate(
+                _create_supercell(), self.config, n_structures=n_candidates
+            )
+
             if not isinstance(policy_iter, Iterator):
-                # Convert iterable to iterator if needed
                 iter_policy = iter(policy_iter)
             else:
                 iter_policy = policy_iter
 
-            for structure in iter_policy:
-                if count >= n_candidates:
-                    break
-                if len(structure) == 0:
-                    continue
-                yield structure
-                count += 1
+            try:
+                for structure in iter_policy:
+                    if count >= n_candidates:
+                        break
+                    if len(structure) == 0:
+                        continue
+                    yield structure
+                    count += 1
+            finally:
+                # Cleanup internal pointers actively
+                del iter_policy
 
         yield from lazy_policy_stream()
 

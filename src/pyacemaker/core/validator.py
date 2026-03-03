@@ -5,7 +5,7 @@ import numpy as np
 from ase import Atoms
 from ase.data import atomic_numbers
 
-from pyacemaker.domain_models.constants import (
+from pyacemaker.domain_models.defaults import (
     ERR_POTENTIAL_NOT_FOUND,
     ERR_VAL_POT_NONE,
     ERR_VAL_POT_NOT_FILE,
@@ -150,6 +150,7 @@ class Validator:
     ) -> ValidationResult:
         """
         Runs validation checks and generates report.
+        Implements resource limits (e.g. atoms count) to prevent DoS during intensive validation steps.
         """
         if structure is None:
             raise ValueError(ERR_VAL_REQ_STRUCT)
@@ -157,18 +158,36 @@ class Validator:
         # Data Integrity Fix: Validate structure input
         LammpsInputValidator.validate_structure(structure)
 
+        # Architecture fix: Validate resource limits to prevent DoS via massive systems
+        if len(structure) > 1000:
+            msg = f"Structure too large for validation: {len(structure)} atoms (max 1000)."
+            raise ValueError(msg)
+
+        import concurrent.futures
+
         # Relax structure
         relaxed_structure = self._relax_structure(structure, potential_path)
 
-        # Phonons
-        phonon_stable, phonon_plot = self.phonon_calc.check_stability(
-            relaxed_structure, potential_path
-        )
+        def _compute_properties() -> tuple[bool, str, bool, list[float], float, str]:
+            _phonon_stable, _phonon_plot = self.phonon_calc.check_stability(
+                relaxed_structure, potential_path
+            )
+            _elastic_stable, _c_ij, _B, _elastic_plot = self.elastic_calc.calculate_properties(
+                relaxed_structure, potential_path
+            )
+            return _phonon_stable, _phonon_plot, _elastic_stable, _c_ij, _B, _elastic_plot
 
-        # Elastic
-        elastic_stable, c_ij, B, elastic_plot = self.elastic_calc.calculate_properties(
-            relaxed_structure, potential_path
-        )
+        # Add explicit execution timeout for DoS mitigation on complex convergence loops
+        # HPC validation should be constrained. We set a 600s (10 min) hard timeout.
+        try:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(_compute_properties)
+                phonon_stable, phonon_plot, elastic_stable, c_ij, B, elastic_plot = future.result(
+                    timeout=600.0
+                )
+        except concurrent.futures.TimeoutError as e:
+            msg = "Validation calculations timed out after 600 seconds."
+            raise TimeoutError(msg) from e
 
         result = ValidationResult(
             phonon_stable=phonon_stable,

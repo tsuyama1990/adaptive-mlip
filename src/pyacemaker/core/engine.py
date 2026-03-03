@@ -1,5 +1,5 @@
+import contextlib
 import tempfile
-import time
 from pathlib import Path
 from typing import Any
 
@@ -9,7 +9,7 @@ from pyacemaker.core.base import BaseEngine
 from pyacemaker.core.io_manager import LammpsFileManager
 from pyacemaker.core.lammps_generator import LammpsScriptGenerator
 from pyacemaker.core.validator import LammpsInputValidator
-from pyacemaker.domain_models.constants import (
+from pyacemaker.domain_models.defaults import (
     ERR_SIM_EXEC_FAIL,
     ERR_SIM_SECURITY_FAIL,
     ERR_SIM_SETUP_FAIL,
@@ -19,6 +19,66 @@ from pyacemaker.domain_models.constants import (
 )
 from pyacemaker.domain_models.md import MDConfig, MDSimulationResult
 from pyacemaker.interfaces.lammps_driver import LammpsDriver
+
+
+class LammpsResultParser:
+    """
+    Handles extraction of properties and parsing results from LAMMPS driver execution.
+    Adheres to the Single Responsibility Principle by decoupling parsing from Engine mechanics.
+    """
+    @staticmethod
+    def parse(
+        driver: LammpsDriver,
+        config: MDConfig,
+        dump_file: Path,
+        log_file: Path
+    ) -> MDSimulationResult:
+        try:
+            energy = driver.extract_variable("pe")
+            temperature = driver.extract_variable("temp")
+            step = int(driver.extract_variable("step"))
+            forces = driver.get_forces().tolist()
+            stress = driver.get_stress().tolist()
+        except (ValueError, KeyError, RuntimeError) as e:
+            # We specifically catch extraction issues, but let fatal system issues crash loudly.
+            # If standard thermo output isn't available, we mark zero, though usually it implies a crashed simulation.
+            # We'll log the warning to surface the issue without burying the exception.
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Failed to cleanly extract basic properties. Recovering with zeroes. Reason: {e!s}")
+            energy = 0.0
+            temperature = 0.0
+            step = 0
+            forces = [[0.0, 0.0, 0.0]]
+            stress = [0.0] * 6
+
+        max_gamma = 0.0
+        if config.fix_halt:
+            try:
+                max_gamma = driver.extract_variable("max_g")
+            except (ValueError, KeyError, RuntimeError) as e:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.warning(f"Failed to cleanly extract max_g variable. Recovering with zero. Reason: {e!s}")
+                max_gamma = 0.0
+
+        halted = False
+        if config.fix_halt:
+            halted = step < config.n_steps
+
+        return MDSimulationResult(
+            energy=energy,
+            forces=forces,
+            stress=stress,
+            halted=halted,
+            max_gamma=max_gamma,
+            n_steps=step,
+            temperature=temperature,
+            trajectory_path=str(dump_file),
+            log_path=str(log_file),
+            halt_structure_path=str(dump_file) if halted else None,
+            halt_step=step if halted else None,
+        )
 
 
 class LammpsEngine(BaseEngine):
@@ -129,60 +189,45 @@ class LammpsEngine(BaseEngine):
     def _execute_and_parse(
         self, input_script_path: Path, restart_out_file: Path, log_file: Path, dump_file: Path
     ) -> MDSimulationResult:
-        driver = LammpsDriver(["-screen", LAMMPS_SCREEN_ARG, "-log", str(log_file)])
-
+        driver = None
         try:
+            driver = LammpsDriver(["-screen", LAMMPS_SCREEN_ARG, "-log", str(log_file)])
             self._execute_simulation(driver, input_script_path)
 
             if restart_out_file.exists():
-                safe_restart_dir = (
-                    Path(tempfile.gettempdir()) / f"lammps_restarts_{int(time.time())}"
-                )
-                safe_restart_dir.mkdir(parents=True, exist_ok=True)
-                safe_restart = safe_restart_dir / "latest.restart"
+                # We use a managed temp directory but persist the state across simulation bounds
+                # To avoid leaks, we overwrite the same tracked directory or just keep one.
+                if not hasattr(self, "_safe_restart_dir") or self._safe_restart_dir is None:
+                    self._safe_restart_dir: Path = Path(tempfile.mkdtemp(prefix="lammps_restarts_"))
+
+                safe_restart = self._safe_restart_dir / "latest.restart"
                 safe_restart.write_bytes(restart_out_file.read_bytes())
                 self._restart_file_path = str(safe_restart)
 
-            try:
-                energy = driver.extract_variable("pe")
-                temperature = driver.extract_variable("temp")
-                step = int(driver.extract_variable("step"))
-                forces = driver.get_forces().tolist()
-                stress = driver.get_stress().tolist()
-            except Exception:
-                energy = 0.0
-                temperature = 0.0
-                step = 0
-                forces = [[0.0, 0.0, 0.0]]
-                stress = [0.0] * 6
-
-            max_gamma = 0.0
-            if self.config.fix_halt:
-                try:
-                    max_gamma = driver.extract_variable("max_g")
-                except Exception:
-                    max_gamma = 0.0
-
-            halted = False
-            if self.config.fix_halt:
-                halted = step < self.config.n_steps
-
-            return MDSimulationResult(
-                energy=energy,
-                forces=forces,
-                stress=stress,
-                halted=halted,
-                max_gamma=max_gamma,
-                n_steps=step,
-                temperature=temperature,
-                trajectory_path=str(dump_file),
-                log_path=str(log_file),
-                halt_structure_path=str(dump_file) if halted else None,
-                halt_step=step if halted else None,
-            )
+            return LammpsResultParser.parse(driver, self.config, dump_file, log_file)
         finally:
-            if hasattr(driver, "close"):
-                driver.close()
+            if driver is not None and hasattr(driver, "lmp"):
+                if hasattr(driver.lmp, "close"):
+                    driver.lmp.close()
+                elif hasattr(driver.lmp, "__del__"):
+                    with contextlib.suppress(Exception):
+                        driver.lmp.__del__()
+
+    def cleanup(self) -> None:
+        """Cleanup managed restart directories explicitly."""
+        if (
+            hasattr(self, "_safe_restart_dir")
+            and self._safe_restart_dir
+            and self._safe_restart_dir.exists()
+        ):
+            import shutil
+
+            shutil.rmtree(self._safe_restart_dir, ignore_errors=True)
+            del self._safe_restart_dir
+
+    def __del__(self) -> None:
+        """Fallback cleanup, though explicit is preferred."""
+        self.cleanup()
 
     def compute_static_properties(self, structure: Atoms, potential: Any) -> MDSimulationResult:
         static_config = self.config.model_copy(
@@ -200,10 +245,15 @@ class LammpsEngine(BaseEngine):
             script_path = temp_dir / "relax.lmp"
             with script_path.open("w") as f:
                 self.generator.write_minimization_script(f, potential_path, data_file, elements)
-            driver = LammpsDriver(["-screen", LAMMPS_SCREEN_ARG, "-log", str(log_file)])
+            driver = None
             try:
+                driver = LammpsDriver(["-screen", LAMMPS_SCREEN_ARG, "-log", str(log_file)])
                 self._execute_simulation(driver, script_path)
                 return driver.get_atoms(elements)
             finally:
-                if hasattr(driver, "close"):
-                    driver.close()
+                if driver is not None and hasattr(driver, "lmp"):
+                    if hasattr(driver.lmp, "close"):
+                        driver.lmp.close()
+                    elif hasattr(driver.lmp, "__del__"):
+                        with contextlib.suppress(Exception):
+                            driver.lmp.__del__()

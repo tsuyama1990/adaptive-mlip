@@ -9,14 +9,14 @@ from pyacemaker.domain_models.workflow import (
 )
 
 
-def test_active_learning_thresholds_valid():
+def test_active_learning_thresholds_valid() -> None:
     t = ActiveLearningThresholds(threshold_call_dft=1.0, threshold_add_train=2.0, smooth_steps=3)
     assert t.threshold_call_dft == 1.0
     assert t.threshold_add_train == 2.0
     assert t.smooth_steps == 3
 
 
-def test_active_learning_thresholds_invalid():
+def test_active_learning_thresholds_invalid() -> None:
     with pytest.raises(ValidationError):
         ActiveLearningThresholds(
             threshold_call_dft="invalid", threshold_add_train=2.0, smooth_steps=3
@@ -25,7 +25,7 @@ def test_active_learning_thresholds_invalid():
         ActiveLearningThresholds(threshold_call_dft=1.0, threshold_add_train=2.0, smooth_steps=-1)
 
 
-def test_cutout_config_valid():
+def test_cutout_config_valid() -> None:
     c = CutoutConfig(
         core_radius=3.0, buffer_radius=5.0, enable_pre_relaxation=True, enable_passivation=True
     )
@@ -35,7 +35,7 @@ def test_cutout_config_valid():
     assert c.enable_passivation is True
 
 
-def test_cutout_config_invalid():
+def test_cutout_config_invalid() -> None:
     with pytest.raises(ValidationError):
         CutoutConfig(
             core_radius="invalid",
@@ -45,7 +45,7 @@ def test_cutout_config_invalid():
         )
 
 
-def test_distillation_config_valid():
+def test_distillation_config_valid() -> None:
     d = DistillationConfig(
         enable=True, mace_model_path="model.pt", uncertainty_threshold=0.5, sampling_counts=1000
     )
@@ -55,14 +55,14 @@ def test_distillation_config_valid():
     assert d.sampling_counts == 1000
 
 
-def test_distillation_config_invalid():
+def test_distillation_config_invalid() -> None:
     with pytest.raises(ValidationError):
         DistillationConfig(
             enable=True, mace_model_path="model.pt", uncertainty_threshold=0.5, sampling_counts=-10
         )
 
 
-def test_loop_strategy_config_valid():
+def test_loop_strategy_config_valid() -> None:
     s = LoopStrategyConfig(
         use_tiered_oracle=True,
         incremental_update=True,
@@ -75,7 +75,7 @@ def test_loop_strategy_config_valid():
     assert s.baseline_potential_type == "LJ"
 
 
-def test_loop_strategy_config_invalid():
+def test_loop_strategy_config_invalid() -> None:
     with pytest.raises(ValidationError):
         LoopStrategyConfig(
             use_tiered_oracle=True,
