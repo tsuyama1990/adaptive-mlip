@@ -63,11 +63,6 @@ def validate_path_safe(path: Path) -> Path:
     _check_traversal(path)
     _check_dangerous_chars(path)
 
-    # Block symlinks to prevent TOCTOU symlink traversal attacks
-    if path.exists() and path.is_symlink():
-        msg = f"Symlinks are forbidden for security reasons: {path}"
-        raise ValueError(msg)
-
     try:
         # Canonicalize path strictly. Use os.path.realpath to fully resolve everything.
         # Strict resolution to block unpredictable traversal paths
@@ -77,6 +72,17 @@ def validate_path_safe(path: Path) -> Path:
     except Exception as e:
         msg = f"Invalid path resolution: {path}"
         raise ValueError(msg) from e
+
+    # TOCTOU: We MUST block symlinks *after* checking realpath context if someone
+    # tries to point to a symlink. Actually os.path.realpath resolves them.
+    # To be extremely safe, we should assert that the resolved string matches the
+    # original path string if we forbid symlinks completely. Or, we can just allow
+    # symlinks IF their fully resolved realpath is inside an allowed root.
+    # The requirement says "allow symlinks that resolve to safe locations".
+    # Since `os.path.realpath` resolves symlinks natively, passing the resolved
+    # path to `_check_allowed_roots` intrinsically achieves this safely.
+    # We will remove the explicit `is_symlink()` block and rely entirely on the
+    # canonicalized realpath validation against the roots.
 
     _check_allowed_roots(resolved)
 

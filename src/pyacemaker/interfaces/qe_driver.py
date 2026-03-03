@@ -35,12 +35,22 @@ class QEDriver:
             ValueError: If configuration parameters are invalid/unsafe.
         """
         if directory is not None:
-            validate_path_safe(Path(directory))
+            dir_path = Path(directory)
+            validate_path_safe(dir_path)
+            # Ensure it is actually a writable directory if it exists, or its parent is writable
+            if dir_path.exists() and not os.access(dir_path, os.W_OK):
+                msg = f"Directory is not writable: {dir_path}"
+                raise ValueError(msg)
+
+        # Security & Architecture: Validate maximum atoms count to prevent resource exhaustion DOS
+        if len(atoms) > 2000:
+            msg = f"System too large for DFT: {len(atoms)} atoms (max 2000)."
+            raise ValueError(msg)
 
         # Security: Validate sensitive parameters (though Pydantic does most heavy lifting)
         # Here we double check constraints relevant to runtime context
-        if config.encut <= 0:
-            msg = "Energy cutoff must be positive."
+        if config.encut <= 0 or config.encut > 2000:
+            msg = "Energy cutoff must be positive and within practical limits (<=2000 eV)."
             raise ValueError(msg)
         if config.kpoints_density <= 0:
             msg = "K-points density must be positive."

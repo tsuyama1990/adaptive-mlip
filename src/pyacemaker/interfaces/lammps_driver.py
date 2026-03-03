@@ -40,7 +40,7 @@ class LammpsDriver:
             raise RuntimeError(msg) from e
 
     def _validate_command(self, cmd: str) -> None:
-        """Validates a single command against security rules."""
+        """Validates a single command against security rules using a strict whitelist."""
         if not self.SAFE_CMD_PATTERN.match(cmd):
             msg = f"Command contains forbidden characters: {cmd}"
             raise ValueError(msg)
@@ -50,10 +50,29 @@ class LammpsDriver:
             return
 
         command = tokens[0].lower()
-        forbidden_commands = {"shell", "include", "jump", "python", "system"}
-        if command in forbidden_commands:
-            msg = f"Script contains forbidden command '{command}'."
+
+        # Whitelist of allowed LAMMPS commands
+        allowed_commands = {
+            "units", "dimension", "boundary", "atom_style", "atom_modify",
+            "lattice", "region", "create_box", "create_atoms", "read_data",
+            "read_restart", "mass", "velocity", "pair_style", "pair_coeff",
+            "neighbor", "neigh_modify", "compute", "fix", "unfix", "uncompute",
+            "thermo", "thermo_style", "thermo_modify", "dump", "dump_modify",
+            "undump", "timestep", "reset_timestep", "run", "minimize", "min_style",
+            "min_modify", "variable", "print", "log", "clear", "restart"
+        }
+
+        if command not in allowed_commands:
+            msg = f"Script contains non-whitelisted or forbidden command '{command}'."
             raise ValueError(msg)
+
+        # For specific safe commands, prevent dangerous arguments
+        if command == "variable":
+            # Only allow simple 'equal' variable assignments, no shell commands or complex expressions
+            if len(tokens) >= 3 and tokens[2].lower() != "equal":
+                if tokens[2].lower() in ["shell", "getenv", "format"]:
+                    msg = "Script contains forbidden variable assignment type."
+                    raise ValueError(msg)
 
         # Prevent variable expansion via $ to avoid injection
         if "$" in cmd or "`" in cmd or "|" in cmd or ";" in cmd or "&" in cmd:

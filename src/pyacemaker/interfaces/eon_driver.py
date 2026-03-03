@@ -109,9 +109,7 @@ class EONWrapper:
             if self.config.mpi_command:
                 # Security: Strictly validate mpi_command to prevent injection
                 mpi_cmd_str = self.config.mpi_command.strip()
-                # Allow only mpirun or mpiexec, plus common arguments (-n, -np, -hostfile, etc.)
-                # We specifically block ;, &, |, `, $, (, ) to prevent shell injection even if shlex is used
-                forbidden_chars = set(";&|`$()")
+                forbidden_chars = set(";&|`$()<>")
                 if any(c in mpi_cmd_str for c in forbidden_chars):
                     msg = "Forbidden characters in mpi_command"
                     raise ValueError(msg)
@@ -120,6 +118,21 @@ class EONWrapper:
                 if not mpi_parts or mpi_parts[0] not in ("mpirun", "mpiexec", "srun", "aprun"):
                     msg = f"Invalid MPI command executable: {mpi_parts[0] if mpi_parts else 'Empty'}"
                     raise ValueError(msg)
+
+                # Strictly whitelist arguments to prevent flag injection (e.g. --allow-run-as-root)
+                allowed_flags = {"-n", "-np", "-N", "--n", "-host", "-hostfile", "-machinefile"}
+                i = 1
+                while i < len(mpi_parts):
+                    part = mpi_parts[i]
+                    if part.startswith("-"):
+                        if part not in allowed_flags:
+                            msg = f"Forbidden MPI argument: {part}"
+                            raise ValueError(msg)
+                        i += 2  # skip the flag and its value (e.g., -n 4)
+                    else:
+                        # Extra bare values are not allowed
+                        msg = f"Unexpected MPI argument formatting: {part}"
+                        raise ValueError(msg)
 
                 cmd = mpi_parts + cmd
 

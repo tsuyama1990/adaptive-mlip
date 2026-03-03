@@ -8,6 +8,7 @@ from pyacemaker.core.policy import (
     RattlePolicy,
     StrainPolicy,
 )
+import typing
 from pyacemaker.domain_models.structure import (
     ExplorationPolicy,
     LocalGenerationStrategy,
@@ -16,38 +17,38 @@ from pyacemaker.domain_models.structure import (
 
 
 class PolicyFactory:
-    """Factory for selecting and instantiating exploration policies."""
+    """Factory for selecting and instantiating exploration policies using a plugin registry."""
 
-    @staticmethod
-    def get_policy(config: StructureConfig) -> BasePolicy:
+    _policies: dict[ExplorationPolicy, type[BasePolicy]] = {}
+    _local_policies: dict[LocalGenerationStrategy, type[BasePolicy]] = {}
+
+    @classmethod
+    def register(cls, name: ExplorationPolicy) -> typing.Callable[[type[BasePolicy]], type[BasePolicy]]:
+        def wrapper(policy_cls: type[BasePolicy]) -> type[BasePolicy]:
+            cls._policies[name] = policy_cls
+            return policy_cls
+        return wrapper
+
+    @classmethod
+    def register_local(cls, name: LocalGenerationStrategy) -> typing.Callable[[type[BasePolicy]], type[BasePolicy]]:
+        def wrapper(policy_cls: type[BasePolicy]) -> type[BasePolicy]:
+            cls._local_policies[name] = policy_cls
+            return policy_cls
+        return wrapper
+
+    @classmethod
+    def get_policy(cls, config: StructureConfig) -> BasePolicy:
         """
         Selects the appropriate policy based on configuration (active_policies).
         Returns a CompositePolicy if multiple policies are active.
-
-        Args:
-            config: Structure configuration.
-
-        Returns:
-            Instantiated policy object.
-
-        Raises:
-            ValueError: If any policy name is unknown.
         """
-        policies_map: dict[ExplorationPolicy, type[BasePolicy]] = {
-            ExplorationPolicy.COLD_START: ColdStartPolicy,
-            ExplorationPolicy.RANDOM_RATTLE: RattlePolicy,
-            ExplorationPolicy.STRAIN: StrainPolicy,
-            ExplorationPolicy.DEFECTS: DefectPolicy,
-        }
-
         active = config.active_policies
         if not active:
-            # Fallback to default if empty (should be handled by Pydantic default though)
             active = [ExplorationPolicy.COLD_START]
 
         selected_policies = []
         for p_name in active:
-            policy_cls = policies_map.get(p_name)
+            policy_cls = cls._policies.get(p_name)
             if not policy_cls:
                 msg = f"Unknown policy: {p_name}"
                 raise ValueError(msg)
@@ -58,26 +59,24 @@ class PolicyFactory:
 
         return CompositePolicy()
 
-    @staticmethod
-    def get_local_policy(strategy: LocalGenerationStrategy) -> BasePolicy:
+    @classmethod
+    def get_local_policy(cls, strategy: LocalGenerationStrategy) -> BasePolicy:
         """
         Selects the appropriate policy for local generation based on strategy.
-
-        Args:
-            strategy: Local generation strategy enum.
-
-        Returns:
-            Instantiated policy object.
         """
-        local_map: dict[LocalGenerationStrategy, type[BasePolicy]] = {
-            LocalGenerationStrategy.RANDOM_DISPLACEMENT: RattlePolicy,
-            LocalGenerationStrategy.NORMAL_MODE: NormalModePolicy,
-            LocalGenerationStrategy.MD_MICRO_BURST: MDMicroBurstPolicy,
-        }
-
-        policy_cls = local_map.get(strategy)
+        policy_cls = cls._local_policies.get(strategy)
         if not policy_cls:
             msg = f"Unknown local strategy: {strategy}"
             raise ValueError(msg)
 
         return policy_cls()
+
+# Register core policies
+PolicyFactory.register(ExplorationPolicy.COLD_START)(ColdStartPolicy)
+PolicyFactory.register(ExplorationPolicy.RANDOM_RATTLE)(RattlePolicy)
+PolicyFactory.register(ExplorationPolicy.STRAIN)(StrainPolicy)
+PolicyFactory.register(ExplorationPolicy.DEFECTS)(DefectPolicy)
+
+PolicyFactory.register_local(LocalGenerationStrategy.RANDOM_DISPLACEMENT)(RattlePolicy)
+PolicyFactory.register_local(LocalGenerationStrategy.NORMAL_MODE)(NormalModePolicy)
+PolicyFactory.register_local(LocalGenerationStrategy.MD_MICRO_BURST)(MDMicroBurstPolicy)

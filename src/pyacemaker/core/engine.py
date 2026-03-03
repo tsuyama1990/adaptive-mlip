@@ -21,6 +21,57 @@ from pyacemaker.domain_models.md import MDConfig, MDSimulationResult
 from pyacemaker.interfaces.lammps_driver import LammpsDriver
 
 
+class LammpsResultParser:
+    """
+    Handles extraction of properties and parsing results from LAMMPS driver execution.
+    Adheres to the Single Responsibility Principle by decoupling parsing from Engine mechanics.
+    """
+    @staticmethod
+    def parse(
+        driver: LammpsDriver,
+        config: MDConfig,
+        dump_file: Path,
+        log_file: Path
+    ) -> MDSimulationResult:
+        try:
+            energy = driver.extract_variable("pe")
+            temperature = driver.extract_variable("temp")
+            step = int(driver.extract_variable("step"))
+            forces = driver.get_forces().tolist()
+            stress = driver.get_stress().tolist()
+        except Exception:
+            energy = 0.0
+            temperature = 0.0
+            step = 0
+            forces = [[0.0, 0.0, 0.0]]
+            stress = [0.0] * 6
+
+        max_gamma = 0.0
+        if config.fix_halt:
+            try:
+                max_gamma = driver.extract_variable("max_g")
+            except Exception:
+                max_gamma = 0.0
+
+        halted = False
+        if config.fix_halt:
+            halted = step < config.n_steps
+
+        return MDSimulationResult(
+            energy=energy,
+            forces=forces,
+            stress=stress,
+            halted=halted,
+            max_gamma=max_gamma,
+            n_steps=step,
+            temperature=temperature,
+            trajectory_path=str(dump_file),
+            log_path=str(log_file),
+            halt_structure_path=str(dump_file) if halted else None,
+            halt_step=step if halted else None,
+        )
+
+
 class LammpsEngine(BaseEngine):
     """
     MD Engine using LAMMPS, natively supporting Master-Slave Inversion via read_restart.
@@ -144,43 +195,7 @@ class LammpsEngine(BaseEngine):
                 safe_restart.write_bytes(restart_out_file.read_bytes())
                 self._restart_file_path = str(safe_restart)
 
-            try:
-                energy = driver.extract_variable("pe")
-                temperature = driver.extract_variable("temp")
-                step = int(driver.extract_variable("step"))
-                forces = driver.get_forces().tolist()
-                stress = driver.get_stress().tolist()
-            except Exception:
-                energy = 0.0
-                temperature = 0.0
-                step = 0
-                forces = [[0.0, 0.0, 0.0]]
-                stress = [0.0] * 6
-
-            max_gamma = 0.0
-            if self.config.fix_halt:
-                try:
-                    max_gamma = driver.extract_variable("max_g")
-                except Exception:
-                    max_gamma = 0.0
-
-            halted = False
-            if self.config.fix_halt:
-                halted = step < self.config.n_steps
-
-            return MDSimulationResult(
-                energy=energy,
-                forces=forces,
-                stress=stress,
-                halted=halted,
-                max_gamma=max_gamma,
-                n_steps=step,
-                temperature=temperature,
-                trajectory_path=str(dump_file),
-                log_path=str(log_file),
-                halt_structure_path=str(dump_file) if halted else None,
-                halt_step=step if halted else None,
-            )
+            return LammpsResultParser.parse(driver, self.config, dump_file, log_file)
         finally:
             if driver is not None and hasattr(driver, "lmp"):
                 if hasattr(driver.lmp, "close"):

@@ -6,6 +6,7 @@ from typing import Any
 from ase import Atoms
 
 from pyacemaker.domain_models.md import MDSimulationResult
+from pyacemaker.domain_models.structure import StructureConfig
 
 
 class BasePolicy(ABC):
@@ -14,7 +15,7 @@ class BasePolicy(ABC):
     """
 
     @abstractmethod
-    def generate(self, base_structure: Any, config: Any, n_structures: int, **kwargs: Any) -> Any:
+    def generate(self, base_structure: Atoms, config: StructureConfig, n_structures: int, **kwargs: Any) -> Iterator[Atoms]:
         """
         Generates new candidates based on policy logic.
         """
@@ -27,7 +28,7 @@ class BaseGenerator(ABC):
     """
 
     @abstractmethod
-    def update_config(self, config: Any) -> None:
+    def update_config(self, config: StructureConfig) -> None:
         """
         Updates the generator configuration.
         This allows adaptive policies to modify generation parameters at runtime.
@@ -123,7 +124,7 @@ class BaseTrainer(ABC):
     @abstractmethod
     def train(
         self, training_data_path: str | Path, initial_potential: str | Path | None = None
-    ) -> Any:
+    ) -> str | Path:
         """
         Trains a potential using the provided training data file.
 
@@ -159,7 +160,7 @@ class BaseEngine(ABC):
     """
 
     @abstractmethod
-    def run(self, structure: Atoms | None, potential: Any) -> MDSimulationResult:
+    def run(self, structure: Atoms | None, potential: str | Path | None) -> MDSimulationResult:
         """
         Runs a simulation using the given structure and potential.
 
@@ -182,7 +183,7 @@ class BaseEngine(ABC):
         """
 
     @abstractmethod
-    def compute_static_properties(self, structure: Atoms, potential: Any) -> MDSimulationResult:
+    def compute_static_properties(self, structure: Atoms, potential: str | Path) -> MDSimulationResult:
         """
         Computes static properties (energy, forces, stress) for a structure.
         Equivalent to a 0-step MD run or minimization.
@@ -196,7 +197,7 @@ class BaseEngine(ABC):
         """
 
     @abstractmethod
-    def relax(self, structure: Atoms, potential: Any) -> Atoms:
+    def relax(self, structure: Atoms, potential: str | Path) -> Atoms:
         """
         Relaxes the structure to a local minimum.
 

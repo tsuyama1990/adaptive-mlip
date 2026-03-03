@@ -152,9 +152,11 @@ class DFTManager(BaseOracle):
         c.diagonalization = "cg"
 
     def _compute_single(self, atoms: Atoms, calc_dir: str) -> Atoms:
+        import time
         current_config = self.config.model_copy()
         strategies = self._get_strategies()
         last_error: Exception | None = None
+        max_transient_retries = 3
 
         for i, strategy in enumerate(strategies):
             if strategy:
@@ -163,17 +165,28 @@ class DFTManager(BaseOracle):
             else:
                 strategy_name = "Initial"
 
-            try:
-                self._run_calculator(atoms, current_config, calc_dir)
-            except Exception as e:
-                last_error = e
-                atoms.calc = None
-                logger.warning(
-                    f"DFT calculation attempt {i + 1} ({strategy_name}) failed. Error: {e!s}. Retrying..."
-                )
-                continue
-            else:
-                return atoms
+            # Implement exponential backoff for transient failures (e.g. HPC connection drops, file IO bounds)
+            for attempt in range(max_transient_retries):
+                try:
+                    self._run_calculator(atoms, current_config, calc_dir)
+                    return atoms
+                except (ConnectionError, TimeoutError, OSError) as e:
+                    last_error = e
+                    atoms.calc = None
+                    backoff = 2 ** attempt
+                    logger.warning(
+                        f"Transient error in DFT attempt {i + 1} ({strategy_name}), retry {attempt+1}/{max_transient_retries} in {backoff}s. Error: {e!s}"
+                    )
+                    time.sleep(backoff)
+                    continue
+                except Exception as e:
+                    # Convergence errors or physics failures fall through to the next strategy
+                    last_error = e
+                    atoms.calc = None
+                    logger.warning(
+                        f"DFT physics/convergence attempt {i + 1} ({strategy_name}) failed. Error: {e!s}. Falling back to next strategy."
+                    )
+                    break
 
         raise OracleError(ERR_ORACLE_FAILED.format(error=last_error)) from last_error
 
