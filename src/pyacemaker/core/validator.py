@@ -5,7 +5,7 @@ import numpy as np
 from ase import Atoms
 from ase.data import atomic_numbers
 
-from pyacemaker.domain_models.constants import (
+from pyacemaker.domain_models.defaults import (
     ERR_POTENTIAL_NOT_FOUND,
     ERR_VAL_POT_NONE,
     ERR_VAL_POT_NOT_FILE,
@@ -150,12 +150,18 @@ class Validator:
     ) -> ValidationResult:
         """
         Runs validation checks and generates report.
+        Implements resource limits (e.g. atoms count) to prevent DoS during intensive validation steps.
         """
         if structure is None:
             raise ValueError(ERR_VAL_REQ_STRUCT)
 
         # Data Integrity Fix: Validate structure input
         LammpsInputValidator.validate_structure(structure)
+
+        # Architecture fix: Validate resource limits to prevent DoS via massive systems
+        if len(structure) > 1000:
+            msg = f"Structure too large for validation: {len(structure)} atoms (max 1000)."
+            raise ValueError(msg)
 
         # Relax structure
         relaxed_structure = self._relax_structure(structure, potential_path)

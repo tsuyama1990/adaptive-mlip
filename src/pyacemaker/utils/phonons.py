@@ -60,6 +60,9 @@ class PhononCalculator:
         Calculates phonons and checks for imaginary modes.
         Returns stability status and base64 encoded band structure plot.
         """
+        from pyacemaker.utils.path import validate_path_safe
+        validate_path_safe(potential_path)
+
         unitcell = self._ase_to_phonopy(structure)
         # Ensure supercell_matrix is 3x3 or list of 3 ints (diagonal)
         if len(self.supercell_matrix) == 3 and isinstance(self.supercell_matrix[0], int):

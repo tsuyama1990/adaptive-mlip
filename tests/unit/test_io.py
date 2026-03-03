@@ -1,5 +1,6 @@
 import tempfile
 from pathlib import Path
+from typing import Any
 
 import pytest
 from ase import Atoms
@@ -8,26 +9,26 @@ from ase.io import read
 from pyacemaker.utils.io import detect_elements, dump_yaml, load_yaml, write_lammps_streaming
 
 
-def test_load_yaml_success(tmp_path):
+def test_load_yaml_success(tmp_path: Any) -> None:
     config_file = tmp_path / "config.yaml"
     config_file.write_text("key: value\n")
     data = load_yaml(config_file)
     assert data == {"key": "value"}
 
 
-def test_load_yaml_not_found():
+def test_load_yaml_not_found() -> None:
     with pytest.raises(FileNotFoundError):
         load_yaml(Path("non_existent.yaml"))
 
 
-def test_dump_yaml(tmp_path):
+def test_dump_yaml(tmp_path: Any) -> None:
     data = {"key": "value"}
     dump_file = tmp_path / "dump.yaml"
     dump_yaml(data, dump_file)
     assert load_yaml(dump_file) == data
 
 
-def test_detect_elements(tmp_path):
+def test_detect_elements(tmp_path: Any) -> None:
     # Create a dummy xyz file
     xyz_file = tmp_path / "test.xyz"
     atoms1 = Atoms("H2O", positions=[[0, 0, 0], [1, 0, 0], [0, 1, 0]])
@@ -43,14 +44,14 @@ def test_detect_elements(tmp_path):
     assert elements == ["C", "H", "O"]  # sorted
 
 
-def test_detect_elements_empty(tmp_path):
+def test_detect_elements_empty(tmp_path: Any) -> None:
     empty_file = tmp_path / "empty.xyz"
     empty_file.touch()
     elements = detect_elements(empty_file)
     assert elements == []
 
 
-def test_write_lammps_streaming_basic():
+def test_write_lammps_streaming_basic() -> None:
     atoms = Atoms("H2", positions=[[0, 0, 0], [0.74, 0, 0]], cell=[5, 5, 5])
     species = ["H"]
 
@@ -77,7 +78,7 @@ def test_write_lammps_streaming_basic():
     path.unlink()
 
 
-def test_write_lammps_streaming_multiple_species():
+def test_write_lammps_streaming_multiple_species() -> None:
     atoms = Atoms("H2O", positions=[[0, 0, 0], [1, 0, 0], [0, 1, 0]], cell=[10, 10, 10])
     species = ["H", "O"]
 
@@ -93,7 +94,7 @@ def test_write_lammps_streaming_multiple_species():
     path.unlink()
 
 
-def test_write_lammps_streaming_missing_species():
+def test_write_lammps_streaming_missing_species() -> None:
     atoms = Atoms("He", positions=[[0, 0, 0]], cell=[10, 10, 10])
     species = ["H"]  # He is missing
 

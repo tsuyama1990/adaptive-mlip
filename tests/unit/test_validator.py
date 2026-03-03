@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -10,20 +11,21 @@ from pyacemaker.domain_models.validation import ValidationConfig, ValidationResu
 
 class TestValidator:
     @pytest.fixture
-    def mock_phonon_calc(self):
+    def mock_phonon_calc(self) -> Any:
         return MagicMock()
 
     @pytest.fixture
-    def mock_elastic_calc(self):
+    def mock_elastic_calc(self) -> Any:
         return MagicMock()
 
     @pytest.fixture
-    def mock_report_gen(self):
+    def mock_report_gen(self) -> Any:
         return MagicMock()
 
     @pytest.fixture
-    def validator(self, mock_phonon_calc, mock_elastic_calc, mock_report_gen):
+    def validator(self, mock_phonon_calc, mock_elastic_calc, mock_report_gen) -> Any:
         from pyacemaker.core.validator import ValidationContext
+
         config = ValidationConfig()
         context = ValidationContext(
             config=config,
@@ -33,7 +35,7 @@ class TestValidator:
         )
         return Validator(context)
 
-    def test_validate_pass(self, validator, mock_phonon_calc, mock_elastic_calc, mock_report_gen):
+    def test_validate_pass(self, validator, mock_phonon_calc, mock_elastic_calc, mock_report_gen: Any) -> None:
         mock_phonon_calc.check_stability.return_value = (True, "base64_phonon")
         mock_elastic_calc.calculate_properties.return_value = (
             True,
@@ -62,7 +64,7 @@ class TestValidator:
         mock_report_gen.generate.assert_called_once()
         mock_report_gen.save.assert_called_once()
 
-    def test_validate_fail_phonon(self, validator, mock_phonon_calc, mock_elastic_calc):
+    def test_validate_fail_phonon(self, validator, mock_phonon_calc, mock_elastic_calc: Any) -> None:
         mock_phonon_calc.check_stability.return_value = (False, "base64_phonon_unstable")
         mock_elastic_calc.calculate_properties.return_value = (
             True,
@@ -82,7 +84,7 @@ class TestValidator:
         assert result.phonon_stable is False
         assert result.elastic_stable is True
 
-    def test_relax_structure(self, validator, mock_elastic_calc):
+    def test_relax_structure(self, validator, mock_elastic_calc: Any) -> None:
         structure = bulk("Cu", "fcc", a=3.6)
         pot_path = Path("pot.yace")
 
@@ -96,7 +98,7 @@ class TestValidator:
         assert relaxed == "relaxed_structure"
         mock_engine.relax.assert_called_once_with(structure, pot_path)
 
-    def test_validate_structure_invalid_element(self):
+    def test_validate_structure_invalid_element(self: Any) -> None:
         """Test rejection of structure with invalid chemical symbol (dummy X)."""
         # 'X' is in atomic_numbers but Z=0
         # Need pbc and cell for get_volume() check to pass first if we want to hit the element check.

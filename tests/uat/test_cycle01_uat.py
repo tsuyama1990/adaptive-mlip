@@ -1,7 +1,7 @@
 from pyacemaker.domain_models.workflow import DistillationConfig
 
 
-def test_cycle01_distillation_schema():
+def test_cycle01_distillation_schema() -> None:
     """
     Scenario 1: Phase 1 - Zero-Shot Distillation & Baseline Construction
     Verify that DistillationConfig is correctly instantiated and handles constraints.

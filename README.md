@@ -128,7 +128,6 @@ uv sync
 ## Development Workflow
 
 This project enforces strict code quality standards using `ruff` and `mypy`.
-We build iteratively through defined Development Cycles (Cycle 01 - 04).
 
 *   **Run Linters**:
     ```bash

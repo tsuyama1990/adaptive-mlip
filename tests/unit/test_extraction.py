@@ -4,7 +4,7 @@ from pyacemaker.domain_models.workflow import CutoutConfig
 from pyacemaker.utils.extraction import extract_intelligent_cluster
 
 
-def test_extract_intelligent_cluster():
+def test_extract_intelligent_cluster() -> None:
     structure = bulk("Cu", "fcc", a=3.6)
     structure = structure * (3, 3, 3)  # 27 atoms
 

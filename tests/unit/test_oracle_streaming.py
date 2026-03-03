@@ -50,7 +50,7 @@ def test_dft_manager_streaming_behavior(mock_dft_config: DFTConfig) -> None:
 
     # 3. Call compute
     # This should return a generator immediately without hanging
-    stream = manager.compute(infinite_structures())
+    stream = manager.compute(infinite_structures(), batch_size=2)
 
     # 4. Consume just a few items manually
     # Do NOT use list(stream) as it would be infinite
@@ -61,12 +61,13 @@ def test_dft_manager_streaming_behavior(mock_dft_config: DFTConfig) -> None:
     assert len(second) == 1
 
     # If we reached here, it means compute didn't consume the whole iterator.
-    # Verify driver calls matches consumed count
+    # Verify driver calls matches consumed count.
+    # Because of batching to safely handle tempdirs, we process batch_size (2) at a time.
     assert mock_driver.get_calculator.call_count == 2
 
-    # Optional: consume one more to be sure
+    # Optional: consume one more to be sure. This will trigger the next batch computation.
     next(stream)
-    assert mock_driver.get_calculator.call_count == 3
+    assert mock_driver.get_calculator.call_count == 4
 
     # Verify no buffering or lookahead
     # If the manager was buffering, it might have called the driver more times

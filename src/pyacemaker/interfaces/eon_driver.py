@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from pyacemaker.domain_models.constants import PACE_DRIVER_TEMPLATE
+from pyacemaker.domain_models.defaults import PACE_DRIVER_TEMPLATE
 from pyacemaker.domain_models.eon import EONConfig
 from pyacemaker.interfaces.process import ProcessRunner, SubprocessRunner
 from pyacemaker.utils.path import validate_path_safe
@@ -97,7 +97,9 @@ class EONWrapper:
         executable = self.config.eon_executable
 
         # Security: Validate paths
-        try:
+        def _validate_and_run() -> None:
+            validate_path_safe(Path(working_dir))
+
             if "/" in executable or "\\" in executable:
                 validate_path_safe(Path(executable))
 
@@ -105,8 +107,34 @@ class EONWrapper:
             cmd = [executable]
 
             if self.config.mpi_command:
-                # Split carefully, treating it as a command prefix
-                cmd = shlex.split(self.config.mpi_command) + cmd
+                # Security: Strictly validate mpi_command to prevent injection
+                mpi_cmd_str = self.config.mpi_command.strip()
+                forbidden_chars = set(";&|`$()<>")
+                if any(c in mpi_cmd_str for c in forbidden_chars):
+                    msg = "Forbidden characters in mpi_command"
+                    raise ValueError(msg)
+
+                mpi_parts = shlex.split(mpi_cmd_str)
+                if not mpi_parts or mpi_parts[0] not in ("mpirun", "mpiexec", "srun", "aprun"):
+                    msg = f"Invalid MPI command executable: {mpi_parts[0] if mpi_parts else 'Empty'}"
+                    raise ValueError(msg)
+
+                # Strictly whitelist arguments to prevent flag injection (e.g. --allow-run-as-root)
+                allowed_flags = {"-n", "-np", "-N", "--n", "-host", "-hostfile", "-machinefile"}
+                i = 1
+                while i < len(mpi_parts):
+                    part = mpi_parts[i]
+                    if part.startswith("-"):
+                        if part not in allowed_flags:
+                            msg = f"Forbidden MPI argument: {part}"
+                            raise ValueError(msg)
+                        i += 2  # skip the flag and its value (e.g., -n 4)
+                    else:
+                        # Extra bare values are not allowed
+                        msg = f"Unexpected MPI argument formatting: {part}"
+                        raise ValueError(msg)
+
+                cmd = mpi_parts + cmd
 
             cmd_str = " ".join(cmd)
             logger.info("Starting EON simulation in %s with command: %s", working_dir, cmd_str)
@@ -123,6 +151,8 @@ class EONWrapper:
             logger.info("EON simulation completed successfully.")
             logger.debug("EON stdout: %s", result.stdout)
 
+        try:
+            _validate_and_run()
         except subprocess.CalledProcessError as e:
             msg = f"EON execution failed with return code {e.returncode}. Stderr: {e.stderr}"
             logger.exception(msg)

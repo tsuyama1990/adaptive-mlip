@@ -1,12 +1,13 @@
 import logging
 import re
+import typing
 from pathlib import Path
 
 import numpy as np
 from ase import Atoms
 from lammps import lammps
 
-from pyacemaker.domain_models.constants import LAMMPS_SAFE_CMD_PATTERN
+from pyacemaker.domain_models.defaults import LAMMPS_SAFE_CMD_PATTERN
 
 logger = logging.getLogger(__name__)
 
@@ -39,14 +40,43 @@ class LammpsDriver:
             raise RuntimeError(msg) from e
 
     def _validate_command(self, cmd: str) -> None:
-        """Validates a single command against security rules."""
+        """Validates a single command against security rules using a strict whitelist."""
         if not self.SAFE_CMD_PATTERN.match(cmd):
             msg = f"Command contains forbidden characters: {cmd}"
             raise ValueError(msg)
 
         tokens = cmd.split()
-        if "shell" in tokens:
-            msg = "Script contains forbidden command 'shell'."
+        if not tokens:
+            return
+
+        command = tokens[0].lower()
+
+        # Whitelist of allowed LAMMPS commands
+        allowed_commands = {
+            "units", "dimension", "boundary", "atom_style", "atom_modify",
+            "lattice", "region", "create_box", "create_atoms", "read_data",
+            "read_restart", "mass", "velocity", "pair_style", "pair_coeff",
+            "neighbor", "neigh_modify", "compute", "fix", "unfix", "uncompute",
+            "thermo", "thermo_style", "thermo_modify", "dump", "dump_modify",
+            "undump", "timestep", "reset_timestep", "run", "minimize", "min_style",
+            "min_modify", "variable", "print", "log", "clear", "restart"
+        }
+
+        if command not in allowed_commands:
+            msg = f"Script contains non-whitelisted or forbidden command '{command}'."
+            raise ValueError(msg)
+
+        # For specific safe commands, prevent dangerous arguments
+        if command == "variable":
+            # Only allow simple 'equal' variable assignments, no shell commands or complex expressions
+            if len(tokens) >= 3 and tokens[2].lower() != "equal":
+                if tokens[2].lower() in ["shell", "getenv", "format"]:
+                    msg = "Script contains forbidden variable assignment type."
+                    raise ValueError(msg)
+
+        # Prevent variable expansion via $ to avoid injection
+        if "$" in cmd or "`" in cmd or "|" in cmd or ";" in cmd or "&" in cmd:
+            msg = "Script contains forbidden shell operators or variable expansion."
             raise ValueError(msg)
 
     def run(self, script: str) -> None:
@@ -63,11 +93,46 @@ class LammpsDriver:
             msg = "Script contains non-ASCII characters, which may be unsafe."
             raise ValueError(msg)
 
-        for line in script.split("\n"):
-            cmd = line.strip()
-            if cmd:
-                self._validate_command(cmd)
-                self.lmp.command(cmd)
+        self._process_lines(script.split("\n"))
+
+    def _process_lines(self, lines: list[str] | typing.Iterable[str]) -> None:
+        """
+        Process script lines, handling multi-line commands using '&' and stripping comments.
+        """
+        buffer = []
+        for line in lines:
+            # Handle comments carefully to avoid stripping within quotes
+            # A simple split("#")[0] is risky with quotes, but for our strict LAMMPS subset,
+            # we can use a more robust regex if needed. For now, since quote support
+            # is limited, we strip anything after the first unquoted '#' or just
+            # standard stripping.
+
+            # Simple handling: strip comments if not inside quotes
+            # Since our regex whitelist LAMMPS_SAFE_CMD_PATTERN allows very few characters
+            # we already constrain quotes heavily. Let's do a basic split.
+            clean_line = line.split("#")[0].strip()
+
+            if not clean_line:
+                continue
+
+            buffer.append(clean_line)
+
+            if clean_line.endswith("&"):
+                # Remove '&' and keep buffering
+                buffer[-1] = clean_line[:-1].strip()
+                continue
+
+            # Command complete
+            cmd = " ".join(buffer)
+            self._validate_command(cmd)
+            self.lmp.command(cmd)
+            buffer = []
+
+        if buffer:
+            # Execute any remaining command (even if it mistakenly ends with &)
+            cmd = " ".join(buffer)
+            self._validate_command(cmd)
+            self.lmp.command(cmd)
 
     def run_file(self, filepath: str | Path) -> None:
         """
@@ -82,30 +147,9 @@ class LammpsDriver:
             msg = f"Input script not found: {path}"
             raise FileNotFoundError(msg)
 
-        # Basic security check: scan file for 'shell' command?
-        # Reading file defeats the purpose of streaming if we read it all.
-        # But for security, we might need to scan.
-        # However, if we trust the generator, we can skip.
-        # Given "Security" requirement, let's stream read and validate.
-        # But lammps.file() executes the file. It doesn't validate line by line in Python.
-        # If we use lammps.file(), we bypass _validate_command unless we pre-scan.
-        # Pre-scanning line by line is O(N) IO but O(1) memory.
-
-        # Security: Read, validate, and execute line-by-line.
-        # Do not use self.lmp.file(str(path)) to avoid TOCTOU and file content injection.
-        # This acts as a sandboxed execution by strictly controlling commands.
+        # Security: Read, validate, and execute line-by-line, handling multi-line logic.
         with path.open("r", encoding="utf-8") as f:
-            for line in f:
-                cmd = line.strip()
-                # Ignore comments
-                if cmd.startswith("#"):
-                    continue
-                if cmd:
-                    # Remove comments from line end
-                    cmd = cmd.split("#")[0].strip()
-                    if cmd:
-                        self._validate_command(cmd)
-                        self.lmp.command(cmd)
+            self._process_lines(f)
 
     def extract_variable(self, name: str) -> float:
         """

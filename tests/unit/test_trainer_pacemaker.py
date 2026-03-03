@@ -6,7 +6,7 @@ from ase.build import bulk
 from pyacemaker.core.trainer import FinetuneManager, IncrementalTrainer
 
 
-def test_finetune_manager():
+def test_finetune_manager() -> None:
     manager = FinetuneManager("MACE-MP-0")
     with tempfile.TemporaryDirectory() as td:
         dummy_data = Path(td) / "data.xyz"
@@ -17,7 +17,7 @@ def test_finetune_manager():
         assert new_model.exists()
 
 
-def test_incremental_trainer():
+def test_incremental_trainer() -> None:
     # Mock base trainer
     class MockTrainer:
         def train(self, path, init=None):
