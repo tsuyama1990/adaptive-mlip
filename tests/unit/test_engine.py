@@ -8,7 +8,7 @@ import pytest
 from ase import Atoms
 
 from pyacemaker.core.engine import LammpsEngine
-from pyacemaker.domain_models.md import  MDConfig, MDSimulationResult
+from pyacemaker.domain_models.md import MDConfig, MDSimulationResult
 
 
 @pytest.fixture

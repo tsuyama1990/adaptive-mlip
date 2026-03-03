@@ -119,12 +119,17 @@ class DFTManager(BaseOracle):
             if not batch:
                 break
 
+            processed_batch = []
+
             with tempfile.TemporaryDirectory() as work_dir:
                 work_path = Path(work_dir)
                 for i, atoms in enumerate(batch):
                     calc_dir = work_path / f"calc_{i}"
                     calc_dir.mkdir()
-                    yield self._process_structure(atoms, str(calc_dir))
+                    # Fully process and store result before yielding to ensure TempDir is cleaned up
+                    processed_batch.append(self._process_structure(atoms, str(calc_dir)))
+
+            yield from processed_batch
 
     def _process_structure(self, atoms: Atoms, calc_dir: str) -> Atoms:
         if self.config.embedding_buffer:

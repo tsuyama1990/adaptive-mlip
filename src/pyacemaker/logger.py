@@ -5,7 +5,7 @@ from pathlib import Path
 
 from pyacemaker.domain_models.logging import LoggingConfig
 
-_LOGGER_REGISTRY = {}
+_LOGGER_REGISTRY: dict[str, logging.Logger] = {}
 
 
 def setup_logger(config: LoggingConfig, project_name: str) -> logging.Logger:

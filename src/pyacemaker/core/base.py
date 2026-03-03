@@ -14,7 +14,7 @@ class BasePolicy(ABC):
     """
 
     @abstractmethod
-    def generate(self, **kwargs: Any) -> None:
+    def generate(self, base_structure: Any, config: Any, n_structures: int, **kwargs: Any) -> Any:
         """
         Generates new candidates based on policy logic.
         """

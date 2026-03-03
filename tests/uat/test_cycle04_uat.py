@@ -1,7 +1,7 @@
 from pyacemaker.domain_models.workflow import LoopStrategyConfig
 
 
-def test_cycle04_hierarchical_fine_tuning():
+def test_cycle04_hierarchical_fine_tuning() -> None:
     """
     Scenario 4: Phase 4 - Hierarchical Fine-Tuning & Seamless Resume
     Verify incremental update settings.

@@ -46,7 +46,6 @@ def _check_allowed_roots(resolved: Path) -> None:
 
 
 def validate_path_safe(path: Path) -> Path:
-    """Ensures path is safe."""
     """
     Ensures path is safe using strict resolution and character allowlisting.
     Centralized utility for path validation.
@@ -59,20 +58,22 @@ def validate_path_safe(path: Path) -> Path:
 
     Raises:
         ValueError: If the path contains dangerous characters, traversal attempts,
-                    or resolves outside allowed directories (CWD, temp, /dev/shm).
+                    symlinks, or resolves outside allowed directories (CWD, temp, /dev/shm).
     """
     _check_traversal(path)
     _check_dangerous_chars(path)
 
+    # Block symlinks to prevent TOCTOU symlink traversal attacks
+    if path.exists() and path.is_symlink():
+        msg = f"Symlinks are forbidden for security reasons: {path}"
+        raise ValueError(msg)
+
     try:
-        # Canonicalize path.
-        if path.exists():
-            resolved = path.resolve(strict=True)
-        elif path.parent.exists():
-            resolved_parent = path.parent.resolve(strict=True)
-            resolved = resolved_parent / path.name
-        else:
-            resolved = path.resolve(strict=False)
+        # Canonicalize path strictly. Use os.path.realpath to fully resolve everything.
+        # Strict resolution to block unpredictable traversal paths
+        resolved_str = os.path.realpath(str(path))
+        resolved = Path(resolved_str)
+
     except Exception as e:
         msg = f"Invalid path resolution: {path}"
         raise ValueError(msg) from e

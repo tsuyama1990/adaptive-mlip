@@ -5,7 +5,7 @@ from numpy.typing import NDArray
 from pyacemaker.domain_models.defaults import EMBEDDING_TOLERANCE_CELL
 
 
-def embed_cluster(cluster: Atoms, buffer: float, copy: bool = True) -> Atoms:
+def embed_cluster(cluster: Atoms, buffer: float) -> Atoms:
     """
     Embeds a cluster of atoms into a periodic box with vacuum padding.
 
@@ -13,14 +13,14 @@ def embed_cluster(cluster: Atoms, buffer: float, copy: bool = True) -> Atoms:
     vacuum buffer to each dimension, and centers the cluster within the new cell.
     Periodic boundary conditions (PBC) are enabled for all dimensions.
 
+    This function always returns a new Atoms object to prevent data corruption.
+
     Args:
         cluster: The atomic cluster to embed. Must contain at least one atom.
         buffer: The amount of vacuum to add to the bounding box dimensions (in Angstroms).
                 This value is added to the extent of the cluster in each dimension.
                 For example, if the cluster spans 5.0 A along x and buffer is 10.0 A,
                 the new cell length along x will be 15.0 A.
-        copy:   If True (default), a new Atoms object is returned (safer).
-                If False, the input cluster is modified in-place (faster, memory efficient).
 
     Returns:
         Atoms object with periodic boundary conditions set to True and
@@ -61,27 +61,29 @@ def embed_cluster(cluster: Atoms, buffer: float, copy: bool = True) -> Atoms:
         msg = f"Resulting cell dimensions must be positive (> {EMBEDDING_TOLERANCE_CELL}): {cell_lengths}. Increase buffer."
         raise ValueError(msg)
 
+    # Validate volume limits to prevent memory exhaustion and OOM crashes
+    vol = cell_lengths[0] * cell_lengths[1] * cell_lengths[2]
+    if vol > 1e7:  # Arbitrary high limit to prevent malicious crashes
+        msg = f"Resulting cell volume {vol} is excessively large. Limit buffer size."
+        raise ValueError(msg)
+
     # Calculate shift
     center_of_box = cell_lengths / 2.0
     center_of_atoms = (min_xyz + max_xyz) / 2.0
     shift = center_of_box - center_of_atoms
 
-    # Handle object creation vs modification
-    if copy:
-        # Create a deep copy of the Atoms object to ensure positions are not shared
-        target = cluster.copy()  # type: ignore[no-untyped-call]
-        target.positions = target.positions.copy()
-    else:
-        # In-place modification of the original object: absolutely no new copies
-        target = cluster
+    # Pre-calculate new positions using numpy broadcast to prevent intermediate large arrays in Atoms
+    new_positions = positions + shift
 
-    # Modify the target (whether it's the copy or original)
-    target.set_cell(cell_lengths)
-    target.set_pbc(True)
-    target.positions += shift
+    # We do NOT use in-place modification to prevent data corruption.
+    # Instead, we create a fresh Atoms object efficiently with symbols and calculated arrays.
+    symbols = cluster.get_chemical_symbols()  # type: ignore[no-untyped-call]
 
-    # Explicit cast to Atoms to satisfy type checker if ASE doesn't return strictly Atoms
-    # or just return as is, assuming target is Atoms.
-    # The ignore was because mypy thinks ASE methods might return something else?
-    # Actually ASE copy() returns 'Atoms' (or subclasses).
-    return target  # type: ignore[no-any-return]
+    new_cluster = Atoms(symbols=symbols, positions=new_positions, cell=cell_lengths, pbc=True)
+
+    # Copy across relevant arrays (like force_weight)
+    for name, array in cluster.arrays.items():
+        if name not in ["positions", "numbers"]:
+            new_cluster.new_array(name, array.copy())  # type: ignore[no-untyped-call]
+
+    return new_cluster

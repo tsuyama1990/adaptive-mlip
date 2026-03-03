@@ -24,25 +24,26 @@ def test_embed_cluster_basic() -> None:
 
 
 def test_embed_cluster_copy() -> None:
-    """Test that copy=True does not modify original cluster."""
+    """Test that  does not modify original cluster."""
     original = Atoms("H", positions=[[0, 0, 0]])
     original_pos = original.get_positions().copy()  # type: ignore[no-untyped-call]
 
-    _ = embed_cluster(original, buffer=5.0, copy=True)
+    _ = embed_cluster(original, buffer=5.0, )
 
     assert np.allclose(original.get_positions(), original_pos)  # type: ignore[no-untyped-call]
 
 
 def test_embed_cluster_inplace() -> None:
-    """Test that copy=False modifies original cluster."""
+    """Test that embedding does not modify the original cluster (safety first)."""
     original = Atoms("H", positions=[[0, 0, 0]])
 
     # With buffer 10, new cell is 10x10x10. Center is 5,5,5.
     # Original center 0,0,0. Shift should be +5,+5,+5.
-    embedded = embed_cluster(original, buffer=10.0, copy=False)
+    embedded = embed_cluster(original, buffer=10.0)
 
-    assert embedded is original
-    assert np.allclose(original.get_positions(), [[5.0, 5.0, 5.0]])  # type: ignore[no-untyped-call]
+    assert embedded is not original
+    assert np.allclose(embedded.get_positions(), [[5.0, 5.0, 5.0]])  # type: ignore[no-untyped-call]
+    assert np.allclose(original.get_positions(), [[0.0, 0.0, 0.0]])  # type: ignore[no-untyped-call]
 
 
 def test_embed_cluster_empty() -> None:

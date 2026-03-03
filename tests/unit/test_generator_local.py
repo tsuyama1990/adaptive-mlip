@@ -6,7 +6,7 @@ from pyacemaker.core.generator import StructureGenerator
 from pyacemaker.domain_models.structure import LocalGenerationStrategy, StructureConfig
 
 
-def test_generate_local_rattle():
+def test_generate_local_rattle() -> None:
     config = StructureConfig(
         elements=["H"],
         supercell_size=[1, 1, 1],

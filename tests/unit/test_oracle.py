@@ -6,7 +6,7 @@ from pyacemaker.core.oracle import DFTManager, MACEManager, TieredOracle
 from pyacemaker.domain_models.dft import DFTConfig
 
 
-def test_mace_manager():
+def test_mace_manager() -> None:
     manager = MACEManager()
     structure = bulk("Cu", "fcc", a=3.6)
 
@@ -19,7 +19,7 @@ def test_mace_manager():
     assert "mace_uncertainty" in result.arrays
 
 
-def test_tiered_oracle_low_uncertainty():
+def test_tiered_oracle_low_uncertainty() -> None:
     mace = MACEManager()
 
     # Create a dummy UPF file to pass validation

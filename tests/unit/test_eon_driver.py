@@ -30,12 +30,12 @@ class MockProcessRunner(ProcessRunner):
 
 
 @pytest.fixture
-def mock_potential_path():
+def mock_potential_path() -> Any:
     with tempfile.NamedTemporaryFile(suffix=".yace") as tmp:
         yield Path(tmp.name)
 
 
-def test_eon_generate_config(mock_potential_path):
+def test_eon_generate_config(mock_potential_path: Any) -> None:
     config = EONConfig(
         potential_path=mock_potential_path,
         temperature=500.0,
@@ -70,7 +70,7 @@ def test_eon_generate_config(mock_potential_path):
         assert stat.S_IMODE(st.st_mode) == 0o600
 
 
-def test_eon_generate_driver_script(mock_potential_path):
+def test_eon_generate_driver_script(mock_potential_path: Any) -> None:
     config = EONConfig(potential_path=mock_potential_path)
     wrapper = EONWrapper(config)
 
@@ -90,7 +90,7 @@ def test_eon_generate_driver_script(mock_potential_path):
         assert stat.S_IMODE(st.st_mode) == 0o700
 
 
-def test_eon_run_command(mock_potential_path):
+def test_eon_run_command(mock_potential_path: Any) -> None:
     # Use a safe path for eon_executable to pass security checks
     with tempfile.NamedTemporaryFile(suffix="eonclient") as tmp_exec:
         # Actually validate_path_safe allows temp dir.
@@ -118,7 +118,7 @@ def test_eon_run_command(mock_potential_path):
         assert kwargs["env"]["PACE_POTENTIAL_PATH"] == str(mock_potential_path)
 
 
-def test_eon_run_not_found(mock_potential_path):
+def test_eon_run_not_found(mock_potential_path: Any) -> None:
     # Test error handling for executable not found
     runner = MockProcessRunner(return_code=127, stderr="not found")
 
@@ -135,7 +135,7 @@ def test_eon_run_not_found(mock_potential_path):
         assert "EON executable not found" in str(excinfo.value)
 
 
-def test_eon_file_write_failure(mock_potential_path):
+def test_eon_file_write_failure(mock_potential_path: Any) -> None:
     config = EONConfig(potential_path=mock_potential_path)
     wrapper = EONWrapper(config)
 

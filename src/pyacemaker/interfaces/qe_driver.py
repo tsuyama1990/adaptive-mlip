@@ -1,4 +1,5 @@
 from functools import lru_cache
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -8,6 +9,7 @@ from ase.data import chemical_symbols
 
 from pyacemaker.domain_models import DFTConfig
 from pyacemaker.domain_models.defaults import RECIPROCAL_FACTOR
+from pyacemaker.utils.path import validate_path_safe
 
 
 class QEDriver:
@@ -32,6 +34,9 @@ class QEDriver:
         Raises:
             ValueError: If configuration parameters are invalid/unsafe.
         """
+        if directory is not None:
+            validate_path_safe(Path(directory))
+
         # Security: Validate sensitive parameters (though Pydantic does most heavy lifting)
         # Here we double check constraints relevant to runtime context
         if config.encut <= 0:

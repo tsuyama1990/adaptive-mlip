@@ -7,22 +7,22 @@ from pyacemaker.core.validator import LammpsInputValidator
 
 
 class TestLammpsInputValidator:
-    def test_validate_structure_none(self):
+    def test_validate_structure_none(self: Any) -> None:
         with pytest.raises(ValueError, match="Structure is None"):
             LammpsInputValidator.validate_structure(None)
 
-    def test_validate_structure_type_error(self):
+    def test_validate_structure_type_error(self: Any) -> None:
         with pytest.raises(TypeError, match="Invalid structure type"):
             LammpsInputValidator.validate_structure("not an atoms object")
 
-    def test_validate_structure_empty(self):
+    def test_validate_structure_empty(self: Any) -> None:
         from ase import Atoms
 
         atoms = Atoms()
         with pytest.raises(ValueError, match="Structure is empty"):
             LammpsInputValidator.validate_structure(atoms)
 
-    def test_validate_structure_zero_volume(self):
+    def test_validate_structure_zero_volume(self: Any) -> None:
         from ase import Atoms
 
         # Zero volume cell
@@ -31,21 +31,21 @@ class TestLammpsInputValidator:
         with pytest.raises(ValueError, match="Failed to compute structure volume"):
             LammpsInputValidator.validate_structure(atoms)
 
-    def test_validate_potential_none(self):
+    def test_validate_potential_none(self: Any) -> None:
         with pytest.raises(ValueError, match="Validator requires a potential"):
             LammpsInputValidator.validate_potential(None)
 
-    def test_validate_potential_not_found(self):
+    def test_validate_potential_not_found(self: Any) -> None:
         with pytest.raises(FileNotFoundError, match="Potential file not found"):
             LammpsInputValidator.validate_potential("nonexistent.yace")
 
-    def test_validate_potential_outside_allowed(self):
+    def test_validate_potential_outside_allowed(self: Any) -> None:
         """Test rejection of file outside allowed dirs."""
         forbidden_file = Path("/etc/passwd")
         if not forbidden_file.exists():
             pass
 
-    def test_validate_potential_allowed_cwd(self, tmp_path, monkeypatch):
+    def test_validate_potential_allowed_cwd(self, tmp_path, monkeypatch: Any) -> None:
         """Test validation within CWD."""
         monkeypatch.chdir(tmp_path)
         pot_file = tmp_path / "pot.yace"
@@ -54,7 +54,7 @@ class TestLammpsInputValidator:
         valid = LammpsInputValidator.validate_potential(pot_file)
         assert valid == pot_file
 
-    def test_validate_potential_allowed_tmp(self):
+    def test_validate_potential_allowed_tmp(self: Any) -> None:
         """Test validation within /tmp."""
         try:
             with tempfile.NamedTemporaryFile() as f:
@@ -65,7 +65,7 @@ class TestLammpsInputValidator:
 
             logging.exception("Validation failed", exc_info=e)
 
-    def test_validate_potential_symlink_traversal(self, tmp_path):
+    def test_validate_potential_symlink_traversal(self, tmp_path: Any) -> None:
         """Test symlink resolving to outside (should fail)."""
         # Create a symlink in tmp_path (allowed location) pointing to /etc/hosts (forbidden location)
         target = Path("/etc/hosts")
@@ -82,12 +82,12 @@ class TestLammpsInputValidator:
         # /etc/hosts is not in /tmp, not in CWD.
         # So it should raise ValueError from validate_path_safe
 
-        # Updated match string to be broad enough to catch "Path traversal detected" OR "outside allowed"
-        with pytest.raises(ValueError, match="Path traversal detected"):
+        # Updated match string to be broad enough to catch "Path traversal detected" OR "outside allowed" OR "Symlinks are forbidden"
+        with pytest.raises(ValueError, match="Symlinks are forbidden for security reasons"):
             LammpsInputValidator.validate_potential(symlink)
 
-    def test_validate_potential_symlink_internal(self, tmp_path, monkeypatch):
-        """Test symlink resolving to inside (should pass)."""
+    def test_validate_potential_symlink_internal(self, tmp_path, monkeypatch: Any) -> None:
+        """Test symlink resolving to inside (should fail as symlinks are globally forbidden)."""
         monkeypatch.chdir(tmp_path)
         real_file = tmp_path / "real.yace"
         real_file.touch()
@@ -95,5 +95,5 @@ class TestLammpsInputValidator:
         symlink = tmp_path / "link.yace"
         symlink.symlink_to(real_file)
 
-        valid = LammpsInputValidator.validate_potential(symlink)
-        assert valid == real_file.resolve()
+        with pytest.raises(ValueError, match="Symlinks are forbidden for security reasons"):
+            LammpsInputValidator.validate_potential(symlink)
