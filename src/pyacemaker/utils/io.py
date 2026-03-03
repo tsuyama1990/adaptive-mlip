@@ -138,11 +138,17 @@ def write_lammps_streaming(
     fileobj.write("Atoms # atomic\n\n")
 
     # Optimize Atom Writing:
-    # Use direct array access and iterators to avoid creating large intermediate lists/arrays if possible.
-    # But atoms.get_positions()  # type: ignore[no-untyped-call] returns a copy anyway.
+    # We access arrays natively without copying to avoid Memory Exhaustion for massive systems
+    pos = atoms.arrays.get("positions")
+    if pos is None:
+        pos = atoms.get_positions()  # type: ignore[no-untyped-call]  # Fallback
 
-    pos = atoms.get_positions()  # type: ignore[no-untyped-call]  # (N, 3)
-    symbols = atoms.get_chemical_symbols()  # type: ignore[no-untyped-call]  # List of strings (N)
+    numbers = atoms.arrays.get("numbers")
+    if numbers is None:
+        symbols = atoms.get_chemical_symbols()  # type: ignore[no-untyped-call]
+    else:
+        from ase.data import chemical_symbols
+        symbols = [chemical_symbols[n] for n in numbers]
 
     # Generator for lines to keep memory usage O(1) per line (after pos array overhead)
     # This avoids creating a huge string buffer or list of strings.

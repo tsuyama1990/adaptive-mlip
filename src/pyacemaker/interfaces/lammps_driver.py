@@ -56,8 +56,8 @@ class LammpsDriver:
             raise ValueError(msg)
 
         # Prevent variable expansion via $ to avoid injection
-        if "$" in cmd:
-            msg = "Script contains variable expansion ($) which is forbidden."
+        if "$" in cmd or "`" in cmd or "|" in cmd or ";" in cmd or "&" in cmd:
+            msg = "Script contains forbidden shell operators or variable expansion."
             raise ValueError(msg)
 
     def run(self, script: str) -> None:

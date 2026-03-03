@@ -189,8 +189,8 @@ class LammpsEngine(BaseEngine):
                     with contextlib.suppress(Exception):
                         driver.lmp.__del__()
 
-    def __del__(self) -> None:
-        """Cleanup managed restart directories."""
+    def cleanup(self) -> None:
+        """Cleanup managed restart directories explicitly."""
         if (
             hasattr(self, "_safe_restart_dir")
             and self._safe_restart_dir
@@ -199,6 +199,11 @@ class LammpsEngine(BaseEngine):
             import shutil
 
             shutil.rmtree(self._safe_restart_dir, ignore_errors=True)
+            del self._safe_restart_dir
+
+    def __del__(self) -> None:
+        """Fallback cleanup, though explicit is preferred."""
+        self.cleanup()
 
     def compute_static_properties(self, structure: Atoms, potential: Any) -> MDSimulationResult:
         static_config = self.config.model_copy(

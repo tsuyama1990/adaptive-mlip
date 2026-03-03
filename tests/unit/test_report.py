@@ -1,3 +1,5 @@
+from typing import Any
+
 from pyacemaker.core.report import ReportGenerator
 from pyacemaker.domain_models.validation import ValidationResult
 

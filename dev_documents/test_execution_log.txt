@@ -4,83 +4,134 @@ rootdir: /app
 configfile: pyproject.toml
 testpaths: tests
 plugins: cov-7.0.0
-collected 184 items / 11 errors
+collected 231 items
 
-==================================== ERRORS ====================================
-_____________ ERROR collecting tests/integration/test_scenarios.py _____________
-tests/integration/test_scenarios.py:16: in <module>
-    def integration_config() -> Any:
-                                ^^^
-E   NameError: name 'Any' is not defined
-________________ ERROR collecting tests/uat/test_cycle07_uat.py ________________
-tests/uat/test_cycle07_uat.py:12: in <module>
-    def validator_dependencies() -> Any:
-                                    ^^^
-E   NameError: name 'Any' is not defined
-_________________ ERROR collecting tests/unit/test_elastic.py __________________
-tests/unit/test_elastic.py:10: in <module>
-    class TestElasticCalculator:
-tests/unit/test_elastic.py:12: in TestElasticCalculator
-    def mock_engine(self) -> Any:
-                             ^^^
-E   NameError: name 'Any' is not defined
-________________ ERROR collecting tests/unit/test_eon_driver.py ________________
-tests/unit/test_eon_driver.py:33: in <module>
-    def mock_potential_path() -> Any:
-                                 ^^^
-E   NameError: name 'Any' is not defined
-____________________ ERROR collecting tests/unit/test_io.py ____________________
-tests/unit/test_io.py:11: in <module>
-    def test_load_yaml_success(tmp_path: Any) -> None:
-                                         ^^^
-E   NameError: name 'Any' is not defined
-__________ ERROR collecting tests/unit/test_lammps_driver_security.py __________
-tests/unit/test_lammps_driver_security.py:9: in <module>
-    def driver() -> Any:
-                    ^^^
-E   NameError: name 'Any' is not defined
-_____________ ERROR collecting tests/unit/test_path_validation.py ______________
-tests/unit/test_path_validation.py:8: in <module>
-    def test_validate_path_safe_valid(tmp_path: Any) -> None:
-                                                ^^^
-E   NameError: name 'Any' is not defined
-_________________ ERROR collecting tests/unit/test_phonons.py __________________
-tests/unit/test_phonons.py:12: in <module>
-    class TestPhononCalculator:
-tests/unit/test_phonons.py:14: in TestPhononCalculator
-    def mock_engine(self) -> Any:
-                             ^^^
-E   NameError: name 'Any' is not defined
-__________________ ERROR collecting tests/unit/test_report.py __________________
-tests/unit/test_report.py:5: in <module>
-    def test_generate_report_pass(tmp_path: Any) -> None:
-                                            ^^^
-E   NameError: name 'Any' is not defined
-________________ ERROR collecting tests/unit/test_validator.py _________________
-tests/unit/test_validator.py:11: in <module>
-    class TestValidator:
-tests/unit/test_validator.py:13: in TestValidator
-    def mock_phonon_calc(self) -> Any:
-                                  ^^^
-E   NameError: name 'Any' is not defined
-____________ ERROR collecting tests/unit/test_validator_security.py ____________
-tests/unit/test_validator_security.py:9: in <module>
-    class TestLammpsInputValidator:
-tests/unit/test_validator_security.py:10: in TestLammpsInputValidator
-    def test_validate_structure_none(self: Any) -> None:
-                                           ^^^
-E   NameError: name 'Any' is not defined
-=========================== short test summary info ============================
-ERROR tests/integration/test_scenarios.py - NameError: name 'Any' is not defined
-ERROR tests/uat/test_cycle07_uat.py - NameError: name 'Any' is not defined
-ERROR tests/unit/test_elastic.py - NameError: name 'Any' is not defined
-ERROR tests/unit/test_eon_driver.py - NameError: name 'Any' is not defined
-ERROR tests/unit/test_io.py - NameError: name 'Any' is not defined
-ERROR tests/unit/test_lammps_driver_security.py - NameError: name 'Any' is no...
-ERROR tests/unit/test_path_validation.py - NameError: name 'Any' is not defined
-ERROR tests/unit/test_phonons.py - NameError: name 'Any' is not defined
-ERROR tests/unit/test_report.py - NameError: name 'Any' is not defined
-ERROR tests/unit/test_validator.py - NameError: name 'Any' is not defined
-ERROR tests/unit/test_validator_security.py - NameError: name 'Any' is not de...
-!!!!!!!!!!!!!!!!!!! Interrupted: 11 errors during collection !!!!!!!!!!!!!!!!!!!
-============================== 11 errors in 1.18s ==============================
+tests/e2e/test_engine_integration.py ..                                  [  0%]
+tests/e2e/test_orchestrator.py .......                                   [  3%]
+tests/e2e/test_orchestrator_loop.py ...                                  [  5%]
+tests/e2e/test_orchestrator_refinement.py ..                             [  6%]
+tests/integration/test_pacemaker_integration.py ..                       [  6%]
+tests/integration/test_scenarios.py .                                    [  7%]
+tests/uat/test_cycle01_uat.py .                                          [  7%]
+tests/uat/test_cycle02_uat.py .                                          [  8%]
+tests/uat/test_cycle03_uat.py .                                          [  8%]
+tests/uat/test_cycle04_uat.py .                                          [  9%]
+tests/uat/test_cycle06_uat.py ..                                         [  9%]
+tests/uat/test_cycle07_uat.py ..                                         [ 10%]
+tests/unit/test_active_set.py .....                                      [ 12%]
+tests/unit/test_active_set_anchor.py ....                                [ 14%]
+tests/unit/test_delta.py ....                                            [ 16%]
+tests/unit/test_domain_models.py ............                            [ 21%]
+tests/unit/test_domain_models_dft.py .............                       [ 27%]
+tests/unit/test_domain_models_eon.py ....                                [ 29%]
+tests/unit/test_domain_models_md.py ...........                          [ 33%]
+tests/unit/test_domain_models_md_new.py ..                               [ 34%]
+tests/unit/test_domain_models_scenario.py ..                             [ 35%]
+tests/unit/test_domain_models_training.py .......                        [ 38%]
+tests/unit/test_domain_models_validation.py ....                         [ 40%]
+tests/unit/test_domain_models_workflow_new.py ........                   [ 43%]
+tests/unit/test_elastic.py ....                                          [ 45%]
+tests/unit/test_embedding.py .......                                     [ 48%]
+tests/unit/test_engine.py .......                                        [ 51%]
+tests/unit/test_engine_halt_step.py ..                                   [ 52%]
+tests/unit/test_engine_relax.py ...                                      [ 53%]
+tests/unit/test_engine_resume.py .                                       [ 54%]
+tests/unit/test_eon_driver.py .....                                      [ 56%]
+tests/unit/test_extraction.py .                                          [ 56%]
+tests/unit/test_factory.py ..                                            [ 57%]
+tests/unit/test_generator.py ......                                      [ 60%]
+tests/unit/test_generator_local.py .                                     [ 60%]
+tests/unit/test_io.py ........                                           [ 64%]
+tests/unit/test_io_manager.py ..                                         [ 64%]
+tests/unit/test_lammps_driver.py ...........                             [ 69%]
+tests/unit/test_lammps_driver_security.py ...                            [ 70%]
+tests/unit/test_lammps_generator.py ...                                  [ 72%]
+tests/unit/test_lammps_generator_reorder.py ..                           [ 73%]
+tests/unit/test_loop.py .......                                          [ 76%]
+tests/unit/test_main.py ...                                              [ 77%]
+tests/unit/test_oracle.py ..                                             [ 78%]
+tests/unit/test_oracle_streaming.py .                                    [ 78%]
+tests/unit/test_path_validation.py .....                                 [ 80%]
+tests/unit/test_perturbations.py ...                                     [ 82%]
+tests/unit/test_phonons.py ..                                            [ 83%]
+tests/unit/test_policies_new.py .                                        [ 83%]
+tests/unit/test_policy_factory.py ...                                    [ 84%]
+tests/unit/test_qe_driver.py .......                                     [ 87%]
+tests/unit/test_report.py ..                                             [ 88%]
+tests/unit/test_scenarios_fept_mgo.py ......                             [ 91%]
+tests/unit/test_streaming_io.py ...                                      [ 92%]
+tests/unit/test_trainer_pacemaker.py ..                                  [ 93%]
+tests/unit/test_validator.py ....                                        [ 95%]
+tests/unit/test_validator_security.py ...........                        [100%]
+
+=============================== warnings summary ===============================
+tests/unit/test_io.py::test_write_lammps_streaming_basic
+  /app/.venv/lib/python3.12/site-packages/ase/io/lammpsdata.py:72: FutureWarning: "style" is deprecated; please use "atom_style".
+    warnings.warn(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.12-final-0 _______________
+
+Name                                         Stmts   Miss  Cover   Missing
+--------------------------------------------------------------------------
+src/pyacemaker/__init__.py                       4      0   100%
+src/pyacemaker/core/__init__.py                  7      0   100%
+src/pyacemaker/core/active_set.py               71     10    86%   46-47, 60-61, 71, 77-78, 86-88
+src/pyacemaker/core/base.py                     29      0   100%
+src/pyacemaker/core/config_generator.py         36      7    81%   41, 52, 56-58, 109-110
+src/pyacemaker/core/directory_manager.py        20      0   100%
+src/pyacemaker/core/engine.py                  136     42    69%   44, 55, 67-68, 75, 77, 80-81, 88, 108-127, 140-145, 153-158, 164-165, 188-190, 199-202, 209-213, 233-235
+src/pyacemaker/core/exceptions.py                8      0   100%
+src/pyacemaker/core/generator.py                57     11    81%   36-39, 59, 62, 94, 106, 112, 114, 141
+src/pyacemaker/core/io_manager.py               60     23    62%   58-71, 78-81, 98-99, 102-117
+src/pyacemaker/core/lammps_generator.py        147     17    88%   111-127, 135, 154-161
+src/pyacemaker/core/loop.py                     69      3    96%   74-77
+src/pyacemaker/core/m3gnet_wrapper.py           34     21    38%   34-63, 70, 80-82
+src/pyacemaker/core/oracle.py                  108     23    79%   34, 67, 76-86, 109, 112, 120, 136, 146, 149, 152, 161-162, 168-174, 178
+src/pyacemaker/core/policy.py                   39      2    95%   39, 46
+src/pyacemaker/core/policy_factory.py           28      5    82%   46, 52-53, 80-81
+src/pyacemaker/core/report.py                   12      1    92%   85
+src/pyacemaker/core/state_manager.py            34      2    94%   37-38
+src/pyacemaker/core/trainer.py                  78     19    76%   53-54, 69-73, 80-82, 85-86, 92-93, 96-97, 100-101, 116
+src/pyacemaker/core/validator.py                74      7    91%   63, 68, 74, 108, 156, 163-164
+src/pyacemaker/domain_models/__init__.py        11      0   100%
+src/pyacemaker/domain_models/config.py          22      0   100%
+src/pyacemaker/domain_models/constants.py       11      0   100%
+src/pyacemaker/domain_models/defaults.py       127      0   100%
+src/pyacemaker/domain_models/dft.py             69     14    80%   76-77, 80-81, 95-96, 102-103, 119-124
+src/pyacemaker/domain_models/eon.py             33      4    88%   63-66
+src/pyacemaker/domain_models/logging.py         31      9    71%   24-25, 31, 39, 45-47, 50-51
+src/pyacemaker/domain_models/md.py             123     20    84%   37, 70-71, 76-77, 79-80, 84-85, 87-88, 218, 224-225, 233-234, 241-242, 244-245
+src/pyacemaker/domain_models/scenario.py         7      0   100%
+src/pyacemaker/domain_models/structure.py       61      4    93%   89-90, 108-109
+src/pyacemaker/domain_models/training.py        51      0   100%
+src/pyacemaker/domain_models/validation.py      17      0   100%
+src/pyacemaker/domain_models/workflow.py        48      0   100%
+src/pyacemaker/factory.py                       63      5    92%   42-43, 132-134
+src/pyacemaker/interfaces/__init__.py            5      0   100%
+src/pyacemaker/interfaces/eon_driver.py         86     16    81%   86, 116-117, 121-122, 150-159, 175, 179
+src/pyacemaker/interfaces/lammps_driver.py     103     16    84%   50, 60-61, 97, 103-104, 114-116, 128-129, 160, 193, 212-214
+src/pyacemaker/interfaces/process.py            14      5    64%   12, 22-29
+src/pyacemaker/interfaces/qe_driver.py          52      2    96%   118-119
+src/pyacemaker/logger.py                        27      3    89%   31-32, 48
+src/pyacemaker/main.py                          55      9    84%   39-42, 67-68, 77-78, 92
+src/pyacemaker/orchestrator.py                 247     35    86%   103-106, 160, 186, 190-191, 215, 219-220, 250-251, 256, 268-270, 288, 310, 353, 357, 370-372, 383-384, 394-395, 399, 410, 456-459, 484
+src/pyacemaker/scenarios/__init__.py             3      0   100%
+src/pyacemaker/scenarios/base_scenario.py       12      1    92%   20
+src/pyacemaker/scenarios/fept_mgo.py           148     28    81%   80, 162-165, 170-172, 181-182, 195-196, 203, 216, 221-222, 225-226, 233, 237, 245-258, 266-268
+src/pyacemaker/utils/delta.py                   17      2    88%   34-35
+src/pyacemaker/utils/elastic.py                 80     52    35%   34-35, 46-137, 146, 154
+src/pyacemaker/utils/embedding.py               39      8    79%   41-42, 49-50, 61-62, 67-68
+src/pyacemaker/utils/extraction.py              45      0   100%
+src/pyacemaker/utils/io.py                      86      8    91%   144, 148, 167-173
+src/pyacemaker/utils/path.py                    46      5    89%   40-41, 77-79
+src/pyacemaker/utils/perturbations.py           50      7    86%   34-42, 94
+src/pyacemaker/utils/phonons.py                 51      2    96%   51, 69
+src/pyacemaker/utils/process.py                 25     21    16%   35-77
+src/pyacemaker/utils/structure.py                6      2    67%   19-20
+--------------------------------------------------------------------------
+TOTAL                                         2922    471    84%
+======================== 231 passed, 1 warning in 3.15s ========================
+/app/.venv/lib/python3.12/site-packages/coverage/inorout.py:561: CoverageWarning: Module dev_src was never imported. (module-not-imported); see https://coverage.readthedocs.io/en/7.13.4/messages.html#warning-module-not-imported
+  self.warn(f"Module {pkg} was never imported.", slug="module-not-imported")
