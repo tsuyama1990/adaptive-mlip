@@ -194,6 +194,8 @@ class Validator:
         )
 
         # Generate Report
+        from pyacemaker.utils.path import validate_path_safe
+        output_path = validate_path_safe(output_path)
         self.report_validator.generate(result, output_path)
 
         return result

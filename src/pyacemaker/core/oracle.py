@@ -139,6 +139,9 @@ class DFTManager(BaseOracle):
         Raises:
             OracleError: If calculation fails after all retries and strategies.
         """
+        from pyacemaker.utils.path import validate_path_safe
+        calc_dir = str(validate_path_safe(Path(calc_dir)))
+
         current_config = self.config.model_copy()
         strategies = self._get_strategies()
         last_error: Exception | None = None

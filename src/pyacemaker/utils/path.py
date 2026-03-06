@@ -6,6 +6,9 @@ from pyacemaker.domain_models.constants import DANGEROUS_PATH_CHARS, DEFAULT_RAM
 
 
 def _check_string_patterns(path: Path) -> None:
+    if path.is_symlink():
+        path = path.resolve()
+
     s = str(path)
     if ".." in s:
         msg = f"Path traversal attempt detected (parent directory reference): {path}"
@@ -34,6 +37,9 @@ def _resolve_path(path: Path) -> Path:
 
 
 def _verify_containment(resolved: Path) -> None:
+    if resolved.is_symlink():
+        resolved = resolved.resolve(strict=True)
+
     base_dir = Path.cwd().resolve()
     allowed_roots = [
         base_dir,
@@ -70,5 +76,7 @@ def validate_path_safe(path: Path) -> Path:
     """
     _check_string_patterns(path)
     resolved = _resolve_path(path)
+    if resolved.is_symlink():
+        resolved = resolved.resolve(strict=True)
     _verify_containment(resolved)
     return resolved

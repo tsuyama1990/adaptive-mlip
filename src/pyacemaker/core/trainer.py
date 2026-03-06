@@ -52,9 +52,10 @@ class PacemakerTrainer(BaseTrainer):
         self._validate_training_data(data_path)
 
         # Determine output directory (same as data file)
-        output_dir = data_path.parent
+        from pyacemaker.utils.path import validate_path_safe
+        output_dir = validate_path_safe(data_path.parent)
         input_yaml_path = output_dir / "input.yaml"
-        potential_path = output_dir / self.config.output_filename
+        potential_path = validate_path_safe(output_dir / self.config.output_filename)
 
         # Generate configuration
         pacemaker_config = self.config_generator.generate(str(data_path), str(potential_path))

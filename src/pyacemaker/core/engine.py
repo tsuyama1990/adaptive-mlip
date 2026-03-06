@@ -120,18 +120,16 @@ class LammpsEngine(BaseEngine):
                     step = int(driver.extract_variable("step"))
                     forces = driver.get_forces().tolist()
                     stress = driver.get_stress().tolist()
-                except Exception:
-                    energy = 0.0
-                    temperature = 0.0
-                    step = 0
-                    forces = [[0.0, 0.0, 0.0]]
-                    stress = [0.0] * 6
+                except (ValueError, TypeError, KeyError) as e:
+                    import logging
+                    logging.getLogger(__name__).error(f"LAMMPS extraction failed: missing or invalid variables. {e}")
+                    raise RuntimeError("LAMMPS execution or data extraction failed.") from e
 
                 max_gamma = 0.0
                 if self.config.fix_halt:
                     try:
                         max_gamma = driver.extract_variable("max_g")
-                    except Exception:
+                    except (ValueError, TypeError, KeyError):
                         max_gamma = 0.0
 
                 halted = False

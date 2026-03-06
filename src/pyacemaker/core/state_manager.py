@@ -38,6 +38,8 @@ class StateManager:
     def save(self) -> None:
         """Saves the current iteration state."""
         try:
+            from pyacemaker.utils.path import validate_path_safe
+            self.state_file = validate_path_safe(self.state_file)
             self.state.save(self.state_file)
             self.logger.debug(LOG_STATE_SAVED.format(state=self.state.model_dump()))
         except Exception as e:
