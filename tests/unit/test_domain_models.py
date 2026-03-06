@@ -13,6 +13,7 @@ from pyacemaker.domain_models import (
     WorkflowConfig,
 )
 from pyacemaker.domain_models.structure import ExplorationPolicy
+from pyacemaker.domain_models.training import PotentialType
 from tests.conftest import create_dummy_pseudopotentials
 
 
@@ -61,10 +62,8 @@ def test_dft_config_valid(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> No
     assert config.encut == 500.0
 
 
-from pyacemaker.domain_models.training import PotentialType
-
-
 def test_training_config_valid() -> None:
+    from pyacemaker.domain_models.training import PotentialType
     config = TrainingConfig(
         potential_type=PotentialType.PACE, cutoff_radius=5.0, max_basis_size=500
     )

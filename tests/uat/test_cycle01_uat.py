@@ -35,7 +35,7 @@ dft:
         H: H.UPF
         O: O.UPF
 training:
-    potential_type: ace
+    potential_type: pace
     cutoff_radius: 5.0
     max_basis_size: 500
 md:
@@ -55,7 +55,7 @@ workflow:
     from pyacemaker.main import main
 
     with patch(
-        "argparse.ArgumentParser.parse_args",
+        "pyacemaker.main.CLIParser.parse",
         return_value=MagicMock(config=str(config_file), dry_run=True, scenario=None),
     ):
         with pytest.raises(SystemExit) as excinfo:

@@ -17,7 +17,7 @@ def test_uat_fit_potential(tmp_path: Path) -> None:
     write(dataset_path, Atoms("H2", positions=[[0, 0, 0], [0, 0, 1]]))
 
     config = TrainingConfig(
-        potential_type="ace",
+        potential_type="pace",
         cutoff_radius=5.0,
         max_basis_size=2,
         delta_learning=True,
@@ -58,7 +58,7 @@ def test_uat_fit_potential_failure(tmp_path: Path) -> None:
     write(dataset_path, Atoms("H"))
 
     config = TrainingConfig(
-        potential_type="ace",
+        potential_type="pace",
         cutoff_radius=5.0,
         max_basis_size=2,
         delta_learning=True,

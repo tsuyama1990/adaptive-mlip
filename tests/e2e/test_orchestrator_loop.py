@@ -8,7 +8,6 @@ from ase import Atoms
 from ase.io import write
 
 from pyacemaker.core.base import BaseGenerator
-from pyacemaker.core.loop import LoopState
 from pyacemaker.domain_models import PyAceConfig
 from pyacemaker.domain_models.md import MDSimulationResult
 from pyacemaker.orchestrator import Orchestrator
@@ -55,7 +54,7 @@ def mock_config(tmp_path: Path) -> PyAceConfig:
             "diagonalization": "david",
         },
         "training": {
-            "potential_type": "ace",
+            "potential_type": "pace",
             "cutoff_radius": 5.0,
             "max_basis_size": 500,
             "delta_learning": True,
@@ -102,9 +101,10 @@ def orchestrator(mock_config: PyAceConfig, tmp_path: Path) -> Orchestrator:
 
 
 def test_cold_start(orchestrator: Orchestrator, tmp_path: Path) -> None:
-    # Inject loop_state
-    if not hasattr(orchestrator, "loop_state"):
-        orchestrator.loop_state = LoopState()
+    # Reset loop state via public state manager method (or let it start fresh)
+    orchestrator.state_manager.reset()
+    if orchestrator.state_manager.load() is None:
+        orchestrator.state_manager.save() # Ensure state exists
 
     # Setup mocks
     assert orchestrator.oracle is not None
@@ -124,7 +124,9 @@ def test_cold_start(orchestrator: Orchestrator, tmp_path: Path) -> None:
     orchestrator._check_initial_potential()
 
     # Verify
-    assert orchestrator.loop_state.current_potential == initial_pot
+    state = orchestrator.state_manager.load()
+    assert state is not None
+    assert state.current_potential == initial_pot
     # generator.generate called internally
     orchestrator.oracle.compute.assert_called_once()
     orchestrator.trainer.train.assert_called_once()
@@ -146,20 +148,23 @@ def test_resume_capability(mock_config: PyAceConfig, tmp_path: Path) -> None:
         mp.setattr("pyacemaker.orchestrator.setup_logger", lambda **kwargs: MagicMock())
         new_orch = Orchestrator(mock_config)
 
-    if hasattr(new_orch, "loop_state"):
-        assert new_orch.loop_state.iteration == 1
-        assert new_orch.loop_state.current_potential == pot_path
-    else:
-        pytest.fail("Orchestrator does not have loop_state attribute")
+    state = new_orch.state_manager.load()
+    assert state is not None
+    assert state.iteration == 1
+    assert state.current_potential == pot_path
 
 
 def test_run_loop_iteration_halt(orchestrator: Orchestrator, tmp_path: Path) -> None:
-    # Inject loop_state
-    if not hasattr(orchestrator, "loop_state"):
-        orchestrator.loop_state = LoopState()
-
-    orchestrator.loop_state.current_potential = tmp_path / "current.yace"
-    orchestrator.loop_state.current_potential.touch()
+    orchestrator.state_manager.reset()
+    state = orchestrator.state_manager.load()
+    if state is None:
+        orchestrator.state_manager.save()
+        state = orchestrator.state_manager.load()
+    current_pot = tmp_path / "current.yace"
+    current_pot.touch()
+    state.current_potential = current_pot
+    orchestrator.state_manager.save()
+    orchestrator.state_manager.load() # reload to update internal orchestrator references if needed
 
     # Mock MD halt
     halt_path = tmp_path / "halt.xyz"
@@ -199,7 +204,9 @@ def test_run_loop_iteration_halt(orchestrator: Orchestrator, tmp_path: Path) -> 
     orchestrator._run_loop_iteration()
 
     # Verify
-    assert orchestrator.loop_state.iteration == 1
-    assert orchestrator.loop_state.current_potential == refined_pot
+    state = orchestrator.state_manager.load()
+    assert state is not None
+    assert state.iteration == 1
+    assert state.current_potential == refined_pot
     orchestrator.engine.run.assert_called()
     orchestrator.trainer.train.assert_called()

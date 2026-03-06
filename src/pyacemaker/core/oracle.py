@@ -2,11 +2,14 @@ import contextlib
 import logging
 import tempfile
 from collections.abc import Callable, Iterator
-from itertools import islice
 from pathlib import Path
 
 from ase import Atoms
-from ase.calculators.calculator import CalculationFailed, CalculatorSetupError, PropertyNotImplementedError
+from ase.calculators.calculator import (
+    CalculationFailed,
+    CalculatorSetupError,
+    PropertyNotImplementedError,
+)
 
 from pyacemaker.core.base import BaseOracle
 from pyacemaker.core.exceptions import OracleError
@@ -27,17 +30,16 @@ class DFTManager(BaseOracle):
         relative to the dataset size. It does not materialize the input iterator into a list.
     """
 
-    def __init__(self, config: DFTConfig, driver: QEDriver | None = None) -> None:
+    def __init__(self, config: DFTConfig, driver: QEDriver) -> None:
         """
         Initializes the DFTManager.
 
         Args:
             config: DFT configuration.
-            driver: Optional QEDriver instance (for dependency injection).
-                    If None, a new QEDriver is created.
+            driver: QEDriver instance (required for dependency injection).
         """
         self.config = config
-        self.driver = driver or QEDriver()
+        self.driver = driver
 
         # Cache strategies to avoid recreation on every compute call
         self.strategies: list[Callable[[DFTConfig], None] | None] = [
@@ -137,6 +139,9 @@ class DFTManager(BaseOracle):
         Raises:
             OracleError: If calculation fails after all retries and strategies.
         """
+        from pyacemaker.utils.path import validate_path_safe
+        calc_dir = str(validate_path_safe(Path(calc_dir)))
+
         current_config = self.config.model_copy()
         strategies = self._get_strategies()
         last_error: Exception | None = None

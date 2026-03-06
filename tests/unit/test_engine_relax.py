@@ -6,6 +6,8 @@ import pytest
 from ase import Atoms
 
 from pyacemaker.core.engine import LammpsEngine
+from pyacemaker.core.io_manager import LammpsFileManager
+from pyacemaker.core.lammps_generator import LammpsScriptGenerator
 from pyacemaker.domain_models.md import MDConfig
 
 
@@ -26,7 +28,7 @@ def test_lammps_engine_relax(
     relaxed_atoms = Atoms("He", positions=[[0, 0, 0]], cell=[10, 10, 10], pbc=True)
     driver_instance.get_atoms.return_value = relaxed_atoms
 
-    engine = LammpsEngine(mock_md_config)
+    engine = LammpsEngine(mock_md_config, LammpsScriptGenerator(mock_md_config), LammpsFileManager(mock_md_config))
     initial_atoms = Atoms("He", positions=[[0.1, 0.1, 0.1]], cell=[10, 10, 10], pbc=True)
 
     # Create dummy potential file
@@ -64,7 +66,7 @@ def test_lammps_engine_relax(
 def test_lammps_engine_relax_missing_potential(
     mock_md_config: MDConfig, mock_driver_relax: Any
 ) -> None:
-    engine = LammpsEngine(mock_md_config)
+    engine = LammpsEngine(mock_md_config, LammpsScriptGenerator(mock_md_config), LammpsFileManager(mock_md_config))
     atoms = Atoms("H", cell=[10, 10, 10], pbc=True)  # Must be valid structure
 
     with pytest.raises(FileNotFoundError):
@@ -77,7 +79,7 @@ def test_lammps_engine_relax_driver_fail(
     driver_instance = mock_driver_relax.return_value
     driver_instance.run_file.side_effect = RuntimeError("Minimization failed")
 
-    engine = LammpsEngine(mock_md_config)
+    engine = LammpsEngine(mock_md_config, LammpsScriptGenerator(mock_md_config), LammpsFileManager(mock_md_config))
     atoms = Atoms("H", cell=[10, 10, 10], pbc=True)
     pot_path = tmp_path / "pot.yace"
     pot_path.touch()

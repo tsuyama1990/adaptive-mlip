@@ -41,7 +41,7 @@ def test_dft_manager_compute_success(mock_dft_config: DFTConfig) -> None:
     mock_driver.get_calculator.return_value = calc
 
     # Inject mock driver
-    manager = DFTManager(mock_dft_config, driver=mock_driver)
+    manager = DFTManager(mock_dft_config, mock_driver)
 
     # Verify generator behavior with next() instead of list()
     generator = manager.compute(iter([atoms]))
@@ -69,7 +69,7 @@ def test_dft_manager_self_healing(mock_dft_config: DFTConfig) -> None:
     mock_driver.get_calculator.side_effect = [calc_fail, calc_success]
 
     # Inject mock driver
-    manager = DFTManager(mock_dft_config, driver=mock_driver)
+    manager = DFTManager(mock_dft_config, mock_driver)
 
     # Use next() to consume generator one-by-one without materializing list
     gen = manager.compute(iter([atoms]))
@@ -105,7 +105,7 @@ def test_dft_manager_fatal_error(mock_dft_config: DFTConfig) -> None:
     # Always fail
     mock_driver.get_calculator.return_value = MockCalculator(fail_count=100)
 
-    manager = DFTManager(mock_dft_config, driver=mock_driver)
+    manager = DFTManager(mock_dft_config, mock_driver)
 
     # Now raises OracleError
     # Use next() to trigger execution
@@ -125,7 +125,7 @@ def test_dft_manager_setup_error(mock_dft_config: DFTConfig) -> None:
     # Fails with setup error (e.g. missing pseudo file)
     mock_driver.get_calculator.return_value = MockCalculator(setup_error=True)
 
-    manager = DFTManager(mock_dft_config, driver=mock_driver)
+    manager = DFTManager(mock_dft_config, mock_driver)
 
     gen = manager.compute(iter([atoms]))
     with pytest.raises(OracleError, match="Oracle calculation failed"):
@@ -139,7 +139,7 @@ def test_dft_manager_setup_error(mock_dft_config: DFTConfig) -> None:
 
 def test_dft_manager_strategies(mock_dft_config: DFTConfig) -> None:
     """Test that strategies are correctly defined."""
-    manager = DFTManager(mock_dft_config)
+    manager = DFTManager(mock_dft_config, MagicMock())
     strategies = manager._get_strategies()
 
     assert len(strategies) > 0
@@ -171,7 +171,7 @@ def test_dft_manager_strategies(mock_dft_config: DFTConfig) -> None:
 
 def test_dft_manager_invalid_input(mock_dft_config: DFTConfig) -> None:
     """Test compute raises TypeError for non-iterator input."""
-    manager = DFTManager(mock_dft_config)
+    manager = DFTManager(mock_dft_config, MagicMock())
     atoms_list = [Atoms("H")]
 
     # Check that it raises TypeError immediately upon calling compute (before next)
@@ -181,7 +181,7 @@ def test_dft_manager_invalid_input(mock_dft_config: DFTConfig) -> None:
 
 def test_dft_manager_empty_iterator(mock_dft_config: DFTConfig) -> None:
     """Test compute handles empty iterator correctly with warning."""
-    manager = DFTManager(mock_dft_config)
+    manager = DFTManager(mock_dft_config, MagicMock())
     empty_iter: Iterator[Atoms] = iter([])
 
     # Explicit loop without list() materialization for safety
@@ -210,7 +210,7 @@ def test_dft_manager_embedding(mock_dft_config: DFTConfig, monkeypatch: pytest.M
     mock_driver = MagicMock()
     mock_driver.get_calculator.return_value = MockCalculator(fail_count=0)
 
-    manager = DFTManager(mock_dft_config, driver=mock_driver)
+    manager = DFTManager(mock_dft_config, mock_driver)
 
     atoms = Atoms("H", positions=[[0, 0, 0]])
     # Must be iterator

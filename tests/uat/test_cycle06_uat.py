@@ -33,7 +33,7 @@ def uat_config(tmp_path: Path) -> PyAceConfig:
             "diagonalization": "david",
         },
         "training": {
-            "potential_type": "ace",
+            "potential_type": "pace",
             "cutoff_radius": 5.0,
             "max_basis_size": 500,
             "delta_learning": True,
@@ -59,7 +59,32 @@ def uat_config(tmp_path: Path) -> PyAceConfig:
     return PyAceConfig(**config_dict)
 
 
-def test_scenario_06_01_active_learning_campaign(uat_config: PyAceConfig, tmp_path: Path) -> None:
+@pytest.fixture
+def mock_pipeline_modules(tmp_path):
+    mock_gen = MagicMock()
+    mock_oracle = MagicMock()
+    mock_trainer = MagicMock()
+    mock_engine = MagicMock()
+    mock_selector = MagicMock()
+    mock_validator = MagicMock()
+
+    pot1 = tmp_path / "pot_v1.yace"
+    pot2 = tmp_path / "pot_v2.yace"
+    pot3 = tmp_path / "pot_v3.yace"
+    pot1.touch()
+    pot2.touch()
+    pot3.touch()
+
+    mock_gen.generate.return_value = iter([Atoms("Fe")])
+    mock_oracle.compute.side_effect = lambda *args, **kwargs: iter([Atoms("Fe")])
+    mock_trainer.train.side_effect = [pot1, pot2, pot3]
+    mock_gen.generate_local.return_value = iter([Atoms("Fe")])
+    mock_selector.select.return_value = iter([Atoms("Fe")])
+
+    return mock_gen, mock_oracle, mock_trainer, mock_engine, mock_selector, mock_validator
+
+
+def test_scenario_06_01_active_learning_campaign(uat_config: PyAceConfig, tmp_path: Path, mock_pipeline_modules) -> None:
     """
     Scenario 06-01: Verify that the system can run a complete active learning loop from start to finish (mocked).
     """
@@ -67,38 +92,10 @@ def test_scenario_06_01_active_learning_campaign(uat_config: PyAceConfig, tmp_pa
         patch("pyacemaker.orchestrator.setup_logger"),
         patch("pyacemaker.factory.ModuleFactory.create_modules") as mock_factory,
     ):
-        # Mock modules
-        mock_gen = MagicMock()
-        mock_oracle = MagicMock()
-        mock_trainer = MagicMock()
-        mock_engine = MagicMock()
-        mock_selector = MagicMock()
-        mock_validator = MagicMock()
+        mock_factory.return_value = mock_pipeline_modules
+        mock_engine = mock_pipeline_modules[3]
+        mock_trainer = mock_pipeline_modules[2]
 
-        mock_factory.return_value = (
-            mock_gen,
-            mock_oracle,
-            mock_trainer,
-            mock_engine,
-            mock_selector,
-            mock_validator,
-        )
-
-        # Pre-create potential files
-        pot1 = tmp_path / "pot_v1.yace"
-        pot2 = tmp_path / "pot_v2.yace"
-        pot3 = tmp_path / "pot_v3.yace"
-        pot1.touch()
-        pot2.touch()
-        pot3.touch()
-
-        # Setup behaviors
-        mock_gen.generate.return_value = iter([Atoms("Fe")])
-        # Use lambda to return fresh iterator each time
-        mock_oracle.compute.side_effect = lambda *args, **kwargs: iter([Atoms("Fe")])
-        mock_trainer.train.side_effect = [pot1, pot2, pot3]
-
-        # Iteration 1: Halt
         halt_path = tmp_path / "halt1.xyz"
         write(halt_path, Atoms("Fe"))
 
@@ -112,7 +109,6 @@ def test_scenario_06_01_active_learning_campaign(uat_config: PyAceConfig, tmp_pa
             halt_structure_path=str(halt_path),
         )
 
-        # Iteration 2: Converged (not halted)
         res2 = MDSimulationResult(
             energy=-10.0,
             temperature=300,
@@ -125,17 +121,11 @@ def test_scenario_06_01_active_learning_campaign(uat_config: PyAceConfig, tmp_pa
 
         mock_engine.run.side_effect = [res1, res2]
 
-        mock_gen.generate_local.return_value = iter([Atoms("Fe")])
-        mock_selector.select.return_value = iter([Atoms("Fe")])
-
-        # Run Orchestrator
         orch = Orchestrator(uat_config)
         orch.run()
 
-        # Expectations
-        # 1. Loop runs for exactly 2 iterations (max_iterations=2)
-        assert orch.loop_state.iteration == 2
-        # Check calls
+        state = orch.state_manager.load()
+        assert state.iteration == 2
         assert mock_engine.run.call_count == 2
         assert mock_trainer.train.call_count >= 2
 
@@ -192,5 +182,6 @@ def test_scenario_06_02_resume_capability(uat_config: PyAceConfig, tmp_path: Pat
         orch.run()
 
         # Expectations
-        assert orch.loop_state.iteration == 2
+        state = orch.state_manager.load()
+        assert state.iteration == 2
         mock_engine.run.assert_called_once()  # Only 1 run

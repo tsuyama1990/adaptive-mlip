@@ -15,7 +15,7 @@ from pyacemaker.domain_models.training import TrainingConfig
 @pytest.fixture
 def config() -> TrainingConfig:
     return TrainingConfig(
-        potential_type="ace",
+        potential_type="pace",
         cutoff_radius=5.0,
         max_basis_size=2,
         output_filename="test_pot.yace",
@@ -39,17 +39,11 @@ def mock_shutil_which() -> Generator[MagicMock, None, None]:
         yield mock
 
 
-def test_train_missing_executable(trainer: PacemakerTrainer, tmp_path: Path) -> None:
+def test_train_missing_executable_error(trainer: PacemakerTrainer, tmp_path: Path) -> None:
     """Test that missing pace_train raises TrainerError."""
-    # We must patch explicitly here because fixture runs before
-    with (
-        patch("shutil.which", return_value=None),
-        pytest.raises(TrainerError, match="Executable 'pace_train' not found"),
-    ):
-        # Create a dummy file so validation passes up to executable check
-        # But wait, logic is: check executable first.
-        trainer.train(tmp_path / "dummy.xyz")
-
+    dummy_data = tmp_path / "dummy.xyz"
+    with patch("shutil.which", return_value=None), pytest.raises(TrainerError, match="Executable 'pace_train' not found"):
+        trainer.train(dummy_data)
 
 def test_train_element_detection_scanning(
     trainer: PacemakerTrainer, tmp_path: Path, mock_shutil_which: MagicMock

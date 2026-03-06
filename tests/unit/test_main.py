@@ -30,7 +30,7 @@ dft:
     pseudopotentials:
         Al: Al.UPF
 training:
-    potential_type: ace
+    potential_type: pace
     cutoff_radius: 4.0
     max_basis_size: 500
 md:
@@ -45,7 +45,7 @@ workflow:
     p.write_text(config_data)
 
     with patch(
-        "argparse.ArgumentParser.parse_args",
+        "pyacemaker.main.CLIParser.parse",
         return_value=MagicMock(config=str(p), dry_run=True, scenario=None),
     ):
         with pytest.raises(SystemExit) as excinfo:
@@ -60,7 +60,7 @@ workflow:
 def test_main_file_not_found(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.chdir(tmp_path)
     with patch(
-        "argparse.ArgumentParser.parse_args",
+        "pyacemaker.main.CLIParser.parse",
         return_value=MagicMock(config="non_existent.yaml", dry_run=False, scenario=None),
     ):
         with pytest.raises(SystemExit) as excinfo:
@@ -85,7 +85,7 @@ dft:
     pseudopotentials:
         Al: Al.UPF
 training:
-    potential_type: ace
+    potential_type: pace
     cutoff_radius: 4.0
     max_basis_size: 500
 md:
@@ -101,7 +101,7 @@ workflow:
 
     with (
         patch(
-            "argparse.ArgumentParser.parse_args",
+            "pyacemaker.main.CLIParser.parse",
             return_value=MagicMock(config=str(p), dry_run=False, scenario=None),
         ),
         patch("pyacemaker.orchestrator.Orchestrator.run") as mock_run,

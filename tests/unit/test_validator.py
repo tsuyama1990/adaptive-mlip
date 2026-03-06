@@ -24,12 +24,18 @@ class TestValidator:
     @pytest.fixture
     def validator(self, mock_phonon_calc, mock_elastic_calc, mock_report_gen):
         config = ValidationConfig()
-        # Assuming Validator takes instances of calculators and report generator
+        from pyacemaker.core.validator import (
+            ElasticValidator,
+            PhononValidator,
+            ReportValidator,
+            StructureRelaxer,
+        )
         return Validator(
             config=config,
-            phonon_calculator=mock_phonon_calc,
-            elastic_calculator=mock_elastic_calc,
-            report_generator=mock_report_gen,
+            phonon_validator=PhononValidator(mock_phonon_calc),
+            elastic_validator=ElasticValidator(mock_elastic_calc),
+            report_validator=ReportValidator(mock_report_gen),
+            relaxer=StructureRelaxer(mock_elastic_calc.engine),
         )
 
     def test_validate_pass(self, validator, mock_phonon_calc, mock_elastic_calc, mock_report_gen):
@@ -45,8 +51,7 @@ class TestValidator:
         output_path = Path("report.html")
         structure = Atoms("Fe", positions=[[0, 0, 0]], cell=[10, 10, 10], pbc=True)
 
-        # Mock _relax_structure to isolate
-        with patch.object(validator, "_relax_structure") as mock_relax:
+        with patch.object(validator.relaxer, "relax") as mock_relax:
             mock_relax.return_value = structure
             result = validator.validate(potential_path, output_path, structure=structure)
 
@@ -74,7 +79,7 @@ class TestValidator:
         output_path = Path("report.html")
         structure = Atoms("Fe", positions=[[0, 0, 0]], cell=[10, 10, 10], pbc=True)
 
-        with patch.object(validator, "_relax_structure") as mock_relax:
+        with patch.object(validator.relaxer, "relax") as mock_relax:
             mock_relax.return_value = structure
             result = validator.validate(potential_path, output_path, structure=structure)
 
@@ -85,12 +90,12 @@ class TestValidator:
         structure = MagicMock()
         pot_path = Path("pot.yace")
 
-        # mock_elastic_calc.engine is accessed in _relax_structure
         mock_engine = MagicMock()
         mock_elastic_calc.engine = mock_engine
         mock_engine.relax.return_value = "relaxed_structure"
+        validator.relaxer.engine = mock_engine
 
-        relaxed = validator._relax_structure(structure, pot_path)
+        relaxed = validator.relaxer.relax(structure, pot_path)
 
         assert relaxed == "relaxed_structure"
         mock_engine.relax.assert_called_once_with(structure, pot_path)

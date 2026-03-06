@@ -1,5 +1,6 @@
 from enum import StrEnum
-from pydantic import BaseModel, ConfigDict, Field, PositiveFloat, field_validator, model_validator
+
+from pydantic import BaseModel, ConfigDict, Field, PositiveFloat, field_validator
 
 from pyacemaker.domain_models.defaults import (
     DEFAULT_DELTA_SPLINE_BINS,
@@ -118,11 +119,3 @@ class TrainingConfig(BaseModel):
     active_set_size: int | None = Field(
         None, description="Target number of structures for active set", gt=0
     )
-
-    @model_validator(mode="after")
-    def validate_active_set_size(self) -> "TrainingConfig":
-        """Ensures active_set_size is set if active_set_optimization is enabled."""
-        if self.active_set_optimization and self.active_set_size is None:
-            msg = "active_set_size must be set when active_set_optimization is True"
-            raise ValueError(msg)
-        return self

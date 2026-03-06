@@ -20,7 +20,7 @@ class StateManager:
         self.logger = logger
         self.state = LoopState()
 
-    def load(self) -> None:
+    def load(self) -> LoopState:
         """Loads the iteration state."""
         try:
             self.state = LoopState.load(self.state_file)
@@ -28,10 +28,18 @@ class StateManager:
         except Exception as e:
             self.logger.warning(LOG_STATE_LOAD_FAIL.format(error=e))
             self.state = LoopState()
+        return self.state
+
+    def reset(self) -> None:
+        """Resets the state to initial values."""
+        self.state = LoopState()
+        self.save()
 
     def save(self) -> None:
         """Saves the current iteration state."""
         try:
+            from pyacemaker.utils.path import validate_path_safe
+            self.state_file = validate_path_safe(self.state_file)
             self.state.save(self.state_file)
             self.logger.debug(LOG_STATE_SAVED.format(state=self.state.model_dump()))
         except Exception as e:

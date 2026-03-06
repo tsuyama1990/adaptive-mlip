@@ -1,3 +1,4 @@
+import logging
 from pathlib import Path
 from typing import Any
 
@@ -6,18 +7,41 @@ from ase import Atoms
 from pyacemaker.core.base import BaseEngine
 from pyacemaker.core.io_manager import LammpsFileManager
 from pyacemaker.core.lammps_generator import LammpsScriptGenerator
-from pyacemaker.utils.io_transaction import DirectoryTransaction
 from pyacemaker.core.validator import LammpsInputValidator
 from pyacemaker.domain_models.constants import (
-    ERR_SIM_EXEC_FAIL,
-    ERR_SIM_SECURITY_FAIL,
-    ERR_SIM_SETUP_FAIL,
-    ERR_SIM_UNEXPECTED,
     ERR_STRUCTURE_NONE,
     LAMMPS_SCREEN_ARG,
 )
 from pyacemaker.domain_models.md import MDConfig, MDSimulationResult
 from pyacemaker.interfaces.lammps_driver import LammpsDriver
+from pyacemaker.utils.io_transaction import DirectoryTransaction
+
+
+class SimulationExecutionStrategy:
+    """Strategy for executing LAMMPS simulations with proper error handling and context logging."""
+    def __init__(self, logger: logging.Logger | None = None) -> None:
+        self.logger = logger or logging.getLogger(__name__)
+
+    def execute(self, driver: LammpsDriver | None, script_path: Path) -> None:
+        """
+        Executes the simulation script using the provided driver.
+        Validates inputs and handles errors gracefully without obscuring original traces.
+        """
+        if driver is None:
+            msg = "Driver instance cannot be None."
+            self.logger.error(msg)
+            raise ValueError(msg)
+
+        if not script_path.exists():
+            msg = "Simulation script not found."
+            self.logger.error(f"{msg} Path: {script_path}")
+            raise FileNotFoundError(msg)
+
+        self.logger.info("Executing LAMMPS simulation", extra={"script_path": str(script_path)})
+
+        # We allow specific exceptions to propagate naturally
+        # Scalability: Use run_file to stream script execution
+        driver.run_file(str(script_path))
 
 
 class LammpsEngine(BaseEngine):
@@ -29,16 +53,18 @@ class LammpsEngine(BaseEngine):
     def __init__(
         self,
         config: MDConfig,
-        generator: LammpsScriptGenerator | None = None,
-        file_manager: LammpsFileManager | None = None,
+        generator: LammpsScriptGenerator,
+        file_manager: LammpsFileManager,
+        execution_strategy: SimulationExecutionStrategy | None = None,
     ) -> None:
         """
         Initialize the engine with configuration.
-        Allows dependency injection for generator and file manager.
+        Requires strict dependency injection for generator and file manager.
         """
         self.config = config
-        self.generator = generator or LammpsScriptGenerator(config)
-        self.file_manager = file_manager or LammpsFileManager(config)
+        self.generator = generator
+        self.file_manager = file_manager
+        self.execution_strategy = execution_strategy or SimulationExecutionStrategy()
 
     def _prepare_simulation_env(
         self, structure: Atoms | None, potential: Any
@@ -65,24 +91,6 @@ class LammpsEngine(BaseEngine):
             msg = f"Input script not found: {script_path}"
             raise FileNotFoundError(msg)
 
-    def _execute_simulation(self, driver: LammpsDriver, script_path: Path) -> None:
-        """
-        Executes the simulation script with standardized error handling.
-        """
-        try:
-            self._ensure_script_readable(script_path)
-            # Scalability: Use run_file to stream script execution
-            driver.run_file(str(script_path))
-
-        except FileNotFoundError as e:
-            raise RuntimeError(ERR_SIM_SETUP_FAIL.format(error=e)) from e
-        except ValueError as e:
-            raise RuntimeError(ERR_SIM_SECURITY_FAIL.format(error=e)) from e
-        except RuntimeError as e:
-            raise RuntimeError(ERR_SIM_EXEC_FAIL.format(error=e)) from e
-        except Exception as e:
-            raise RuntimeError(ERR_SIM_UNEXPECTED.format(error=e)) from e
-
     def run(self, structure: Atoms | None, potential: Any) -> MDSimulationResult:
         """
         Runs the MD simulation.
@@ -103,7 +111,7 @@ class LammpsEngine(BaseEngine):
             driver = LammpsDriver(["-screen", LAMMPS_SCREEN_ARG, "-log", str(log_file)])
 
             try:
-                self._execute_simulation(driver, input_script_path)
+                self.execution_strategy.execute(driver, input_script_path)
 
                 # Extract Results
                 try:
@@ -112,18 +120,16 @@ class LammpsEngine(BaseEngine):
                     step = int(driver.extract_variable("step"))
                     forces = driver.get_forces().tolist()
                     stress = driver.get_stress().tolist()
-                except Exception:
-                    energy = 0.0
-                    temperature = 0.0
-                    step = 0
-                    forces = [[0.0, 0.0, 0.0]]
-                    stress = [0.0] * 6
+                except (ValueError, TypeError, KeyError) as e:
+                    import logging
+                    logging.getLogger(__name__).error(f"LAMMPS extraction failed: missing or invalid variables. {e}")
+                    raise RuntimeError("LAMMPS execution or data extraction failed.") from e
 
                 max_gamma = 0.0
                 if self.config.fix_halt:
                     try:
                         max_gamma = driver.extract_variable("max_g")
-                    except Exception:
+                    except (ValueError, TypeError, KeyError):
                         max_gamma = 0.0
 
                 halted = False
@@ -158,7 +164,9 @@ class LammpsEngine(BaseEngine):
             update={"n_steps": 0, "minimize": False, "thermo_freq": 1, "dump_freq": 0}
         )
 
-        engine = LammpsEngine(static_config)
+        generator = LammpsScriptGenerator(static_config)
+        file_manager = LammpsFileManager(static_config)
+        engine = LammpsEngine(static_config, generator, file_manager)
         return engine.run(structure, potential)
 
     def relax(self, structure: Atoms, potential: Any) -> Atoms:
@@ -180,7 +188,7 @@ class LammpsEngine(BaseEngine):
             # Execute
             driver = LammpsDriver(["-screen", LAMMPS_SCREEN_ARG, "-log", str(log_file)])
             try:
-                self._execute_simulation(driver, script_path)
+                self.execution_strategy.execute(driver, script_path)
                 return driver.get_atoms(elements)
             finally:
                 if hasattr(driver, "close"):

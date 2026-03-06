@@ -162,7 +162,16 @@ class FePtMgoScenario(BaseScenario):
     ) -> None:
         super().__init__(config)
         ctx = context or ScenarioContext()
-        self.engine = ctx.engine or LammpsEngine(self.config.md)
+        if ctx.engine:
+            self.engine = ctx.engine
+        else:
+            from pyacemaker.core.io_manager import LammpsFileManager
+            from pyacemaker.core.lammps_generator import LammpsScriptGenerator
+            self.engine = LammpsEngine(
+                self.config.md,
+                LammpsScriptGenerator(self.config.md),
+                LammpsFileManager(self.config.md)
+            )
         self.eon_wrapper = ctx.eon_wrapper
         self.deposition_manager = ctx.deposition_manager
 

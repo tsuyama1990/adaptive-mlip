@@ -1,9 +1,7 @@
+from enum import StrEnum
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
-
-
-from enum import StrEnum
 
 
 class ScenarioName(StrEnum):

@@ -9,7 +9,6 @@ from pyacemaker.domain_models.constants import (
     ERR_POTENTIAL_NOT_FOUND,
     ERR_VAL_POT_NONE,
     ERR_VAL_POT_NOT_FILE,
-    ERR_VAL_REQ_STRUCT,
     ERR_VAL_STRUCT_DUMMY_ELEM,
     ERR_VAL_STRUCT_EMPTY,
     ERR_VAL_STRUCT_NAN_POS,
@@ -110,30 +109,58 @@ class LammpsInputValidator:
         return path
 
 
+class PhononValidator:
+    """Validator for phonon stability."""
+    def __init__(self, calculator: PhononCalculator) -> None:
+        self.calculator = calculator
+
+    def validate(self, structure: Atoms, potential_path: Path) -> tuple[bool, Path]:
+        return self.calculator.check_stability(structure, potential_path)
+
+class ElasticValidator:
+    """Validator for elastic stability."""
+    def __init__(self, calculator: ElasticCalculator) -> None:
+        self.calculator = calculator
+
+    def validate(self, structure: Atoms, potential_path: Path) -> tuple[bool, list[list[float]], float, Path]:
+        return self.calculator.calculate_properties(structure, potential_path)
+
+class ReportValidator:
+    """Generates validation reports."""
+    def __init__(self, report_generator: Any) -> None:
+        self.report_gen = report_generator
+
+    def generate(self, result: ValidationResult, output_path: Path) -> None:
+        html = self.report_gen.generate(result)
+        self.report_gen.save(output_path, html)
+
+class StructureRelaxer:
+    """Relaxes structures for validation."""
+    def __init__(self, engine: Any) -> None:
+        self.engine = engine
+
+    def relax(self, structure: Atoms, potential_path: Path) -> Atoms:
+        return self.engine.relax(structure, potential_path)
+
 class Validator:
     """
     Coordinates the validation of potentials using Phonopy and Elastic checks.
+    Uses composition of specialized validators to adhere to Single Responsibility Principle.
     """
 
     def __init__(
         self,
         config: ValidationConfig,
-        phonon_calculator: PhononCalculator,
-        elastic_calculator: ElasticCalculator,
-        report_generator: Any,
+        phonon_validator: PhononValidator,
+        elastic_validator: ElasticValidator,
+        report_validator: ReportValidator,
+        relaxer: StructureRelaxer,
     ) -> None:
         self.config = config
-        self.phonon_calc = phonon_calculator
-        self.elastic_calc = elastic_calculator
-        self.report_gen = report_generator
-
-    def _relax_structure(self, structure: Atoms, potential_path: Path) -> Atoms:
-        """
-        Relaxes the structure using the engine provided in calculators.
-        """
-        # Use engine from elastic_calc (arbitrary choice, they should share engine)
-        engine = self.elastic_calc.engine
-        return engine.relax(structure, potential_path)
+        self.phonon_validator = phonon_validator
+        self.elastic_validator = elastic_validator
+        self.report_validator = report_validator
+        self.relaxer = relaxer
 
     def validate(
         self, potential_path: Path, output_path: Path, structure: Atoms
@@ -145,15 +172,15 @@ class Validator:
         LammpsInputValidator.validate_structure(structure)
 
         # Relax structure
-        relaxed_structure = self._relax_structure(structure, potential_path)
+        relaxed_structure = self.relaxer.relax(structure, potential_path)
 
         # Phonons
-        phonon_stable, phonon_plot = self.phonon_calc.check_stability(
+        phonon_stable, phonon_plot = self.phonon_validator.validate(
             relaxed_structure, potential_path
         )
 
         # Elastic
-        elastic_stable, c_ij, B, elastic_plot = self.elastic_calc.calculate_properties(
+        elastic_stable, c_ij, B, elastic_plot = self.elastic_validator.validate(
             relaxed_structure, potential_path
         )
 
@@ -167,7 +194,8 @@ class Validator:
         )
 
         # Generate Report
-        html = self.report_gen.generate(result)
-        self.report_gen.save(output_path, html)
+        from pyacemaker.utils.path import validate_path_safe
+        output_path = validate_path_safe(output_path)
+        self.report_validator.generate(result, output_path)
 
         return result

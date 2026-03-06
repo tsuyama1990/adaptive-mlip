@@ -7,6 +7,8 @@ import pytest
 from ase import Atoms
 
 from pyacemaker.core.engine import LammpsEngine
+from pyacemaker.core.io_manager import LammpsFileManager
+from pyacemaker.core.lammps_generator import LammpsScriptGenerator
 from pyacemaker.domain_models.md import MDConfig, MDSimulationResult
 
 
@@ -45,7 +47,7 @@ def test_engine_integration_workflow(
     atoms = Atoms("H", positions=[[0, 0, 0]], cell=[10, 10, 10], pbc=True)
 
     # 2. Execution
-    engine = LammpsEngine(mock_md_config)
+    engine = LammpsEngine(mock_md_config, LammpsScriptGenerator(mock_md_config), LammpsFileManager(mock_md_config))
     result = engine.run(atoms, potential_path)
 
     # 3. Verification
@@ -74,8 +76,8 @@ def test_engine_integration_lammps_failure(
     # Simulate LAMMPS command failure (on command(), not file())
     mock_lammps_module.return_value.command.side_effect = RuntimeError("LAMMPS Error")
 
-    engine = LammpsEngine(mock_md_config)
+    engine = LammpsEngine(mock_md_config, LammpsScriptGenerator(mock_md_config), LammpsFileManager(mock_md_config))
 
     # Updated match string
-    with pytest.raises(RuntimeError, match="Simulation execution failed"):
+    with pytest.raises(RuntimeError, match="LAMMPS Error"):
         engine.run(atoms, potential_path)

@@ -9,7 +9,7 @@ from ase import Atoms
 from pyacemaker.domain_models.config import PyAceConfig
 from pyacemaker.domain_models.eon import EONConfig
 from pyacemaker.domain_models.scenario import ScenarioConfig
-from pyacemaker.scenarios.fept_mgo import ScenarioContext, DepositionManager, FePtMgoScenario
+from pyacemaker.scenarios.fept_mgo import DepositionManager, FePtMgoScenario, ScenarioContext
 
 
 @pytest.fixture
@@ -29,9 +29,10 @@ def mock_config() -> Any:
 
 
 def test_fept_init(mock_config: Any) -> None:
-    scenario = FePtMgoScenario(mock_config)
+    ctx = ScenarioContext(eon_wrapper=MagicMock())
+    scenario = FePtMgoScenario(mock_config, context=ctx)
     assert scenario.name == "fept_mgo"
-    assert scenario.eon_wrapper is None  # Should be None initially or mocked
+    assert scenario.eon_wrapper is not None
 
 
 def test_fept_generate_surface(mock_config: Any) -> None:

@@ -1,10 +1,13 @@
 from collections.abc import Iterator
 from typing import Any
 
+import numpy as np
 from ase import Atoms
+from ase.io import read
 
 from pyacemaker.core.base import BasePolicy
 from pyacemaker.domain_models.structure import StructureConfig
+from pyacemaker.utils.perturbations import apply_strain, create_vacancy, rattle
 
 
 class SafeBasePolicy(BasePolicy):
@@ -14,7 +17,8 @@ class SafeBasePolicy(BasePolicy):
         """
         Generates new candidates based on policy logic.
         """
-        yield base_structure
+        for _ in range(n_structures):
+            yield base_structure.copy()
 
 
 # Re-implement ColdStartPolicy and others that might have been overwritten or missing
@@ -27,19 +31,47 @@ class ColdStartPolicy(SafeBasePolicy):
     def generate(
         self, base_structure: Atoms, config: StructureConfig, n_structures: int = 1, **kwargs: Any
     ) -> Iterator[Atoms]:
-        yield from super().generate(base_structure, config, n_structures, **kwargs)
+        yield base_structure.copy()
         # Cold start logic stub
 
+
+class MDExecutionStrategy:
+    """Strategy for executing short MD bursts."""
+    def execute(self, base_structure: Atoms, engine: Any, potential: Any, n_structures: int) -> Iterator[Atoms]:
+        original_config = engine.config
+        try:
+            # Create a temporary config for the burst without mutating the original reference long-term
+            engine.config = engine.config.model_copy(update={"n_steps": 100})
+            for _ in range(n_structures):
+                result = engine.run(base_structure, potential)
+                if result and result.trajectory_path:
+                    yield read(result.trajectory_path, index=-1)
+                else:
+                    yield base_structure.copy()
+        finally:
+            engine.config = original_config
 
 class MDMicroBurstPolicy(SafeBasePolicy):
     """
     Policy using short MD bursts to explore phase space.
     """
+    def __init__(self, md_strategy: MDExecutionStrategy | None = None) -> None:
+        self.md_strategy = md_strategy or MDExecutionStrategy()
+        super().__init__()
 
     def generate(
         self, base_structure: Atoms, config: StructureConfig, n_structures: int = 1, **kwargs: Any
     ) -> Iterator[Atoms]:
-        yield from super().generate(base_structure, config, n_structures, **kwargs)
+        engine = kwargs.get("engine")
+        if engine is None:
+            # Fallback to rattle if no engine
+            rng = np.random.default_rng()
+            for _ in range(n_structures):
+                yield rattle(base_structure, stdev=config.rattle_stdev, rng=rng)
+            return
+
+        potential = kwargs.get("potential")
+        yield from self.md_strategy.execute(base_structure, engine, potential, n_structures)
 
 
 class NormalModePolicy(SafeBasePolicy):
@@ -50,7 +82,10 @@ class NormalModePolicy(SafeBasePolicy):
     def generate(
         self, base_structure: Atoms, config: StructureConfig, n_structures: int = 1, **kwargs: Any
     ) -> Iterator[Atoms]:
-        yield from super().generate(base_structure, config, n_structures, **kwargs)
+        # Fallback to rattle
+        rng = np.random.default_rng()
+        for _ in range(n_structures):
+            yield rattle(base_structure, stdev=config.rattle_stdev, rng=rng)
 
 
 class CompositePolicy(SafeBasePolicy):
@@ -64,7 +99,16 @@ class CompositePolicy(SafeBasePolicy):
     def generate(
         self, base_structure: Atoms, config: StructureConfig, n_structures: int = 1, **kwargs: Any
     ) -> Iterator[Atoms]:
-        yield from super().generate(base_structure, config, n_structures, **kwargs)
+        if not self.policies:
+            return
+
+        n_policies = len(self.policies)
+        base_count = n_structures // n_policies
+        remainder = n_structures % n_policies
+
+        for i, policy in enumerate(self.policies):
+            count = base_count + (1 if i < remainder else 0)
+            yield from policy.generate(base_structure, config, n_structures=count, **kwargs)
 
 
 class DefectPolicy(SafeBasePolicy):
@@ -75,7 +119,9 @@ class DefectPolicy(SafeBasePolicy):
     def generate(
         self, base_structure: Atoms, config: StructureConfig, n_structures: int = 1, **kwargs: Any
     ) -> Iterator[Atoms]:
-        yield from super().generate(base_structure, config, n_structures, **kwargs)
+        rng = np.random.default_rng()
+        for _ in range(n_structures):
+            yield create_vacancy(base_structure, rate=config.vacancy_rate, rng=rng)
 
 
 class RattlePolicy(SafeBasePolicy):
@@ -86,7 +132,9 @@ class RattlePolicy(SafeBasePolicy):
     def generate(
         self, base_structure: Atoms, config: StructureConfig, n_structures: int = 1, **kwargs: Any
     ) -> Iterator[Atoms]:
-        yield from super().generate(base_structure, config, n_structures, **kwargs)
+        rng = np.random.default_rng()
+        for _ in range(n_structures):
+            yield rattle(base_structure, stdev=config.rattle_stdev, rng=rng)
 
 
 class StrainPolicy(SafeBasePolicy):
@@ -97,4 +145,8 @@ class StrainPolicy(SafeBasePolicy):
     def generate(
         self, base_structure: Atoms, config: StructureConfig, n_structures: int = 1, **kwargs: Any
     ) -> Iterator[Atoms]:
-        yield from super().generate(base_structure, config, n_structures, **kwargs)
+        rng = np.random.default_rng()
+        for _ in range(n_structures):
+            strain_val = rng.uniform(-0.05, 0.05)
+            strain_tensor = np.eye(3) * strain_val
+            yield apply_strain(base_structure, strain_tensor)

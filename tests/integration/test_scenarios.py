@@ -40,7 +40,8 @@ def test_fept_mgo_integration(integration_config):
 
     wrapper = EONWrapper(integration_config.eon, runner=mock_runner)
 
-    scenario = FePtMgoScenario(integration_config, engine=mock_engine, eon_wrapper=wrapper)
+    context = ScenarioContext(engine=mock_engine, eon_wrapper=wrapper)
+    scenario = FePtMgoScenario(integration_config, context=context)
 
     # Run in temp dir
     with tempfile.TemporaryDirectory() as tmp_dir:

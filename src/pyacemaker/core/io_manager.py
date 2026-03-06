@@ -74,18 +74,19 @@ class LammpsFileManager:
                 # It's an Atoms object.
                 elements = get_species_order(structure)
                 self._write_structure_memory(structure, data_file, elements)
-
-            return temp_dir_ctx, data_file, dump_file, log_file, elements
-
         except Exception:
             # Clean up if setup fails
             temp_dir_ctx.cleanup()
             raise
+        else:
+            return temp_dir_ctx, data_file, dump_file, log_file, elements
 
     def _write_structure_memory(
         self, structure: Atoms, output_path: Path, elements: list[str]
     ) -> None:
         """Writes structure to disk using streaming writer if possible."""
+        from pyacemaker.utils.path import validate_path_safe
+        output_path = validate_path_safe(output_path)
         try:
             # Memory Safety Fix: Always attempt streaming first if atom_style allows
             streaming_success = False

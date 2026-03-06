@@ -9,18 +9,15 @@ from pyacemaker.domain_models.defaults import (
     LOG_DRY_RUN_COMPLETE,
     LOG_PROJECT_INIT,
 )
+from pyacemaker.domain_models.scenario import ScenarioName
 from pyacemaker.logger import setup_logger
 from pyacemaker.orchestrator import Orchestrator
 from pyacemaker.scenarios.base_scenario import BaseScenario
-from typing import Type
-
-from pyacemaker.domain_models.scenario import ScenarioName
 from pyacemaker.scenarios.fept_mgo import FePtMgoScenario
 from pyacemaker.utils.io import load_config
 
-
 # Registry pattern for scenarios
-SCENARIO_REGISTRY: dict[ScenarioName, Type[BaseScenario]] = {
+SCENARIO_REGISTRY: dict[ScenarioName, type[BaseScenario]] = {
     ScenarioName.FEPT_MGO: FePtMgoScenario,
 }
 
@@ -40,15 +37,20 @@ def get_scenario_runner(name: str, config: PyAceConfig) -> BaseScenario:
     raise ValueError(msg)
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description="Adaptive MLIP construction orchestrator")
-    parser.add_argument("--config", type=str, required=True, help="Path to configuration file")
-    parser.add_argument(
-        "--dry-run", action="store_true", help="Validate config and exit without running"
-    )
-    parser.add_argument("--scenario", type=str, help="Run a specific scenario (e.g., fept_mgo)")
+class CLIParser:
+    """Parses command-line arguments."""
+    @staticmethod
+    def parse() -> argparse.Namespace:
+        parser = argparse.ArgumentParser(description="Adaptive MLIP construction orchestrator")
+        parser.add_argument("--config", type=str, required=True, help="Path to configuration file")
+        parser.add_argument(
+            "--dry-run", action="store_true", help="Validate config and exit without running"
+        )
+        parser.add_argument("--scenario", type=str, help="Run a specific scenario (e.g., fept_mgo)")
+        return parser.parse_args()
 
-    args = parser.parse_args()
+def main() -> None:
+    args = CLIParser.parse()
     config_path = Path(args.config)
 
     try:

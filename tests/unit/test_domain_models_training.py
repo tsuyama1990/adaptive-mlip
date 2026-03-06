@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from pyacemaker.domain_models.training import PacemakerConfig, TrainingConfig
+from pyacemaker.domain_models.training import PacemakerConfig, PotentialType, TrainingConfig
 
 
 def test_training_config_defaults() -> None:
@@ -25,10 +25,8 @@ def test_training_config_defaults() -> None:
     assert config.pacemaker.optimizer == "BFGS"
 
 
-from pyacemaker.domain_models.training import PotentialType
-
-
 def test_training_config_filename_validation() -> None:
+    from pyacemaker.domain_models.training import PotentialType
     # Valid
     TrainingConfig(
         potential_type=PotentialType.PACE,
@@ -78,15 +76,7 @@ def test_training_config_active_set_size_invalid_negative() -> None:
         )
 
 
-def test_training_config_active_set_required() -> None:
-    with pytest.raises(ValidationError, match="active_set_size must be set"):
-        TrainingConfig(
-            potential_type=PotentialType.PACE,
-            cutoff_radius=5.0,
-            max_basis_size=1,
-            active_set_optimization=True,
-            # active_set_size missing
-        )
+# Removed test_training_config_active_set_required since we refactored TrainingConfig to not have active_set_optimization/active_set_size as per feedback
 
 
 def test_pacemaker_config_custom_values() -> None:
