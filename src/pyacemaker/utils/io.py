@@ -1,7 +1,7 @@
-import json
 import logging
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 import numpy as np
 import yaml
@@ -30,8 +30,10 @@ def load_yaml(filepath: Path) -> dict[str, Any]:
     with filepath.open("r") as f:
         return yaml.safe_load(f) or {}
 
+
 # Alias for backward compatibility
 load_config = load_yaml
+
 
 def detect_elements(data_path: Path, max_frames: int = 10) -> list[str]:
     """
@@ -56,7 +58,9 @@ def detect_elements(data_path: Path, max_frames: int = 10) -> list[str]:
                 if not new_syms.issubset(symbols):
                     symbols.update(new_syms)
     except Exception:
-        logger.warning(f"Could not fully read {data_path} to detect elements. Elements detected so far: {symbols}")
+        logger.warning(
+            f"Could not fully read {data_path} to detect elements. Elements detected so far: {symbols}"
+        )
 
     return sorted(symbols)
 
@@ -77,15 +81,13 @@ def _get_atomic_mass(symbol: str) -> float:
     """Helper to get atomic mass with caching."""
     if symbol not in _ATOMIC_MASSES_CACHE:
         from ase.data import atomic_masses, atomic_numbers
+
         _ATOMIC_MASSES_CACHE[symbol] = atomic_masses[atomic_numbers[symbol]]
     return _ATOMIC_MASSES_CACHE[symbol]
 
 
 def write_lammps_streaming(
-    fileobj: Any,
-    atoms: Atoms,
-    species: list[str],
-    atom_style: str = "atomic"
+    fileobj: Any, atoms: Atoms, species: list[str], atom_style: str = "atomic"
 ) -> None:
     """
     Writes a single frame in LAMMPS data format to an open file object.
@@ -137,8 +139,8 @@ def write_lammps_streaming(
     # Use direct array access and iterators to avoid creating large intermediate lists/arrays if possible.
     # But atoms.get_positions() returns a copy anyway.
 
-    pos = atoms.get_positions() # (N, 3)
-    symbols = atoms.get_chemical_symbols() # List of strings (N)
+    pos = atoms.get_positions()  # (N, 3)
+    symbols = atoms.get_chemical_symbols()  # List of strings (N)
 
     # Generator for lines to keep memory usage O(1) per line (after pos array overhead)
     # This avoids creating a huge string buffer or list of strings.
@@ -148,10 +150,10 @@ def write_lammps_streaming(
             try:
                 t = type_map[s]
             except KeyError:
-                 raise KeyError(f"Symbol {s} not in provided species list: {species}")
+                raise KeyError(f"Symbol {s} not in provided species list: {species}")
 
             # 1-based index
-            yield f"{i+1} {t} {pos[i, 0]:.6f} {pos[i, 1]:.6f} {pos[i, 2]:.6f}\n"
+            yield f"{i + 1} {t} {pos[i, 0]:.6f} {pos[i, 1]:.6f} {pos[i, 2]:.6f}\n"
 
     fileobj.writelines(line_generator())
 

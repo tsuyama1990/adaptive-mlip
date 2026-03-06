@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict, Field, PositiveInt
+from pydantic import BaseModel, ConfigDict, Field, PositiveInt, model_validator
 
 from pyacemaker.domain_models.defaults import (
     DEFAULT_ACTIVE_LEARNING_DIR,
@@ -17,24 +17,25 @@ from pyacemaker.domain_models.defaults import (
 
 class OTFConfig(BaseModel):
     """Configuration for On-The-Fly (OTF) Active Learning loop."""
+
     model_config = ConfigDict(extra="forbid")
 
     uncertainty_threshold: float = Field(
         default=DEFAULT_OTF_UNCERTAINTY_THRESHOLD,
         gt=0,
-        description="Gamma threshold to trigger halt and retraining."
+        description="Gamma threshold to trigger halt and retraining.",
     )
     local_n_candidates: PositiveInt = Field(
         default=DEFAULT_OTF_LOCAL_N_CANDIDATES,
-        description="Number of local candidates to generate around halt structure."
+        description="Number of local candidates to generate around halt structure.",
     )
     local_n_select: PositiveInt = Field(
         default=DEFAULT_OTF_LOCAL_N_SELECT,
-        description="Number of candidates to select via active set optimization."
+        description="Number of candidates to select via active set optimization.",
     )
     max_retries: PositiveInt = Field(
         default=DEFAULT_OTF_MAX_RETRIES,
-        description="Maximum number of retraining attempts per iteration."
+        description="Maximum number of retraining attempts per iteration.",
     )
 
 
@@ -73,7 +74,12 @@ class WorkflowConfig(BaseModel):
         default=DEFAULT_POTENTIALS_DIR, description="Directory for storing trained potentials"
     )
 
-    otf: OTFConfig = Field(
-        default_factory=OTFConfig,
-        description="Configuration for OTF loop."
-    )
+    otf: OTFConfig = Field(default_factory=OTFConfig, description="Configuration for OTF loop.")
+
+    @model_validator(mode="after")
+    def validate_checkpoint_interval(self) -> "WorkflowConfig":
+        """Ensures checkpoint_interval is logically sound."""
+        if self.checkpoint_interval > self.max_iterations:
+            msg = "checkpoint_interval cannot be greater than max_iterations"
+            raise ValueError(msg)
+        return self

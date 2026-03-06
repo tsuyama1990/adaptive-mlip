@@ -41,10 +41,7 @@ def test_structure_config_invalid_supercell() -> None:
 
 def test_structure_config_policy() -> None:
     config = StructureConfig(
-        elements=["Fe"],
-        supercell_size=[1,1,1],
-        policy_name="random_rattle",
-        rattle_stdev=0.2
+        elements=["Fe"], supercell_size=[1, 1, 1], policy_name="random_rattle", rattle_stdev=0.2
     )
     assert config.policy_name == ExplorationPolicy.RANDOM_RATTLE
     assert config.rattle_stdev == 0.2
@@ -64,8 +61,13 @@ def test_dft_config_valid(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> No
     assert config.encut == 500.0
 
 
+from pyacemaker.domain_models.training import PotentialType
+
+
 def test_training_config_valid() -> None:
-    config = TrainingConfig(potential_type="ace", cutoff_radius=5.0, max_basis_size=500)
+    config = TrainingConfig(
+        potential_type=PotentialType.PACE, cutoff_radius=5.0, max_basis_size=500
+    )
     assert config.cutoff_radius == 5.0
 
 
@@ -113,7 +115,9 @@ def test_pyace_config_valid(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
         encut=400.0,
         pseudopotentials={"Al": "Al.UPF"},
     )
-    training = TrainingConfig(potential_type="ace", cutoff_radius=4.5, max_basis_size=500)
+    training = TrainingConfig(
+        potential_type=PotentialType.PACE, cutoff_radius=4.5, max_basis_size=500
+    )
     md = MDConfig(temperature=300.0, pressure=0.0, timestep=0.001, n_steps=1000)
     workflow = WorkflowConfig(max_iterations=10)
     logging = LoggingConfig()

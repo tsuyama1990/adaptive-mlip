@@ -137,6 +137,18 @@ class DepositionManager:
         return structure  # type: ignore[no-any-return]
 
 
+class ScenarioContext:
+    def __init__(
+        self,
+        engine: LammpsEngine | None = None,
+        eon_wrapper: EONWrapper | None = None,
+        deposition_manager: DepositionManager | None = None,
+    ) -> None:
+        self.engine = engine
+        self.eon_wrapper = eon_wrapper
+        self.deposition_manager = deposition_manager
+
+
 class FePtMgoScenario(BaseScenario):
     """
     Implements the 'Grand Challenge': Fe/Pt deposition on MgO (001) surface
@@ -146,14 +158,13 @@ class FePtMgoScenario(BaseScenario):
     def __init__(
         self,
         config: "PyAceConfig",
-        engine: LammpsEngine | None = None,
-        eon_wrapper: EONWrapper | None = None,
-        deposition_manager: DepositionManager | None = None,
+        context: ScenarioContext | None = None,
     ) -> None:
         super().__init__(config)
-        self.engine = engine or LammpsEngine(self.config.md)
-        self.eon_wrapper = eon_wrapper
-        self.deposition_manager = deposition_manager
+        ctx = context or ScenarioContext()
+        self.engine = ctx.engine or LammpsEngine(self.config.md)
+        self.eon_wrapper = ctx.eon_wrapper
+        self.deposition_manager = ctx.deposition_manager
 
         # Validate parameters
         try:

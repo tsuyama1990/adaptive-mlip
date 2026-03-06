@@ -22,16 +22,17 @@ def test_uat_fit_potential(tmp_path: Path) -> None:
         max_basis_size=2,
         delta_learning=True,
         output_filename="output_potential.yace",
-        elements=["H"]
+        elements=["H"],
     )
     trainer = PacemakerTrainer(config)
 
     # Use run_command patch to simulate success without real Pacemaker
     # And verify config file content
-    with patch("pyacemaker.core.trainer.run_command") as mock_run, \
-         patch("pyacemaker.core.trainer.dump_yaml") as mock_dump, \
-         patch("shutil.which", return_value="/usr/bin/pace_train"):  # Mock executable check
-
+    with (
+        patch("pyacemaker.core.trainer.run_command") as mock_run,
+        patch("pyacemaker.core.trainer.dump_yaml") as mock_dump,
+        patch("shutil.which", return_value="/usr/bin/pace_train"),
+    ):  # Mock executable check
         # Simulate output file creation
         (tmp_path / "output_potential.yace").touch()
 
@@ -50,6 +51,7 @@ def test_uat_fit_potential(tmp_path: Path) -> None:
         assert config_dict["backend"]["evaluator"] == "tensorpot"
         assert config_dict["backend"]["display_step"] == 50
 
+
 def test_uat_fit_potential_failure(tmp_path: Path) -> None:
     # GIVEN a labelled dataset
     dataset_path = tmp_path / "train.xyz"
@@ -61,7 +63,7 @@ def test_uat_fit_potential_failure(tmp_path: Path) -> None:
         max_basis_size=2,
         delta_learning=True,
         output_filename="output_potential.yace",
-        elements=["H"]
+        elements=["H"],
     )
     trainer = PacemakerTrainer(config)
 
@@ -70,16 +72,18 @@ def test_uat_fit_potential_failure(tmp_path: Path) -> None:
 
     from pyacemaker.core.exceptions import TrainerError
 
-    with patch("pyacemaker.core.trainer.run_command") as mock_run, \
-         patch("shutil.which", return_value="/usr/bin/pace_train"):
-
+    with (
+        patch("pyacemaker.core.trainer.run_command") as mock_run,
+        patch("shutil.which", return_value="/usr/bin/pace_train"),
+    ):
         mock_run.side_effect = subprocess.CalledProcessError(1, "cmd", stderr="Simulated Crash")
 
         with pytest.raises(TrainerError, match="Training failed with exit code 1"):
             trainer.train(dataset_path)
 
+
 def test_uat_active_set_selection(tmp_path: Path) -> None:
-    pool = [Atoms('H') for _ in range(20)]
+    pool = [Atoms("H") for _ in range(20)]
     pot_path = tmp_path / "current.yace"
     pot_path.touch()
 

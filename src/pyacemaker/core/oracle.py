@@ -1,11 +1,12 @@
 import contextlib
+import logging
 import tempfile
 from collections.abc import Callable, Iterator
 from itertools import islice
 from pathlib import Path
 
 from ase import Atoms
-from ase.calculators.calculator import PropertyNotImplementedError
+from ase.calculators.calculator import CalculationFailed, CalculatorSetupError, PropertyNotImplementedError
 
 from pyacemaker.core.base import BaseOracle
 from pyacemaker.core.exceptions import OracleError
@@ -13,9 +14,9 @@ from pyacemaker.domain_models import DFTConfig
 from pyacemaker.domain_models.constants import ERR_ORACLE_FAILED, ERR_ORACLE_ITERATOR
 from pyacemaker.interfaces.qe_driver import QEDriver
 from pyacemaker.utils.embedding import embed_cluster
-import logging
 
 logger = logging.getLogger(__name__)
+
 
 class DFTManager(BaseOracle):
     """
@@ -43,7 +44,7 @@ class DFTManager(BaseOracle):
             None,
             self._strategy_reduce_beta,
             self._strategy_increase_smearing,
-            self._strategy_use_cg
+            self._strategy_use_cg,
         ]
 
     def compute(self, structures: Iterator[Atoms], batch_size: int = 10) -> Iterator[Atoms]:
@@ -72,43 +73,14 @@ class DFTManager(BaseOracle):
 
     def _compute_generator(self, structures: Iterator[Atoms], batch_size: int) -> Iterator[Atoms]:
         """Internal generator for streaming computations with batching."""
-        # Use batched processing (chunking) to reuse temporary directories
-        # without materializing the whole batch in memory list.
-        # However, islice consumes the iterator.
-
         while True:
-            # Create a batch generator (iterator slice)
-            # Note: list(islice(...)) materializes the batch.
-            # To avoid materializing even the batch if batch_size is huge, we should process one by one
-            # BUT reuse the context.
-            # The audit requirement was: "DFTManager.compute method accepts batch_size parameter but ignores it... Implement proper batching logic"
-            # Batching usually implies grouping. If we process 1 by 1 inside a loop of batch_size, we achieve the goal.
-
-            # We can use a single temp dir for 'batch_size' items.
-            # But since we want to yield as soon as one is done, we iterate `batch_size` times.
-
-            # Since we can't easily peek existence of next item without consuming,
-            # we iterate until exhaustion.
-
-            # Efficient pattern:
-            # Create temp dir. Process N items. Close temp dir. Repeat.
-
-            # Check if there are items left?
-            # We can just try to take `batch_size` items.
-            # list(islice) is standard but creates a list of `batch_size`.
-            # If batch_size is small (e.g. 10-100), this is fine.
-            # If batch_size is huge (unlikely default), it might be an issue.
-            # Let's assume batch_size is reasonable (10-1000).
-
-            batch = list(islice(structures, batch_size))
-            if not batch:
-                break
-
             with tempfile.TemporaryDirectory() as work_dir:
                 work_path = Path(work_dir)
-                for i, atoms in enumerate(batch):
-                    # Use unique subdirs or filenames to avoid collision if artifacts persist
-                    # though we process sequentially here.
+                for i in range(batch_size):
+                    try:
+                        atoms = next(structures)
+                    except StopIteration:
+                        return
                     calc_dir = work_path / f"calc_{i}"
                     calc_dir.mkdir()
                     yield self._process_structure(atoms, str(calc_dir))
@@ -128,6 +100,9 @@ class DFTManager(BaseOracle):
         # Apply Periodic Embedding if configured
         if self.config.embedding_buffer:
             structure_to_compute = embed_cluster(atoms, buffer=self.config.embedding_buffer)
+            # Preserve uncertainty information if present
+            if "c_gamma" in atoms.arrays:
+                structure_to_compute.new_array("c_gamma", atoms.get_array("c_gamma").copy())  # type: ignore[no-untyped-call]
         else:
             structure_to_compute = atoms
 
@@ -175,15 +150,15 @@ class DFTManager(BaseOracle):
 
             try:
                 self._run_calculator(atoms, current_config, calc_dir)
-            except Exception as e:
-                # Catch all exceptions (RuntimeError, CalculatorSetupError, JobFailedException etc)
+            except (RuntimeError, CalculatorSetupError, CalculationFailed) as e:
+                # Catch specific exceptions related to calculation failure
                 # to ensure self-healing strategies are attempted.
                 last_error = e
                 atoms.calc = None  # Clean up failed calculator
 
                 # Enhanced Logging for debugging
                 logger.warning(
-                    f"DFT calculation attempt {i+1} ({strategy_name}) failed. Error: {e!s}. Retrying..."
+                    f"DFT calculation attempt {i + 1} ({strategy_name}) failed. Error: {e!s}. Retrying..."
                 )
                 continue
             else:
@@ -199,10 +174,15 @@ class DFTManager(BaseOracle):
         calc = self.driver.get_calculator(atoms, config.model_copy(), directory=calc_dir)
         atoms.calc = calc
 
-        # Trigger actual calculation
-        atoms.get_potential_energy()  # type: ignore[no-untyped-call]
-        atoms.get_forces()  # type: ignore[no-untyped-call]
+        try:
+            # Trigger actual calculation
+            atoms.get_potential_energy()  # type: ignore[no-untyped-call]
+            atoms.get_forces()  # type: ignore[no-untyped-call]
 
-        # Try to get stress (optional)
-        with contextlib.suppress(PropertyNotImplementedError, RuntimeError):
-            atoms.get_stress()  # type: ignore[no-untyped-call]
+            # Try to get stress (optional)
+            with contextlib.suppress(PropertyNotImplementedError, RuntimeError):
+                atoms.get_stress()  # type: ignore[no-untyped-call]
+        except (CalculationFailed, RuntimeError) as e:
+            # Explicitly log convergence or execution failure specifically
+            logger.debug(f"Calculator failed specifically during execution/convergence: {e}")
+            raise
