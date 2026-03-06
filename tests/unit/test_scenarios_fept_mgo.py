@@ -9,7 +9,7 @@ from ase import Atoms
 from pyacemaker.domain_models.config import PyAceConfig
 from pyacemaker.domain_models.eon import EONConfig
 from pyacemaker.domain_models.scenario import ScenarioConfig
-from pyacemaker.scenarios.fept_mgo import DepositionManager, FePtMgoScenario
+from pyacemaker.scenarios.fept_mgo import ScenarioContext, DepositionManager, FePtMgoScenario
 
 
 @pytest.fixture
@@ -55,7 +55,7 @@ def test_fept_deposit_atoms_deterministic(mock_config: Any) -> None:
 
     mock_engine.relax.side_effect = mock_relax
 
-    scenario1 = FePtMgoScenario(mock_config, engine=mock_engine)
+    scenario1 = FePtMgoScenario(mock_config, context=ScenarioContext(engine=mock_engine))
     slab1 = scenario1._generate_surface()
     # Manually instantiate DepositionManager as it's now decoupled
     pot_path1 = scenario1._get_potential_path()
@@ -63,7 +63,7 @@ def test_fept_deposit_atoms_deterministic(mock_config: Any) -> None:
     deposited1 = dm1.deposit(slab1)
 
     # Run again with same seed
-    scenario2 = FePtMgoScenario(mock_config, engine=mock_engine)
+    scenario2 = FePtMgoScenario(mock_config, context=ScenarioContext(engine=mock_engine))
     slab2 = scenario2._generate_surface()
     pot_path2 = scenario2._get_potential_path()
     dm2 = DepositionManager(mock_engine, scenario2.params, pot_path2)
@@ -82,7 +82,7 @@ def test_fept_run_flow(mock_config: Any) -> None:
 
     mock_eon = MagicMock()
 
-    scenario = FePtMgoScenario(mock_config, engine=mock_engine, eon_wrapper=mock_eon)
+    scenario = FePtMgoScenario(mock_config, context=ScenarioContext(engine=mock_engine, eon_wrapper=mock_eon))
 
     # Mock write to avoid file creation in CWD during test
     with patch("pyacemaker.scenarios.fept_mgo.write") as mock_write:
@@ -99,7 +99,7 @@ def test_fept_relaxation_failure(mock_config: Any) -> None:
     mock_engine = MagicMock()
     mock_engine.relax.side_effect = Exception("Relaxation failed")
 
-    scenario = FePtMgoScenario(mock_config, engine=mock_engine)
+    scenario = FePtMgoScenario(mock_config, context=ScenarioContext(engine=mock_engine))
     slab = scenario._generate_surface()
     dm = DepositionManager(mock_engine, scenario.params, Path("pot"))
 
@@ -113,7 +113,7 @@ def test_deposition_manager_error(mock_config: Any) -> None:
     # relaxation fails
     mock_engine.relax.side_effect = Exception("Fail")
 
-    scenario = FePtMgoScenario(mock_config, engine=mock_engine)
+    scenario = FePtMgoScenario(mock_config, context=ScenarioContext(engine=mock_engine))
     dm = DepositionManager(mock_engine, scenario.params, Path("pot"))
     slab = scenario._generate_surface()
 

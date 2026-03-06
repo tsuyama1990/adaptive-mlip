@@ -12,14 +12,23 @@ from pyacemaker.domain_models.defaults import (
 from pyacemaker.logger import setup_logger
 from pyacemaker.orchestrator import Orchestrator
 from pyacemaker.scenarios.base_scenario import BaseScenario
+from typing import Type
+
+from pyacemaker.domain_models.scenario import ScenarioName
 from pyacemaker.scenarios.fept_mgo import FePtMgoScenario
 from pyacemaker.utils.io import load_config
 
 
+# Registry pattern for scenarios
+SCENARIO_REGISTRY: dict[str, Type[BaseScenario]] = {
+    ScenarioName.FEPT_MGO.value: FePtMgoScenario,
+}
+
 def get_scenario_runner(name: str, config: PyAceConfig) -> BaseScenario:
     """Factory method to get the appropriate scenario runner."""
-    if name == "fept_mgo":
-        return FePtMgoScenario(config)
+    scenario_cls = SCENARIO_REGISTRY.get(name)
+    if scenario_cls is not None:
+        return scenario_cls(config)
     msg = f"Unknown scenario: {name}"
     raise ValueError(msg)
 

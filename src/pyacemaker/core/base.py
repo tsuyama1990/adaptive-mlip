@@ -6,6 +6,7 @@ from typing import Any
 from ase import Atoms
 
 from pyacemaker.domain_models.md import MDSimulationResult
+from pyacemaker.domain_models.structure import StructureConfig
 
 
 class BasePolicy(ABC):
@@ -13,7 +14,13 @@ class BasePolicy(ABC):
     Abstract base class for exploration policies.
     """
     @abstractmethod
-    def generate(self, **kwargs: Any) -> None:
+    def generate(
+        self,
+        base_structure: Atoms,
+        config: StructureConfig,
+        n_structures: int = 1,
+        **kwargs: Any
+    ) -> Iterator[Atoms]:
         """
         Generates new candidates based on policy logic.
         """

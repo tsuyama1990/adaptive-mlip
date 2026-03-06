@@ -9,7 +9,7 @@ from pyacemaker.domain_models.config import PyAceConfig
 from pyacemaker.domain_models.eon import EONConfig
 from pyacemaker.domain_models.scenario import ScenarioConfig
 from pyacemaker.interfaces.eon_driver import EONWrapper
-from pyacemaker.scenarios.fept_mgo import FePtMgoScenario
+from pyacemaker.scenarios.fept_mgo import FePtMgoScenario, ScenarioContext
 
 
 @pytest.fixture

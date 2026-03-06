@@ -18,7 +18,7 @@ def setup_logger(config: LoggingConfig, project_name: str) -> logging.Logger:
     Returns:
         Configured Logger instance.
     """
-    logger = logging.getLogger(project_name)
+    logger = logging.getLogger(f"pyacemaker.{project_name}")
 
     # If handlers already exist, assume it's already configured and return.
     # This prevents duplicate logs if setup_logger is called multiple times.
