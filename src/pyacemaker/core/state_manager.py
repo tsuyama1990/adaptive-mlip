@@ -20,7 +20,7 @@ class StateManager:
         self.logger = logger
         self.state = LoopState()
 
-    def load(self) -> None:
+    def load(self) -> LoopState:
         """Loads the iteration state."""
         try:
             self.state = LoopState.load(self.state_file)
@@ -28,6 +28,12 @@ class StateManager:
         except Exception as e:
             self.logger.warning(LOG_STATE_LOAD_FAIL.format(error=e))
             self.state = LoopState()
+        return self.state
+
+    def reset(self) -> None:
+        """Resets the state to initial values."""
+        self.state = LoopState()
+        self.save()
 
     def save(self) -> None:
         """Saves the current iteration state."""

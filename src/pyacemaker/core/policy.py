@@ -35,10 +35,29 @@ class ColdStartPolicy(SafeBasePolicy):
         # Cold start logic stub
 
 
+class MDExecutionStrategy:
+    """Strategy for executing short MD bursts."""
+    def execute(self, base_structure: Atoms, engine: Any, potential: Any, n_structures: int) -> Iterator[Atoms]:
+        original_config = engine.config
+        try:
+            # Create a temporary config for the burst without mutating the original reference long-term
+            engine.config = engine.config.model_copy(update={"n_steps": 100})
+            for _ in range(n_structures):
+                result = engine.run(base_structure, potential)
+                if result and result.trajectory_path:
+                    yield read(result.trajectory_path, index=-1)
+                else:
+                    yield base_structure.copy()
+        finally:
+            engine.config = original_config
+
 class MDMicroBurstPolicy(SafeBasePolicy):
     """
     Policy using short MD bursts to explore phase space.
     """
+    def __init__(self, md_strategy: MDExecutionStrategy | None = None) -> None:
+        self.md_strategy = md_strategy or MDExecutionStrategy()
+        super().__init__()
 
     def generate(
         self, base_structure: Atoms, config: StructureConfig, n_structures: int = 1, **kwargs: Any
@@ -52,18 +71,7 @@ class MDMicroBurstPolicy(SafeBasePolicy):
             return
 
         potential = kwargs.get("potential")
-
-        md_config = engine.config.model_copy(update={"n_steps": 100})
-        # Note: Ideally we should use the engine.config type to instantiate a new engine,
-        # but the test logic implies we mock it so engine.run() works.
-        engine.config = md_config
-
-        for _ in range(n_structures):
-            result = engine.run(base_structure, potential)
-            if result and result.trajectory_path:
-                yield read(result.trajectory_path, index=-1)
-            else:
-                yield base_structure.copy()
+        yield from self.md_strategy.execute(base_structure, engine, potential, n_structures)
 
 
 class NormalModePolicy(SafeBasePolicy):

@@ -85,7 +85,8 @@ class PacemakerTrainer(BaseTrainer):
             raise TrainerError(msg) from e
 
         if not potential_path.exists():
-            logger.error(f"Potential file was not created at {potential_path}")
+            import logging
+            logging.getLogger(__name__).error(f"Potential file was not created at {potential_path}")
             return None
 
         return potential_path

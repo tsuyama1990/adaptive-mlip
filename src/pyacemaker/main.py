@@ -37,15 +37,20 @@ def get_scenario_runner(name: str, config: PyAceConfig) -> BaseScenario:
     raise ValueError(msg)
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description="Adaptive MLIP construction orchestrator")
-    parser.add_argument("--config", type=str, required=True, help="Path to configuration file")
-    parser.add_argument(
-        "--dry-run", action="store_true", help="Validate config and exit without running"
-    )
-    parser.add_argument("--scenario", type=str, help="Run a specific scenario (e.g., fept_mgo)")
+class CLIParser:
+    """Parses command-line arguments."""
+    @staticmethod
+    def parse() -> argparse.Namespace:
+        parser = argparse.ArgumentParser(description="Adaptive MLIP construction orchestrator")
+        parser.add_argument("--config", type=str, required=True, help="Path to configuration file")
+        parser.add_argument(
+            "--dry-run", action="store_true", help="Validate config and exit without running"
+        )
+        parser.add_argument("--scenario", type=str, help="Run a specific scenario (e.g., fept_mgo)")
+        return parser.parse_args()
 
-    args = parser.parse_args()
+def main() -> None:
+    args = CLIParser.parse()
     config_path = Path(args.config)
 
     try:

@@ -1,3 +1,6 @@
+from pyacemaker.core.lammps_generator import LammpsScriptGenerator
+from pyacemaker.core.io_manager import LammpsFileManager
+
 import re
 from pathlib import Path
 from typing import Any
@@ -45,7 +48,7 @@ def test_lammps_engine_run(mock_md_config: MDConfig, mock_driver: Any, tmp_path:
 
     # Enable fix_halt to test gamma extraction
     config = mock_md_config.model_copy(update={"fix_halt": True})
-    engine = LammpsEngine(config)
+    engine = LammpsEngine(config, LammpsScriptGenerator(config), LammpsFileManager(config))
     atoms = Atoms("H", cell=[10, 10, 10], pbc=True)
 
     # Create dummy potential file
@@ -90,7 +93,7 @@ def test_lammps_engine_halted(mock_md_config: MDConfig, mock_driver: Any, tmp_pa
 
     # Enable fix_halt to test halted logic
     config = mock_md_config.model_copy(update={"fix_halt": True})
-    engine = LammpsEngine(config)
+    engine = LammpsEngine(config, LammpsScriptGenerator(config), LammpsFileManager(config))
     atoms = Atoms("H", cell=[10, 10, 10], pbc=True)
     pot_path = tmp_path / "potential.yace"
     pot_path.touch()
@@ -111,7 +114,7 @@ def test_lammps_engine_hybrid_potential(
         update={"hybrid_potential": True, "hybrid_params": hybrid_params}
     )
 
-    engine = LammpsEngine(config)
+    engine = LammpsEngine(config, LammpsScriptGenerator(config), LammpsFileManager(config))
     atoms = Atoms("Al", cell=[10, 10, 10], pbc=True)
     pot_path = tmp_path / "potential.yace"
     pot_path.touch()
@@ -142,7 +145,7 @@ def test_lammps_engine_hybrid_potential(
 
 def test_run_empty_structure_error(mock_md_config: MDConfig, tmp_path: Path) -> None:
     """Tests error handling for empty structure."""
-    engine = LammpsEngine(mock_md_config)
+    engine = LammpsEngine(mock_md_config, LammpsScriptGenerator(mock_md_config), LammpsFileManager(mock_md_config))
     atoms = Atoms()  # Empty
     pot_path = tmp_path / "pot.yace"
     pot_path.touch()
@@ -154,7 +157,7 @@ def test_run_empty_structure_error(mock_md_config: MDConfig, tmp_path: Path) -> 
 
 def test_run_missing_potential_error(mock_md_config: MDConfig) -> None:
     """Tests error handling for missing potential file."""
-    engine = LammpsEngine(mock_md_config)
+    engine = LammpsEngine(mock_md_config, LammpsScriptGenerator(mock_md_config), LammpsFileManager(mock_md_config))
     atoms = Atoms("H", cell=[10, 10, 10], pbc=True)
 
     with pytest.raises(FileNotFoundError, match="Potential file not found"):
@@ -168,7 +171,7 @@ def test_run_large_structure_warning(
     import logging
 
     caplog.set_level(logging.INFO)
-    engine = LammpsEngine(mock_md_config)
+    engine = LammpsEngine(mock_md_config, LammpsScriptGenerator(mock_md_config), LammpsFileManager(mock_md_config))
     # Create large structure > 10k
     atoms = Atoms(
         symbols=["H"] * 10001, positions=[[0, 0, 0]] * 10001, cell=[100, 100, 100], pbc=True
@@ -200,7 +203,7 @@ def test_run_driver_failure(mock_md_config: MDConfig, mock_driver: Any, tmp_path
     driver_instance = mock_driver.return_value
     driver_instance.run_file.side_effect = RuntimeError("LAMMPS crashed")
 
-    engine = LammpsEngine(mock_md_config)
+    engine = LammpsEngine(mock_md_config, LammpsScriptGenerator(mock_md_config), LammpsFileManager(mock_md_config))
     atoms = Atoms("H", cell=[10, 10, 10], pbc=True)
     pot_path = tmp_path / "pot.yace"
     pot_path.touch()

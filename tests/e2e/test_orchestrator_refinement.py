@@ -73,12 +73,10 @@ class FakeActiveSetSelector(ActiveSetSelector):
             yield cands[i]
 
 
-def test_orchestrator_refinement_logic(tmp_path: Path) -> None:
-    # Create dummy UPF
+@pytest.fixture
+def base_config(tmp_path: Path) -> PyAceConfig:
     (tmp_path / "H.UPF").write_text("dummy UPF content")
-
-    # 1. Setup Config
-    config = PyAceConfig(
+    return PyAceConfig(
         project_name="TestRefine",
         structure=StructureConfig(elements=["H"], supercell_size=[1, 1, 1]),
         dft=DFTConfig(
@@ -99,6 +97,9 @@ def test_orchestrator_refinement_logic(tmp_path: Path) -> None:
         ),
         logging=LoggingConfig(level="DEBUG"),
     )
+
+def test_orchestrator_refinement_logic(base_config: PyAceConfig, tmp_path: Path) -> None:
+    config = base_config
 
     # 2. Setup Orchestrator
     orch = Orchestrator(config)
@@ -157,35 +158,9 @@ def test_orchestrator_refinement_logic(tmp_path: Path) -> None:
     assert any(paths["training"].iterdir())
 
 
-def test_orchestrator_refinement_extraction_failure(tmp_path: Path, caplog: Any) -> None:
+def test_orchestrator_refinement_extraction_failure(base_config: PyAceConfig, tmp_path: Path, caplog: Any) -> None:
     # Test graceful handling of extraction failure
-
-    # Create dummy UPF
-    (tmp_path / "H.UPF").write_text("dummy UPF content")
-
-    # Setup minimal config & orch
-    config = PyAceConfig(
-        project_name="TestRefine",
-        structure=StructureConfig(elements=["H"], supercell_size=[1, 1, 1]),
-        dft=DFTConfig(
-            code="qe",
-            functional="PBE",
-            pseudopotentials={"H": str(tmp_path / "H.UPF")},
-            kpoints_density=0.04,
-            encut=400.0,
-        ),
-        training=TrainingConfig(potential_type="pace", cutoff_radius=4.0, max_basis_size=100),
-        md=MDConfig(temperature=300.0, pressure=0.0, timestep=0.001, n_steps=100, fix_halt=True),
-        workflow=WorkflowConfig(
-            max_iterations=1,
-            state_file_path=str(tmp_path / "state.json"),
-            data_dir=str(tmp_path / "data"),
-            active_learning_dir=str(tmp_path / "al"),
-            potentials_dir=str(tmp_path / "pots"),
-        ),
-        logging=LoggingConfig(level="DEBUG"),
-    )
-    orch = Orchestrator(config)
+    orch = Orchestrator(base_config)
 
     # Inject modules
     orch.generator = FakeGenerator()

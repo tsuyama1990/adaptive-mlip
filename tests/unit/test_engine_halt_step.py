@@ -1,3 +1,6 @@
+from pyacemaker.core.lammps_generator import LammpsScriptGenerator
+from pyacemaker.core.io_manager import LammpsFileManager
+
 from pathlib import Path
 from unittest.mock import patch
 
@@ -32,7 +35,7 @@ def test_lammps_engine_halt_step_populated(tmp_path: Path) -> None:
         driver.get_forces.return_value = np.zeros((1, 3))
         driver.get_stress.return_value = np.zeros(6)
 
-        engine = LammpsEngine(config)
+        engine = LammpsEngine(config, LammpsScriptGenerator(config), LammpsFileManager(config))
         atoms = Atoms("H", cell=[10, 10, 10], pbc=True)
         pot_path = tmp_path / "pot.yace"
         pot_path.touch()
@@ -68,7 +71,7 @@ def test_lammps_engine_halt_step_none_if_not_halted(tmp_path: Path) -> None:
         driver.get_forces.return_value = np.zeros((1, 3))
         driver.get_stress.return_value = np.zeros(6)
 
-        engine = LammpsEngine(config)
+        engine = LammpsEngine(config, LammpsScriptGenerator(config), LammpsFileManager(config))
         atoms = Atoms("H", cell=[10, 10, 10], pbc=True)
         pot_path = tmp_path / "pot.yace"
         pot_path.touch()

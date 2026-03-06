@@ -12,64 +12,73 @@ from pyacemaker.core.trainer import PacemakerTrainer
 from pyacemaker.domain_models.training import TrainingConfig
 
 
-def test_pacemaker_integration_full_flow(tmp_path: Path) -> None:
-    """
-    Integration test for PacemakerTrainer.
-    Verifies:
-    1. Input file reading (element detection).
-    2. Config generation (using defaults).
-    3. Command execution (mocked).
-    4. Output file handling.
-    """
-    # 1. Setup Data
+@pytest.fixture
+def base_training_data(tmp_path: Path) -> Path:
     data_path = tmp_path / "training_data.xyz"
-    # Write a few frames to test element detection
     atoms = [Atoms("H2O"), Atoms("H2O")]
     write(data_path, atoms)
+    return data_path
 
-    output_pot_path = tmp_path / "output.yace"
-
-    # 2. Config
-    config = TrainingConfig(
+@pytest.fixture
+def trainer_config() -> TrainingConfig:
+    return TrainingConfig(
         potential_type="pace",
         cutoff_radius=4.0,
         max_basis_size=300,
         output_filename="output.yace",
-        # No elements specified, relies on detection
     )
 
-    trainer = PacemakerTrainer(config)
+def test_pacemaker_element_detection(tmp_path: Path, base_training_data: Path, trainer_config: TrainingConfig) -> None:
+    trainer = PacemakerTrainer(trainer_config)
 
-    # 3. Mock Execution Environment
-    # We mock:
-    # - shutil.which (to simulate pace_train exists)
-    # - subprocess.run (to simulate successful execution)
     with (
         patch("shutil.which", return_value="/usr/bin/pace_train"),
         patch("pyacemaker.core.trainer.run_command") as mock_run,
     ):
-        # Simulate output file creation by the external process
         def side_effect(cmd: list[str], **kwargs: Any) -> MagicMock:
-            # cmd[0] is 'pace_train', cmd[1] is input.yaml path
             input_yaml = Path(cmd[1])
-            assert input_yaml.exists()
-
-            # Verify generated YAML content
             with input_yaml.open() as f:
                 data = yaml.safe_load(f)
                 assert data["potential"]["elements"] == ["H", "O"]
-                assert data["cutoff"] == 4.0
+            (tmp_path / "output.yace").touch()
+            return MagicMock(returncode=0)
 
-            # Create the expected output file
+        mock_run.side_effect = side_effect
+        trainer.train(base_training_data)
+
+def test_pacemaker_config_generation(tmp_path: Path, base_training_data: Path, trainer_config: TrainingConfig) -> None:
+    trainer = PacemakerTrainer(trainer_config)
+
+    with (
+        patch("shutil.which", return_value="/usr/bin/pace_train"),
+        patch("pyacemaker.core.trainer.run_command") as mock_run,
+    ):
+        def side_effect(cmd: list[str], **kwargs: Any) -> MagicMock:
+            input_yaml = Path(cmd[1])
+            with input_yaml.open() as f:
+                data = yaml.safe_load(f)
+                assert data["cutoff"] == 4.0
+            (tmp_path / "output.yace").touch()
+            return MagicMock(returncode=0)
+
+        mock_run.side_effect = side_effect
+        trainer.train(base_training_data)
+
+def test_pacemaker_command_execution(tmp_path: Path, base_training_data: Path, trainer_config: TrainingConfig) -> None:
+    trainer = PacemakerTrainer(trainer_config)
+    output_pot_path = tmp_path / "output.yace"
+
+    with (
+        patch("shutil.which", return_value="/usr/bin/pace_train"),
+        patch("pyacemaker.core.trainer.run_command") as mock_run,
+    ):
+        def side_effect(cmd: list[str], **kwargs: Any) -> MagicMock:
             output_pot_path.touch()
             return MagicMock(returncode=0)
 
         mock_run.side_effect = side_effect
+        result = trainer.train(base_training_data)
 
-        # 4. Execute
-        result = trainer.train(data_path)
-
-        # 5. Verify
         assert result == output_pot_path
         assert result.exists()
         mock_run.assert_called_once()

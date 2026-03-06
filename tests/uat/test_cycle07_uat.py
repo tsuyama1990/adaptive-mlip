@@ -16,11 +16,13 @@ def validator_dependencies():
 @pytest.fixture
 def validator(validator_dependencies):
     config = ValidationConfig()
+    from pyacemaker.core.validator import ElasticValidator, PhononValidator, ReportValidator, StructureRelaxer
     return Validator(
         config,
-        validator_dependencies["phonon"],
-        validator_dependencies["elastic"],
-        validator_dependencies["report"],
+        PhononValidator(validator_dependencies["phonon"]),
+        ElasticValidator(validator_dependencies["elastic"]),
+        ReportValidator(validator_dependencies["report"]),
+        StructureRelaxer(MagicMock()),
     )
 
 
@@ -43,7 +45,7 @@ def test_uat_07_01_validate_potential_pass(validator, validator_dependencies):
     # 2. Action
     structure = Atoms("Fe", positions=[[0, 0, 0]], cell=[2.8, 2.8, 2.8])
 
-    with patch.object(validator, "_relax_structure") as mock_relax:
+    with patch.object(validator.relaxer, "relax") as mock_relax:
         mock_relax.return_value = structure
         result = validator.validate(potential_path, report_path, structure=structure)
 
@@ -84,7 +86,7 @@ def test_uat_07_02_unstable_detection(validator, validator_dependencies):
     # 2. Action
     structure = Atoms("Fe", positions=[[0, 0, 0]], cell=[2.8, 2.8, 2.8])
 
-    with patch.object(validator, "_relax_structure") as mock_relax:
+    with patch.object(validator.relaxer, "relax") as mock_relax:
         mock_relax.return_value = structure
         result = validator.validate(potential_path, report_path, structure=structure)
 

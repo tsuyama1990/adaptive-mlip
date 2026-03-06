@@ -1,5 +1,5 @@
 import os
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 
 import numpy as np
@@ -39,7 +39,7 @@ def _get_default_temp_dir() -> str | None:
     return None
 
 
-class AtomStyle(str, Enum):
+class AtomStyle(StrEnum):
     ATOMIC = "atomic"
     CHARGE = "charge"
     FULL = "full"
@@ -101,20 +101,25 @@ class MDSimulationResult(BaseModel):
     def validate_physical_values(self) -> "MDSimulationResult":
         # Validate energy is finite
         if not np.isfinite(self.energy):
-            raise ValueError("Energy must be a finite number")
+            msg = "Energy must be a finite number"
+            raise ValueError(msg)
 
         # Validate forces shape and values
         for f in self.forces:
             if len(f) != 3:
-                raise ValueError("Forces must be 3D vectors (list of 3 floats)")
+                msg = "Forces must be 3D vectors (list of 3 floats)"
+                raise ValueError(msg)
             if not np.isfinite(f).all():
-                raise ValueError("Forces must contain finite numbers")
+                msg = "Forces must contain finite numbers"
+                raise ValueError(msg)
 
         # Validate stress
         if len(self.stress) != 6:
-            raise ValueError("Stress must be a 6-element list (Voigt notation)")
+            msg = "Stress must be a 6-element list (Voigt notation)"
+            raise ValueError(msg)
         if not np.isfinite(self.stress).all():
-            raise ValueError("Stress must contain finite numbers")
+            msg = "Stress must contain finite numbers"
+            raise ValueError(msg)
 
         return self
 
@@ -217,7 +222,8 @@ class MDConfig(BaseModel):
     @model_validator(mode="after")
     def validate_otf_settings(self) -> "MDConfig":
         if self.fix_halt and self.check_interval <= 0:
-            raise ValueError("check_interval must be positive when fix_halt is enabled.")
+            msg = "check_interval must be positive when fix_halt is enabled."
+            raise ValueError(msg)
         return self
 
     @model_validator(mode="after")
@@ -225,14 +231,17 @@ class MDConfig(BaseModel):
         if self.temp_dir:
             p = Path(self.temp_dir)
             if not p.exists() or not os.access(p, os.W_OK):
-                raise ValueError(f"Temporary directory {p} does not exist or is not writable.")
+                msg = f"Temporary directory {p} does not exist or is not writable."
+                raise ValueError(msg)
         return self
 
     @model_validator(mode="after")
     def validate_default_forces(self) -> "MDConfig":
         for f in self.default_forces:
             if len(f) != 3:
-                raise ValueError("Default forces must be a list of 3D vectors (list of 3 floats)")
+                msg = "Default forces must be a list of 3D vectors (list of 3 floats)"
+                raise ValueError(msg)
             if not all(isinstance(x, (int, float)) for x in f):
-                raise ValueError("Default forces elements must be numeric")
+                msg = "Default forces elements must be numeric"
+                raise ValueError(msg)
         return self

@@ -46,7 +46,7 @@ def test_dft_manager_streaming_behavior(mock_dft_config: DFTConfig) -> None:
     calc.get_stress.return_value = np.zeros(6)
     mock_driver.get_calculator.return_value = calc
 
-    manager = DFTManager(mock_dft_config, driver=mock_driver)
+    manager = DFTManager(mock_dft_config, mock_driver)
 
     # 3. Call compute
     # This should return a generator immediately without hanging

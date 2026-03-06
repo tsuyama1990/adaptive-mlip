@@ -50,7 +50,8 @@ class ModuleFactory:
 
         try:
             # Oracle
-            oracle = DFTManager(config.dft)
+            from pyacemaker.interfaces.qe_driver import QEDriver
+            oracle = DFTManager(config.dft, QEDriver())
 
             # Generator
             generator = StructureGenerator(config.structure)
@@ -59,25 +60,38 @@ class ModuleFactory:
             trainer = PacemakerTrainer(config.training)
 
             # Engine
-            engine = LammpsEngine(config.md)
+            from pyacemaker.core.io_manager import LammpsFileManager
+            from pyacemaker.core.lammps_generator import LammpsScriptGenerator
+            engine = LammpsEngine(
+                config.md,
+                LammpsScriptGenerator(config.md),
+                LammpsFileManager(config.md)
+            )
 
             # Active Set Selector
             active_set_selector = ActiveSetSelector()
 
             # Validator
-            report_gen = ReportGenerator()
-            phonon_calc = PhononCalculator(
+            from pyacemaker.core.validator import (
+                ElasticValidator,
+                PhononValidator,
+                ReportValidator,
+                StructureRelaxer,
+            )
+            report_validator = ReportValidator(ReportGenerator())
+            phonon_validator = PhononValidator(PhononCalculator(
                 engine,
                 config.validation.phonon_supercell,
                 config.validation.phonon_displacement,
                 config.validation.phonon_imaginary_tol,
-            )
-            elastic_calc = ElasticCalculator(
+            ))
+            elastic_validator = ElasticValidator(ElasticCalculator(
                 engine,
                 config.validation.elastic_strain,
                 config.validation.elastic_steps,
-            )
-            validator = Validator(config.validation, phonon_calc, elastic_calc, report_gen)
+            ))
+            relaxer = StructureRelaxer(engine)
+            validator = Validator(config.validation, phonon_validator, elastic_validator, report_validator, relaxer)
 
         except Exception as e:
             msg = f"Failed to create modules: {e}"

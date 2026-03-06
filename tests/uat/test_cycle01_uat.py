@@ -55,7 +55,7 @@ workflow:
     from pyacemaker.main import main
 
     with patch(
-        "argparse.ArgumentParser.parse_args",
+        "pyacemaker.main.CLIParser.parse",
         return_value=MagicMock(config=str(config_file), dry_run=True, scenario=None),
     ):
         with pytest.raises(SystemExit) as excinfo:

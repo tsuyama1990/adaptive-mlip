@@ -1,3 +1,5 @@
+from unittest.mock import MagicMock
+
 from pathlib import Path
 from unittest.mock import patch
 
@@ -56,7 +58,7 @@ def test_uat_02_01_single_point_calculation(
             MockCalculator(fail_count=0, test_energy=TEST_ENERGY_H2O)
         )
 
-        manager = DFTManager(uat_dft_config)
+        manager = DFTManager(uat_dft_config, mock_driver_instance)
 
         # Use explicit iteration
         gen = manager.compute(iter([h2o]))
@@ -93,7 +95,7 @@ def test_uat_02_02_self_healing(
 
         mock_driver_instance.get_calculator.side_effect = [calc_fail, calc_success]
 
-        manager = DFTManager(uat_dft_config)
+        manager = DFTManager(uat_dft_config, mock_driver_instance)
 
         gen = manager.compute(iter([h2o]))
         result = next(gen)

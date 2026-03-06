@@ -60,7 +60,12 @@ def test_module_factory_create_modules(mock_config: PyAceConfig) -> None:
         assert oracle == MockDFTManager.return_value
 
         # Verify initializations
-        MockDFTManager.assert_called_once_with(mock_config.dft)
+        from pyacemaker.interfaces.qe_driver import QEDriver
+        # MockDFTManager was called with config and a QEDriver instance
+        assert MockDFTManager.call_count == 1
+        args, kwargs = MockDFTManager.call_args
+        assert args[0] == mock_config.dft
+        assert isinstance(args[1], QEDriver)
 
         # Check trainer config
         assert trainer.config == mock_config.training

@@ -29,16 +29,16 @@ class LammpsEngine(BaseEngine):
     def __init__(
         self,
         config: MDConfig,
-        generator: LammpsScriptGenerator | None = None,
-        file_manager: LammpsFileManager | None = None,
+        generator: LammpsScriptGenerator,
+        file_manager: LammpsFileManager,
     ) -> None:
         """
         Initialize the engine with configuration.
-        Allows dependency injection for generator and file manager.
+        Requires strict dependency injection for generator and file manager.
         """
         self.config = config
-        self.generator = generator or LammpsScriptGenerator(config)
-        self.file_manager = file_manager or LammpsFileManager(config)
+        self.generator = generator
+        self.file_manager = file_manager
 
     def _prepare_simulation_env(
         self, structure: Atoms | None, potential: Any
@@ -158,7 +158,9 @@ class LammpsEngine(BaseEngine):
             update={"n_steps": 0, "minimize": False, "thermo_freq": 1, "dump_freq": 0}
         )
 
-        engine = LammpsEngine(static_config)
+        generator = LammpsScriptGenerator(static_config)
+        file_manager = LammpsFileManager(static_config)
+        engine = LammpsEngine(static_config, generator, file_manager)
         return engine.run(structure, potential)
 
     def relax(self, structure: Atoms, potential: Any) -> Atoms:
