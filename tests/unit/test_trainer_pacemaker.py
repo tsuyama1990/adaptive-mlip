@@ -1,3 +1,7 @@
+import os
+import os
+if 'PACE_TRAIN_EXECUTABLE' not in os.environ:
+    os.environ['PACE_TRAIN_EXECUTABLE'] = 'echo'
 import subprocess
 from collections.abc import Generator
 from pathlib import Path
@@ -38,6 +42,10 @@ def mock_shutil_which() -> Generator[MagicMock, None, None]:
         mock.return_value = "/usr/bin/pace_train"
         yield mock
 
+
+@pytest.fixture(autouse=True)
+def mock_env(monkeypatch):
+    monkeypatch.setenv("PACE_TRAIN_EXECUTABLE", "pace_train")
 
 def test_train_missing_executable(trainer: PacemakerTrainer, tmp_path: Path) -> None:
     """Test that missing pace_train raises TrainerError."""

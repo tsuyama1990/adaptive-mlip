@@ -122,7 +122,7 @@ class BaseTrainer(ABC):
         self,
         training_data_path: str | Path,
         initial_potential: str | Path | None = None
-    ) -> Any:
+    ) -> Path:
         """
         Trains a potential using the provided training data file.
 
