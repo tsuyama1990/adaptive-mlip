@@ -6,6 +6,7 @@ from ase import Atoms
 from pyacemaker.core.base import BaseEngine
 from pyacemaker.core.io_manager import LammpsFileManager
 from pyacemaker.core.lammps_generator import LammpsScriptGenerator
+from pyacemaker.utils.io_transaction import DirectoryTransaction
 from pyacemaker.core.validator import LammpsInputValidator
 from pyacemaker.domain_models.constants import (
     ERR_SIM_EXEC_FAIL,
@@ -41,7 +42,7 @@ class LammpsEngine(BaseEngine):
 
     def _prepare_simulation_env(
         self, structure: Atoms | None, potential: Any
-    ) -> tuple[Any, Path, Path, Path, list[str], Path]:
+    ) -> tuple[DirectoryTransaction, Path, Path, Path, list[str], Path]:
         """
         Prepares the simulation environment: validation, paths, and files.
         Returns: (ctx, data_file, dump_file, log_file, elements, potential_path)

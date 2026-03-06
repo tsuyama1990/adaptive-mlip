@@ -136,14 +136,11 @@ class Validator:
         return engine.relax(structure, potential_path)
 
     def validate(
-        self, potential_path: Path, output_path: Path, structure: Atoms | None = None
+        self, potential_path: Path, output_path: Path, structure: Atoms
     ) -> ValidationResult:
         """
         Runs validation checks and generates report.
         """
-        if structure is None:
-            raise ValueError(ERR_VAL_REQ_STRUCT)
-
         # Data Integrity Fix: Validate structure input
         LammpsInputValidator.validate_structure(structure)
 

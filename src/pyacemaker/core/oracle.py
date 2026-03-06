@@ -73,19 +73,17 @@ class DFTManager(BaseOracle):
 
     def _compute_generator(self, structures: Iterator[Atoms], batch_size: int) -> Iterator[Atoms]:
         """Internal generator for streaming computations with batching."""
-        exhausted = False
-        while not exhausted:
+        while True:
             with tempfile.TemporaryDirectory() as work_dir:
                 work_path = Path(work_dir)
                 for i in range(batch_size):
                     try:
                         atoms = next(structures)
-                        calc_dir = work_path / f"calc_{i}"
-                        calc_dir.mkdir()
-                        yield self._process_structure(atoms, str(calc_dir))
                     except StopIteration:
-                        exhausted = True
-                        break
+                        return
+                    calc_dir = work_path / f"calc_{i}"
+                    calc_dir.mkdir()
+                    yield self._process_structure(atoms, str(calc_dir))
 
     def _process_structure(self, atoms: Atoms, calc_dir: str) -> Atoms:
         """

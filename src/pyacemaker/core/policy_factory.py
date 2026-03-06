@@ -22,7 +22,7 @@ class PolicyFactory:
     def get_policy(config: StructureConfig) -> BasePolicy:
         """
         Selects the appropriate policy based on configuration (active_policies).
-        Returns a CompositePolicy if multiple policies are active.
+        Returns a CompositePolicy if multiple policies are active, otherwise returns the single policy instance.
 
         Args:
             config: Structure configuration.

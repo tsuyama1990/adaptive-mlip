@@ -126,7 +126,7 @@ class BaseTrainer(ABC):
     @abstractmethod
     def train(
         self, training_data_path: str | Path, initial_potential: str | Path | None = None
-    ) -> Path:
+    ) -> Path | None:
         """
         Trains a potential using the provided training data file.
 

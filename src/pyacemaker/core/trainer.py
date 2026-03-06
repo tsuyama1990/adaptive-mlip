@@ -22,7 +22,7 @@ class PacemakerTrainer(BaseTrainer):
 
     def train(
         self, training_data_path: str | Path, initial_potential: str | Path | None = None
-    ) -> Path:
+    ) -> Path | None:
         """
         Trains a potential using the provided training data file.
 
@@ -85,8 +85,8 @@ class PacemakerTrainer(BaseTrainer):
             raise TrainerError(msg) from e
 
         if not potential_path.exists():
-            msg = f"Potential file was not created at {potential_path}"
-            raise TrainerError(msg)
+            logger.error(f"Potential file was not created at {potential_path}")
+            return None
 
         return potential_path
 
