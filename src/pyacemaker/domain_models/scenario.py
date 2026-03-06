@@ -5,9 +5,11 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from enum import StrEnum
 
+
 class ScenarioName(StrEnum):
     FEPT_MGO = "fept_mgo"
     # Other scenarios can be added here
+
 
 class ScenarioConfig(BaseModel):
     """Configuration for specific scenarios."""

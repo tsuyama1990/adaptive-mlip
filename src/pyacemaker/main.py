@@ -20,13 +20,20 @@ from pyacemaker.utils.io import load_config
 
 
 # Registry pattern for scenarios
-SCENARIO_REGISTRY: dict[str, Type[BaseScenario]] = {
-    ScenarioName.FEPT_MGO.value: FePtMgoScenario,
+SCENARIO_REGISTRY: dict[ScenarioName, Type[BaseScenario]] = {
+    ScenarioName.FEPT_MGO: FePtMgoScenario,
 }
+
 
 def get_scenario_runner(name: str, config: PyAceConfig) -> BaseScenario:
     """Factory method to get the appropriate scenario runner."""
-    scenario_cls = SCENARIO_REGISTRY.get(name)
+    try:
+        scenario_name = ScenarioName(name)
+    except ValueError:
+        msg = f"Unknown scenario: {name}"
+        raise ValueError(msg) from None
+
+    scenario_cls = SCENARIO_REGISTRY.get(scenario_name)
     if scenario_cls is not None:
         return scenario_cls(config)
     msg = f"Unknown scenario: {name}"
@@ -39,9 +46,7 @@ def main() -> None:
     parser.add_argument(
         "--dry-run", action="store_true", help="Validate config and exit without running"
     )
-    parser.add_argument(
-        "--scenario", type=str, help="Run a specific scenario (e.g., fept_mgo)"
-    )
+    parser.add_argument("--scenario", type=str, help="Run a specific scenario (e.g., fept_mgo)")
 
     args = parser.parse_args()
     config_path = Path(args.config)

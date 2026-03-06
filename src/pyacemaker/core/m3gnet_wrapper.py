@@ -32,7 +32,7 @@ class M3GNetWrapper:
 
         # Simple Mock logic
         if composition == "FePt":
-             return Atoms(
+            return Atoms(
                 "FePt",
                 positions=[[0, 0, 0], [1.9, 1.9, 1.9]],
                 cell=[3.8, 3.8, 3.8],
@@ -43,5 +43,5 @@ class M3GNetWrapper:
         try:
             return bulk(composition)
         except Exception:
-             # Very simple fallback
-             return Atoms(composition, cell=[5.0, 5.0, 5.0], pbc=True)
+            # Very simple fallback
+            return Atoms(composition, cell=[5.0, 5.0, 5.0], pbc=True)

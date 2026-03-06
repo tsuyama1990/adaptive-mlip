@@ -81,7 +81,9 @@ class StructureGenerator(BaseGenerator):
             try:
                 base_structure = self.m3gnet.predict_structure(composition)
             except Exception as e:
-                raise GeneratorError(ERR_GEN_BASE_FAIL.format(composition=composition, error=e)) from e
+                raise GeneratorError(
+                    ERR_GEN_BASE_FAIL.format(composition=composition, error=e)
+                ) from e
 
             # Generate the base supercell template once.
             # We must materialize the base supercell to apply perturbations (rattle/strain).
@@ -101,10 +103,10 @@ class StructureGenerator(BaseGenerator):
 
             # Verify it's an iterator to enforce streaming contract at runtime
             if not isinstance(policy_iter, Iterator):
-                 # Convert iterable to iterator if needed
-                 iter_policy = iter(policy_iter)
+                # Convert iterable to iterator if needed
+                iter_policy = iter(policy_iter)
             else:
-                 iter_policy = policy_iter
+                iter_policy = policy_iter
 
             for structure in iter_policy:
                 if count >= n_candidates:
@@ -116,7 +118,9 @@ class StructureGenerator(BaseGenerator):
 
         yield from lazy_policy_stream()
 
-    def generate_local(self, base_structure: Atoms, n_candidates: int, **kwargs: Any) -> Iterator[Atoms]:
+    def generate_local(
+        self, base_structure: Atoms, n_candidates: int, **kwargs: Any
+    ) -> Iterator[Atoms]:
         """
         Generates candidate structures by perturbing a base structure.
         Used in OTF loops to explore the local neighborhood of a high-uncertainty configuration.

@@ -148,6 +148,7 @@ class ScenarioContext:
         self.eon_wrapper = eon_wrapper
         self.deposition_manager = deposition_manager
 
+
 class FePtMgoScenario(BaseScenario):
     """
     Implements the 'Grand Challenge': Fe/Pt deposition on MgO (001) surface

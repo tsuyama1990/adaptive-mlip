@@ -21,9 +21,7 @@ class PacemakerTrainer(BaseTrainer):
         self.config_generator = PacemakerConfigGenerator(config)
 
     def train(
-        self,
-        training_data_path: str | Path,
-        initial_potential: str | Path | None = None
+        self, training_data_path: str | Path, initial_potential: str | Path | None = None
     ) -> Path:
         """
         Trains a potential using the provided training data file.
@@ -44,6 +42,7 @@ class PacemakerTrainer(BaseTrainer):
         """
         # Ensure pace_train is installed
         import os
+
         pace_train_exe = os.environ.get("PACE_TRAIN_EXECUTABLE", "pace_train")
         if not shutil.which(pace_train_exe):
             msg = f"Executable '{pace_train_exe}' not found in PATH."
@@ -70,6 +69,7 @@ class PacemakerTrainer(BaseTrainer):
                 msg = f"Initial potential not found: {initial_path}"
                 raise TrainerError(msg)
             from pyacemaker.utils.path import validate_path_safe
+
             safe_initial_path = validate_path_safe(initial_path)
             cmd.extend(["--initial_potential", str(safe_initial_path)])
 
@@ -98,6 +98,7 @@ class PacemakerTrainer(BaseTrainer):
             raise TrainerError(msg)
 
         from pyacemaker.domain_models.defaults import SUPPORTED_TRAINING_FORMATS
+
         if data_path.suffix not in SUPPORTED_TRAINING_FORMATS:
             msg = f"Invalid training data format: {data_path.suffix}"
             raise TrainerError(msg)
