@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from pyacemaker.domain_models.training import PacemakerConfig, TrainingConfig
+from pyacemaker.domain_models.training import PacemakerConfig, PotentialType, TrainingConfig
 
 
 def test_training_config_defaults() -> None:
@@ -25,10 +25,8 @@ def test_training_config_defaults() -> None:
     assert config.pacemaker.optimizer == "BFGS"
 
 
-from pyacemaker.domain_models.training import PotentialType
-
-
 def test_training_config_filename_validation() -> None:
+    from pyacemaker.domain_models.training import PotentialType
     # Valid
     TrainingConfig(
         potential_type=PotentialType.PACE,

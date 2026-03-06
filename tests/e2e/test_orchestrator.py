@@ -187,7 +187,7 @@ def test_orchestrator_corrupted_state_file(
 
     orch = Orchestrator(mock_config)
     # The load method may handle invalid JSON by returning None or resetting state depending on implementation
-    state = orch.state_manager.load()
+    orch.state_manager.load()
 
 
 def test_orchestrator_directory_creation_error(mock_config: PyAceConfig, monkeypatch: Any) -> None:

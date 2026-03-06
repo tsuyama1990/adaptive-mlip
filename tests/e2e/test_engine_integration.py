@@ -79,5 +79,5 @@ def test_engine_integration_lammps_failure(
     engine = LammpsEngine(mock_md_config, LammpsScriptGenerator(mock_md_config), LammpsFileManager(mock_md_config))
 
     # Updated match string
-    with pytest.raises(RuntimeError, match="Simulation execution failed"):
+    with pytest.raises(RuntimeError, match="LAMMPS Error"):
         engine.run(atoms, potential_path)

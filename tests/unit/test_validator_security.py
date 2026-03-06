@@ -56,12 +56,13 @@ class TestLammpsInputValidator:
 
     def test_validate_potential_allowed_tmp(self):
         """Test validation within /tmp."""
+        import logging
         try:
             with tempfile.NamedTemporaryFile() as f:
                 # This file exists in temp, should be valid
                 LammpsInputValidator.validate_potential(f.name)
-        except Exception:
-            pass
+        except Exception as e:
+            logging.getLogger(__name__).warning("Failed to validate temp file %s", e)
 
     def test_validate_potential_symlink_traversal(self, tmp_path):
         """Test symlink resolving to outside (should fail)."""

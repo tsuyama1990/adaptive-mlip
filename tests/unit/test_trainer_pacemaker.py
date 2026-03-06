@@ -42,11 +42,8 @@ def mock_shutil_which() -> Generator[MagicMock, None, None]:
 def test_train_missing_executable_error(trainer: PacemakerTrainer, tmp_path: Path) -> None:
     """Test that missing pace_train raises TrainerError."""
     dummy_data = tmp_path / "dummy.xyz"
-    write(dummy_data, Atoms("H"))
-    with patch("shutil.which", return_value=None):
-        with pytest.raises(TrainerError, match="Executable 'pace_train' not found"):
-            trainer.train(dummy_data)
-
+    with patch("shutil.which", return_value=None), pytest.raises(TrainerError, match="Executable 'pace_train' not found"):
+        trainer.train(dummy_data)
 
 def test_train_element_detection_scanning(
     trainer: PacemakerTrainer, tmp_path: Path, mock_shutil_which: MagicMock

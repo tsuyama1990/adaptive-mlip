@@ -1,3 +1,4 @@
+import logging
 from pathlib import Path
 from typing import Any
 
@@ -8,16 +9,39 @@ from pyacemaker.core.io_manager import LammpsFileManager
 from pyacemaker.core.lammps_generator import LammpsScriptGenerator
 from pyacemaker.core.validator import LammpsInputValidator
 from pyacemaker.domain_models.constants import (
-    ERR_SIM_EXEC_FAIL,
-    ERR_SIM_SECURITY_FAIL,
-    ERR_SIM_SETUP_FAIL,
-    ERR_SIM_UNEXPECTED,
     ERR_STRUCTURE_NONE,
     LAMMPS_SCREEN_ARG,
 )
 from pyacemaker.domain_models.md import MDConfig, MDSimulationResult
 from pyacemaker.interfaces.lammps_driver import LammpsDriver
 from pyacemaker.utils.io_transaction import DirectoryTransaction
+
+
+class SimulationExecutionStrategy:
+    """Strategy for executing LAMMPS simulations with proper error handling and context logging."""
+    def __init__(self, logger: logging.Logger | None = None) -> None:
+        self.logger = logger or logging.getLogger(__name__)
+
+    def execute(self, driver: LammpsDriver | None, script_path: Path) -> None:
+        """
+        Executes the simulation script using the provided driver.
+        Validates inputs and handles errors gracefully without obscuring original traces.
+        """
+        if driver is None:
+            msg = "Driver instance cannot be None."
+            self.logger.error(msg)
+            raise ValueError(msg)
+
+        if not script_path.exists():
+            msg = "Simulation script not found."
+            self.logger.error(f"{msg} Path: {script_path}")
+            raise FileNotFoundError(msg)
+
+        self.logger.info("Executing LAMMPS simulation", extra={"script_path": str(script_path)})
+
+        # We allow specific exceptions to propagate naturally
+        # Scalability: Use run_file to stream script execution
+        driver.run_file(str(script_path))
 
 
 class LammpsEngine(BaseEngine):
@@ -31,6 +55,7 @@ class LammpsEngine(BaseEngine):
         config: MDConfig,
         generator: LammpsScriptGenerator,
         file_manager: LammpsFileManager,
+        execution_strategy: SimulationExecutionStrategy | None = None,
     ) -> None:
         """
         Initialize the engine with configuration.
@@ -39,6 +64,7 @@ class LammpsEngine(BaseEngine):
         self.config = config
         self.generator = generator
         self.file_manager = file_manager
+        self.execution_strategy = execution_strategy or SimulationExecutionStrategy()
 
     def _prepare_simulation_env(
         self, structure: Atoms | None, potential: Any
@@ -65,24 +91,6 @@ class LammpsEngine(BaseEngine):
             msg = f"Input script not found: {script_path}"
             raise FileNotFoundError(msg)
 
-    def _execute_simulation(self, driver: LammpsDriver, script_path: Path) -> None:
-        """
-        Executes the simulation script with standardized error handling.
-        """
-        try:
-            self._ensure_script_readable(script_path)
-            # Scalability: Use run_file to stream script execution
-            driver.run_file(str(script_path))
-
-        except FileNotFoundError as e:
-            raise RuntimeError(ERR_SIM_SETUP_FAIL.format(error=e)) from e
-        except ValueError as e:
-            raise RuntimeError(ERR_SIM_SECURITY_FAIL.format(error=e)) from e
-        except RuntimeError as e:
-            raise RuntimeError(ERR_SIM_EXEC_FAIL.format(error=e)) from e
-        except Exception as e:
-            raise RuntimeError(ERR_SIM_UNEXPECTED.format(error=e)) from e
-
     def run(self, structure: Atoms | None, potential: Any) -> MDSimulationResult:
         """
         Runs the MD simulation.
@@ -103,7 +111,7 @@ class LammpsEngine(BaseEngine):
             driver = LammpsDriver(["-screen", LAMMPS_SCREEN_ARG, "-log", str(log_file)])
 
             try:
-                self._execute_simulation(driver, input_script_path)
+                self.execution_strategy.execute(driver, input_script_path)
 
                 # Extract Results
                 try:
@@ -182,7 +190,7 @@ class LammpsEngine(BaseEngine):
             # Execute
             driver = LammpsDriver(["-screen", LAMMPS_SCREEN_ARG, "-log", str(log_file)])
             try:
-                self._execute_simulation(driver, script_path)
+                self.execution_strategy.execute(driver, script_path)
                 return driver.get_atoms(elements)
             finally:
                 if hasattr(driver, "close"):
