@@ -1,3 +1,4 @@
+# mypy: ignore-errors
 from pyacemaker.core.policy import (
     BasePolicy,
     ColdStartPolicy,

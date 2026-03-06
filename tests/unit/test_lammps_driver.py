@@ -1,4 +1,3 @@
-
 import sys
 from pathlib import Path
 from typing import Any
@@ -45,7 +44,7 @@ def test_lammps_driver_run_unsafe(mock_lammps: Any) -> None:
     """Tests rejection of unsafe (non-ASCII) scripts."""
     driver = LammpsDriver()
     # Non-ascii:
-    script_unsafe = "print 'Hello \uFFFF'"
+    script_unsafe = "print 'Hello \uffff'"
     with pytest.raises(ValueError, match="Script contains non-ASCII"):
         driver.run(script_unsafe)
 
@@ -66,6 +65,7 @@ def test_lammps_driver_run_forbidden_command(mock_lammps: Any) -> None:
     script = "shell rm -rf /"
     with pytest.raises(ValueError, match="forbidden command 'shell'"):
         driver.run(script)
+
 
 def test_lammps_driver_run_file_calls_command(mock_lammps: Any, tmp_path: Path) -> None:
     """Test run_file executes line-by-line via lmp.command() instead of lmp.file()."""
@@ -106,10 +106,17 @@ def test_lammps_driver_get_atoms(mock_lammps: Any) -> None:
     driver = LammpsDriver()
     driver.lmp.get_natoms.return_value = 2
     driver.lmp.extract_box.return_value = (
-        [0.0, 0.0, 0.0], [10.0, 10.0, 10.0], 0.0, 0.0, 0.0, [1, 1, 1], 0
+        [0.0, 0.0, 0.0],
+        [10.0, 10.0, 10.0],
+        0.0,
+        0.0,
+        0.0,
+        [1, 1, 1],
+        0,
     )
 
     with patch("pyacemaker.interfaces.lammps_driver.np.ctypeslib.as_array") as mock_as_array:
+
         def as_array_side_effect(ptr: Any, shape: tuple[int, ...]) -> Any:
             if shape == (2, 3):
                 return np.array([[0.0, 0.0, 0.0], [2.0, 0.0, 0.0]])
@@ -130,12 +137,20 @@ def test_lammps_driver_get_atoms_invalid_type(mock_lammps: Any) -> None:
     driver = LammpsDriver()
     driver.lmp.get_natoms.return_value = 1
     driver.lmp.extract_box.return_value = (
-        [0.0, 0.0, 0.0], [10.0, 10.0, 10.0], 0.0, 0.0, 0.0, [1, 1, 1], 0
+        [0.0, 0.0, 0.0],
+        [10.0, 10.0, 10.0],
+        0.0,
+        0.0,
+        0.0,
+        [1, 1, 1],
+        0,
     )
 
     with patch("pyacemaker.interfaces.lammps_driver.np.ctypeslib.as_array") as mock_as_array:
         # Return type 2, but only 1 element provided
-        mock_as_array.side_effect = lambda ptr, shape: np.array([2], dtype=np.int32) if shape == (1,) else np.zeros((1,3))
+        mock_as_array.side_effect = lambda ptr, shape: (
+            np.array([2], dtype=np.int32) if shape == (1,) else np.zeros((1, 3))
+        )
 
         with pytest.raises(ValueError, match="index out of range"):
             driver.get_atoms(["Al"])

@@ -22,9 +22,7 @@ class PacemakerTrainer(BaseTrainer):
         self.config_generator = PacemakerConfigGenerator(config)
 
     def train(
-        self,
-        training_data_path: str | Path,
-        initial_potential: str | Path | None = None
+        self, training_data_path: str | Path, initial_potential: str | Path | None = None
     ) -> Any:
         """
         Trains a potential using the provided training data file.
@@ -101,5 +99,3 @@ class PacemakerTrainer(BaseTrainer):
         if data_path.stat().st_size == 0:
             msg = f"Training data file is empty: {data_path}"
             raise TrainerError(msg)
-
-

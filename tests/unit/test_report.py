@@ -9,7 +9,7 @@ def test_generate_report_pass(tmp_path):
         c_ij={"C11": 200.0},
         bulk_modulus=150.0,
         plots={"phonon": "base64_string", "elastic": "base64_string"},
-        report_path=str(tmp_path / "report.html")
+        report_path=str(tmp_path / "report.html"),
     )
     generator = ReportGenerator()
     html = generator.generate(result)
@@ -18,6 +18,7 @@ def test_generate_report_pass(tmp_path):
     assert "200.0" in html
     assert "base64_string" in html
 
+
 def test_generate_report_fail(tmp_path):
     result = ValidationResult(
         phonon_stable=False,
@@ -25,7 +26,7 @@ def test_generate_report_fail(tmp_path):
         c_ij={"C11": 200.0},
         bulk_modulus=150.0,
         plots={"phonon": "base64_string", "elastic": "base64_string"},
-        report_path=str(tmp_path / "report.html")
+        report_path=str(tmp_path / "report.html"),
     )
     generator = ReportGenerator()
     html = generator.generate(result)

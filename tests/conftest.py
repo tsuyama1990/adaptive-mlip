@@ -44,6 +44,7 @@ def mock_dft_config(tmp_path: Any, monkeypatch: Any) -> DFTConfig:
         pseudopotentials={"H": "H.UPF", "O": "O.UPF", "Fe": "Fe.UPF"},
     )
 
+
 @pytest.fixture
 def mock_structure_config() -> StructureConfig:
     return StructureConfig(
@@ -52,6 +53,7 @@ def mock_structure_config() -> StructureConfig:
         policy_name=ExplorationPolicy.COLD_START,
     )
 
+
 @pytest.fixture
 def mock_training_config() -> TrainingConfig:
     return TrainingConfig(
@@ -59,8 +61,9 @@ def mock_training_config() -> TrainingConfig:
         cutoff_radius=5.0,
         max_basis_size=500,
         delta_learning=True,
-        active_set_optimization=False
+        active_set_optimization=False,
     )
+
 
 @pytest.fixture
 def mock_md_config() -> MDConfig:
@@ -70,7 +73,7 @@ def mock_md_config() -> MDConfig:
         timestep=0.001,
         n_steps=1000,
         hybrid_potential=True,
-        hybrid_params=HybridParams(zbl_cut_inner=2.0, zbl_cut_outer=2.5)
+        hybrid_params=HybridParams(zbl_cut_inner=2.0, zbl_cut_outer=2.5),
     )
 
 
@@ -80,7 +83,9 @@ class MockCalculator(Calculator):
     Can simulate failures and setup errors.
     """
 
-    def __init__(self, fail_count: int = 0, setup_error: bool = False, test_energy: float | None = None) -> None:
+    def __init__(
+        self, fail_count: int = 0, setup_error: bool = False, test_energy: float | None = None
+    ) -> None:
         super().__init__()  # type: ignore[no-untyped-call]
         self.implemented_properties = ["energy", "forces", "stress"]
         self.fail_count = fail_count
@@ -135,18 +140,18 @@ def create_test_config_dict(**overrides: Any) -> dict[str, Any]:
             "functional": "PBE",
             "kpoints_density": 0.04,
             "encut": 500.0,
-            "pseudopotentials": {"Fe": "Fe.UPF"}, # Expects file to exist
+            "pseudopotentials": {"Fe": "Fe.UPF"},  # Expects file to exist
             "mixing_beta": 0.7,
             "smearing_type": "mv",
             "smearing_width": 0.1,
-            "diagonalization": "david"
+            "diagonalization": "david",
         },
         "training": {
             "potential_type": "ace",
             "cutoff_radius": 5.0,
             "max_basis_size": 500,
             "delta_learning": True,
-            "active_set_optimization": False
+            "active_set_optimization": False,
         },
         "md": {
             "temperature": 300.0,
@@ -154,9 +159,9 @@ def create_test_config_dict(**overrides: Any) -> dict[str, Any]:
             "timestep": 0.001,
             "n_steps": 1000,
             "uncertainty_threshold": 5.0,
-            "check_interval": 10
+            "check_interval": 10,
         },
-        "validation": {}, # Use defaults
+        "validation": {},  # Use defaults
         "workflow": {
             "max_iterations": 10,
             "state_file_path": "state.json",
@@ -168,17 +173,17 @@ def create_test_config_dict(**overrides: Any) -> dict[str, Any]:
                 "uncertainty_threshold": 5.0,
                 "local_n_candidates": 20,
                 "local_n_select": 5,
-                "max_retries": 3
-            }
+                "max_retries": 3,
+            },
         },
-        "logging": {}
+        "logging": {},
     }
 
     # 2. Apply overrides (Deep merge)
     for key, value in overrides.items():
         if key in defaults and isinstance(defaults[key], dict) and isinstance(value, dict):
-             defaults[key].update(value)
+            defaults[key].update(value)
         else:
-             defaults[key] = value
+            defaults[key] = value
 
     return defaults
