@@ -9,7 +9,11 @@ from pyacemaker.domain_models.md import HybridParams, MDConfig
 def test_generator_pure_pace(tmp_path: Path) -> None:
     """Tests script generation with pure PACE."""
     config = MDConfig(
-        temperature=300.0, pressure=1.0, timestep=0.001, n_steps=1000, hybrid_potential=False
+        temperature=300.0,
+        pressure=1.0,
+        timestep=0.001,
+        n_steps=1000,
+        hybrid_potential=False
     )
     generator = LammpsScriptGenerator(config)
 
@@ -37,7 +41,7 @@ def test_generator_hybrid_potential(tmp_path: Path) -> None:
         timestep=0.001,
         n_steps=1000,
         hybrid_potential=True,
-        hybrid_params=HybridParams(zbl_cut_inner=1.0, zbl_cut_outer=1.5),
+        hybrid_params=HybridParams(zbl_cut_inner=1.0, zbl_cut_outer=1.5)
     )
     generator = LammpsScriptGenerator(config)
 
@@ -55,6 +59,9 @@ def test_generator_hybrid_potential(tmp_path: Path) -> None:
     assert f"pair_coeff * * pace {expected_pot} H He" in script
 
     # ZBL check
+    # H (Z=1), He (Z=2)
+    # pair_coeff 1 1 zbl 1 1
+    # pair_coeff 1 2 zbl 1 2
     # pair_coeff 2 2 zbl 2 2
     assert "pair_coeff 1 1 zbl 1 1" in script
     assert "pair_coeff 1 2 zbl 1 2" in script
@@ -70,7 +77,7 @@ def test_generator_watchdog(tmp_path: Path) -> None:
         n_steps=1000,
         fix_halt=True,
         uncertainty_threshold=5.0,
-        check_interval=10,
+        check_interval=10
     )
     generator = LammpsScriptGenerator(config)
 

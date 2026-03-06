@@ -22,7 +22,9 @@ class PacemakerTrainer(BaseTrainer):
         self.config_generator = PacemakerConfigGenerator(config)
 
     def train(
-        self, training_data_path: str | Path, initial_potential: str | Path | None = None
+        self,
+        training_data_path: str | Path,
+        initial_potential: str | Path | None = None
     ) -> Any:
         """
         Trains a potential using the provided training data file.

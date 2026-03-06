@@ -4,7 +4,7 @@ from ase.data import atomic_numbers
 from pyacemaker.domain_models.constants import DEFAULT_LJ_PARAMS, FALLBACK_LJ_PARAMS
 
 
-def get_lj_params(element: str) -> float | dict[str, float]:
+def get_lj_params(element: str) -> dict[str, float]:
     """
     Returns Lennard-Jones parameters for a given element.
     If the element is not found in the database, returns generic default parameters.

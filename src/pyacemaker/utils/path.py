@@ -1,11 +1,11 @@
-import os
 import tempfile
+import os
 from pathlib import Path
 
 from pyacemaker.domain_models.constants import DANGEROUS_PATH_CHARS, DEFAULT_RAM_DISK_PATH
 
 
-def validate_path_safe(path: Path) -> Path:  # noqa: C901
+def validate_path_safe(path: Path) -> Path:
     """
     Ensures path is safe using strict resolution and character allowlisting.
     Centralized utility for path validation.
@@ -24,8 +24,8 @@ def validate_path_safe(path: Path) -> Path:  # noqa: C901
 
     # Check for dangerous patterns in string representation BEFORE resolve
     if ".." in s:
-        msg = f"Path traversal attempt detected (parent directory reference): {path}"
-        raise ValueError(msg)
+         msg = f"Path traversal attempt detected (parent directory reference): {path}"
+         raise ValueError(msg)
 
     if any(c in s for c in DANGEROUS_PATH_CHARS):
         msg = f"Path contains invalid characters: {path}"
@@ -42,19 +42,20 @@ def validate_path_safe(path: Path) -> Path:  # noqa: C901
         # If it doesn't exist (e.g. output file), we must resolve based on parent.
         if path.exists():
             resolved = path.resolve(strict=True)
-        # For non-existent files, check parent
-        elif path.parent.exists():
-            resolved_parent = path.parent.resolve(strict=True)
-            # Combine resolved parent with filename
-            resolved = resolved_parent / path.name
         else:
-            # If even parent doesn't exist, this is likely unsafe or too deep
-            # Fallback to loose resolve but we will check containment
-            resolved = path.resolve(strict=False)
+            # For non-existent files, check parent
+            if path.parent.exists():
+                resolved_parent = path.parent.resolve(strict=True)
+                # Combine resolved parent with filename
+                resolved = resolved_parent / path.name
+            else:
+                # If even parent doesn't exist, this is likely unsafe or too deep
+                # Fallback to loose resolve but we will check containment
+                resolved = path.resolve(strict=False)
 
     except Exception as e:
-        msg = f"Invalid path resolution: {path}"
-        raise ValueError(msg) from e
+         msg = f"Invalid path resolution: {path}"
+         raise ValueError(msg) from e
 
     base_dir = Path.cwd().resolve()
 
@@ -62,7 +63,7 @@ def validate_path_safe(path: Path) -> Path:  # noqa: C901
     allowed_roots = [
         base_dir,
         Path(tempfile.gettempdir()).resolve(),
-        Path(DEFAULT_RAM_DISK_PATH).resolve(),
+        Path(DEFAULT_RAM_DISK_PATH).resolve()
     ]
 
     is_safe = False
@@ -78,7 +79,7 @@ def validate_path_safe(path: Path) -> Path:  # noqa: C901
             continue
 
     if not is_safe:
-        msg = f"Path traversal detected: {resolved} is outside allowed roots {allowed_roots}"
-        raise ValueError(msg)
+         msg = f"Path traversal detected: {resolved} is outside allowed roots {allowed_roots}"
+         raise ValueError(msg)
 
     return resolved

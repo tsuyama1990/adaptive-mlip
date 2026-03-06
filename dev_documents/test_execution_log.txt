@@ -1,4 +1,13 @@
-ImportError while loading conftest '/app/tests/conftest.py'.
-tests/conftest.py:13: in <module>
-    from pyacemaker.domain_models import (  # noqa: E402
-E   ModuleNotFoundError: No module named 'pyacemaker'
+============================= test session starts ==============================
+platform linux -- Python 3.12.12, pytest-9.0.2, pluggy-1.6.0
+rootdir: /app
+configfile: pyproject.toml
+plugins: cov-7.0.0
+collected 28 items
+
+tests/unit/test_domain_models.py ............                            [ 42%]
+tests/unit/test_oracle.py ........                                       [ 71%]
+tests/unit/test_extraction.py ..                                         [ 78%]
+tests/unit/test_trainer_pacemaker.py ......                              [100%]
+
+============================== 28 passed in 1.00s ==============================

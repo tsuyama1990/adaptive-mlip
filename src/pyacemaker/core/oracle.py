@@ -1,5 +1,4 @@
 import contextlib
-import logging
 import tempfile
 from collections.abc import Callable, Iterator
 from itertools import islice
@@ -14,9 +13,9 @@ from pyacemaker.domain_models import DFTConfig
 from pyacemaker.domain_models.constants import ERR_ORACLE_FAILED, ERR_ORACLE_ITERATOR
 from pyacemaker.interfaces.qe_driver import QEDriver
 from pyacemaker.utils.embedding import embed_cluster
+import logging
 
 logger = logging.getLogger(__name__)
-
 
 class DFTManager(BaseOracle):
     """
@@ -44,7 +43,7 @@ class DFTManager(BaseOracle):
             None,
             self._strategy_reduce_beta,
             self._strategy_increase_smearing,
-            self._strategy_use_cg,
+            self._strategy_use_cg
         ]
 
     def compute(self, structures: Iterator[Atoms], batch_size: int = 10) -> Iterator[Atoms]:
@@ -77,7 +76,6 @@ class DFTManager(BaseOracle):
         # without materializing the whole batch in memory list.
         # However, islice consumes the iterator.
 
-        first_batch = True
         while True:
             # Create a batch generator (iterator slice)
             # Note: list(islice(...)) materializes the batch.
@@ -104,16 +102,7 @@ class DFTManager(BaseOracle):
 
             batch = list(islice(structures, batch_size))
             if not batch:
-                if first_batch:
-                    import warnings
-
-                    warnings.warn(
-                        "Oracle received empty iterator. No calculations performed.",
-                        UserWarning,
-                        stacklevel=2,
-                    )
                 break
-            first_batch = False
 
             with tempfile.TemporaryDirectory() as work_dir:
                 work_path = Path(work_dir)
@@ -194,7 +183,7 @@ class DFTManager(BaseOracle):
 
                 # Enhanced Logging for debugging
                 logger.warning(
-                    f"DFT calculation attempt {i + 1} ({strategy_name}) failed. Error: {e!s}. Retrying..."
+                    f"DFT calculation attempt {i+1} ({strategy_name}) failed. Error: {e!s}. Retrying..."
                 )
                 continue
             else:

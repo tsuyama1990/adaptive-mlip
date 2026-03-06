@@ -21,10 +21,10 @@ def mock_config() -> Any:
         mock_conf.scenario = ScenarioConfig(
             name="fept_mgo",
             enabled=True,
-            parameters={"num_depositions": 2, "fe_pt_ratio": 0.5, "random_seed": 42},
+            parameters={"num_depositions": 2, "fe_pt_ratio": 0.5, "random_seed": 42}
         )
         mock_conf.eon = EONConfig(potential_path=path)
-        mock_conf.md = MagicMock()  # Mock MD config
+        mock_conf.md = MagicMock() # Mock MD config
         yield mock_conf
 
 
@@ -47,7 +47,6 @@ def test_fept_generate_surface(mock_config: Any) -> None:
 
 def test_fept_deposit_atoms_deterministic(mock_config: Any) -> None:
     mock_engine = MagicMock()
-
     # Configure engine.relax to return a modified structure (simulating relaxation)
     def mock_relax(atoms: Atoms, pot: Any) -> Atoms:
         atoms_copy = atoms.copy()
@@ -72,13 +71,12 @@ def test_fept_deposit_atoms_deterministic(mock_config: Any) -> None:
 
     # Check positions match (determinism)
     import numpy as np
-
     assert np.allclose(deposited1.get_positions(), deposited2.get_positions())
     assert deposited1.get_chemical_symbols() == deposited2.get_chemical_symbols()
 
 
 def test_fept_run_flow(mock_config: Any) -> None:
-    mock_config.eon.enabled = True  # Enable EON for this test
+    mock_config.eon.enabled = True # Enable EON for this test
     mock_engine = MagicMock()
     mock_engine.relax.side_effect = lambda atoms, pot: atoms.copy()
 
@@ -91,7 +89,7 @@ def test_fept_run_flow(mock_config: Any) -> None:
         scenario.run()
 
     # Verify sequence
-    assert mock_write.call_count >= 3  # surface, deposited, eon structure
+    assert mock_write.call_count >= 3 # surface, deposited, eon structure
     assert mock_eon.generate_config.called
     assert mock_eon.run.called
 
@@ -109,7 +107,6 @@ def test_fept_relaxation_failure(mock_config: Any) -> None:
         dm.deposit(slab)
 
     assert "Deposition failed" in str(excinfo.value)
-
 
 def test_deposition_manager_error(mock_config: Any) -> None:
     mock_engine = MagicMock()

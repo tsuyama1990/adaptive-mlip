@@ -1,83 +1,103 @@
+import logging
 import tempfile
+import uuid
 from pathlib import Path
+from typing import Any
 
 from ase import Atoms
-from ase.io.lammpsdata import write_lammps_data
+from ase.io import write
 
-from pyacemaker.domain_models.constants import DEFAULT_RAM_DISK_PATH
 from pyacemaker.domain_models.md import MDConfig
+from pyacemaker.utils.io import write_lammps_streaming
+from pyacemaker.utils.structure import get_species_order
+
+logger = logging.getLogger(__name__)
 
 
 class LammpsFileManager:
     """
-    Manages LAMMPS input/output files and workspace preparation.
+    Manages file I/O for LAMMPS engine.
+    Handles temporary directories, structure writing, and path management.
     """
 
     def __init__(self, config: MDConfig) -> None:
         self.config = config
 
-    def _determine_workspace_dir(self) -> Path:
-        """Determines the base directory for the LAMMPS workspace."""
-        base_dir = Path(self.config.temp_dir) if self.config.temp_dir else Path("/tmp")
-        if str(base_dir) == DEFAULT_RAM_DISK_PATH:
-            base_dir.mkdir(parents=True, exist_ok=True)
-        return base_dir
-
-    def _get_unique_elements(self, structure: Atoms) -> list[str]:
-        """Extracts unique chemical symbols from the structure."""
-        symbols = structure.get_chemical_symbols() # type: ignore[no-untyped-call]
-        # Sort for determinism
-        return sorted(set(symbols))
-
-    def prepare_workspace(
-        self, structure: Atoms
-    ) -> tuple[tempfile.TemporaryDirectory[str], Path, Path, Path, list[str]]:
+    def prepare_workspace(self, structure: Atoms | str | Path) -> tuple[Any, Path, Path, Path, list[str]]:
         """
-        Creates a temporary workspace and writes the LAMMPS data file.
+        Creates temporary directory and writes structure file.
+
+        Args:
+            structure: Atomic structure to simulate. Can be Atoms object, or path to file.
 
         Returns:
-            Tuple of (TemporaryDirectory object, path to data_file, path to dump_file, path to log_file, elements_list)
+            temp_dir_ctx: Context manager for temporary directory.
+            data_file: Path to input data file (in temp dir).
+            dump_file: Path to output trajectory file (in CWD).
+            log_file: Path to output log file (in CWD).
+            elements: List of element symbols in order.
         """
-        base_dir = self._determine_workspace_dir()
-
-        # Create temporary directory within the chosen base dir
-        # We return the TemporaryDirectory object so the caller can control its lifecycle (e.g. using 'with')
-        temp_dir_ctx = tempfile.TemporaryDirectory(dir=base_dir, prefix="lammps_")
-        work_dir = Path(temp_dir_ctx.name)
-
-        data_file = work_dir / "structure.data"
-        dump_file = work_dir / "trajectory.dump"
-        log_file = work_dir / "lammps.log"
-
-        elements = self._get_unique_elements(structure)
-
+        # RAM disk usage optimization via config
+        temp_dir_ctx = tempfile.TemporaryDirectory(dir=self.config.temp_dir)
         try:
-            # Memory optimization: Large structures can be written in chunks if supported,
-            # but write_lammps_data typically writes directly to file stream efficiently.
-            # We enforce use of safe paths.
-            if len(structure) > 100000:
-                # Placeholder for explicit chunked writing if write_lammps_data proves too memory intensive
-                self._write_structure_memory(structure, data_file, elements)
+            temp_dir = Path(temp_dir_ctx.name)
+
+            run_id = uuid.uuid4().hex[:8]
+            data_file = temp_dir / f"data_{run_id}.lmp"
+
+            # Persistence: Outputs go to current working directory
+            cwd = Path.cwd()
+            dump_file = cwd / f"dump_{run_id}.lammpstrj"
+            log_file = cwd / f"log_{run_id}.lammps"
+
+            # Handle different input types
+            if isinstance(structure, (str, Path)):
+                # Load only the first frame to minimize memory usage
+                from ase.io import iread
+                try:
+                    atoms_iter = iread(str(structure))
+                    first_frame = next(atoms_iter)
+                except StopIteration:
+                    msg = f"Input structure file {structure} is empty."
+                    raise ValueError(msg) from None
+                except Exception as e:
+                    msg = f"Failed to read structure from {structure}: {e}"
+                    raise ValueError(msg) from e
+
+                elements = get_species_order(first_frame)
+                self._write_structure_memory(first_frame, data_file, elements)
+
             else:
+                # It's an Atoms object.
+                elements = get_species_order(structure)
                 self._write_structure_memory(structure, data_file, elements)
+
+            return temp_dir_ctx, data_file, dump_file, log_file, elements
 
         except Exception:
             # Clean up if setup fails
             temp_dir_ctx.cleanup()
             raise
-        else:
-            return temp_dir_ctx, data_file, dump_file, log_file, elements
 
-    def _write_structure_memory(
-        self, structure: Atoms, data_file: Path, elements: list[str]
-    ) -> None:
-        """Writes structure to data file ensuring atomic positions are handled optimally."""
+    def _write_structure_memory(self, structure: Atoms, output_path: Path, elements: list[str]) -> None:
+        """Writes structure to disk using streaming writer if possible."""
         try:
-            with data_file.open("w") as fd:
-                # Use atom_style from config
-                write_lammps_data(
-                    fd, structure, specorder=elements, atom_style=self.config.atom_style.value
-                )
+            # Memory Safety Fix: Always attempt streaming first if atom_style allows
+            streaming_success = False
+            if self.config.atom_style == "atomic":
+                try:
+                    with output_path.open("w") as f:
+                        write_lammps_streaming(f, structure, elements)
+                    streaming_success = True
+                    logger.debug("Successfully wrote LAMMPS data file using streaming.")
+                except ValueError as e:
+                    logger.debug("Streaming write skipped: %s. Falling back to ASE.", e)
+
+            if not streaming_success:
+                if len(structure) > 1000000:
+                    logger.warning("Falling back to ASE write for large structure (%d atoms). Memory usage may be high.", len(structure))
+                write(str(output_path), structure, format="lammps-data", specorder=elements, atom_style=self.config.atom_style.value)
+
         except Exception as e:
             msg = f"Failed to write LAMMPS data file: {e}"
             raise RuntimeError(msg) from e

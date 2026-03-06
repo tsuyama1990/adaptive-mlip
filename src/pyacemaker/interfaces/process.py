@@ -11,7 +11,6 @@ class ProcessRunner(ABC):
     def run(self, cmd: list[str], cwd: Path, **kwargs: Any) -> subprocess.CompletedProcess[str]:
         pass
 
-
 class SubprocessRunner(ProcessRunner):
     """Default implementation using subprocess.run."""
 
