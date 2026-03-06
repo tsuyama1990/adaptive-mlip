@@ -57,7 +57,7 @@ def mock_structure_config() -> StructureConfig:
 @pytest.fixture
 def mock_training_config() -> TrainingConfig:
     return TrainingConfig(
-        potential_type="ace",
+        potential_type="pace",
         cutoff_radius=5.0,
         max_basis_size=500,
         delta_learning=True,
@@ -147,7 +147,7 @@ def create_test_config_dict(**overrides: Any) -> dict[str, Any]:
             "diagonalization": "david",
         },
         "training": {
-            "potential_type": "ace",
+            "potential_type": "pace",
             "cutoff_radius": 5.0,
             "max_basis_size": 500,
             "delta_learning": True,

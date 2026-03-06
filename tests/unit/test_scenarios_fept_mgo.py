@@ -9,7 +9,7 @@ from ase import Atoms
 from pyacemaker.domain_models.config import PyAceConfig
 from pyacemaker.domain_models.eon import EONConfig
 from pyacemaker.domain_models.scenario import ScenarioConfig
-from pyacemaker.scenarios.fept_mgo import ScenarioContext, DepositionManager, FePtMgoScenario
+from pyacemaker.scenarios.fept_mgo import DepositionManager, FePtMgoScenario, ScenarioContext
 
 
 @pytest.fixture

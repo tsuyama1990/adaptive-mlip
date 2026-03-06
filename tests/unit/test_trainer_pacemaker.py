@@ -15,7 +15,7 @@ from pyacemaker.domain_models.training import TrainingConfig
 @pytest.fixture
 def config() -> TrainingConfig:
     return TrainingConfig(
-        potential_type="ace",
+        potential_type="pace",
         cutoff_radius=5.0,
         max_basis_size=2,
         output_filename="test_pot.yace",

@@ -35,7 +35,7 @@ dft:
         H: H.UPF
         O: O.UPF
 training:
-    potential_type: ace
+    potential_type: pace
     cutoff_radius: 5.0
     max_basis_size: 500
 md:

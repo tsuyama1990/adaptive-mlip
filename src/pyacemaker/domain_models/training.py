@@ -1,4 +1,5 @@
 from enum import StrEnum
+
 from pydantic import BaseModel, ConfigDict, Field, PositiveFloat, field_validator, model_validator
 
 from pyacemaker.domain_models.defaults import (

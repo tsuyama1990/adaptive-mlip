@@ -31,7 +31,7 @@ def test_pacemaker_integration_full_flow(tmp_path: Path) -> None:
 
     # 2. Config
     config = TrainingConfig(
-        potential_type="ace",
+        potential_type="pace",
         cutoff_radius=4.0,
         max_basis_size=300,
         output_filename="output.yace",
@@ -80,7 +80,7 @@ def test_pacemaker_integration_failure_handling(tmp_path: Path) -> None:
     data_path = tmp_path / "data.xyz"
     write(data_path, Atoms("He"))
 
-    config = TrainingConfig(potential_type="ace", cutoff_radius=3.0, max_basis_size=100)
+    config = TrainingConfig(potential_type="pace", cutoff_radius=3.0, max_basis_size=100)
     trainer = PacemakerTrainer(config)
 
     from pyacemaker.core.exceptions import TrainerError

@@ -88,7 +88,7 @@ def test_orchestrator_refinement_logic(tmp_path: Path) -> None:
             kpoints_density=0.04,
             encut=400.0,
         ),
-        training=TrainingConfig(potential_type="ace", cutoff_radius=4.0, max_basis_size=100),
+        training=TrainingConfig(potential_type="pace", cutoff_radius=4.0, max_basis_size=100),
         md=MDConfig(temperature=300.0, pressure=0.0, timestep=0.001, n_steps=100, fix_halt=True),
         workflow=WorkflowConfig(
             max_iterations=1,
@@ -174,7 +174,7 @@ def test_orchestrator_refinement_extraction_failure(tmp_path: Path, caplog: Any)
             kpoints_density=0.04,
             encut=400.0,
         ),
-        training=TrainingConfig(potential_type="ace", cutoff_radius=4.0, max_basis_size=100),
+        training=TrainingConfig(potential_type="pace", cutoff_radius=4.0, max_basis_size=100),
         md=MDConfig(temperature=300.0, pressure=0.0, timestep=0.001, n_steps=100, fix_halt=True),
         workflow=WorkflowConfig(
             max_iterations=1,

@@ -2,11 +2,14 @@ import contextlib
 import logging
 import tempfile
 from collections.abc import Callable, Iterator
-from itertools import islice
 from pathlib import Path
 
 from ase import Atoms
-from ase.calculators.calculator import CalculationFailed, CalculatorSetupError, PropertyNotImplementedError
+from ase.calculators.calculator import (
+    CalculationFailed,
+    CalculatorSetupError,
+    PropertyNotImplementedError,
+)
 
 from pyacemaker.core.base import BaseOracle
 from pyacemaker.core.exceptions import OracleError

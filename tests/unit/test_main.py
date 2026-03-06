@@ -30,7 +30,7 @@ dft:
     pseudopotentials:
         Al: Al.UPF
 training:
-    potential_type: ace
+    potential_type: pace
     cutoff_radius: 4.0
     max_basis_size: 500
 md:
@@ -85,7 +85,7 @@ dft:
     pseudopotentials:
         Al: Al.UPF
 training:
-    potential_type: ace
+    potential_type: pace
     cutoff_radius: 4.0
     max_basis_size: 500
 md:

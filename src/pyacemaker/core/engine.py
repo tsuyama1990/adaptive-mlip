@@ -6,7 +6,6 @@ from ase import Atoms
 from pyacemaker.core.base import BaseEngine
 from pyacemaker.core.io_manager import LammpsFileManager
 from pyacemaker.core.lammps_generator import LammpsScriptGenerator
-from pyacemaker.utils.io_transaction import DirectoryTransaction
 from pyacemaker.core.validator import LammpsInputValidator
 from pyacemaker.domain_models.constants import (
     ERR_SIM_EXEC_FAIL,
@@ -18,6 +17,7 @@ from pyacemaker.domain_models.constants import (
 )
 from pyacemaker.domain_models.md import MDConfig, MDSimulationResult
 from pyacemaker.interfaces.lammps_driver import LammpsDriver
+from pyacemaker.utils.io_transaction import DirectoryTransaction
 
 
 class LammpsEngine(BaseEngine):

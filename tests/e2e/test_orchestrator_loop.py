@@ -55,7 +55,7 @@ def mock_config(tmp_path: Path) -> PyAceConfig:
             "diagonalization": "david",
         },
         "training": {
-            "potential_type": "ace",
+            "potential_type": "pace",
             "cutoff_radius": 5.0,
             "max_basis_size": 500,
             "delta_learning": True,
