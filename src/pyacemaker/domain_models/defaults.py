@@ -297,3 +297,5 @@ def main():
 if __name__ == "__main__":
     main()
 """
+
+SUPPORTED_TRAINING_FORMATS: Final[set[str]] = {".pckl", ".xyz", ".extxyz", ".gzip"}

@@ -1,7 +1,6 @@
 import shutil
 import subprocess
 from pathlib import Path
-from typing import Any
 
 from pyacemaker.core.base import BaseTrainer
 from pyacemaker.core.config_generator import PacemakerConfigGenerator
@@ -25,7 +24,7 @@ class PacemakerTrainer(BaseTrainer):
         self,
         training_data_path: str | Path,
         initial_potential: str | Path | None = None
-    ) -> Any:
+    ) -> Path:
         """
         Trains a potential using the provided training data file.
 
@@ -44,8 +43,10 @@ class PacemakerTrainer(BaseTrainer):
             TrainerError: If the training data file does not exist or format is invalid.
         """
         # Ensure pace_train is installed
-        if not shutil.which("pace_train"):
-            msg = "Executable 'pace_train' not found in PATH."
+        import os
+        pace_train_exe = os.environ.get("PACE_TRAIN_EXECUTABLE", "pace_train")
+        if not shutil.which(pace_train_exe):
+            msg = f"Executable '{pace_train_exe}' not found in PATH."
             raise TrainerError(msg)
 
         data_path = Path(training_data_path).resolve()
@@ -61,14 +62,16 @@ class PacemakerTrainer(BaseTrainer):
         dump_yaml(pacemaker_config, input_yaml_path)
 
         # Run pace_train
-        cmd = ["pace_train", str(input_yaml_path)]
+        cmd = [pace_train_exe, str(input_yaml_path)]
 
         if initial_potential:
             initial_path = Path(initial_potential)
             if not initial_path.exists():
                 msg = f"Initial potential not found: {initial_path}"
                 raise TrainerError(msg)
-            cmd.extend(["--initial_potential", str(initial_path)])
+            from pyacemaker.utils.path import validate_path_safe
+            safe_initial_path = validate_path_safe(initial_path)
+            cmd.extend(["--initial_potential", str(safe_initial_path)])
 
         try:
             run_command(cmd)
@@ -87,13 +90,15 @@ class PacemakerTrainer(BaseTrainer):
 
         return potential_path
 
-    def _validate_training_data(self, data_path: Path) -> None:
+    @staticmethod
+    def _validate_training_data(data_path: Path) -> None:
         """Validates existence and basic format of training data."""
         if not data_path.exists():
             msg = f"Training data not found: {data_path}"
             raise TrainerError(msg)
 
-        if data_path.suffix not in {".pckl", ".xyz", ".extxyz", ".gzip"}:
+        from pyacemaker.domain_models.defaults import SUPPORTED_TRAINING_FORMATS
+        if data_path.suffix not in SUPPORTED_TRAINING_FORMATS:
             msg = f"Invalid training data format: {data_path.suffix}"
             raise TrainerError(msg)
 
@@ -101,5 +106,3 @@ class PacemakerTrainer(BaseTrainer):
         if data_path.stat().st_size == 0:
             msg = f"Training data file is empty: {data_path}"
             raise TrainerError(msg)
-
-
