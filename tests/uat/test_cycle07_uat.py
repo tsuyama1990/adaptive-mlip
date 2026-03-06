@@ -16,7 +16,12 @@ def validator_dependencies():
 @pytest.fixture
 def validator(validator_dependencies):
     config = ValidationConfig()
-    from pyacemaker.core.validator import ElasticValidator, PhononValidator, ReportValidator, StructureRelaxer
+    from pyacemaker.core.validator import (
+        ElasticValidator,
+        PhononValidator,
+        ReportValidator,
+        StructureRelaxer,
+    )
     return Validator(
         config,
         PhononValidator(validator_dependencies["phonon"]),

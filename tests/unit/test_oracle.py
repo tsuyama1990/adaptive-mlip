@@ -1,5 +1,3 @@
-from unittest.mock import MagicMock
-
 from collections.abc import Iterator
 from pathlib import Path
 from unittest.mock import MagicMock

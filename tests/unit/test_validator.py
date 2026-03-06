@@ -24,7 +24,12 @@ class TestValidator:
     @pytest.fixture
     def validator(self, mock_phonon_calc, mock_elastic_calc, mock_report_gen):
         config = ValidationConfig()
-        from pyacemaker.core.validator import ElasticValidator, PhononValidator, ReportValidator, StructureRelaxer
+        from pyacemaker.core.validator import (
+            ElasticValidator,
+            PhononValidator,
+            ReportValidator,
+            StructureRelaxer,
+        )
         return Validator(
             config=config,
             phonon_validator=PhononValidator(mock_phonon_calc),

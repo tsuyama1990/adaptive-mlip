@@ -1,6 +1,3 @@
-from pyacemaker.core.lammps_generator import LammpsScriptGenerator
-from pyacemaker.core.io_manager import LammpsFileManager
-
 from pathlib import Path
 from unittest.mock import patch
 
@@ -8,6 +5,8 @@ import numpy as np
 from ase import Atoms
 
 from pyacemaker.core.engine import LammpsEngine
+from pyacemaker.core.io_manager import LammpsFileManager
+from pyacemaker.core.lammps_generator import LammpsScriptGenerator
 from pyacemaker.domain_models.md import MDConfig
 
 

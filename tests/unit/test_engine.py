@@ -1,6 +1,3 @@
-from pyacemaker.core.lammps_generator import LammpsScriptGenerator
-from pyacemaker.core.io_manager import LammpsFileManager
-
 import re
 from pathlib import Path
 from typing import Any
@@ -11,6 +8,8 @@ import pytest
 from ase import Atoms
 
 from pyacemaker.core.engine import LammpsEngine
+from pyacemaker.core.io_manager import LammpsFileManager
+from pyacemaker.core.lammps_generator import LammpsScriptGenerator
 from pyacemaker.domain_models.md import HybridParams, MDConfig, MDSimulationResult
 
 
