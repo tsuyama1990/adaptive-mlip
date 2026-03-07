@@ -37,7 +37,10 @@ class ColdStartPolicy(SafeBasePolicy):
 
 class MDExecutionStrategy:
     """Strategy for executing short MD bursts."""
-    def execute(self, base_structure: Atoms, engine: Any, potential: Any, n_structures: int) -> Iterator[Atoms]:
+
+    def execute(
+        self, base_structure: Atoms, engine: Any, potential: Any, n_structures: int
+    ) -> Iterator[Atoms]:
         original_config = engine.config
         try:
             # Create a temporary config for the burst without mutating the original reference long-term
@@ -51,10 +54,12 @@ class MDExecutionStrategy:
         finally:
             engine.config = original_config
 
+
 class MDMicroBurstPolicy(SafeBasePolicy):
     """
     Policy using short MD bursts to explore phase space.
     """
+
     def __init__(self, md_strategy: MDExecutionStrategy | None = None) -> None:
         self.md_strategy = md_strategy or MDExecutionStrategy()
         super().__init__()

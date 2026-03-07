@@ -51,6 +51,7 @@ class ModuleFactory:
         try:
             # Oracle
             from pyacemaker.interfaces.qe_driver import QEDriver
+
             oracle = DFTManager(config.dft, QEDriver())
 
             # Generator
@@ -62,10 +63,16 @@ class ModuleFactory:
             # Engine
             from pyacemaker.core.io_manager import LammpsFileManager
             from pyacemaker.core.lammps_generator import LammpsScriptGenerator
+
             engine = LammpsEngine(
                 config.md,
-                LammpsScriptGenerator(config.md),
-                LammpsFileManager(config.md)
+                LammpsScriptGenerator(
+                    config.md,
+                    otf_config=config.workflow.otf,
+                    thresholds=config.workflow.loop_strategy.thresholds,
+                ),
+                LammpsFileManager(config.md),
+                otf_config=config.workflow.otf,
             )
 
             # Active Set Selector
@@ -78,20 +85,27 @@ class ModuleFactory:
                 ReportValidator,
                 StructureRelaxer,
             )
+
             report_validator = ReportValidator(ReportGenerator())
-            phonon_validator = PhononValidator(PhononCalculator(
-                engine,
-                config.validation.phonon_supercell,
-                config.validation.phonon_displacement,
-                config.validation.phonon_imaginary_tol,
-            ))
-            elastic_validator = ElasticValidator(ElasticCalculator(
-                engine,
-                config.validation.elastic_strain,
-                config.validation.elastic_steps,
-            ))
+            phonon_validator = PhononValidator(
+                PhononCalculator(
+                    engine,
+                    config.validation.phonon_supercell,
+                    config.validation.phonon_displacement,
+                    config.validation.phonon_imaginary_tol,
+                )
+            )
+            elastic_validator = ElasticValidator(
+                ElasticCalculator(
+                    engine,
+                    config.validation.elastic_strain,
+                    config.validation.elastic_steps,
+                )
+            )
             relaxer = StructureRelaxer(engine)
-            validator = Validator(config.validation, phonon_validator, elastic_validator, report_validator, relaxer)
+            validator = Validator(
+                config.validation, phonon_validator, elastic_validator, report_validator, relaxer
+            )
 
         except Exception as e:
             msg = f"Failed to create modules: {e}"

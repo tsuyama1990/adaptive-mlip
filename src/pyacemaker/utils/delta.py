@@ -4,6 +4,8 @@ from ase.data import atomic_numbers
 from pyacemaker.domain_models.constants import DEFAULT_LJ_PARAMS, FALLBACK_LJ_PARAMS
 
 
+from typing import Any
+
 def get_lj_params(element: str) -> dict[str, float]:
     """
     Returns Lennard-Jones parameters for a given element.
@@ -15,7 +17,8 @@ def get_lj_params(element: str) -> dict[str, float]:
     Returns:
         Dictionary with "sigma" (Angstrom) and "epsilon" (eV).
     """
-    return DEFAULT_LJ_PARAMS.get(element, FALLBACK_LJ_PARAMS.copy())
+    val = DEFAULT_LJ_PARAMS.get(element, FALLBACK_LJ_PARAMS.copy())
+    return val  # type: ignore[return-value]
 
 
 def compute_zbl_energy(el1: str, el2: str, r: float) -> float:

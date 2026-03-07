@@ -61,6 +61,7 @@ def test_module_factory_create_modules(mock_config: PyAceConfig) -> None:
 
         # Verify initializations
         from pyacemaker.interfaces.qe_driver import QEDriver
+
         # MockDFTManager was called with config and a QEDriver instance
         assert MockDFTManager.call_count == 1
         args, kwargs = MockDFTManager.call_args

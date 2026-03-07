@@ -65,8 +65,6 @@ def mock_config(tmp_path: Path) -> PyAceConfig:
             "pressure": 0.0,
             "timestep": 0.001,
             "n_steps": 1000,
-            "uncertainty_threshold": 5.0,
-            "check_interval": 10,
         },
         "workflow": {
             "max_iterations": 2,
@@ -74,6 +72,10 @@ def mock_config(tmp_path: Path) -> PyAceConfig:
             "data_dir": str(tmp_path / "data"),
             "active_learning_dir": str(tmp_path / "active_learning"),
             "potentials_dir": str(tmp_path / "potentials"),
+            "otf": {
+                "fix_halt": True,
+                "check_interval": 10,
+            },
         },
         "logging": {},
     }
@@ -104,7 +106,7 @@ def test_cold_start(orchestrator: Orchestrator, tmp_path: Path) -> None:
     # Reset loop state via public state manager method (or let it start fresh)
     orchestrator.state_manager.reset()
     if orchestrator.state_manager.load() is None:
-        orchestrator.state_manager.save() # Ensure state exists
+        orchestrator.state_manager.save()  # Ensure state exists
 
     # Setup mocks
     assert orchestrator.oracle is not None
@@ -164,7 +166,7 @@ def test_run_loop_iteration_halt(orchestrator: Orchestrator, tmp_path: Path) -> 
     current_pot.touch()
     state.current_potential = current_pot
     orchestrator.state_manager.save()
-    orchestrator.state_manager.load() # reload to update internal orchestrator references if needed
+    orchestrator.state_manager.load()  # reload to update internal orchestrator references if needed
 
     # Mock MD halt
     halt_path = tmp_path / "halt.xyz"

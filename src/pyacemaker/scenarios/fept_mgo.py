@@ -167,10 +167,16 @@ class FePtMgoScenario(BaseScenario):
         else:
             from pyacemaker.core.io_manager import LammpsFileManager
             from pyacemaker.core.lammps_generator import LammpsScriptGenerator
+
             self.engine = LammpsEngine(
                 self.config.md,
-                LammpsScriptGenerator(self.config.md),
-                LammpsFileManager(self.config.md)
+                LammpsScriptGenerator(
+                    self.config.md,
+                    otf_config=self.config.workflow.otf,
+                    thresholds=self.config.workflow.loop_strategy.thresholds,
+                ),
+                LammpsFileManager(self.config.md),
+                otf_config=self.config.workflow.otf,
             )
         self.eon_wrapper = ctx.eon_wrapper
         self.deposition_manager = ctx.deposition_manager

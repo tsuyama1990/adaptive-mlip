@@ -30,28 +30,36 @@ from pyacemaker.orchestrator import Orchestrator
 
 def create_mock_generator(elements: list[str]) -> MagicMock:
     mock_gen = MagicMock(spec=BaseGenerator)
+
     def generate(n_candidates: int) -> Iterator[Atoms]:
         symbol = elements[0] if elements else "H"
         for _ in range(n_candidates):
             yield Atoms(f"{symbol}2", positions=[[0, 0, 0], [0, 0, 0.74]])
+
     def generate_local(base_structure: Atoms, n_candidates: int, **kwargs: Any) -> Iterator[Atoms]:
         for _ in range(n_candidates):
             yield base_structure.copy()
+
     mock_gen.generate.side_effect = generate
     mock_gen.generate_local.side_effect = generate_local
     return mock_gen
 
+
 def create_mock_oracle() -> MagicMock:
     mock_oracle = MagicMock(spec=BaseOracle)
+
     def compute(structures: Iterator[Atoms], batch_size: int = 10) -> Iterator[Atoms]:
         for atoms in structures:
             atoms.info["energy"] = -10.0
             yield atoms
+
     mock_oracle.compute.side_effect = compute
     return mock_oracle
 
+
 def create_mock_trainer(output_dir: Path) -> MagicMock:
     mock_trainer = MagicMock(spec=BaseTrainer)
+
     def train(training_data_path: str | Path, initial_potential: str | Path | None = None) -> Any:
         path = Path(training_data_path)
         if not path.exists():
@@ -60,11 +68,14 @@ def create_mock_trainer(output_dir: Path) -> MagicMock:
         pot_path = output_dir / "fake_potential.yace"
         pot_path.touch()
         return pot_path
+
     mock_trainer.train.side_effect = train
     return mock_trainer
 
+
 def create_mock_engine() -> MagicMock:
     mock_engine = MagicMock(spec=BaseEngine)
+
     def run(structure: Atoms | None, potential: Any) -> MDSimulationResult:
         return MDSimulationResult(
             energy=-10.0,
@@ -77,6 +88,7 @@ def create_mock_engine() -> MagicMock:
             log_path="log.lammps",
             halt_structure_path=None,
         )
+
     mock_engine.run.side_effect = run
     mock_engine.compute_static_properties.side_effect = run
     mock_engine.relax.side_effect = lambda structure, potential: structure
@@ -251,9 +263,11 @@ def test_orchestrator_error_handling_oracle_stream(
 
     def mock_create_modules(cfg: PyAceConfig) -> tuple[Any, Any, Any, Any, Any, Any]:
         mock_oracle = MagicMock(spec=BaseOracle)
+
         def compute(structures: Iterator[Atoms], batch_size: int = 10) -> Iterator[Atoms]:
             msg = "Oracle computation failed"
             raise RuntimeError(msg)
+
         mock_oracle.compute.side_effect = compute
 
         return (

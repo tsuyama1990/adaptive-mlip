@@ -15,16 +15,53 @@ from pyacemaker.domain_models.defaults import (
 )
 
 
+class ActiveLearningThresholds(BaseModel):
+    """Two-Tier Thresholds inspired by FLARE"""
+    model_config = ConfigDict(extra="forbid")
+
+    threshold_call_dft: float = Field(0.05, description="Criteria to halt MD and call DFT")
+    threshold_add_train: float = Field(0.02, description="Criteria to select atoms for training set")
+    smooth_steps: int = Field(3, description="Consecutive steps threshold exceedance required to eliminate thermal noise")
+
+class CutoutConfig(BaseModel):
+    """Phase 3: Intelligent Cutout Settings"""
+    model_config = ConfigDict(extra="forbid")
+
+    core_radius: float = Field(4.0, description="Radius for Force Weight 1.0")
+    buffer_radius: float = Field(3.0, description="Thickness of additional relaxation buffer layer")
+    enable_pre_relaxation: bool = True
+    enable_passivation: bool = True
+    passivation_element: str = "H"
+
+class DistillationConfig(BaseModel):
+    """Phase 1: Zero-Shot Distillation Settings"""
+    model_config = ConfigDict(extra="forbid")
+
+    enable: bool = True
+    mace_model_path: str = "mace-mp-0-medium"
+    uncertainty_threshold: float = Field(0.05, description="Safe threshold for MACE")
+    sampling_structures_per_system: int = 1000
+
+class LoopStrategyConfig(BaseModel):
+    """Active Learning Loop Strategy Settings"""
+    model_config = ConfigDict(extra="forbid")
+
+    use_tiered_oracle: bool = True
+    incremental_update: bool = True
+    replay_buffer_size: int = Field(500, description="Number of past data points to retain to prevent catastrophic forgetting")
+    baseline_potential_type: str = Field("LJ", description="Physical baseline potential (e.g., LJ)")
+    thresholds: ActiveLearningThresholds = Field(default_factory=ActiveLearningThresholds)
+
 class OTFConfig(BaseModel):
     """Configuration for On-The-Fly (OTF) Active Learning loop."""
 
     model_config = ConfigDict(extra="forbid")
 
-    uncertainty_threshold: float = Field(
-        default=DEFAULT_OTF_UNCERTAINTY_THRESHOLD,
-        gt=0,
-        description="Gamma threshold to trigger halt and retraining.",
+    fix_halt: bool = Field(False, description="Enable OTF halting based on uncertainty")
+    check_interval: int = Field(
+        10, gt=0, description="Step interval for uncertainty check"
     )
+
     local_n_candidates: PositiveInt = Field(
         default=DEFAULT_OTF_LOCAL_N_CANDIDATES,
         description="Number of local candidates to generate around halt structure.",
@@ -75,6 +112,9 @@ class WorkflowConfig(BaseModel):
     )
 
     otf: OTFConfig = Field(default_factory=OTFConfig, description="Configuration for OTF loop.")
+    loop_strategy: LoopStrategyConfig = Field(default_factory=LoopStrategyConfig, description="Configuration for loop strategy.")
+    distillation: DistillationConfig = Field(default_factory=DistillationConfig, description="Configuration for distillation.")
+    cutout: CutoutConfig = Field(default_factory=CutoutConfig, description="Configuration for cutout.")
 
     @model_validator(mode="after")
     def validate_checkpoint_interval(self) -> "WorkflowConfig":

@@ -39,6 +39,7 @@ def get_scenario_runner(name: str, config: PyAceConfig) -> BaseScenario:
 
 class CLIParser:
     """Parses command-line arguments."""
+
     @staticmethod
     def parse() -> argparse.Namespace:
         parser = argparse.ArgumentParser(description="Adaptive MLIP construction orchestrator")
@@ -48,6 +49,7 @@ class CLIParser:
         )
         parser.add_argument("--scenario", type=str, help="Run a specific scenario (e.g., fept_mgo)")
         return parser.parse_args()
+
 
 def main() -> None:
     args = CLIParser.parse()

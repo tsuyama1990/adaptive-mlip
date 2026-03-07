@@ -44,8 +44,6 @@ def uat_config(tmp_path: Path) -> PyAceConfig:
             "pressure": 0.0,
             "timestep": 0.001,
             "n_steps": 1000,
-            "uncertainty_threshold": 5.0,
-            "check_interval": 10,
         },
         "workflow": {
             "max_iterations": 2,
@@ -53,6 +51,10 @@ def uat_config(tmp_path: Path) -> PyAceConfig:
             "data_dir": str(tmp_path / "data"),
             "active_learning_dir": str(tmp_path / "active_learning"),
             "potentials_dir": str(tmp_path / "potentials"),
+            "otf": {
+                "fix_halt": True,
+                "check_interval": 10,
+            }
         },
         "logging": {},
     }
@@ -84,7 +86,9 @@ def mock_pipeline_modules(tmp_path):
     return mock_gen, mock_oracle, mock_trainer, mock_engine, mock_selector, mock_validator
 
 
-def test_scenario_06_01_active_learning_campaign(uat_config: PyAceConfig, tmp_path: Path, mock_pipeline_modules) -> None:
+def test_scenario_06_01_active_learning_campaign(
+    uat_config: PyAceConfig, tmp_path: Path, mock_pipeline_modules
+) -> None:
     """
     Scenario 06-01: Verify that the system can run a complete active learning loop from start to finish (mocked).
     """

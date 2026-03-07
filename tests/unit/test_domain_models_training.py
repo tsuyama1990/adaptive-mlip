@@ -27,6 +27,7 @@ def test_training_config_defaults() -> None:
 
 def test_training_config_filename_validation() -> None:
     from pyacemaker.domain_models.training import PotentialType
+
     # Valid
     TrainingConfig(
         potential_type=PotentialType.PACE,

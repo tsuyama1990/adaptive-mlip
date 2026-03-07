@@ -111,22 +111,29 @@ class LammpsInputValidator:
 
 class PhononValidator:
     """Validator for phonon stability."""
+
     def __init__(self, calculator: PhononCalculator) -> None:
         self.calculator = calculator
 
     def validate(self, structure: Atoms, potential_path: Path) -> tuple[bool, Path]:
         return self.calculator.check_stability(structure, potential_path)
 
+
 class ElasticValidator:
     """Validator for elastic stability."""
+
     def __init__(self, calculator: ElasticCalculator) -> None:
         self.calculator = calculator
 
-    def validate(self, structure: Atoms, potential_path: Path) -> tuple[bool, list[list[float]], float, Path]:
+    def validate(
+        self, structure: Atoms, potential_path: Path
+    ) -> tuple[bool, list[list[float]], float, Path]:
         return self.calculator.calculate_properties(structure, potential_path)
+
 
 class ReportValidator:
     """Generates validation reports."""
+
     def __init__(self, report_generator: Any) -> None:
         self.report_gen = report_generator
 
@@ -134,13 +141,16 @@ class ReportValidator:
         html = self.report_gen.generate(result)
         self.report_gen.save(output_path, html)
 
+
 class StructureRelaxer:
     """Relaxes structures for validation."""
+
     def __init__(self, engine: Any) -> None:
         self.engine = engine
 
     def relax(self, structure: Atoms, potential_path: Path) -> Atoms:
         return self.engine.relax(structure, potential_path)
+
 
 class Validator:
     """
@@ -195,6 +205,7 @@ class Validator:
 
         # Generate Report
         from pyacemaker.utils.path import validate_path_safe
+
         output_path = validate_path_safe(output_path)
         self.report_validator.generate(result, output_path)
 

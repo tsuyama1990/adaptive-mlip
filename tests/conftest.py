@@ -12,7 +12,6 @@ from ase.calculators.calculator import Calculator, CalculatorSetupError  # noqa:
 
 from pyacemaker.domain_models import (  # noqa: E402
     DFTConfig,
-    HybridParams,
     MDConfig,
     StructureConfig,
     TrainingConfig,
@@ -73,7 +72,7 @@ def mock_md_config() -> MDConfig:
         timestep=0.001,
         n_steps=1000,
         hybrid_potential=True,
-        hybrid_params=HybridParams(zbl_cut_inner=2.0, zbl_cut_outer=2.5),
+        hybrid_params=MDConfig.HybridParams(zbl_cut_inner=2.0, zbl_cut_outer=2.5),
     )
 
 
@@ -158,8 +157,6 @@ def create_test_config_dict(**overrides: Any) -> dict[str, Any]:
             "pressure": 0.0,
             "timestep": 0.001,
             "n_steps": 1000,
-            "uncertainty_threshold": 5.0,
-            "check_interval": 10,
         },
         "validation": {},  # Use defaults
         "workflow": {
@@ -170,7 +167,8 @@ def create_test_config_dict(**overrides: Any) -> dict[str, Any]:
             "n_candidates": 10,
             "batch_size": 5,
             "otf": {
-                "uncertainty_threshold": 5.0,
+                "fix_halt": True,
+                "check_interval": 10,
                 "local_n_candidates": 20,
                 "local_n_select": 5,
                 "max_retries": 3,
@@ -182,7 +180,7 @@ def create_test_config_dict(**overrides: Any) -> dict[str, Any]:
     # 2. Apply overrides (Deep merge)
     for key, value in overrides.items():
         if key in defaults and isinstance(defaults[key], dict) and isinstance(value, dict):
-            defaults[key].update(value)
+            defaults[key].update(value)  # type: ignore[attr-defined]
         else:
             defaults[key] = value
 

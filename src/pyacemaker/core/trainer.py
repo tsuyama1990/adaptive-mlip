@@ -53,6 +53,7 @@ class PacemakerTrainer(BaseTrainer):
 
         # Determine output directory (same as data file)
         from pyacemaker.utils.path import validate_path_safe
+
         output_dir = validate_path_safe(data_path.parent)
         input_yaml_path = output_dir / "input.yaml"
         potential_path = validate_path_safe(output_dir / self.config.output_filename)
@@ -87,6 +88,7 @@ class PacemakerTrainer(BaseTrainer):
 
         if not potential_path.exists():
             import logging
+
             logging.getLogger(__name__).error(f"Potential file was not created at {potential_path}")
             return None
 

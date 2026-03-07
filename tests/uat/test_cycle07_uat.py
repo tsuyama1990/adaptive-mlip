@@ -22,6 +22,7 @@ def validator(validator_dependencies):
         ReportValidator,
         StructureRelaxer,
     )
+
     return Validator(
         config,
         PhononValidator(validator_dependencies["phonon"]),
@@ -62,7 +63,8 @@ def test_uat_07_01_validate_potential_pass(validator, validator_dependencies):
 
     validator_dependencies["report"].generate.assert_called_once()
     validator_dependencies["report"].save.assert_called_once_with(
-        Path("validation_report.html").resolve(), validator_dependencies["report"].generate.return_value
+        Path("validation_report.html").resolve(),
+        validator_dependencies["report"].generate.return_value,
     )
 
     if potential_path.exists():
