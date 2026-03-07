@@ -38,9 +38,9 @@ class MACEManager(BaseOracle):
         from pyacemaker.utils.path import validate_path_safe
 
         # Validate model path format (either a known valid string like 'mace-mp-0-medium', or a valid path/URL)
-        if not use_mock and not model_path.startswith("mace-") and not model_path.startswith("http"):
-            if not Path(model_path).exists():
-                raise ValueError(f"model_path {model_path} does not exist or is not a valid MACE identifier.")
+        if not use_mock and not model_path.startswith("mace-") and not model_path.startswith("http") and not Path(model_path).exists():
+            msg = f"model_path {model_path} does not exist or is not a valid MACE identifier."
+            raise ValueError(msg)
 
         # Usually model_path is a string URL or name, but if it is a local file, validate it.
         # To avoid breaking valid mace-mp-0-medium strings, we only validate if use_mock is False
@@ -50,8 +50,6 @@ class MACEManager(BaseOracle):
         else:
             self.model_path = model_path
         self.use_mock = use_mock
-        # Real implementation would load mace torch model here
-        # self.model = mace.calculators.mace_mp(model=model_path)
 
     def compute_uncertainty(self, structure: Atoms) -> float:
         inferred = self._infer(structure)
@@ -87,12 +85,6 @@ class MACEManager(BaseOracle):
             # Uncertainty output (gamma)
             result.arrays["c_gamma"] = rng.uniform(0.001, 0.05, size=n_atoms)
         else:
-            # Placeholder for actual MACE call
-            # result.calc = self.model
-            # result.get_potential_energy()
-            # result.get_forces()
-            # If MACE is missing and use_mock is False, we should raise an error as per requirements.
-            # But wait, MACE is an external dependency. We'll raise a RuntimeError.
             msg = "MACE model is not installed or available, and use_mock is False."
             raise RuntimeError(msg)
 

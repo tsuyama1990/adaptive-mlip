@@ -70,16 +70,19 @@ class LammpsEngine(BaseEngine):
             msg = "LammpsScriptGenerator cannot be None"
             raise ValueError(msg)
         if not isinstance(generator, LammpsScriptGenerator):
-            raise TypeError("generator must be an instance of LammpsScriptGenerator")
+            msg = "generator must be an instance of LammpsScriptGenerator"
+            raise TypeError(msg)
 
         if file_manager is None:
             msg = "LammpsFileManager cannot be None"
             raise ValueError(msg)
         if not isinstance(file_manager, LammpsFileManager):
-            raise TypeError("file_manager must be an instance of LammpsFileManager")
+            msg = "file_manager must be an instance of LammpsFileManager"
+            raise TypeError(msg)
 
         if execution_strategy is not None and not isinstance(execution_strategy, SimulationExecutionStrategy):
-            raise TypeError("execution_strategy must be an instance of SimulationExecutionStrategy")
+            msg = "execution_strategy must be an instance of SimulationExecutionStrategy"
+            raise TypeError(msg)
 
         self.config = MDConfig.model_validate(config)
         self.generator = generator
