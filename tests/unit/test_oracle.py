@@ -36,7 +36,8 @@ def test_dft_manager_compute_success(mock_dft_config: DFTConfig) -> None:
     atoms = Atoms("H", cell=[10, 10, 10], pbc=True)
 
     # Create Mock Driver
-    mock_driver = MagicMock()
+    from pyacemaker.interfaces.qe_driver import QEDriver
+    mock_driver = MagicMock(spec=QEDriver)
     # Mock returns a calculator instance
     calc = MockCalculator(fail_count=0)
     mock_driver.get_calculator.return_value = calc
@@ -62,7 +63,8 @@ def test_dft_manager_self_healing(mock_dft_config: DFTConfig) -> None:
     atoms = Atoms("H", cell=[10, 10, 10], pbc=True)
 
     # Mock Driver
-    mock_driver = MagicMock()
+    from pyacemaker.interfaces.qe_driver import QEDriver
+    mock_driver = MagicMock(spec=QEDriver)
 
     # The calculator needs to fail first, then succeed.
     calc_fail = MockCalculator(fail_count=1)  # Fails once (attempt 1)
@@ -104,7 +106,8 @@ def test_dft_manager_fatal_error(mock_dft_config: DFTConfig) -> None:
     mock_dft_config = DFTConfig.model_validate(mock_dft_config)
     atoms = Atoms("H", cell=[10, 10, 10], pbc=True)
 
-    mock_driver = MagicMock()
+    from pyacemaker.interfaces.qe_driver import QEDriver
+    mock_driver = MagicMock(spec=QEDriver)
     # Always fail
     mock_driver.get_calculator.return_value = MockCalculator(fail_count=100)
 
@@ -125,7 +128,8 @@ def test_dft_manager_setup_error(mock_dft_config: DFTConfig) -> None:
     mock_dft_config = DFTConfig.model_validate(mock_dft_config)
     atoms = Atoms("H", cell=[10, 10, 10], pbc=True)
 
-    mock_driver = MagicMock()
+    from pyacemaker.interfaces.qe_driver import QEDriver
+    mock_driver = MagicMock(spec=QEDriver)
     # Fails with setup error (e.g. missing pseudo file)
     mock_driver.get_calculator.return_value = MockCalculator(setup_error=True)
 
@@ -144,7 +148,8 @@ def test_dft_manager_setup_error(mock_dft_config: DFTConfig) -> None:
 def test_dft_manager_strategies(mock_dft_config: DFTConfig) -> None:
     """Test that strategies are correctly defined."""
     mock_dft_config = DFTConfig.model_validate(mock_dft_config)
-    manager = DFTManager(mock_dft_config, MagicMock())
+    from pyacemaker.interfaces.qe_driver import QEDriver
+    manager = DFTManager(mock_dft_config, MagicMock(spec=QEDriver))
     strategies = manager._get_strategies()
 
     assert len(strategies) > 0
@@ -181,7 +186,7 @@ def test_dft_manager_invalid_input(mock_dft_config: DFTConfig) -> None:
     atoms_list = [Atoms("H")]
 
     # Check that it raises TypeError immediately upon calling compute (before next)
-    with pytest.raises(TypeError, match="Oracle failed to create iterator"):
+    with pytest.raises(TypeError, match="Oracle failed to create iterator|Expected Iterator"):
         manager.compute(atoms_list)  # type: ignore[arg-type]
 
 
@@ -285,7 +290,8 @@ def test_dft_manager_embedding(mock_dft_config: DFTConfig, monkeypatch: pytest.M
     monkeypatch.setattr("pyacemaker.core.oracle.embed_cluster", mock_embed)
 
     # Mock Driver
-    mock_driver = MagicMock()
+    from pyacemaker.interfaces.qe_driver import QEDriver
+    mock_driver = MagicMock(spec=QEDriver)
     mock_driver.get_calculator.return_value = MockCalculator(fail_count=0)
 
     manager = DFTManager(mock_dft_config, mock_driver)

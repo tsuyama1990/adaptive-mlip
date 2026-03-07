@@ -48,7 +48,7 @@ def test_uat_02_01_single_point_calculation(
     # We patch at the source where DFTManager imports it or uses it
     # DFTManager imports QEDriver from interfaces.qe_driver
 
-    with patch("pyacemaker.core.oracle.QEDriver") as MockDriverClass:
+    with patch("pyacemaker.core.oracle.QEDriver", spec=True) as MockDriverClass:
         mock_driver_instance = MockDriverClass.return_value
         # Mock get_calculator to return a MockCalculator instance with H2O energy
         # Accept **kwargs to handle 'directory' argument
@@ -56,6 +56,7 @@ def test_uat_02_01_single_point_calculation(
             MockCalculator(fail_count=0, test_energy=TEST_ENERGY_H2O)
         )
 
+        uat_dft_config = DFTConfig.model_validate(uat_dft_config)
         manager = DFTManager(uat_dft_config, mock_driver_instance)
 
         # Use explicit iteration
@@ -80,7 +81,7 @@ def test_uat_02_02_self_healing(
     )
 
     # 2. Action: Run DFTManager with failure
-    with patch("pyacemaker.core.oracle.QEDriver") as MockDriverClass:
+    with patch("pyacemaker.core.oracle.QEDriver", spec=True) as MockDriverClass:
         mock_driver_instance = MockDriverClass.return_value
 
         # Mock failure on first attempt, success on second
@@ -93,6 +94,7 @@ def test_uat_02_02_self_healing(
 
         mock_driver_instance.get_calculator.side_effect = [calc_fail, calc_success]
 
+        uat_dft_config = DFTConfig.model_validate(uat_dft_config)
         manager = DFTManager(uat_dft_config, mock_driver_instance)
 
         gen = manager.compute(iter([h2o]))

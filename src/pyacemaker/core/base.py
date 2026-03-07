@@ -22,8 +22,7 @@ class BasePolicy(ABC):
         """
         Generates new candidates based on policy logic.
         """
-        StructureConfig.model_validate(config)
-        yield base_structure.copy() # type: ignore[no-untyped-call]
+        pass
 
 
 class BaseGenerator(ABC):
@@ -41,6 +40,7 @@ class BaseGenerator(ABC):
         Args:
             config: New configuration object.
         """
+        StructureConfig.model_validate(config)
 
     @abstractmethod
     def generate(self, n_candidates: int) -> Iterator[Atoms]:
@@ -111,6 +111,7 @@ class BaseOracle(ABC):
         Raises:
             RuntimeError: If calculation fails (e.g., DFT convergence error, connection error).
             ValueError: If input structures are invalid.
+            TypeError: If structures is not an iterator.
 
         Example:
             class DFTOracle(BaseOracle):
@@ -120,6 +121,8 @@ class BaseOracle(ABC):
                         for res in results:
                             yield res
         """
+        if not isinstance(structures, Iterator):
+            raise TypeError(f"Expected Iterator, got {type(structures)}")
 
 
 class BaseTrainer(ABC):
@@ -149,6 +152,7 @@ class BaseTrainer(ABC):
         Raises:
             RuntimeError: If training fails (e.g., MLIP code crash, insufficient data).
             FileNotFoundError: If training data file does not exist.
+            ValueError: If training_data_path is invalid.
 
         Example:
             class PacemakerTrainer(BaseTrainer):
@@ -159,6 +163,8 @@ class BaseTrainer(ABC):
                     subprocess.run(cmd)
                     return "potential.yace"
         """
+        from pyacemaker.utils.path import validate_path_safe
+        data_path = validate_path_safe(Path(training_data_path))
 
 
 class BaseEngine(ABC):
@@ -181,6 +187,7 @@ class BaseEngine(ABC):
 
         Raises:
             RuntimeError: If simulation fails (e.g., segmentation fault, physics explosion).
+            ValueError: If structure is None and not supported by implementation.
 
         Example:
             class LAMMPSEngine(BaseEngine):
@@ -189,6 +196,8 @@ class BaseEngine(ABC):
                     subprocess.run(["lmp", ...])
                     return MDSimulationResult(...)
         """
+        if structure is None:
+            raise ValueError("Structure cannot be None. Please provide a valid Atoms object.")
 
     @abstractmethod
     def compute_static_properties(self, structure: Atoms, potential: Any) -> MDSimulationResult:

@@ -73,7 +73,7 @@ class LammpsEngine(BaseEngine):
             msg = "LammpsFileManager cannot be None"
             raise ValueError(msg)
 
-        self.config = config
+        self.config = MDConfig.model_validate(config)
         self.generator = generator
         self.file_manager = file_manager
         self.execution_strategy = execution_strategy or SimulationExecutionStrategy()
@@ -115,6 +115,8 @@ class LammpsEngine(BaseEngine):
         )
 
         resume_from_step = kwargs.get("resume_from_step")
+        if resume_from_step is not None and not isinstance(resume_from_step, int):
+            raise TypeError("resume_from_step must be an integer")
 
         # Override data file with restart if resuming (in full impl)
         # For seamless resume, Master-Slave inversion requires LAMMPS to maintain memory.
@@ -192,6 +194,11 @@ class LammpsEngine(BaseEngine):
         Computes static properties (energy, forces, stress) for a structure.
         Equivalent to a 0-step MD run.
         """
+        if structure is None:
+            raise ValueError("Structure cannot be None for static properties calculation")
+        if len(structure) == 0:
+            raise ValueError("Structure cannot be empty")
+
         static_config = self.config.model_copy(
             update={"n_steps": 0, "minimize": False, "thermo_freq": 1, "dump_freq": 0}
         )
@@ -205,6 +212,11 @@ class LammpsEngine(BaseEngine):
         """
         Relaxes the structure to a local minimum using LAMMPS minimize.
         """
+        if structure is None:
+            raise ValueError("Structure cannot be None for relaxation")
+        if len(structure) == 0:
+            raise ValueError("Structure cannot be empty")
+
         ctx, data_file, dump_file, log_file, elements, potential_path = (
             self._prepare_simulation_env(structure, potential)
         )

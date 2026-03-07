@@ -30,7 +30,7 @@ def test_scenario_2_1_nextgen_architecture(tmp_path: Path, monkeypatch: pytest.M
     config_dict = create_test_config_dict(
         workflow={
             "max_iterations": 1,
-            "distillation": {"enable": True, "uncertainty_threshold": 0.05, "sampling_structures_per_system": 10},
+            "distillation": {"enable": True, "uncertainty_threshold": 0.05, "sampling_structures_per_system": 100},
             "loop_strategy": {"use_tiered_oracle": True, "incremental_update": True, "replay_buffer_size": 10},
             "cutout": {"core_radius": 2.0, "buffer_radius": 1.0, "enable_passivation": True, "passivation_element": "H"}
         },
@@ -46,7 +46,12 @@ def test_scenario_2_1_nextgen_architecture(tmp_path: Path, monkeypatch: pytest.M
 
     # 2. Tiered Oracle Mock (Phase 2 & 3)
     mace = MACEManager(use_mock=True)
-    dft_mock = MagicMock(spec=DFTManager)
+
+    # We must mock DFTManager properly to avoid TypeError checks on its dependencies
+    from pyacemaker.interfaces.qe_driver import QEDriver
+    dft_config = config.dft
+    dft_mock = DFTManager(config=dft_config, driver=MagicMock(spec=QEDriver))
+    dft_mock.compute = MagicMock() # Mock the inner compute
 
     # Mock MACE to return high uncertainty so it triggers DFT fallback
     def mock_infer(atoms: Atoms) -> Atoms:
@@ -76,7 +81,7 @@ def test_scenario_2_1_nextgen_architecture(tmp_path: Path, monkeypatch: pytest.M
     assert "force_weight" in cluster.arrays
 
     # 4. Seamless Resume (Phase 4)
-    engine_mock = MagicMock(spec=LammpsEngine)
+    engine_mock = MagicMock()
     engine_mock.run.return_value = MagicMock(halted=False, n_steps=1000)
 
     # Simulate resuming MD

@@ -18,7 +18,7 @@ class StructureGenerator(BaseGenerator):
     """
 
     def __init__(self, config: StructureConfig) -> None:
-        self.config = config
+        self.config = StructureConfig.model_validate(config)
         self.m3gnet = M3GNetWrapper()
 
     def update_config(self, config: StructureConfig) -> None:
@@ -55,6 +55,8 @@ class StructureGenerator(BaseGenerator):
             RuntimeError: If base structure generation fails.
             ValueError: If n_candidates is negative or policy is invalid.
         """
+        if not isinstance(n_candidates, int):
+            raise TypeError("n_candidates must be an integer")
         if n_candidates < 0:
             raise ValueError(ERR_GEN_NCAND_NEG.format(n=n_candidates))
 
@@ -134,6 +136,11 @@ class StructureGenerator(BaseGenerator):
         Returns:
             Iterator yielding ASE Atoms objects.
         """
+        if base_structure is None:
+            raise ValueError("base_structure cannot be None")
+        if len(base_structure) == 0:
+            raise ValueError("base_structure cannot be empty")
+
         if n_candidates <= 0:
             return
 

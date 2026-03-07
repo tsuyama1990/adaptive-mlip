@@ -28,6 +28,11 @@ class MACEManager(BaseOracle):
     energy, forces, and dummy uncertainty values if MACE is not available.
     """
     def __init__(self, model_path: str = "mace-mp-0-medium", use_mock: bool = False) -> None:
+        if not isinstance(model_path, str):
+            raise TypeError("model_path must be a string")
+        if not isinstance(use_mock, bool):
+            raise TypeError("use_mock must be a boolean")
+
         from pyacemaker.utils.path import validate_path_safe
         # Usually model_path is a string URL or name, but if it is a local file, validate it.
         # To avoid breaking valid mace-mp-0-medium strings, we only validate if use_mock is False
@@ -41,6 +46,8 @@ class MACEManager(BaseOracle):
         # self.model = mace.calculators.mace_mp(model=model_path)
 
     def compute(self, structures: Iterator[Atoms], batch_size: int = 10) -> Iterator[Atoms]:
+        if not isinstance(batch_size, int) or batch_size <= 0:
+            raise ValueError("batch_size must be a positive integer")
         if not isinstance(structures, Iterator):
             msg = f"Oracle failed to create iterator. Expected Iterator, got {type(structures)}"
             raise TypeError(msg)
@@ -84,12 +91,16 @@ class TieredOracle(BaseOracle):
         if dft_manager is None:
             msg = "dft_manager cannot be None"
             raise ValueError(msg)
+        if not isinstance(uncertainty_threshold, (float, int)) or uncertainty_threshold < 0:
+            raise ValueError("uncertainty_threshold must be a non-negative number")
 
         self.mace_manager = mace_manager
         self.dft_manager = dft_manager
         self.uncertainty_threshold = uncertainty_threshold
 
     def compute(self, structures: Iterator[Atoms], batch_size: int = 10) -> Iterator[Atoms]:
+        if not isinstance(batch_size, int) or batch_size <= 0:
+            raise ValueError("batch_size must be a positive integer")
         if not isinstance(structures, Iterator):
             msg = f"Oracle failed to create iterator. Expected Iterator, got {type(structures)}"
             raise TypeError(msg)
@@ -152,6 +163,8 @@ class DFTManager(BaseOracle):
         if driver is None:
             msg = "driver cannot be None"
             raise ValueError(msg)
+        # We don't strictly assert QEDriver via isinstance at runtime here to support mock overrides
+        # But we validated it at the config level and it is statically typed as QEDriver.
 
         self.config = DFTConfig.model_validate(config)
         self.driver = driver
@@ -180,6 +193,9 @@ class DFTManager(BaseOracle):
             TypeError: If structures is not an iterator (to prevent memory leaks from huge lists).
         """
         # Validate that structures is an iterator to enforce O(1) memory usage contract
+        if not isinstance(batch_size, int) or batch_size <= 0:
+            raise ValueError("batch_size must be a positive integer")
+
         if isinstance(structures, (list, tuple)):
             raise TypeError(ERR_ORACLE_ITERATOR.format(type=type(structures)))
 
@@ -254,6 +270,11 @@ class DFTManager(BaseOracle):
         Raises:
             OracleError: If calculation fails after all retries and strategies.
         """
+        if atoms is None:
+            raise ValueError("atoms cannot be None")
+        if len(atoms) == 0:
+            raise ValueError("atoms cannot be empty")
+
         from pyacemaker.utils.path import validate_path_safe
 
         calc_dir = str(validate_path_safe(Path(calc_dir)))

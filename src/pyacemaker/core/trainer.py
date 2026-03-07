@@ -17,9 +17,13 @@ class FinetuneManager:
     fine-tuning loop on the newly acquired DFT data.
     """
     def __init__(self, use_mock: bool = False) -> None:
+        if not isinstance(use_mock, bool):
+            raise TypeError("use_mock must be a boolean")
         self.use_mock = use_mock
 
     def finetune(self, dft_data_path: Path) -> None:
+        from pyacemaker.utils.path import validate_path_safe
+        dft_data_path = validate_path_safe(dft_data_path)
         if self.use_mock:
             import logging
             logging.getLogger(__name__).info(f"Mock MACE fine-tuning completed using {dft_data_path}")
@@ -44,19 +48,6 @@ class PacemakerTrainer(BaseTrainer):
     def train(
         self, training_data_path: str | Path, initial_potential: str | Path | None = None, replay_buffer_path: Path | None = None, replay_buffer_size: int = 500
     ) -> Path | None:
-        from pyacemaker.utils.path import validate_path_safe
-
-        # Validate all file paths
-        data_path = validate_path_safe(Path(training_data_path))
-        if initial_potential:
-            initial_potential_path = validate_path_safe(Path(initial_potential))
-        else:
-            initial_potential_path = None
-
-        if replay_buffer_path:
-            replay_buffer_path_safe = validate_path_safe(Path(replay_buffer_path))
-        else:
-            replay_buffer_path_safe = None
         """
         Trains a potential using the provided training data file.
 
@@ -74,6 +65,22 @@ class PacemakerTrainer(BaseTrainer):
         Raises:
             TrainerError: If the training data file does not exist or format is invalid.
         """
+        if not isinstance(replay_buffer_size, int) or replay_buffer_size < 0:
+            raise ValueError("replay_buffer_size must be a non-negative integer")
+
+        from pyacemaker.utils.path import validate_path_safe
+
+        # Validate all file paths
+        data_path = validate_path_safe(Path(training_data_path))
+        if initial_potential:
+            initial_potential_path = validate_path_safe(Path(initial_potential))
+        else:
+            initial_potential_path = None
+
+        if replay_buffer_path:
+            replay_buffer_path_safe = validate_path_safe(Path(replay_buffer_path))
+        else:
+            replay_buffer_path_safe = None
         # Ensure pace_train is installed
         import os
 
@@ -154,6 +161,9 @@ class PacemakerTrainer(BaseTrainer):
     @staticmethod
     def _validate_training_data(data_path: Path) -> None:
         """Validates existence and basic format of training data."""
+        if not isinstance(data_path, Path):
+            raise ValueError('data_path must be a Path object')
+
         if not data_path.exists():
             msg = f"Training data not found: {data_path}"
             raise TrainerError(msg)

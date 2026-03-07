@@ -22,6 +22,12 @@ class ActiveLearningThresholds(BaseModel):
     threshold_add_train: float = Field(0.02, description="Criteria to select atoms for training set")
     smooth_steps: int = Field(3, description="Consecutive steps threshold exceedance required to eliminate thermal noise")
 
+    @model_validator(mode="after")
+    def validate_thresholds(self) -> "ActiveLearningThresholds":
+        if self.threshold_add_train > self.threshold_call_dft:
+            raise ValueError('threshold_add_train must be <= threshold_call_dft')
+        return self
+
 class CutoutConfig(BaseModel):
     """Phase 3: Intelligent Cutout Settings"""
     model_config = ConfigDict(extra="forbid")
@@ -32,6 +38,12 @@ class CutoutConfig(BaseModel):
     enable_passivation: bool = True
     passivation_element: str = "H"
 
+    @model_validator(mode="after")
+    def validate_radii(self) -> "CutoutConfig":
+        if self.buffer_radius > self.core_radius:
+            raise ValueError('buffer_radius must be <= core_radius')
+        return self
+
 class DistillationConfig(BaseModel):
     """Phase 1: Zero-Shot Distillation Settings"""
     model_config = ConfigDict(extra="forbid")
@@ -39,7 +51,7 @@ class DistillationConfig(BaseModel):
     enable: bool = True
     mace_model_path: str = "mace-mp-0-medium"
     uncertainty_threshold: float = Field(0.05, description="Safe threshold for MACE")
-    sampling_structures_per_system: int = 1000
+    sampling_structures_per_system: int = Field(1000, ge=100, le=10000, description="Safe threshold for MACE")
 
 class LoopStrategyConfig(BaseModel):
     """Active Learning Loop Strategy Settings"""
@@ -47,7 +59,7 @@ class LoopStrategyConfig(BaseModel):
 
     use_tiered_oracle: bool = True
     incremental_update: bool = True
-    replay_buffer_size: int = Field(500, description="Number of past data points to retain to prevent catastrophic forgetting")
+    replay_buffer_size: int = Field(500, ge=10, le=10000, description="Number of past data points to retain to prevent catastrophic forgetting")
     baseline_potential_type: str = Field("LJ", description="Physical baseline potential (e.g., LJ)")
     thresholds: ActiveLearningThresholds = Field(default_factory=ActiveLearningThresholds)
 
@@ -58,7 +70,7 @@ class OTFConfig(BaseModel):
 
     fix_halt: bool = Field(False, description="Enable OTF halting based on uncertainty")
     check_interval: int = Field(
-        10, gt=0, description="Step interval for uncertainty check"
+        10, gt=0, le=1000, description="Step interval for uncertainty check"
     )
 
     local_n_candidates: PositiveInt = Field(
@@ -80,10 +92,10 @@ class WorkflowConfig(BaseModel):
 
     max_iterations: PositiveInt = Field(..., description="Maximum number of active learning cycles")
     convergence_energy: float = Field(
-        default=0.001, gt=0, description="Energy convergence criteria in eV/atom"
+        default=0.001, ge=1e-6, le=0.1, description="Energy convergence criteria in eV/atom"
     )
     convergence_force: float = Field(
-        default=0.01, gt=0, description="Force convergence criteria in eV/Angstrom"
+        default=0.01, ge=1e-4, le=1.0, description="Force convergence criteria in eV/Angstrom"
     )
     state_file_path: str = Field(
         default=DEFAULT_STATE_FILE, description="Path to the state checkpoint file"
