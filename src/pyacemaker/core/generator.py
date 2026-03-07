@@ -21,7 +21,7 @@ class StructureGenerator(BaseGenerator):
         self.config = config
         self.m3gnet = M3GNetWrapper()
 
-    def update_config(self, config: Any) -> None:
+    def update_config(self, config: StructureConfig) -> None:
         """
         Updates the generator configuration.
 
@@ -36,7 +36,7 @@ class StructureGenerator(BaseGenerator):
         if not isinstance(config, StructureConfig):
             msg = f"Expected StructureConfig, got {type(config)}"
             raise TypeError(msg)
-        self.config = config
+        self.config = StructureConfig.model_validate(config)
 
     def generate(self, n_candidates: int) -> Iterator[Atoms]:
         """

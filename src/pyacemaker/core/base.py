@@ -16,14 +16,14 @@ class BasePolicy(ABC):
     """
 
     @abstractmethod
-    @validate_call(config={'arbitrary_types_allowed': True})
     def generate(
         self, base_structure: Atoms, config: StructureConfig, n_structures: int = 1, **kwargs: Any
     ) -> Iterator[Atoms]:
         """
         Generates new candidates based on policy logic.
-        Validates config strictly at runtime.
         """
+        StructureConfig.model_validate(config)
+        yield base_structure.copy() # type: ignore[no-untyped-call]
 
 
 class BaseGenerator(ABC):
@@ -33,13 +33,13 @@ class BaseGenerator(ABC):
     """
 
     @abstractmethod
-    def update_config(self, config: Any) -> None:
+    def update_config(self, config: StructureConfig) -> None:
         """
         Updates the generator configuration.
         This allows adaptive policies to modify generation parameters at runtime.
 
         Args:
-            config: New configuration object (e.g. StructureConfig).
+            config: New configuration object.
         """
 
     @abstractmethod
