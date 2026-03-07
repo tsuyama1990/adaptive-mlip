@@ -1,6 +1,7 @@
+from pathlib import Path
+
 from pyacemaker.core.report import ReportGenerator
 from pyacemaker.domain_models.validation import ValidationResult
-from pathlib import Path
 
 
 def test_generate_report_pass(tmp_path: Path) -> None:

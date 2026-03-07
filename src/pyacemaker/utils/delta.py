@@ -1,10 +1,9 @@
+
 import numpy as np
 from ase.data import atomic_numbers
 
 from pyacemaker.domain_models.constants import DEFAULT_LJ_PARAMS, FALLBACK_LJ_PARAMS
 
-
-from typing import Any
 
 def get_lj_params(element: str) -> dict[str, float]:
     """
@@ -17,8 +16,9 @@ def get_lj_params(element: str) -> dict[str, float]:
     Returns:
         Dictionary with "sigma" (Angstrom) and "epsilon" (eV).
     """
-    val = DEFAULT_LJ_PARAMS.get(element, FALLBACK_LJ_PARAMS.copy())
-    return val  # type: ignore[return-value]
+    if element not in atomic_numbers:
+        raise ValueError(f"element {element} is not a valid chemical symbol.")
+    return DEFAULT_LJ_PARAMS.get(element, FALLBACK_LJ_PARAMS.copy())  # type: ignore[return-value]
 
 
 def compute_zbl_energy(el1: str, el2: str, r: float) -> float:
@@ -33,6 +33,9 @@ def compute_zbl_energy(el1: str, el2: str, r: float) -> float:
     Returns:
         Energy in eV.
     """
+    if el1 not in atomic_numbers or el2 not in atomic_numbers:
+        raise ValueError(f"Invalid chemical symbols: {el1}, {el2}")
+
     if r <= 0:
         msg = "Distance must be positive."
         raise ValueError(msg)

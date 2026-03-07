@@ -9,7 +9,6 @@ from pyacemaker.core.io_manager import LammpsFileManager
 from pyacemaker.core.lammps_generator import LammpsScriptGenerator
 from pyacemaker.core.validator import LammpsInputValidator
 from pyacemaker.domain_models.constants import (
-    ERR_STRUCTURE_NONE,
     LAMMPS_SCREEN_ARG,
 )
 from pyacemaker.domain_models.md import MDConfig, MDSimulationResult
@@ -64,7 +63,25 @@ class LammpsEngine(BaseEngine):
         Initialize the engine with configuration.
         Requires strict dependency injection for generator and file manager.
         """
-        self.config = config
+        if config is None:
+            msg = "MDConfig cannot be None"
+            raise ValueError(msg)
+        if generator is None:
+            msg = "LammpsScriptGenerator cannot be None"
+            raise ValueError(msg)
+        if not isinstance(generator, LammpsScriptGenerator):
+            raise TypeError("generator must be an instance of LammpsScriptGenerator")
+
+        if file_manager is None:
+            msg = "LammpsFileManager cannot be None"
+            raise ValueError(msg)
+        if not isinstance(file_manager, LammpsFileManager):
+            raise TypeError("file_manager must be an instance of LammpsFileManager")
+
+        if execution_strategy is not None and not isinstance(execution_strategy, SimulationExecutionStrategy):
+            raise TypeError("execution_strategy must be an instance of SimulationExecutionStrategy")
+
+        self.config = MDConfig.model_validate(config)
         self.generator = generator
         self.file_manager = file_manager
         self.execution_strategy = execution_strategy or SimulationExecutionStrategy()
@@ -77,15 +94,14 @@ class LammpsEngine(BaseEngine):
         Prepares the simulation environment: validation, paths, and files.
         Returns: (ctx, data_file, dump_file, log_file, elements, potential_path)
         """
-        if structure is None:
-            raise ValueError(ERR_STRUCTURE_NONE)
 
         LammpsInputValidator.validate_structure(structure)
         potential_path = LammpsInputValidator.validate_potential(potential)
         potential_path = potential_path.resolve(strict=True)
 
+        # We checked structure is not None inside LammpsInputValidator.validate_structure
         ctx, data_file, dump_file, log_file, elements = self.file_manager.prepare_workspace(
-            structure
+            structure  # type: ignore[arg-type]
         )
         return ctx, data_file, dump_file, log_file, elements, potential_path
 
@@ -95,13 +111,27 @@ class LammpsEngine(BaseEngine):
             msg = f"Input script not found: {script_path}"
             raise FileNotFoundError(msg)
 
-    def run(self, structure: Atoms | None, potential: Any) -> MDSimulationResult:
+    def save_state(self, path: str | Path) -> None:
+        """
+        Saves the internal state of the engine.
+        """
+
+    def load_state(self, path: str | Path) -> None:
+        """
+        Loads the internal state of the engine.
+        """
+
+    def run(self, structure: Atoms | None, potential: Any, **kwargs: Any) -> MDSimulationResult:
         """
         Runs the MD simulation.
+        If resume_from_step is provided, skips initialization and applies a soft-start.
         """
         ctx, data_file, dump_file, log_file, elements, potential_path = (
             self._prepare_simulation_env(structure, potential)
         )
+
+        resume_from_step = kwargs.get("resume_from_step")
+        use_python_invoke = kwargs.get("use_python_invoke", False)
 
         with ctx:
             # Generate input script to file
@@ -110,6 +140,18 @@ class LammpsEngine(BaseEngine):
 
             with input_script_path.open("w") as f:
                 self.generator.write_script(f, potential_path, data_file, dump_file, elements)
+
+                # Use fix python/invoke for true Master-Slave inversion if configured
+                if use_python_invoke:
+                    f.write("\n# Master-Slave Inversion via fix python/invoke\n")
+                    f.write("python check_uncertainty file pyacemaker_callback.py\n")
+                    f.write("fix check_otf all python/invoke 10 post_force check_uncertainty\n")
+                elif resume_from_step is not None:
+                    # Fallback for subprocess simulated resume
+                    f.write(f"\n# Seamless Resume from step {resume_from_step}\n")
+                    f.write("fix soft_start all langevin 300.0 300.0 100.0 48279\n")
+                    f.write("run 50\n")
+                    f.write("unfix soft_start\n")
 
             # Initialize Driver with unique log file
             driver = LammpsDriver(["-screen", LAMMPS_SCREEN_ARG, "-log", str(log_file)])

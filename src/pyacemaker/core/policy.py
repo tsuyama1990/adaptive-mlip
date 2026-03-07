@@ -18,7 +18,16 @@ class SafeBasePolicy(BasePolicy):
         Generates new candidates based on policy logic.
         """
         for _ in range(n_structures):
-            yield base_structure.copy()
+            yield base_structure.copy()  # type: ignore[no-untyped-call]
+
+    def generate_local(
+        self, base_structure: Atoms, n_candidates: int, **kwargs: Any
+    ) -> Iterator[Atoms]:
+        """
+        Generates candidates for local neighborhood exploration.
+        """
+        for _ in range(n_candidates):
+            yield base_structure.copy()  # type: ignore[no-untyped-call]
 
 
 # Re-implement ColdStartPolicy and others that might have been overwritten or missing

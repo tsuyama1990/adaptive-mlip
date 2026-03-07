@@ -19,7 +19,6 @@ from pyacemaker.domain_models.constants import (
 from pyacemaker.domain_models.defaults import (
     DEFAULT_MD_ATOM_STYLE,
     DEFAULT_MD_BASE_ENERGY,
-    DEFAULT_MD_CHECK_INTERVAL,
     DEFAULT_MD_DUMP_FREQ,
     DEFAULT_MD_HYBRID_ZBL_INNER,
     DEFAULT_MD_HYBRID_ZBL_OUTER,
@@ -27,7 +26,6 @@ from pyacemaker.domain_models.defaults import (
     DEFAULT_MD_PDAMP_FACTOR,
     DEFAULT_MD_TDAMP_FACTOR,
     DEFAULT_MD_THERMO_FREQ,
-    DEFAULT_OTF_UNCERTAINTY_THRESHOLD,
 )
 
 
@@ -101,11 +99,17 @@ class MDConfig(BaseModel):
         model_config = ConfigDict(extra="forbid")
 
         zbl_cut_inner: PositiveFloat = Field(
-            DEFAULT_MD_HYBRID_ZBL_INNER, description="Inner cutoff radius for ZBL potential (Angstrom)"
+            DEFAULT_MD_HYBRID_ZBL_INNER, description="Inner cutoff radius for ZBL potential (Angstrom)", ge=0.1, le=10.0
         )
         zbl_cut_outer: PositiveFloat = Field(
-            DEFAULT_MD_HYBRID_ZBL_OUTER, description="Outer cutoff radius for ZBL potential (Angstrom)"
+            DEFAULT_MD_HYBRID_ZBL_OUTER, description="Outer cutoff radius for ZBL potential (Angstrom)", ge=0.1, le=20.0
         )
+
+        @model_validator(mode="after")
+        def validate_cutoffs(self) -> "MDConfig.HybridParams":
+            if self.zbl_cut_inner >= self.zbl_cut_outer:
+                raise ValueError('zbl_cut_outer must be strictly greater than zbl_cut_inner')
+            return self
 
     class MDRampingConfig(BaseModel):
         model_config = ConfigDict(extra="forbid")
@@ -117,13 +121,16 @@ class MDConfig(BaseModel):
 
         @model_validator(mode="after")
         def validate_ramping(self) -> "MDConfig.MDRampingConfig":
+            if self.temp_start is not None and self.temp_end is not None and self.temp_start > self.temp_end:
+                msg = 'temp_start must be <= temp_end'
+                raise ValueError(msg)
             return self
 
     class MCConfig(BaseModel):
         model_config = ConfigDict(extra="forbid")
 
         swap_freq: int = Field(..., gt=0, description="Frequency of MC swaps (steps)")
-        swap_prob: float = Field(..., gt=0.0, le=1.0, description="Probability of swapping atoms")
+        swap_prob: float = Field(..., gt=0.01, le=0.99, description="Probability of swapping atoms")
         seed: int = Field(DEFAULT_MC_SEED, description="Random seed for MC swaps")
 
 
@@ -203,7 +210,8 @@ class MDConfig(BaseModel):
     def validate_simulation_physics(self) -> "MDConfig":
         total_time = self.n_steps * self.timestep
         if total_time > MAX_MD_DURATION:
-            pass
+            msg = f'Total simulation time {total_time} exceeds maximum allowed duration {MAX_MD_DURATION}'
+            raise ValueError(msg)
         return self
 
     @model_validator(mode="after")
@@ -216,9 +224,12 @@ class MDConfig(BaseModel):
         return self
 
     @model_validator(mode="after")
-    def validate_default_forces(self) -> "MDConfig":
+    def validate_default_forces_shape(self) -> "MDConfig":
+        if not isinstance(self.default_forces, list):
+            msg = "default_forces must be a list of lists"
+            raise TypeError(msg)
         for f in self.default_forces:
-            if len(f) != 3:
+            if not isinstance(f, list) or len(f) != 3:
                 msg = "Default forces must be a list of 3D vectors (list of 3 floats)"
                 raise ValueError(msg)
             if not all(isinstance(x, (int, float)) for x in f):

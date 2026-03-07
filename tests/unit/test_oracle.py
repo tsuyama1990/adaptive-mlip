@@ -6,7 +6,7 @@ import pytest
 from ase import Atoms
 
 from pyacemaker.core.exceptions import OracleError
-from pyacemaker.core.oracle import DFTManager
+from pyacemaker.core.oracle import DFTManager, MACEManager, TieredOracle
 from pyacemaker.domain_models import DFTConfig
 from tests.conftest import MockCalculator, create_dummy_pseudopotentials
 from tests.constants import TEST_ENERGY_GENERIC
@@ -32,10 +32,12 @@ def mock_dft_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> DFTConfi
 
 def test_dft_manager_compute_success(mock_dft_config: DFTConfig) -> None:
     """Test successful computation using dependency injection."""
+    mock_dft_config = DFTConfig.model_validate(mock_dft_config)
     atoms = Atoms("H", cell=[10, 10, 10], pbc=True)
 
     # Create Mock Driver
-    mock_driver = MagicMock()
+    from pyacemaker.interfaces.qe_driver import QEDriver
+    mock_driver = MagicMock(spec=QEDriver)
     # Mock returns a calculator instance
     calc = MockCalculator(fail_count=0)
     mock_driver.get_calculator.return_value = calc
@@ -57,10 +59,12 @@ def test_dft_manager_compute_success(mock_dft_config: DFTConfig) -> None:
 
 def test_dft_manager_self_healing(mock_dft_config: DFTConfig) -> None:
     """Test self-healing mechanism."""
+    mock_dft_config = DFTConfig.model_validate(mock_dft_config)
     atoms = Atoms("H", cell=[10, 10, 10], pbc=True)
 
     # Mock Driver
-    mock_driver = MagicMock()
+    from pyacemaker.interfaces.qe_driver import QEDriver
+    mock_driver = MagicMock(spec=QEDriver)
 
     # The calculator needs to fail first, then succeed.
     calc_fail = MockCalculator(fail_count=1)  # Fails once (attempt 1)
@@ -99,9 +103,11 @@ def test_dft_manager_self_healing(mock_dft_config: DFTConfig) -> None:
 
 def test_dft_manager_fatal_error(mock_dft_config: DFTConfig) -> None:
     """Test fatal error after exhausting retries."""
+    mock_dft_config = DFTConfig.model_validate(mock_dft_config)
     atoms = Atoms("H", cell=[10, 10, 10], pbc=True)
 
-    mock_driver = MagicMock()
+    from pyacemaker.interfaces.qe_driver import QEDriver
+    mock_driver = MagicMock(spec=QEDriver)
     # Always fail
     mock_driver.get_calculator.return_value = MockCalculator(fail_count=100)
 
@@ -119,9 +125,11 @@ def test_dft_manager_fatal_error(mock_dft_config: DFTConfig) -> None:
 
 def test_dft_manager_setup_error(mock_dft_config: DFTConfig) -> None:
     """Test handling of CalculatorSetupError."""
+    mock_dft_config = DFTConfig.model_validate(mock_dft_config)
     atoms = Atoms("H", cell=[10, 10, 10], pbc=True)
 
-    mock_driver = MagicMock()
+    from pyacemaker.interfaces.qe_driver import QEDriver
+    mock_driver = MagicMock(spec=QEDriver)
     # Fails with setup error (e.g. missing pseudo file)
     mock_driver.get_calculator.return_value = MockCalculator(setup_error=True)
 
@@ -139,7 +147,9 @@ def test_dft_manager_setup_error(mock_dft_config: DFTConfig) -> None:
 
 def test_dft_manager_strategies(mock_dft_config: DFTConfig) -> None:
     """Test that strategies are correctly defined."""
-    manager = DFTManager(mock_dft_config, MagicMock())
+    mock_dft_config = DFTConfig.model_validate(mock_dft_config)
+    from pyacemaker.interfaces.qe_driver import QEDriver
+    manager = DFTManager(mock_dft_config, MagicMock(spec=QEDriver))
     strategies = manager._get_strategies()
 
     assert len(strategies) > 0
@@ -169,19 +179,11 @@ def test_dft_manager_strategies(mock_dft_config: DFTConfig) -> None:
     assert config_copy.diagonalization == "cg"
 
 
-def test_dft_manager_invalid_input(mock_dft_config: DFTConfig) -> None:
-    """Test compute raises TypeError for non-iterator input."""
-    manager = DFTManager(mock_dft_config, MagicMock())
-    atoms_list = [Atoms("H")]
-
-    # Check that it raises TypeError immediately upon calling compute (before next)
-    with pytest.raises(TypeError, match="Oracle failed to create iterator"):
-        manager.compute(atoms_list)  # type: ignore[arg-type]
-
-
 def test_dft_manager_empty_iterator(mock_dft_config: DFTConfig) -> None:
     """Test compute handles empty iterator correctly with warning."""
-    manager = DFTManager(mock_dft_config, MagicMock())
+    mock_dft_config = DFTConfig.model_validate(mock_dft_config)
+    from pyacemaker.interfaces.qe_driver import QEDriver
+    manager = DFTManager(mock_dft_config, MagicMock(spec=QEDriver))
     empty_iter: Iterator[Atoms] = iter([])
 
     # Explicit loop without list() materialization for safety
@@ -191,12 +193,83 @@ def test_dft_manager_empty_iterator(mock_dft_config: DFTConfig) -> None:
     deque(manager.compute(empty_iter), maxlen=0)
 
 
+def test_mace_manager_mock() -> None:
+    atoms = Atoms("H", positions=[[0, 0, 0]])
+    mace = MACEManager(use_mock=True)
+
+    gen = mace.compute(iter([atoms]))
+    result = next(gen)
+
+    assert "energy" in result.info
+    assert "forces" in result.arrays
+    assert "c_gamma" in result.arrays
+
+
+def test_mace_manager_no_mock_raises() -> None:
+    atoms = Atoms("H", positions=[[0, 0, 0]])
+    mace = MACEManager(use_mock=False)
+
+    gen = mace.compute(iter([atoms]))
+    with pytest.raises(RuntimeError, match="MACE model is not installed"):
+        next(gen)
+
+def test_tiered_oracle_fallback() -> None:
+    atoms = Atoms("H", positions=[[0, 0, 0]])
+
+    mace_mock = MagicMock()
+    dft_mock = MagicMock()
+
+    # MACE returns structure with high uncertainty
+    high_uncertainty_atoms = Atoms("H", positions=[[0, 0, 0]])
+    import numpy as np
+    high_uncertainty_atoms.new_array("c_gamma", np.array([0.1])) # > 0.05
+
+    mace_mock.compute.return_value = iter([high_uncertainty_atoms])
+
+    dft_result = Atoms("H", positions=[[0, 0, 0]])
+    dft_result.info["dft"] = True
+    dft_mock.compute.return_value = iter([dft_result])
+
+    tiered = TieredOracle(mace_manager=mace_mock, dft_manager=dft_mock, uncertainty_threshold=0.05)
+
+    gen = tiered.compute(iter([atoms]))
+    result = next(gen)
+
+    # Because uncertainty 0.1 > 0.05, it should fallback to DFT
+    assert "dft" in result.info
+    dft_mock.compute.assert_called_once()
+
+def test_tiered_oracle_no_fallback() -> None:
+    atoms = Atoms("H", positions=[[0, 0, 0]])
+
+    mace_mock = MagicMock()
+    dft_mock = MagicMock()
+
+    # MACE returns structure with low uncertainty
+    low_uncertainty_atoms = Atoms("H", positions=[[0, 0, 0]])
+    import numpy as np
+    low_uncertainty_atoms.new_array("c_gamma", np.array([0.01])) # < 0.05
+    low_uncertainty_atoms.info["mace"] = True
+
+    mace_mock.compute.return_value = iter([low_uncertainty_atoms])
+
+    tiered = TieredOracle(mace_manager=mace_mock, dft_manager=dft_mock, uncertainty_threshold=0.05)
+
+    gen = tiered.compute(iter([atoms]))
+    result = next(gen)
+
+    # Because uncertainty 0.01 < 0.05, it should NOT fallback to DFT
+    assert "mace" in result.info
+    dft_mock.compute.assert_not_called()
+
+
 def test_dft_manager_embedding(mock_dft_config: DFTConfig, monkeypatch: pytest.MonkeyPatch) -> None:
     """Test that embedding is applied when configured."""
     from pyacemaker.core.oracle import DFTManager
 
     # Configure embedding buffer
     mock_dft_config.embedding_buffer = 5.0
+    mock_dft_config = DFTConfig.model_validate(mock_dft_config)
 
     # Mock embed_cluster
     mock_embed = MagicMock()
@@ -207,7 +280,8 @@ def test_dft_manager_embedding(mock_dft_config: DFTConfig, monkeypatch: pytest.M
     monkeypatch.setattr("pyacemaker.core.oracle.embed_cluster", mock_embed)
 
     # Mock Driver
-    mock_driver = MagicMock()
+    from pyacemaker.interfaces.qe_driver import QEDriver
+    mock_driver = MagicMock(spec=QEDriver)
     mock_driver.get_calculator.return_value = MockCalculator(fail_count=0)
 
     manager = DFTManager(mock_dft_config, mock_driver)

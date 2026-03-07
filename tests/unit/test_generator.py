@@ -16,8 +16,8 @@ def test_cold_start_policy() -> None:
     generator = StructureGenerator(config)
     structures = list(generator.generate(n_candidates=10))
 
-    # Cold Start yields 1 structure regardless of n
-    assert len(structures) == 1
+    # With strict O(1) streaming refactor, Cold Start now correctly obeys n_candidates
+    assert len(structures) == 10
     atoms = structures[0]
     assert isinstance(atoms, Atoms)
 

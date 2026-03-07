@@ -1,7 +1,60 @@
 import numpy as np
 from ase.build import bulk
 
-from pyacemaker.utils.extraction import extract_local_region
+from pyacemaker.domain_models.workflow import CutoutConfig
+from pyacemaker.utils.extraction import extract_intelligent_cluster, extract_local_region
+
+
+def test_extract_intelligent_cluster_basic() -> None:
+    # Create a simple cubic lattice
+    atoms = bulk("Cu", "sc", a=2.5).repeat((3, 3, 3))  # type: ignore[no-untyped-call]
+
+    config = CutoutConfig(
+        core_radius=2.6, # Includes 1st shell
+        buffer_radius=1.0, # Total cutoff 3.6 (Includes 2nd shell)
+        enable_passivation=True,
+        passivation_element="H"
+    )
+
+    target_atoms = [13]
+    cluster = extract_intelligent_cluster(atoms, target_atoms, config)
+
+    # 1 center + 6 nearest neighbors (1st shell) + 12 next-nearest (2nd shell) = 19
+    # Plus passivation atoms for the 12 outer atoms (if w==0) -> 12 dummy H atoms
+    # Total = 19 + 12 = 31
+    assert len(cluster) == 31
+
+    weights = cluster.get_array("force_weight")  # type: ignore[no-untyped-call]
+    symbols = cluster.get_chemical_symbols()  # type: ignore[no-untyped-call]
+
+    n_core = np.sum(weights == 1.0)
+    n_buffer = np.sum(weights == 0.0)
+
+    # Core atoms: center + 6 NN = 7
+    assert n_core == 7
+
+    # Buffer atoms: 12 NNN (Cu) + 12 Passivation (H) = 24
+    assert n_buffer == 24
+
+    # Count H atoms
+    h_atoms = sum(1 for s in symbols if s == "H")
+    assert h_atoms == 12
+
+def test_extract_intelligent_cluster_no_passivation() -> None:
+    atoms = bulk("Cu", "sc", a=2.5).repeat((3, 3, 3))  # type: ignore[no-untyped-call]
+
+    config = CutoutConfig(
+        core_radius=2.6,
+        buffer_radius=1.0,
+        enable_passivation=False,
+    )
+
+    target_atoms = [13]
+    cluster = extract_intelligent_cluster(atoms, target_atoms, config)
+
+    assert len(cluster) == 19
+    symbols = cluster.get_chemical_symbols()  # type: ignore[no-untyped-call]
+    assert "H" not in symbols
 
 
 def test_extract_local_region_basic() -> None:

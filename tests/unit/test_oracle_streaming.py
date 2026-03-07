@@ -8,6 +8,7 @@ from ase import Atoms
 
 from pyacemaker.core.oracle import DFTManager
 from pyacemaker.domain_models import DFTConfig
+from pyacemaker.interfaces.qe_driver import QEDriver
 from tests.conftest import create_dummy_pseudopotentials
 
 
@@ -40,7 +41,7 @@ def test_dft_manager_streaming_behavior(mock_dft_config: DFTConfig) -> None:
             i += 1
 
     # 2. Mock driver
-    mock_driver = MagicMock()
+    mock_driver = MagicMock(spec=QEDriver)
     # Mock calculator methods to return valid data (get_stress expects array)
     calc = MagicMock()
     calc.get_stress.return_value = np.zeros(6)

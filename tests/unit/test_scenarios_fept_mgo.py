@@ -6,7 +6,6 @@ from unittest.mock import MagicMock, patch
 import pytest
 from ase import Atoms
 
-from pyacemaker.domain_models.config import PyAceConfig
 from pyacemaker.domain_models.eon import EONConfig
 from pyacemaker.domain_models.scenario import ScenarioConfig
 from pyacemaker.scenarios.fept_mgo import DepositionManager, FePtMgoScenario, ScenarioContext
@@ -17,14 +16,27 @@ def mock_config() -> Any:
     # Mock minimal config for scenario
     with tempfile.NamedTemporaryFile(suffix=".yace") as tmp:
         path = Path(tmp.name)
-        mock_conf = MagicMock(spec=PyAceConfig)
+        mock_conf = MagicMock()
         mock_conf.scenario = ScenarioConfig(
             name="fept_mgo",
             enabled=True,
             parameters={"num_depositions": 2, "fe_pt_ratio": 0.5, "random_seed": 42},
         )
         mock_conf.eon = EONConfig(potential_path=path)
-        mock_conf.md = MagicMock()  # Mock MD config
+
+        # Need actual MDConfig for LammpsEngine init type check
+        from pyacemaker.domain_models.md import MDConfig
+        mock_conf.md = MDConfig(
+            temperature=300.0,
+            pressure=0.0,
+            timestep=0.001,
+            n_steps=1000,
+            thermo_freq=10,
+            dump_freq=100,
+        )
+
+        mock_conf.workflow = MagicMock()
+        mock_conf.workflow.otf = MagicMock()
         yield mock_conf
 
 
