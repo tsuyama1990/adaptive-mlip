@@ -1,4 +1,3 @@
-
 import numpy as np
 from ase.data import atomic_numbers
 
@@ -17,7 +16,8 @@ def get_lj_params(element: str) -> dict[str, float]:
         Dictionary with "sigma" (Angstrom) and "epsilon" (eV).
     """
     if element not in atomic_numbers:
-        raise ValueError(f"element {element} is not a valid chemical symbol.")
+        msg = f"element {element} is not a valid chemical symbol."
+        raise ValueError(msg)
     return DEFAULT_LJ_PARAMS.get(element, FALLBACK_LJ_PARAMS.copy())  # type: ignore[return-value]
 
 
@@ -34,7 +34,8 @@ def compute_zbl_energy(el1: str, el2: str, r: float) -> float:
         Energy in eV.
     """
     if el1 not in atomic_numbers or el2 not in atomic_numbers:
-        raise ValueError(f"Invalid chemical symbols: {el1}, {el2}")
+        msg = f"Invalid chemical symbols: {el1}, {el2}"
+        raise ValueError(msg)
 
     if r <= 0:
         msg = "Distance must be positive."

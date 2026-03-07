@@ -27,6 +27,7 @@ class MACEManager(BaseOracle):
     Wraps MACE foundational model inference. Currently mocked to output
     energy, forces, and dummy uncertainty values if MACE is not available.
     """
+
     def __init__(self, model_path: str = "mace-mp-0-medium", use_mock: bool = False) -> None:
         if not isinstance(model_path, str):
             msg = "model_path must be a string"
@@ -37,15 +38,23 @@ class MACEManager(BaseOracle):
 
         from pyacemaker.utils.path import validate_path_safe
 
-        # Validate model path format (either a known valid string like 'mace-mp-0-medium', or a valid path/URL)
-        if not use_mock and not model_path.startswith("mace-") and not model_path.startswith("http") and not Path(model_path).exists():
+        if (
+            not use_mock
+            and not model_path.startswith("mace-")
+            and not model_path.startswith("http")
+            and not Path(model_path).exists()
+        ):
             msg = f"model_path {model_path} does not exist or is not a valid MACE identifier."
             raise ValueError(msg)
 
         # Usually model_path is a string URL or name, but if it is a local file, validate it.
         # To avoid breaking valid mace-mp-0-medium strings, we only validate if use_mock is False
         # and it looks like a path.
-        if not use_mock and ("/" in model_path or "\\" in model_path) and not model_path.startswith("http"):
+        if (
+            not use_mock
+            and ("/" in model_path or "\\" in model_path)
+            and not model_path.startswith("http")
+        ):
             self.model_path = str(validate_path_safe(Path(model_path)))
         else:
             self.model_path = model_path
@@ -96,7 +105,13 @@ class TieredOracle(BaseOracle):
     Implements a query strategy where MACE is queried first.
     If its uncertainty exceeds a threshold, it falls back to DFT.
     """
-    def __init__(self, mace_manager: MACEManager, dft_manager: "DFTManager", uncertainty_threshold: float = 0.05) -> None:
+
+    def __init__(
+        self,
+        mace_manager: MACEManager,
+        dft_manager: "DFTManager",
+        uncertainty_threshold: float = 0.05,
+    ) -> None:
         if mace_manager is None:
             msg = "mace_manager cannot be None"
             raise ValueError(msg)
@@ -127,7 +142,9 @@ class TieredOracle(BaseOracle):
                 max_gamma = np.max(mace_result.get_array("c_gamma"))  # type: ignore[no-untyped-call]
 
             if max_gamma > self.uncertainty_threshold:
-                logger.info(f"MACE uncertainty {max_gamma:.4f} > {self.uncertainty_threshold}. Falling back to DFT.")
+                logger.info(
+                    f"MACE uncertainty {max_gamma:.4f} > {self.uncertainty_threshold}. Falling back to DFT."
+                )
                 dft_result = next(self.dft_manager.compute(iter([orig_structure]), batch_size=1))
                 yield dft_result
             else:
