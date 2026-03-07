@@ -40,7 +40,7 @@ class LammpsEngine(BaseEngine):
         self.file_manager = file_manager or LammpsFileManager(config)
 
     def _prepare_simulation_env(
-        self, structure: Atoms | None, potential: Any
+        self, structure: Atoms | None, potential: str | Path | None
     ) -> tuple[Any, Path, Path, Path, list[str], Path]:
         """
         Prepares the simulation environment: validation, paths, and files.
@@ -80,7 +80,7 @@ class LammpsEngine(BaseEngine):
         except Exception as e:
             raise RuntimeError(ERR_SIM_UNEXPECTED.format(error=e)) from e
 
-    def run(self, structure: Atoms | None, potential: Any) -> MDSimulationResult:
+    def run(self, structure: Atoms | None, potential: str | Path | None) -> MDSimulationResult:
         """
         Runs the MD simulation.
         """
@@ -150,7 +150,7 @@ class LammpsEngine(BaseEngine):
                 if hasattr(driver, "close"):
                     driver.close()
 
-    def compute_static_properties(self, structure: Atoms, potential: Any) -> MDSimulationResult:
+    def compute_static_properties(self, structure: Atoms, potential: str | Path | None) -> MDSimulationResult:
         """
         Computes static properties (energy, forces, stress) for a structure.
         Equivalent to a 0-step MD run.
@@ -165,7 +165,7 @@ class LammpsEngine(BaseEngine):
         engine = LammpsEngine(static_config)
         return engine.run(structure, potential)
 
-    def relax(self, structure: Atoms, potential: Any) -> Atoms:
+    def relax(self, structure: Atoms, potential: str | Path | None) -> Atoms:
         """
         Relaxes the structure to a local minimum using LAMMPS minimize.
         """

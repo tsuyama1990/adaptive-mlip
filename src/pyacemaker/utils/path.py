@@ -37,6 +37,13 @@ def validate_path_safe(path: Path) -> Path:
         raise ValueError(msg)
 
     try:
+        if path.is_symlink():
+            msg = f"Path cannot be a symlink: {path}"
+            raise ValueError(msg)
+    except OSError:
+        pass
+
+    try:
         # Canonicalize path.
         # Enforce strict=True if the path exists to catch symlink attacks immediately.
         # If it doesn't exist (e.g. output file), we must resolve based on parent.

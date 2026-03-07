@@ -1,7 +1,7 @@
 import logging
 from collections.abc import Iterable
 from pathlib import Path
-from typing import Any
+from typing import Any, TextIO
 
 import numpy as np
 import yaml
@@ -25,7 +25,8 @@ def load_yaml(filepath: Path) -> dict[str, Any]:
         Dictionary containing configuration.
     """
     if not filepath.exists():
-        raise FileNotFoundError(f"Configuration file not found: {filepath}")
+        msg = f"Configuration file not found: {filepath}"
+        raise FileNotFoundError(msg)
 
     with filepath.open("r") as f:
         return yaml.safe_load(f) or {}
@@ -82,7 +83,7 @@ def _get_atomic_mass(symbol: str) -> float:
 
 
 def write_lammps_streaming(
-    fileobj: Any,
+    fileobj: TextIO,
     atoms: Atoms,
     species: list[str],
     atom_style: str = "atomic"
@@ -97,6 +98,10 @@ def write_lammps_streaming(
         species: List of chemical symbols mapping to types 1..N.
         atom_style: LAMMPS atom style (currently only 'atomic' supported for streaming).
     """
+    if not hasattr(fileobj, "write") or not callable(fileobj.write):
+        msg = "fileobj must be a file-like object with a write() method."
+        raise TypeError(msg)
+
     natoms = len(atoms)
 
     # 1. Header
@@ -107,7 +112,8 @@ def write_lammps_streaming(
     # 2. Box
     cell = atoms.get_cell()
     if not np.allclose(cell, np.diag(np.diag(cell))):
-        raise ValueError("Streaming write currently only supports orthogonal cells")
+        msg = "Streaming write currently only supports orthogonal cells"
+        raise ValueError(msg)
 
     xlo, xhi = 0.0, cell[0, 0]
     ylo, yhi = 0.0, cell[1, 1]
@@ -147,8 +153,9 @@ def write_lammps_streaming(
             s = symbols[i]
             try:
                 t = type_map[s]
-            except KeyError:
-                 raise KeyError(f"Symbol {s} not in provided species list: {species}")
+            except KeyError as err:
+                 msg = f"Symbol {s} not in provided species list: {species}"
+                 raise KeyError(msg) from err
 
             # 1-based index
             yield f"{i+1} {t} {pos[i, 0]:.6f} {pos[i, 1]:.6f} {pos[i, 2]:.6f}\n"

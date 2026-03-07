@@ -28,8 +28,8 @@ def test_generator_pure_pace(tmp_path: Path) -> None:
     assert "pair_style pace" in script
     assert "pair_style hybrid" not in script
 
-    # Expected quoted path (shlex.quote might use single quotes)
-    expected_pot = shlex.quote(str(pot_path))
+    # Expected quoted path is double quoted
+    expected_pot = f'"{pot_path}"'
     assert f"pair_coeff * * pace {expected_pot} Al" in script
 
 
@@ -55,7 +55,7 @@ def test_generator_hybrid_potential(tmp_path: Path) -> None:
 
     assert "pair_style hybrid/overlay" in script
 
-    expected_pot = shlex.quote(str(pot_path))
+    expected_pot = f'"{pot_path}"'
     assert f"pair_coeff * * pace {expected_pot} H He" in script
 
     # ZBL check
@@ -89,7 +89,7 @@ def test_generator_watchdog(tmp_path: Path) -> None:
     generator.write_script(buffer, pot_path, data_file, dump_file, ["Al"])
     script = buffer.getvalue()
 
-    expected_pot = shlex.quote(str(pot_path))
+    expected_pot = f'"{pot_path}"'
     assert f"compute gamma all pace {expected_pot}" in script
     assert "compute max_gamma all reduce max c_gamma" in script
     assert "fix halt_check all halt 10 v_max_g > 5.0 error continue" in script

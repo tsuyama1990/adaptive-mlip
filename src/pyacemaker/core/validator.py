@@ -5,6 +5,7 @@ import numpy as np
 from ase import Atoms
 from ase.data import atomic_numbers
 
+from pyacemaker.core.base import BaseEngine
 from pyacemaker.domain_models.constants import (
     ERR_POTENTIAL_NOT_FOUND,
     ERR_VAL_POT_NONE,
@@ -110,6 +111,8 @@ class LammpsInputValidator:
         return path
 
 
+
+
 class Validator:
     """
     Coordinates the validation of potentials using Phonopy and Elastic checks.
@@ -118,22 +121,22 @@ class Validator:
     def __init__(
         self,
         config: ValidationConfig,
+        engine: BaseEngine,
         phonon_calculator: PhononCalculator,
         elastic_calculator: ElasticCalculator,
         report_generator: Any,
     ) -> None:
         self.config = config
+        self.engine = engine
         self.phonon_calc = phonon_calculator
         self.elastic_calc = elastic_calculator
         self.report_gen = report_generator
 
     def _relax_structure(self, structure: Atoms, potential_path: Path) -> Atoms:
         """
-        Relaxes the structure using the engine provided in calculators.
+        Relaxes the structure using the injected engine.
         """
-        # Use engine from elastic_calc (arbitrary choice, they should share engine)
-        engine = self.elastic_calc.engine
-        return engine.relax(structure, potential_path)
+        return self.engine.relax(structure, potential_path)
 
     def validate(
         self, potential_path: Path, output_path: Path, structure: Atoms | None = None

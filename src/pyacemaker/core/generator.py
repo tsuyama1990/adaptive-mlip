@@ -1,4 +1,5 @@
 from collections.abc import Iterator
+from pathlib import Path
 from typing import Any
 
 from ase import Atoms
@@ -116,7 +117,7 @@ class StructureGenerator(BaseGenerator):
 
         yield from lazy_policy_stream()
 
-    def generate_local(self, base_structure: Atoms, n_candidates: int, **kwargs: Any) -> Iterator[Atoms]:
+    def generate_local(self, base_structure: Atoms, n_candidates: int, engine: Any | None = None, potential: str | Path | None = None) -> Iterator[Atoms]:
         """
         Generates candidate structures by perturbing a base structure.
         Used in OTF loops to explore the local neighborhood of a high-uncertainty configuration.
@@ -125,7 +126,8 @@ class StructureGenerator(BaseGenerator):
         Args:
             base_structure: The reference structure to perturb.
             n_candidates: Number of structures to generate.
-            **kwargs: Additional arguments (e.g., engine).
+            engine: Simulation engine for advanced policies.
+            potential: Path to potential for advanced policies.
 
         Returns:
             Iterator yielding ASE Atoms objects.
@@ -138,5 +140,4 @@ class StructureGenerator(BaseGenerator):
         policy = PolicyFactory.get_local_policy(strategy)
 
         # Generate using policy
-        # Pass kwargs (e.g. engine) to allow advanced policies like MD Micro Burst
-        yield from policy.generate(base_structure, self.config, n_structures=n_candidates, **kwargs)
+        yield from policy.generate(base_structure, self.config, n_structures=n_candidates, engine=engine, potential=potential)

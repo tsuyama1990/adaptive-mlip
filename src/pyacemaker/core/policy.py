@@ -21,18 +21,14 @@ __all__ = [
 ]
 
 
+from pathlib import Path
+
+
 class SafeBasePolicy(BasePolicy):
-    def generate(self, base_structure: Atoms, config: StructureConfig, n_structures: int = 1, **kwargs: Any) -> Iterator[Atoms]:
+    def generate(self, base_structure: Atoms, config: StructureConfig, n_structures: int = 1, engine: Any | None = None, potential: str | Path | None = None) -> Iterator[Atoms]:
         """
         Generates new candidates based on policy logic.
         """
-        # Validate allowed kwargs
-        allowed_args = {"engine", "potential"}
-        unknown = set(kwargs.keys()) - allowed_args
-        if unknown:
-            msg = f"Unknown arguments passed to Policy.generate: {unknown}"
-            raise ValueError(msg)
-
         # Abstract method conceptually, but memory requires actual fallbacks if called directly
         # We will yield base_structure as the ultimate fallback if a subclass forgets
         for _ in range(n_structures):
@@ -45,8 +41,8 @@ class ColdStartPolicy(SafeBasePolicy):
     Policy for initial exploration (Cold Start).
     Usually implies random structure generation or grid search.
     """
-    def generate(self, base_structure: Atoms, config: StructureConfig, n_structures: int = 1, **kwargs: Any) -> Iterator[Atoms]:
-        super().generate(base_structure, config, n_structures=1, **kwargs)
+    def generate(self, base_structure: Atoms, config: StructureConfig, n_structures: int = 1, engine: Any | None = None, potential: str | Path | None = None) -> Iterator[Atoms]:
+        super().generate(base_structure, config, n_structures=1, engine=engine, potential=potential)
         # Cold start yields 1 structure regardless of n (based on tests)
         yield base_structure.copy() # type: ignore[no-untyped-call]
 
@@ -55,36 +51,34 @@ class MDMicroBurstPolicy(SafeBasePolicy):
     """
     Policy using short MD bursts to explore phase space.
     """
-    def generate(self, base_structure: Atoms, config: StructureConfig, n_structures: int = 1, **kwargs: Any) -> Iterator[Atoms]:
-        super().generate(base_structure, config, n_structures=n_structures, **kwargs)
-
-        engine = kwargs.get("engine")
-        potential = kwargs.get("potential")
+    def generate(self, base_structure: Atoms, config: StructureConfig, n_structures: int = 1, engine: Any | None = None, potential: str | Path | None = None) -> Iterator[Atoms]:
+        super().generate(base_structure, config, n_structures=n_structures, engine=engine, potential=potential)
 
         if engine is not None:
             # Full implementation would run engine, for test stub, just read trajectory if possible
             for _ in range(n_structures):
                 res = engine.run(base_structure, potential)
                 if hasattr(res, "trajectory_path") and res.trajectory_path:
-                    yield read(res.trajectory_path, index=-1) # type: ignore[no-untyped-call]
+                    # type checker complains about list vs atoms from read
+                    yield read(res.trajectory_path, index=-1) # type: ignore
                 else:
                     yield base_structure.copy() # type: ignore[no-untyped-call]
             return
 
         # Fallback to rattle (tests expect fallback to move atoms)
         rp = RattlePolicy()
-        yield from rp.generate(base_structure, config, n_structures=n_structures, **kwargs)
+        yield from rp.generate(base_structure, config, n_structures=n_structures, engine=engine, potential=potential)
 
 
 class NormalModePolicy(SafeBasePolicy):
     """
     Policy using Normal Mode sampling.
     """
-    def generate(self, base_structure: Atoms, config: StructureConfig, n_structures: int = 1, **kwargs: Any) -> Iterator[Atoms]:
-        super().generate(base_structure, config, n_structures=n_structures, **kwargs)
+    def generate(self, base_structure: Atoms, config: StructureConfig, n_structures: int = 1, engine: Any | None = None, potential: str | Path | None = None) -> Iterator[Atoms]:
+        super().generate(base_structure, config, n_structures=n_structures, engine=engine, potential=potential)
         # Tests expect fallback to rattle
         rp = RattlePolicy()
-        yield from rp.generate(base_structure, config, n_structures=n_structures, **kwargs)
+        yield from rp.generate(base_structure, config, n_structures=n_structures, engine=engine, potential=potential)
 
 
 class CompositePolicy(SafeBasePolicy):
@@ -94,8 +88,8 @@ class CompositePolicy(SafeBasePolicy):
     def __init__(self, policies: list[BasePolicy] | None = None) -> None:
         self.policies = policies or []
 
-    def generate(self, base_structure: Atoms, config: StructureConfig, n_structures: int = 1, **kwargs: Any) -> Iterator[Atoms]:
-        super().generate(base_structure, config, n_structures=n_structures, **kwargs)
+    def generate(self, base_structure: Atoms, config: StructureConfig, n_structures: int = 1, engine: Any | None = None, potential: str | Path | None = None) -> Iterator[Atoms]:
+        super().generate(base_structure, config, n_structures=n_structures, engine=engine, potential=potential)
         if not self.policies:
             return
 
@@ -106,15 +100,15 @@ class CompositePolicy(SafeBasePolicy):
         for i, p in enumerate(self.policies):
             count = base_count + (1 if i < remainder else 0)
             if count > 0:
-                yield from p.generate(base_structure, config, n_structures=count, **kwargs)
+                yield from p.generate(base_structure, config, n_structures=count, engine=engine, potential=potential)
 
 
 class DefectPolicy(SafeBasePolicy):
     """
     Policy for creating point defects (vacancies, interstitials).
     """
-    def generate(self, base_structure: Atoms, config: StructureConfig, n_structures: int = 1, **kwargs: Any) -> Iterator[Atoms]:
-        super().generate(base_structure, config, n_structures=n_structures, **kwargs)
+    def generate(self, base_structure: Atoms, config: StructureConfig, n_structures: int = 1, engine: Any | None = None, potential: str | Path | None = None) -> Iterator[Atoms]:
+        super().generate(base_structure, config, n_structures=n_structures, engine=engine, potential=potential)
         for _ in range(n_structures):
             atoms = base_structure.copy() # type: ignore[no-untyped-call]
             if len(atoms) > 0:
@@ -128,8 +122,8 @@ class RattlePolicy(SafeBasePolicy):
     """
     Policy for rattling structures (random perturbation).
     """
-    def generate(self, base_structure: Atoms, config: StructureConfig, n_structures: int = 1, **kwargs: Any) -> Iterator[Atoms]:
-        super().generate(base_structure, config, n_structures=n_structures, **kwargs)
+    def generate(self, base_structure: Atoms, config: StructureConfig, n_structures: int = 1, engine: Any | None = None, potential: str | Path | None = None) -> Iterator[Atoms]:
+        super().generate(base_structure, config, n_structures=n_structures, engine=engine, potential=potential)
         for _ in range(n_structures):
             atoms = base_structure.copy() # type: ignore[no-untyped-call]
             # Add random normal noise to positions
@@ -142,8 +136,8 @@ class StrainPolicy(SafeBasePolicy):
     """
     Policy for applying strain to structures.
     """
-    def generate(self, base_structure: Atoms, config: StructureConfig, n_structures: int = 1, **kwargs: Any) -> Iterator[Atoms]:
-        super().generate(base_structure, config, n_structures=n_structures, **kwargs)
+    def generate(self, base_structure: Atoms, config: StructureConfig, n_structures: int = 1, engine: Any | None = None, potential: str | Path | None = None) -> Iterator[Atoms]:
+        super().generate(base_structure, config, n_structures=n_structures, engine=engine, potential=potential)
         for _ in range(n_structures):
             atoms = base_structure.copy() # type: ignore[no-untyped-call]
 

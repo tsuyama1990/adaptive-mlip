@@ -1,5 +1,5 @@
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 from ase import Atoms
@@ -24,9 +24,11 @@ class TestValidator:
     @pytest.fixture
     def validator(self, mock_phonon_calc, mock_elastic_calc, mock_report_gen):
         config = ValidationConfig()
+        engine = MagicMock()
         # Assuming Validator takes instances of calculators and report generator
         return Validator(
             config=config,
+            engine=engine,
             phonon_calculator=mock_phonon_calc,
             elastic_calculator=mock_elastic_calc,
             report_generator=mock_report_gen
@@ -41,10 +43,8 @@ class TestValidator:
         from ase import Atoms
         structure = Atoms("Fe", positions=[[0, 0, 0]], cell=[2, 2, 2])
 
-        # Mock _relax_structure to isolate
-        with patch.object(validator, "_relax_structure") as mock_relax:
-            mock_relax.return_value = structure
-            result = validator.validate(potential_path, output_path, structure=structure)
+        validator.engine.relax.return_value = structure
+        result = validator.validate(potential_path, output_path, structure=structure)
 
         assert isinstance(result, ValidationResult)
         assert result.phonon_stable is True
@@ -66,26 +66,22 @@ class TestValidator:
         from ase import Atoms
         structure = Atoms("Fe", positions=[[0, 0, 0]], cell=[2, 2, 2])
 
-        with patch.object(validator, "_relax_structure") as mock_relax:
-            mock_relax.return_value = structure
-            result = validator.validate(potential_path, output_path, structure=structure)
+        validator.engine.relax.return_value = structure
+        result = validator.validate(potential_path, output_path, structure=structure)
 
         assert result.phonon_stable is False
         assert result.elastic_stable is True
 
-    def test_relax_structure(self, validator, mock_elastic_calc):
+    def test_relax_structure(self, validator):
         structure = MagicMock()
         pot_path = Path("pot.yace")
 
-        # mock_elastic_calc.engine is accessed in _relax_structure
-        mock_engine = MagicMock()
-        mock_elastic_calc.engine = mock_engine
-        mock_engine.relax.return_value = "relaxed_structure"
+        validator.engine.relax.return_value = "relaxed_structure"
 
         relaxed = validator._relax_structure(structure, pot_path)
 
         assert relaxed == "relaxed_structure"
-        mock_engine.relax.assert_called_once_with(structure, pot_path)
+        validator.engine.relax.assert_called_once_with(structure, pot_path)
 
     def test_validate_structure_invalid_element(self):
         """Test rejection of structure with invalid chemical symbol (dummy X)."""

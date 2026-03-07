@@ -78,7 +78,7 @@ class ModuleFactory:
                 config.validation.elastic_steps,
             )
             validator = Validator(
-                config.validation, phonon_calc, elastic_calc, report_gen
+                config.validation, engine, phonon_calc, elastic_calc, report_gen
             )
 
         except Exception as e:

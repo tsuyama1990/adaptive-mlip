@@ -81,18 +81,18 @@ src/pyacemaker/core/config_generator.py         36      3    92%   58-60
 src/pyacemaker/core/directory_manager.py        20      0   100%
 src/pyacemaker/core/engine.py                   90     18    80%   50, 62-63, 75, 77, 80-81, 116-121, 127-128, 158-166
 src/pyacemaker/core/exceptions.py                8      0   100%
-src/pyacemaker/core/generator.py                52     11    79%   36-39, 59, 62, 95, 105, 111, 113, 134
+src/pyacemaker/core/generator.py                53     11    79%   37-40, 60, 63, 96, 106, 112, 114, 136
 src/pyacemaker/core/io_manager.py               60     23    62%   56-68, 77-80, 93-94, 97-103
-src/pyacemaker/core/lammps_generator.py        130     17    87%   105-121, 129, 148-155
+src/pyacemaker/core/lammps_generator.py        134     19    86%   46-47, 116-132, 140, 159-166
 src/pyacemaker/core/loop.py                     69      3    96%   74-77
 src/pyacemaker/core/m3gnet_wrapper.py           16      4    75%   26-28, 45-47
-src/pyacemaker/core/oracle.py                   80      1    99%   70
-src/pyacemaker/core/policy.py                   87     12    86%   30-39, 71, 100, 162-164
+src/pyacemaker/core/oracle.py                   83      1    99%   73
+src/pyacemaker/core/policy.py                   81      7    91%   34-35, 65, 94, 156-158
 src/pyacemaker/core/policy_factory.py           27      5    81%   46, 52-53, 80-81
 src/pyacemaker/core/report.py                   12      1    92%   85
 src/pyacemaker/core/state_manager.py            34      2    94%   37-38
 src/pyacemaker/core/trainer.py                  54      9    83%   79-82, 85-86, 93-94, 97-98
-src/pyacemaker/core/validator.py                65      5    92%   63, 68, 74, 108, 145
+src/pyacemaker/core/validator.py                66      5    92%   64, 69, 75, 109, 148
 src/pyacemaker/domain_models/__init__.py        11      0   100%
 src/pyacemaker/domain_models/config.py          22      0   100%
 src/pyacemaker/domain_models/constants.py       10      0   100%
@@ -122,12 +122,12 @@ src/pyacemaker/utils/delta.py                   17      2    88%   34-35
 src/pyacemaker/utils/elastic.py                 80     52    35%   34-35, 46-137, 146, 154
 src/pyacemaker/utils/embedding.py               36      6    83%   41-42, 49-50, 61-62
 src/pyacemaker/utils/extraction.py              31      0   100%
-src/pyacemaker/utils/io.py                      70      0   100%
-src/pyacemaker/utils/path.py                    40      6    85%   53-57, 77-78
+src/pyacemaker/utils/io.py                      76      2    97%   102-103
+src/pyacemaker/utils/path.py                    46      7    85%   44, 60-64, 84-85
 src/pyacemaker/utils/perturbations.py           43      1    98%   77
 src/pyacemaker/utils/phonons.py                 51      2    96%   51, 69
 src/pyacemaker/utils/process.py                 25     21    16%   34-74
 src/pyacemaker/utils/structure.py                6      2    67%   19-20
 --------------------------------------------------------------------------
-TOTAL                                         2659    362    86%
-======================== 243 passed, 1 warning in 2.98s ========================
+TOTAL                                         2674    362    86%
+======================== 243 passed, 1 warning in 2.35s ========================
