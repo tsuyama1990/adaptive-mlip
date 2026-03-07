@@ -30,6 +30,7 @@ class TestValidator:
             ReportValidator,
             StructureRelaxer,
         )
+
         return Validator(
             config=config,
             phonon_validator=PhononValidator(mock_phonon_calc),

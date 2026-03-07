@@ -86,6 +86,7 @@ class LammpsFileManager:
     ) -> None:
         """Writes structure to disk using streaming writer if possible."""
         from pyacemaker.utils.path import validate_path_safe
+
         output_path = validate_path_safe(output_path)
         try:
             # Memory Safety Fix: Always attempt streaming first if atom_style allows

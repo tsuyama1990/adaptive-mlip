@@ -7,7 +7,7 @@ from pydantic import ValidationError
 from pyacemaker.domain_models.eon import EONConfig
 
 
-def test_eon_config_valid():
+def test_eon_config_valid() -> None:
     with tempfile.NamedTemporaryFile(suffix=".yace") as tmp:
         path = Path(tmp.name)
         config = EONConfig(
@@ -23,7 +23,7 @@ def test_eon_config_valid():
         assert config.random_seed == 12345
 
 
-def test_eon_config_defaults():
+def test_eon_config_defaults() -> None:
     with tempfile.NamedTemporaryFile(suffix=".yace") as tmp:
         path = Path(tmp.name)
         config = EONConfig(potential_path=path)
@@ -32,13 +32,13 @@ def test_eon_config_defaults():
         assert config.supercell == [1, 1, 1]
 
 
-def test_eon_config_invalid_potential_path():
+def test_eon_config_invalid_potential_path() -> None:
     with pytest.raises(ValidationError) as excinfo:
         EONConfig(potential_path=Path("non_existent_file.yace"))
     assert "Potential file does not exist" in str(excinfo.value)
 
 
-def test_eon_config_invalid_temperature():
+def test_eon_config_invalid_temperature() -> None:
     with tempfile.NamedTemporaryFile(suffix=".yace") as tmp:
         path = Path(tmp.name)
         with pytest.raises(ValidationError):

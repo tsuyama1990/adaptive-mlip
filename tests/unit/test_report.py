@@ -1,8 +1,9 @@
 from pyacemaker.core.report import ReportGenerator
 from pyacemaker.domain_models.validation import ValidationResult
+from pathlib import Path
 
 
-def test_generate_report_pass(tmp_path):
+def test_generate_report_pass(tmp_path: Path) -> None:
     result = ValidationResult(
         phonon_stable=True,
         elastic_stable=True,
@@ -19,7 +20,7 @@ def test_generate_report_pass(tmp_path):
     assert "base64_string" in html
 
 
-def test_generate_report_fail(tmp_path):
+def test_generate_report_fail(tmp_path: Path) -> None:
     result = ValidationResult(
         phonon_stable=False,
         elastic_stable=True,

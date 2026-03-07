@@ -6,6 +6,7 @@ from ase.data import atomic_numbers
 
 from pyacemaker.domain_models.constants import LAMMPS_MIN_STYLE_CG
 from pyacemaker.domain_models.md import MDConfig
+from pyacemaker.domain_models.workflow import ActiveLearningThresholds, OTFConfig
 from pyacemaker.utils.path import validate_path_safe
 
 
@@ -16,15 +17,22 @@ class LammpsScriptGenerator:
     Supports writing directly to a file-like object to handle large scripts efficiently.
     """
 
-    def __init__(self, config: MDConfig) -> None:
+    def __init__(
+        self,
+        config: MDConfig,
+        otf_config: OTFConfig | None = None,
+        thresholds: ActiveLearningThresholds | None = None,
+    ) -> None:
         self.config = config
+        self.otf_config = otf_config
+        self.thresholds = thresholds
         # Use lru_cache for methods instead of manual dict
-        self._atomic_numbers_cache = {}
+        self._atomic_numbers_cache: dict[str, int] = {}
 
     def _get_atomic_number(self, symbol: str) -> int:
         """Cached atomic number lookup."""
         if symbol not in self._atomic_numbers_cache:
-            self._atomic_numbers_cache[symbol] = atomic_numbers[symbol]
+            self._atomic_numbers_cache[symbol] = int(atomic_numbers[symbol])
         return self._atomic_numbers_cache[symbol]
 
     def _quote(self, path: str) -> str:
@@ -90,16 +98,18 @@ class LammpsScriptGenerator:
 
     def _gen_watchdog(self, buffer: TextIO, potential_path: Path) -> None:
         """Generates Uncertainty Watchdog commands."""
-        if not self.config.fix_halt:
+        if not self.otf_config or not self.otf_config.fix_halt:
             return
+
+        threshold = self.thresholds.threshold_call_dft if self.thresholds else 0.05
 
         quoted_pot = self._quote(str(potential_path))
         buffer.write(f"compute gamma all pace {quoted_pot}\n")
         buffer.write("compute max_gamma all reduce max c_gamma\n")
         buffer.write("variable max_g equal c_max_gamma\n")
         buffer.write(
-            f"fix halt_check all halt {self.config.check_interval} "
-            f"v_max_g > {self.config.uncertainty_threshold} error continue\n"
+            f"fix halt_check all halt {self.otf_config.check_interval} "
+            f"v_max_g > {threshold} error continue\n"
         )
 
     def _gen_mc(self, buffer: TextIO, elements: list[str]) -> None:
@@ -174,7 +184,7 @@ class LammpsScriptGenerator:
         style_parts = ["step", "temp", "pe", "press"]
         dump_parts = ["id", "type", "x", "y", "z"]
 
-        if self.config.fix_halt:
+        if self.otf_config and self.otf_config.fix_halt:
             style_parts.append("v_max_g")
             dump_parts.append("c_gamma")
 
@@ -209,7 +219,7 @@ class LammpsScriptGenerator:
         buffer.write("clear\n")
         buffer.write("units metal\n")
         # Use .value to ensure we get the string value "atomic", "charge" etc.
-        buffer.write(f"atom_style {self.config.atom_style.value}\n")
+        buffer.write(f"atom_style {self.config.atom_style}\n")
         buffer.write("boundary p p p\n")
         buffer.write(f"read_data {quoted_data}\n")
 
@@ -238,7 +248,7 @@ class LammpsScriptGenerator:
 
         buffer.write("clear\n")
         buffer.write("units metal\n")
-        buffer.write(f"atom_style {self.config.atom_style.value}\n")
+        buffer.write(f"atom_style {self.config.atom_style}\n")
         buffer.write("boundary p p p\n")
         buffer.write(f"read_data {quoted_data}\n")
 

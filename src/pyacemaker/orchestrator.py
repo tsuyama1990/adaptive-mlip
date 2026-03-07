@@ -349,7 +349,7 @@ class Orchestrator:
         ):
             return None
 
-        threshold = self.config.workflow.otf.uncertainty_threshold
+        threshold = self.config.workflow.loop_strategy.thresholds.threshold_call_dft
         if result.max_gamma <= threshold and not result.halted:
             return None
 

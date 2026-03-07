@@ -13,12 +13,14 @@ from pyacemaker.domain_models.constants import (
     LAMMPS_SCREEN_ARG,
 )
 from pyacemaker.domain_models.md import MDConfig, MDSimulationResult
+from pyacemaker.domain_models.workflow import OTFConfig
 from pyacemaker.interfaces.lammps_driver import LammpsDriver
 from pyacemaker.utils.io_transaction import DirectoryTransaction
 
 
 class SimulationExecutionStrategy:
     """Strategy for executing LAMMPS simulations with proper error handling and context logging."""
+
     def __init__(self, logger: logging.Logger | None = None) -> None:
         self.logger = logger or logging.getLogger(__name__)
 
@@ -56,6 +58,7 @@ class LammpsEngine(BaseEngine):
         generator: LammpsScriptGenerator,
         file_manager: LammpsFileManager,
         execution_strategy: SimulationExecutionStrategy | None = None,
+        otf_config: OTFConfig | None = None,
     ) -> None:
         """
         Initialize the engine with configuration.
@@ -65,6 +68,7 @@ class LammpsEngine(BaseEngine):
         self.generator = generator
         self.file_manager = file_manager
         self.execution_strategy = execution_strategy or SimulationExecutionStrategy()
+        self.otf_config = otf_config
 
     def _prepare_simulation_env(
         self, structure: Atoms | None, potential: Any
@@ -122,18 +126,20 @@ class LammpsEngine(BaseEngine):
                     stress = driver.get_stress().tolist()
                 except (ValueError, TypeError, KeyError) as e:
                     import logging
-                    logging.getLogger(__name__).error(f"LAMMPS extraction failed: missing or invalid variables. {e}")
-                    raise RuntimeError("LAMMPS execution or data extraction failed.") from e
+
+                    msg = "LAMMPS extraction failed: missing or invalid variables."
+                    logging.getLogger(__name__).exception(msg)
+                    raise RuntimeError(msg) from e
 
                 max_gamma = 0.0
-                if self.config.fix_halt:
+                if self.otf_config and self.otf_config.fix_halt:
                     try:
                         max_gamma = driver.extract_variable("max_g")
                     except (ValueError, TypeError, KeyError):
                         max_gamma = 0.0
 
                 halted = False
-                if self.config.fix_halt:
+                if self.otf_config and self.otf_config.fix_halt:
                     # If using fix halt, checking step count is a proxy for early termination
                     halted = step < self.config.n_steps
 

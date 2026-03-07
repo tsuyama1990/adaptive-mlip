@@ -19,6 +19,7 @@ def base_training_data(tmp_path: Path) -> Path:
     write(data_path, atoms)
     return data_path
 
+
 @pytest.fixture
 def trainer_config() -> TrainingConfig:
     return TrainingConfig(
@@ -28,13 +29,17 @@ def trainer_config() -> TrainingConfig:
         output_filename="output.yace",
     )
 
-def test_pacemaker_element_detection(tmp_path: Path, base_training_data: Path, trainer_config: TrainingConfig) -> None:
+
+def test_pacemaker_element_detection(
+    tmp_path: Path, base_training_data: Path, trainer_config: TrainingConfig
+) -> None:
     trainer = PacemakerTrainer(trainer_config)
 
     with (
         patch("shutil.which", return_value="/usr/bin/pace_train"),
         patch("pyacemaker.core.trainer.run_command") as mock_run,
     ):
+
         def side_effect(cmd: list[str], **kwargs: Any) -> MagicMock:
             input_yaml = Path(cmd[1])
             with input_yaml.open() as f:
@@ -46,13 +51,17 @@ def test_pacemaker_element_detection(tmp_path: Path, base_training_data: Path, t
         mock_run.side_effect = side_effect
         trainer.train(base_training_data)
 
-def test_pacemaker_config_generation(tmp_path: Path, base_training_data: Path, trainer_config: TrainingConfig) -> None:
+
+def test_pacemaker_config_generation(
+    tmp_path: Path, base_training_data: Path, trainer_config: TrainingConfig
+) -> None:
     trainer = PacemakerTrainer(trainer_config)
 
     with (
         patch("shutil.which", return_value="/usr/bin/pace_train"),
         patch("pyacemaker.core.trainer.run_command") as mock_run,
     ):
+
         def side_effect(cmd: list[str], **kwargs: Any) -> MagicMock:
             input_yaml = Path(cmd[1])
             with input_yaml.open() as f:
@@ -64,7 +73,10 @@ def test_pacemaker_config_generation(tmp_path: Path, base_training_data: Path, t
         mock_run.side_effect = side_effect
         trainer.train(base_training_data)
 
-def test_pacemaker_command_execution(tmp_path: Path, base_training_data: Path, trainer_config: TrainingConfig) -> None:
+
+def test_pacemaker_command_execution(
+    tmp_path: Path, base_training_data: Path, trainer_config: TrainingConfig
+) -> None:
     trainer = PacemakerTrainer(trainer_config)
     output_pot_path = tmp_path / "output.yace"
 
@@ -72,6 +84,7 @@ def test_pacemaker_command_execution(tmp_path: Path, base_training_data: Path, t
         patch("shutil.which", return_value="/usr/bin/pace_train"),
         patch("pyacemaker.core.trainer.run_command") as mock_run,
     ):
+
         def side_effect(cmd: list[str], **kwargs: Any) -> MagicMock:
             output_pot_path.touch()
             return MagicMock(returncode=0)

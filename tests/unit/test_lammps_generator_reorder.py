@@ -3,6 +3,7 @@ from pathlib import Path
 
 from pyacemaker.core.lammps_generator import LammpsScriptGenerator
 from pyacemaker.domain_models.md import MDConfig
+from pyacemaker.domain_models.workflow import OTFConfig
 
 
 def test_lammps_generator_order() -> None:
@@ -11,9 +12,9 @@ def test_lammps_generator_order() -> None:
         pressure=0,
         timestep=0.001,
         n_steps=1000,
-        fix_halt=True,
     )
-    generator = LammpsScriptGenerator(config)
+    otf_config = OTFConfig(fix_halt=True)
+    generator = LammpsScriptGenerator(config, otf_config=otf_config)
 
     # Use StringIO as buffer
     buffer = StringIO()
@@ -55,9 +56,9 @@ def test_lammps_generator_gamma_column() -> None:
         pressure=0,
         timestep=0.001,
         n_steps=1000,
-        fix_halt=True,
     )
-    generator = LammpsScriptGenerator(config)
+    otf_config = OTFConfig(fix_halt=True)
+    generator = LammpsScriptGenerator(config, otf_config=otf_config)
 
     buffer = StringIO()
     generator.write_script(

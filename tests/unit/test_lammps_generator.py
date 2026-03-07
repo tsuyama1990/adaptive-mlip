@@ -3,7 +3,8 @@ from io import StringIO
 from pathlib import Path
 
 from pyacemaker.core.lammps_generator import LammpsScriptGenerator
-from pyacemaker.domain_models.md import HybridParams, MDConfig
+from pyacemaker.domain_models.md import MDConfig
+from pyacemaker.domain_models.workflow import OTFConfig
 
 
 def test_generator_pure_pace(tmp_path: Path) -> None:
@@ -37,7 +38,7 @@ def test_generator_hybrid_potential(tmp_path: Path) -> None:
         timestep=0.001,
         n_steps=1000,
         hybrid_potential=True,
-        hybrid_params=HybridParams(zbl_cut_inner=1.0, zbl_cut_outer=1.5),
+        hybrid_params=MDConfig.HybridParams(zbl_cut_inner=1.0, zbl_cut_outer=1.5),
     )
     generator = LammpsScriptGenerator(config)
 
@@ -66,21 +67,19 @@ def test_generator_watchdog(tmp_path: Path) -> None:
         pressure=1.0,
         timestep=0.001,
         n_steps=1000,
-        fix_halt=True,
-        uncertainty_threshold=5.0,
-        check_interval=10,
     )
-    generator = LammpsScriptGenerator(config)
+    otf_config = OTFConfig(fix_halt=True, check_interval=50)
+    gen = LammpsScriptGenerator(config, otf_config=otf_config)
 
     pot_path = tmp_path / "potential.yace"
     data_file = tmp_path / "data.lmp"
     dump_file = tmp_path / "dump.lammpstrj"
 
     buffer = StringIO()
-    generator.write_script(buffer, pot_path, data_file, dump_file, ["Al"])
+    gen.write_script(buffer, pot_path, data_file, dump_file, ["Al"])
     script = buffer.getvalue()
 
     expected_pot = shlex.quote(str(pot_path))
     assert f"compute gamma all pace {expected_pot}" in script
     assert "compute max_gamma all reduce max c_gamma" in script
-    assert "fix halt_check all halt 10 v_max_g > 5.0 error continue" in script
+    assert "fix halt_check all halt 50 v_max_g > 0.05 error continue" in script

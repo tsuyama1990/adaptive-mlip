@@ -57,6 +57,7 @@ class TestLammpsInputValidator:
     def test_validate_potential_allowed_tmp(self):
         """Test validation within /tmp."""
         import logging
+
         try:
             with tempfile.NamedTemporaryFile() as f:
                 # This file exists in temp, should be valid

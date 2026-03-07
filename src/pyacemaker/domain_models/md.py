@@ -45,38 +45,6 @@ class AtomStyle(StrEnum):
     FULL = "full"
 
 
-class HybridParams(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    zbl_cut_inner: PositiveFloat = Field(
-        DEFAULT_MD_HYBRID_ZBL_INNER, description="Inner cutoff radius for ZBL potential (Angstrom)"
-    )
-    zbl_cut_outer: PositiveFloat = Field(
-        DEFAULT_MD_HYBRID_ZBL_OUTER, description="Outer cutoff radius for ZBL potential (Angstrom)"
-    )
-
-
-class MDRampingConfig(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    temp_start: float | None = Field(None, ge=0.0, description="Starting temperature (K)")
-    temp_end: float | None = Field(None, ge=0.0, description="Ending temperature (K)")
-    press_start: float | None = Field(None, ge=0.0, description="Starting pressure (Bar)")
-    press_end: float | None = Field(None, ge=0.0, description="Ending pressure (Bar)")
-
-    @model_validator(mode="after")
-    def validate_ramping(self) -> "MDRampingConfig":
-        return self
-
-
-class MCConfig(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    swap_freq: int = Field(..., gt=0, description="Frequency of MC swaps (steps)")
-    swap_prob: float = Field(..., gt=0.0, le=1.0, description="Probability of swapping atoms")
-    seed: int = Field(DEFAULT_MC_SEED, description="Random seed for MC swaps")
-
-
 class MDSimulationResult(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -128,6 +96,36 @@ class MDConfig(BaseModel):
     """
     Configuration for Molecular Dynamics simulations.
     """
+
+    class HybridParams(BaseModel):
+        model_config = ConfigDict(extra="forbid")
+
+        zbl_cut_inner: PositiveFloat = Field(
+            DEFAULT_MD_HYBRID_ZBL_INNER, description="Inner cutoff radius for ZBL potential (Angstrom)"
+        )
+        zbl_cut_outer: PositiveFloat = Field(
+            DEFAULT_MD_HYBRID_ZBL_OUTER, description="Outer cutoff radius for ZBL potential (Angstrom)"
+        )
+
+    class MDRampingConfig(BaseModel):
+        model_config = ConfigDict(extra="forbid")
+
+        temp_start: float | None = Field(None, ge=0.0, description="Starting temperature (K)")
+        temp_end: float | None = Field(None, ge=0.0, description="Ending temperature (K)")
+        press_start: float | None = Field(None, ge=0.0, description="Starting pressure (Bar)")
+        press_end: float | None = Field(None, ge=0.0, description="Ending pressure (Bar)")
+
+        @model_validator(mode="after")
+        def validate_ramping(self) -> "MDConfig.MDRampingConfig":
+            return self
+
+    class MCConfig(BaseModel):
+        model_config = ConfigDict(extra="forbid")
+
+        swap_freq: int = Field(..., gt=0, description="Frequency of MC swaps (steps)")
+        swap_prob: float = Field(..., gt=0.0, le=1.0, description="Probability of swapping atoms")
+        seed: int = Field(DEFAULT_MC_SEED, description="Random seed for MC swaps")
+
 
     model_config = ConfigDict(extra="forbid")
 
@@ -197,17 +195,6 @@ class MDConfig(BaseModel):
         default_factory=HybridParams, description="Parameters for hybrid potential baseline"
     )
 
-    # Spec Section 3.4 (OTF)
-    fix_halt: bool = Field(False, description="Enable OTF halting based on uncertainty")
-    uncertainty_threshold: float = Field(
-        DEFAULT_OTF_UNCERTAINTY_THRESHOLD,
-        gt=0.0,
-        description="Gamma threshold for halting simulation",
-    )
-    check_interval: int = Field(
-        DEFAULT_MD_CHECK_INTERVAL, gt=0, description="Step interval for uncertainty check"
-    )
-
     # Spec Section 3.1: Ramping and MC
     ramping: MDRampingConfig | None = Field(None, description="Configuration for T/P ramping")
     mc: MCConfig | None = Field(None, description="Configuration for Monte Carlo atom swapping")
@@ -217,13 +204,6 @@ class MDConfig(BaseModel):
         total_time = self.n_steps * self.timestep
         if total_time > MAX_MD_DURATION:
             pass
-        return self
-
-    @model_validator(mode="after")
-    def validate_otf_settings(self) -> "MDConfig":
-        if self.fix_halt and self.check_interval <= 0:
-            msg = "check_interval must be positive when fix_halt is enabled."
-            raise ValueError(msg)
         return self
 
     @model_validator(mode="after")

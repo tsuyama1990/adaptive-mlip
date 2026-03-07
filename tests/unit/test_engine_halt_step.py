@@ -8,6 +8,7 @@ from pyacemaker.core.engine import LammpsEngine
 from pyacemaker.core.io_manager import LammpsFileManager
 from pyacemaker.core.lammps_generator import LammpsScriptGenerator
 from pyacemaker.domain_models.md import MDConfig
+from pyacemaker.domain_models.workflow import OTFConfig
 
 
 def test_lammps_engine_halt_step_populated(tmp_path: Path) -> None:
@@ -17,8 +18,8 @@ def test_lammps_engine_halt_step_populated(tmp_path: Path) -> None:
         pressure=0,
         timestep=0.001,
         n_steps=1000,
-        fix_halt=True,
     )
+    otf_config = OTFConfig(fix_halt=True)
 
     with patch("pyacemaker.core.engine.LammpsDriver") as MockDriver:
         driver = MockDriver.return_value
@@ -34,7 +35,7 @@ def test_lammps_engine_halt_step_populated(tmp_path: Path) -> None:
         driver.get_forces.return_value = np.zeros((1, 3))
         driver.get_stress.return_value = np.zeros(6)
 
-        engine = LammpsEngine(config, LammpsScriptGenerator(config), LammpsFileManager(config))
+        engine = LammpsEngine(config, LammpsScriptGenerator(config, otf_config=otf_config), LammpsFileManager(config), otf_config=otf_config)
         atoms = Atoms("H", cell=[10, 10, 10], pbc=True)
         pot_path = tmp_path / "pot.yace"
         pot_path.touch()
@@ -53,8 +54,8 @@ def test_lammps_engine_halt_step_none_if_not_halted(tmp_path: Path) -> None:
         pressure=0,
         timestep=0.001,
         n_steps=1000,
-        fix_halt=True,
     )
+    otf_config = OTFConfig(fix_halt=True)
 
     with patch("pyacemaker.core.engine.LammpsDriver") as MockDriver:
         driver = MockDriver.return_value
@@ -70,7 +71,7 @@ def test_lammps_engine_halt_step_none_if_not_halted(tmp_path: Path) -> None:
         driver.get_forces.return_value = np.zeros((1, 3))
         driver.get_stress.return_value = np.zeros(6)
 
-        engine = LammpsEngine(config, LammpsScriptGenerator(config), LammpsFileManager(config))
+        engine = LammpsEngine(config, LammpsScriptGenerator(config, otf_config=otf_config), LammpsFileManager(config), otf_config=otf_config)
         atoms = Atoms("H", cell=[10, 10, 10], pbc=True)
         pot_path = tmp_path / "pot.yace"
         pot_path.touch()

@@ -87,7 +87,7 @@ def base_config(tmp_path: Path) -> PyAceConfig:
             encut=400.0,
         ),
         training=TrainingConfig(potential_type="pace", cutoff_radius=4.0, max_basis_size=100),
-        md=MDConfig(temperature=300.0, pressure=0.0, timestep=0.001, n_steps=100, fix_halt=True),
+        md=MDConfig(temperature=300.0, pressure=0.0, timestep=0.001, n_steps=100),
         workflow=WorkflowConfig(
             max_iterations=1,
             state_file_path=str(tmp_path / "state.json"),
@@ -97,6 +97,7 @@ def base_config(tmp_path: Path) -> PyAceConfig:
         ),
         logging=LoggingConfig(level="DEBUG"),
     )
+
 
 def test_orchestrator_refinement_logic(base_config: PyAceConfig, tmp_path: Path) -> None:
     config = base_config
@@ -158,7 +159,9 @@ def test_orchestrator_refinement_logic(base_config: PyAceConfig, tmp_path: Path)
     assert any(paths["training"].iterdir())
 
 
-def test_orchestrator_refinement_extraction_failure(base_config: PyAceConfig, tmp_path: Path, caplog: Any) -> None:
+def test_orchestrator_refinement_extraction_failure(
+    base_config: PyAceConfig, tmp_path: Path, caplog: Any
+) -> None:
     # Test graceful handling of extraction failure
     orch = Orchestrator(base_config)
 
