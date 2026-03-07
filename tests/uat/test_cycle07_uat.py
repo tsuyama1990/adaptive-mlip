@@ -4,7 +4,13 @@ from unittest.mock import MagicMock
 import pytest
 from ase import Atoms
 
-from pyacemaker.core.validator import Validator
+from pyacemaker.core.validator import (
+    ElasticValidator,
+    PhononValidator,
+    ReportValidator,
+    StructureRelaxer,
+    ValidationCoordinator,
+)
 from pyacemaker.domain_models.validation import ValidationConfig
 
 
@@ -20,12 +26,12 @@ def validator_dependencies():
 def validator(validator_dependencies):
     config = ValidationConfig()
     engine = MagicMock()
-    return Validator(
-        config,
-        engine,
-        validator_dependencies["phonon"],
-        validator_dependencies["elastic"],
-        validator_dependencies["report"]
+    return ValidationCoordinator(
+        config=config,
+        relaxer=StructureRelaxer(engine),
+        phonon_validator=PhononValidator(validator_dependencies["phonon"]),
+        elastic_validator=ElasticValidator(validator_dependencies["elastic"]),
+        report_validator=ReportValidator(validator_dependencies["report"])
     )
 
 def test_uat_07_01_validate_potential_pass(validator, validator_dependencies):
@@ -44,7 +50,7 @@ def test_uat_07_01_validate_potential_pass(validator, validator_dependencies):
     # 2. Action
     structure = Atoms("Fe", positions=[[0,0,0]], cell=[2.8,2.8,2.8])
 
-    validator.engine.relax.return_value = structure
+    validator.relaxer.engine.relax.return_value = structure
     result = validator.validate(potential_path, report_path, structure=structure)
 
     # 3. Expectation
@@ -75,7 +81,7 @@ def test_uat_07_02_unstable_detection(validator, validator_dependencies):
     # 2. Action
     structure = Atoms("Fe", positions=[[0,0,0]], cell=[2.8,2.8,2.8])
 
-    validator.engine.relax.return_value = structure
+    validator.relaxer.engine.relax.return_value = structure
     result = validator.validate(potential_path, report_path, structure=structure)
 
     # 3. Expectation

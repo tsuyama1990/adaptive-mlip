@@ -10,6 +10,12 @@ from ase.calculators.calculator import PropertyNotImplementedError
 
 from pyacemaker.core.base import BaseOracle
 from pyacemaker.core.exceptions import OracleError
+from pyacemaker.core.healing import (
+    HealingStrategy,
+    IncreaseSmearingStrategy,
+    ReduceBetaStrategy,
+    UseCGDiagonalizationStrategy,
+)
 from pyacemaker.domain_models import DFTConfig
 from pyacemaker.domain_models.constants import (
     ERR_ORACLE_FAILED,
@@ -20,6 +26,37 @@ from pyacemaker.interfaces.qe_driver import QEDriver
 from pyacemaker.utils.embedding import embed_cluster
 
 logger = logging.getLogger(__name__)
+
+class RetryManager:
+    """Handles the self-healing retry loop."""
+    def __init__(self, strategies: list[HealingStrategy | None]) -> None:
+        self.strategies = strategies
+
+    def execute(self, atoms: Atoms, base_config: DFTConfig, calc_dir: str, runner: Callable[[Atoms, DFTConfig, str], None]) -> Atoms:
+        current_config = base_config.model_copy()
+        last_error: Exception | None = None
+
+        for i, strategy in enumerate(self.strategies):
+            if strategy:
+                strategy.apply(current_config)
+                strategy_name = strategy.__class__.__name__
+            else:
+                strategy_name = "Initial"
+
+            try:
+                runner(atoms, current_config, calc_dir)
+            except (RuntimeError, ValueError) as e:
+                last_error = e
+                atoms.calc = None  # Clean up failed calculator
+                logger.warning(
+                    f"DFT calculation attempt {i+1} ({strategy_name}) failed. Error: {e!s}. Retrying..."
+                )
+                continue
+            else:
+                return atoms
+
+        raise OracleError(ERR_ORACLE_FAILED.format(error=last_error)) from last_error
+
 
 class DFTManager(BaseOracle):
     """
@@ -42,13 +79,12 @@ class DFTManager(BaseOracle):
         self.config = config
         self.driver = driver or QEDriver()
 
-        # Cache strategies to avoid recreation on every compute call
-        self.strategies: list[Callable[[DFTConfig], None] | None] = [
+        self.retry_manager = RetryManager([
             None,
-            self._strategy_reduce_beta,
-            self._strategy_increase_smearing,
-            self._strategy_use_cg
-        ]
+            ReduceBetaStrategy(config.mixing_beta_factor),
+            IncreaseSmearingStrategy(config.smearing_width_factor),
+            UseCGDiagonalizationStrategy()
+        ])
 
     def compute(self, structures: Iterator[Atoms], batch_size: int = 10) -> Iterator[Atoms]:
         """
@@ -133,21 +169,6 @@ class DFTManager(BaseOracle):
 
         return self._compute_single(structure_to_compute, calc_dir)
 
-    def _get_strategies(self) -> list[Callable[[DFTConfig], None] | None]:
-        """
-        Returns a list of self-healing strategies.
-        """
-        return self.strategies
-
-    def _strategy_reduce_beta(self, c: DFTConfig) -> None:
-        c.mixing_beta *= self.config.mixing_beta_factor
-
-    def _strategy_increase_smearing(self, c: DFTConfig) -> None:
-        c.smearing_width *= self.config.smearing_width_factor
-
-    def _strategy_use_cg(self, c: DFTConfig) -> None:
-        c.diagonalization = "cg"
-
     def _compute_single(self, atoms: Atoms, calc_dir: str) -> Atoms:
         """
         Runs calculation for a single structure with retries and self-healing strategies.
@@ -162,35 +183,7 @@ class DFTManager(BaseOracle):
         Raises:
             OracleError: If calculation fails after all retries and strategies.
         """
-        current_config = self.config.model_copy()
-        strategies = self._get_strategies()
-        last_error: Exception | None = None
-
-        for i, strategy in enumerate(strategies):
-            if strategy:
-                strategy(current_config)
-                strategy_name = strategy.__name__
-            else:
-                strategy_name = "Initial"
-
-            try:
-                self._run_calculator(atoms, current_config, calc_dir)
-            except (RuntimeError, ValueError) as e:
-                # Catch specific exceptions related to computation or configuration
-                # Avoid catching system interrupts (like KeyboardInterrupt)
-                last_error = e
-                atoms.calc = None  # Clean up failed calculator
-
-                # Enhanced Logging for debugging
-                logger.warning(
-                    f"DFT calculation attempt {i+1} ({strategy_name}) failed. Error: {e!s}. Retrying..."
-                )
-                continue
-            else:
-                return atoms
-
-        # Correctly format the error message with the captured exception
-        raise OracleError(ERR_ORACLE_FAILED.format(error=last_error)) from last_error
+        return self.retry_manager.execute(atoms, self.config, calc_dir, self._run_calculator)
 
     def _run_calculator(self, atoms: Atoms, config: DFTConfig, calc_dir: str) -> None:
         """Helper to run a single calculation attempt."""

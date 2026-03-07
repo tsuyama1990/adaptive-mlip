@@ -19,41 +19,25 @@ def validate_path_safe(path: Path) -> Path:
         ValueError: If the path contains dangerous characters, traversal attempts,
                     or resolves outside allowed directories (CWD, temp, /dev/shm).
     """
-    s = str(path)
+    try:
+        import os
+        # Canonicalize path using realpath which aggressively resolves all symlinks
+        # without raising errors on non-existent files, avoiding TOCTOU bugs.
+        resolved = Path(os.path.realpath(path))
+    except Exception as e:
+         msg = f"Invalid path resolution: {path}"
+         raise ValueError(msg) from e
 
-    # Check for dangerous patterns in string representation BEFORE resolve
-    if ".." in s:
-         msg = f"Path traversal attempt detected (parent directory reference): {path}"
-         raise ValueError(msg)
+    s = str(resolved)
 
     if any(c in s for c in DANGEROUS_PATH_CHARS):
         msg = f"Path contains invalid characters: {path}"
         raise ValueError(msg)
 
     # Ensure filename doesn't start with dash (flag injection)
-    if path.name.startswith("-"):
-        msg = f"Filename cannot start with '-': {path.name}"
+    if resolved.name.startswith("-"):
+        msg = f"Filename cannot start with '-': {resolved.name}"
         raise ValueError(msg)
-
-    try:
-        # Canonicalize path.
-        # Enforce strict=True if the path exists to catch symlink attacks immediately.
-        # If it doesn't exist (e.g. output file), we must resolve based on parent.
-        if path.exists():
-            resolved = path.resolve(strict=True)
-        # For non-existent files, check parent
-        elif path.parent.exists():
-            resolved_parent = path.parent.resolve(strict=True)
-            # Combine resolved parent with filename
-            resolved = resolved_parent / path.name
-        else:
-            # If even parent doesn't exist, this is likely unsafe or too deep
-            # Fallback to loose resolve but we will check containment
-            resolved = path.resolve(strict=False)
-
-    except Exception as e:
-         msg = f"Invalid path resolution: {path}"
-         raise ValueError(msg) from e
 
     base_dir = Path.cwd().resolve()
 

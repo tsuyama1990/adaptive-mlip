@@ -77,8 +77,19 @@ class ModuleFactory:
                 config.validation.elastic_strain,
                 config.validation.elastic_steps,
             )
-            validator = Validator(
-                config.validation, engine, phonon_calc, elastic_calc, report_gen
+            from pyacemaker.core.validator import (
+                ElasticValidator,
+                PhononValidator,
+                ReportValidator,
+                StructureRelaxer,
+                ValidationCoordinator,
+            )
+            validator = ValidationCoordinator(
+                config=config.validation,
+                relaxer=StructureRelaxer(engine),
+                phonon_validator=PhononValidator(phonon_calc),
+                elastic_validator=ElasticValidator(elastic_calc),
+                report_validator=ReportValidator(report_gen)
             )
 
         except Exception as e:

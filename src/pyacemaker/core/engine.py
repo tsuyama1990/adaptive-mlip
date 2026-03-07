@@ -1,17 +1,14 @@
 from pathlib import Path
-from typing import Any
 
 from ase import Atoms
 
 from pyacemaker.core.base import BaseEngine
 from pyacemaker.core.io_manager import LammpsFileManager
 from pyacemaker.core.lammps_generator import LammpsScriptGenerator
-from pyacemaker.core.validator import LammpsInputValidator
 from pyacemaker.domain_models.constants import (
     ERR_SIM_EXEC_FAIL,
     ERR_SIM_SECURITY_FAIL,
     ERR_SIM_SETUP_FAIL,
-    ERR_STRUCTURE_NONE,
     LAMMPS_SCREEN_ARG,
 )
 from pyacemaker.domain_models.md import MDConfig, MDSimulationResult
@@ -37,27 +34,6 @@ class LammpsEngine(BaseEngine):
         self.config = config
         self.generator = generator or LammpsScriptGenerator(config)
         self.file_manager = file_manager or LammpsFileManager(config)
-
-    def _prepare_simulation_env(
-        self, structure: Atoms | None, potential: str | Path | None
-    ) -> tuple[Any, Path, Path, Path, list[str], Path]:
-        """
-        Prepares the simulation environment: validation, paths, and files.
-        Returns: (ctx, data_file, dump_file, log_file, elements, potential_path)
-        """
-        if structure is None:
-             raise ValueError(ERR_STRUCTURE_NONE)
-
-        LammpsInputValidator.validate_structure(structure)
-        potential_path = LammpsInputValidator.validate_potential(potential)
-        potential_path = potential_path.resolve(strict=True)
-
-        import os
-        if not os.access(potential_path, os.R_OK):
-            raise PermissionError(f"Potential file is not readable: {potential_path}")
-
-        ctx, data_file, dump_file, log_file, elements = self.file_manager.prepare_workspace(structure)
-        return ctx, data_file, dump_file, log_file, elements, potential_path
 
     def _ensure_script_readable(self, script_path: Path) -> None:
         """Helper to ensure script path exists."""
@@ -85,7 +61,10 @@ class LammpsEngine(BaseEngine):
         """
         Runs the MD simulation.
         """
-        ctx, data_file, dump_file, log_file, elements, potential_path = self._prepare_simulation_env(structure, potential)
+        from pyacemaker.domain_models.constants import ERR_STRUCTURE_NONE
+        if structure is None:
+             raise ValueError(ERR_STRUCTURE_NONE)
+        ctx, data_file, dump_file, log_file, elements, potential_path = self.file_manager.prepare_workspace(structure, potential)
 
         with ctx:
             # Generate input script to file
@@ -166,11 +145,14 @@ class LammpsEngine(BaseEngine):
         engine = LammpsEngine(static_config)
         return engine.run(structure, potential)
 
-    def relax(self, structure: Atoms, potential: str | Path | None) -> Atoms:
+    def relax(self, structure: Atoms | None, potential: str | Path | None) -> Atoms:
         """
         Relaxes the structure to a local minimum using LAMMPS minimize.
         """
-        ctx, data_file, dump_file, log_file, elements, potential_path = self._prepare_simulation_env(structure, potential)
+        from pyacemaker.domain_models.constants import ERR_STRUCTURE_NONE
+        if structure is None:
+             raise ValueError(ERR_STRUCTURE_NONE)
+        ctx, data_file, dump_file, log_file, elements, potential_path = self.file_manager.prepare_workspace(structure, potential)
 
         with ctx:
             # Generate minimization script

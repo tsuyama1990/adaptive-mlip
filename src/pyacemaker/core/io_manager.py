@@ -23,12 +23,14 @@ class LammpsFileManager:
     def __init__(self, config: MDConfig) -> None:
         self.config = config
 
-    def prepare_workspace(self, structure: Atoms | str | Path) -> tuple[Any, Path, Path, Path, list[str]]:
+    def prepare_workspace(self, structure: Atoms | str | Path, potential: str | Path | None = None) -> tuple[Any, Path, Path, Path, list[str], Path]:
         """
-        Creates temporary directory and writes structure file.
+        Prepares the entire simulation workspace. Validates structure and potential,
+        creates temporary directory, and writes structure file.
 
         Args:
             structure: Atomic structure to simulate. Can be Atoms object, or path to file.
+            potential: Path to trained potential.
 
         Returns:
             temp_dir_ctx: Context manager for temporary directory.
@@ -36,7 +38,24 @@ class LammpsFileManager:
             dump_file: Path to output trajectory file (in CWD).
             log_file: Path to output log file (in CWD).
             elements: List of element symbols in order.
+            potential_path: Validated, absolute path to the potential file.
         """
+        from pyacemaker.core.validator import LammpsInputValidator
+        from pyacemaker.domain_models.constants import ERR_STRUCTURE_NONE
+
+        if structure is None:
+             raise ValueError(ERR_STRUCTURE_NONE)
+
+        if isinstance(structure, Atoms):
+             LammpsInputValidator.validate_structure(structure)
+
+        potential_path = LammpsInputValidator.validate_potential(potential)
+        potential_path = potential_path.resolve(strict=True)
+
+        import os
+        if not os.access(potential_path, os.R_OK):
+            raise PermissionError(f"Potential file is not readable: {potential_path}")
+
         # RAM disk usage optimization via config
         temp_dir_ctx = tempfile.TemporaryDirectory(dir=self.config.temp_dir)
         try:
@@ -72,7 +91,7 @@ class LammpsFileManager:
                 elements = get_species_order(structure)
                 self._write_structure_memory(structure, data_file, elements)
 
-            return temp_dir_ctx, data_file, dump_file, log_file, elements
+            return temp_dir_ctx, data_file, dump_file, log_file, elements, potential_path
 
         except Exception:
             # Clean up if setup fails

@@ -12,6 +12,55 @@ from pyacemaker.domain_models.constants import ERR_GEN_BASE_FAIL, ERR_GEN_NCAND_
 from pyacemaker.domain_models.structure import StructureConfig
 
 
+class BaseStructureGenerator:
+    """Generates the foundational atomic structure."""
+    def __init__(self, config: StructureConfig) -> None:
+        self.config = config
+        self.m3gnet = M3GNetWrapper()
+
+    def get_base_supercell(self) -> Atoms:
+        composition = "".join(self.config.elements)
+        if len(composition) > 100:
+            msg = f"Composition string is excessively long ({len(composition)} chars), which may cause issues for M3GNet."
+            raise ValueError(msg)
+
+        try:
+            base_structure = self.m3gnet.predict_structure(composition)
+        except Exception as e:
+            raise GeneratorError(ERR_GEN_BASE_FAIL.format(composition=composition, error=e)) from e
+
+        if tuple(self.config.supercell_size) == (1, 1, 1):
+            return base_structure
+
+        return base_structure.repeat(self.config.supercell_size)  # type: ignore[no-untyped-call]
+
+
+class PolicyOrchestrator:
+    """Orchestrates structural policies to apply to the base structure."""
+    def __init__(self, config: StructureConfig) -> None:
+        self.config = config
+
+    def apply(self, base_supercell: Atoms, n_candidates: int) -> Iterator[Atoms]:
+        policy = PolicyFactory.get_policy(self.config)
+        policy_iter = policy.generate(base_supercell, self.config, n_structures=n_candidates)
+
+        iter_policy = iter(policy_iter) if not isinstance(policy_iter, Iterator) else policy_iter
+
+        count = 0
+        for structure in iter_policy:
+            if count >= n_candidates:
+                break
+            if len(structure) == 0:
+                continue
+            yield structure
+            count += 1
+
+    def apply_local(self, base_structure: Atoms, n_candidates: int, engine: Any | None = None, potential: str | Path | None = None) -> Iterator[Atoms]:
+        strategy = self.config.local_generation_strategy
+        policy = PolicyFactory.get_local_policy(strategy)
+        yield from policy.generate(base_structure, self.config, n_structures=n_candidates, engine=engine, potential=potential)
+
+
 class StructureGenerator(BaseGenerator):
     """
     Structure Generator implementation.
@@ -20,127 +69,33 @@ class StructureGenerator(BaseGenerator):
 
     def __init__(self, config: StructureConfig) -> None:
         self.config = config
-        self.m3gnet = M3GNetWrapper()
+        self.base_generator = BaseStructureGenerator(config)
+        self.orchestrator = PolicyOrchestrator(config)
+
+        # Keep m3gnet reference for backwards compatibility with tests
+        self.m3gnet = self.base_generator.m3gnet
 
     def update_config(self, config: Any) -> None:
-        """
-        Updates the generator configuration.
-
-        This allows adaptive policies to modify generation parameters at runtime.
-
-        Args:
-            config: New configuration object (must be an instance of StructureConfig).
-
-        Raises:
-            TypeError: If the provided config is not a StructureConfig instance.
-        """
         if not isinstance(config, StructureConfig):
             msg = f"Expected StructureConfig, got {type(config)}"
             raise TypeError(msg)
         self.config = config
+        self.base_generator.config = config
+        self.orchestrator.config = config
 
-    def generate(self, n_candidates: int) -> Iterator[Atoms]:  # noqa: C901
-        """
-        Generates candidate structures.
-
-        This method returns an iterator to ensure streaming and O(1) memory usage.
-        It uses the configured exploration policy to generate structures.
-
-        Args:
-            n_candidates: The number of candidate structures to generate.
-
-        Yields:
-            Atoms: Generated atomic structures.
-
-        Raises:
-            RuntimeError: If base structure generation fails.
-            ValueError: If n_candidates is negative or policy is invalid.
-        """
+    def generate(self, n_candidates: int) -> Iterator[Atoms]:
         if n_candidates < 0:
             raise ValueError(ERR_GEN_NCAND_NEG.format(n=n_candidates))
-
         if n_candidates == 0:
             return
 
-        # Policy Selection
-        # Uses active_policies via PolicyFactory
-        policy = PolicyFactory.get_policy(self.config)
-
-        # Step 1: Base Structure Generation (Lazy)
-        # We define composition here but don't call prediction yet
-        composition = "".join(self.config.elements)
-        if len(composition) > 100:
-            msg = f"Composition string is excessively long ({len(composition)} chars), which may cause issues for M3GNet."
-            raise ValueError(msg)
-
-        # Step 2: Apply Policy (Streaming)
-        # Create the supercell template lazily inside the generator.
-        # This prevents materializing a potentially huge supercell if n_candidates is 0,
-        # but more importantly, the base_supercell itself is just one object.
-        # The true laziness comes from the policy yielding one by one.
-
-        # Ensure we strictly follow the iterator protocol.
         def lazy_policy_stream() -> Iterator[Atoms]:
-            # Lazy loading of base structure only when generator is started and first item requested
-            try:
-                base_structure = self.m3gnet.predict_structure(composition)
-            except Exception as e:
-                raise GeneratorError(ERR_GEN_BASE_FAIL.format(composition=composition, error=e)) from e
-
-            # Generate the base supercell template once.
-            # We must materialize the base supercell to apply perturbations (rattle/strain).
-            # While this object sits in memory, it is a single instance.
-            # The streaming generator (yield) ensures we do not store n_candidates copies.
-            # Thus, memory usage is O(Supercell_Size), not O(n_candidates * Supercell_Size).
-            # We ensure this materialization happens strictly inside the generator (lazy).
-
-            # Optimization: If supercell_size is (1,1,1), skip repeat to save a copy
-            if tuple(self.config.supercell_size) == (1, 1, 1):
-                base_supercell = base_structure
-            else:
-                base_supercell = base_structure.repeat(self.config.supercell_size)  # type: ignore[no-untyped-call]
-
-            count = 0
-            policy_iter = policy.generate(base_supercell, self.config, n_structures=n_candidates)
-
-            # Verify it's an iterator to enforce streaming contract at runtime
-            if not isinstance(policy_iter, Iterator):
-                 # Convert iterable to iterator if needed
-                 iter_policy = iter(policy_iter)
-            else:
-                 iter_policy = policy_iter
-
-            for structure in iter_policy:
-                if count >= n_candidates:
-                    break
-                if len(structure) == 0:
-                    continue
-                yield structure
-                count += 1
+            base_supercell = self.base_generator.get_base_supercell()
+            yield from self.orchestrator.apply(base_supercell, n_candidates)
 
         yield from lazy_policy_stream()
 
     def generate_local(self, base_structure: Atoms, n_candidates: int, engine: Any | None = None, potential: str | Path | None = None) -> Iterator[Atoms]:
-        """
-        Generates candidate structures by perturbing a base structure.
-        Used in OTF loops to explore the local neighborhood of a high-uncertainty configuration.
-        Uses the configured local_generation_strategy.
-
-        Args:
-            base_structure: The reference structure to perturb.
-            n_candidates: Number of structures to generate.
-            engine: Simulation engine for advanced policies.
-            potential: Path to potential for advanced policies.
-
-        Returns:
-            Iterator yielding ASE Atoms objects.
-        """
         if n_candidates <= 0:
             return
-
-        # Use PolicyFactory to get local policy
-        strategy = self.config.local_generation_strategy
-        policy = PolicyFactory.get_local_policy(strategy)
-
-        # Generate using policy
-        yield from policy.generate(base_structure, self.config, n_structures=n_candidates, engine=engine, potential=potential)
+        yield from self.orchestrator.apply_local(base_structure, n_candidates, engine, potential)

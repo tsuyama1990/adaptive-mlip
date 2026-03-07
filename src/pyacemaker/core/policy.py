@@ -1,4 +1,3 @@
-import random
 from collections.abc import Iterator
 from typing import Any
 
@@ -106,13 +105,18 @@ class DefectPolicy(SafeBasePolicy):
     Policy for creating point defects (vacancies, interstitials).
     """
     def generate(self, base_structure: Atoms, config: StructureConfig, n_structures: int = 1, engine: Any | None = None, potential: str | Path | None = None) -> Iterator[Atoms]:
-        super().generate(base_structure, config, n_structures=n_structures, engine=engine, potential=potential)
+        import secrets
+
+        if len(base_structure) == 0:
+            msg = "Base structure must have at least one atom to apply DefectPolicy."
+            raise ValueError(msg)
+
         for _ in range(n_structures):
             atoms = base_structure.copy() # type: ignore[no-untyped-call]
-            if len(atoms) > 0:
-                # Randomly remove an atom to introduce a vacancy
-                idx_to_remove = random.randint(0, len(atoms) - 1)  # noqa: S311
-                del atoms[idx_to_remove]
+            # Use secrets for cryptographically secure index selection as requested,
+            # avoiding inclusive bounds bugs and predictable PRNGs.
+            idx_to_remove = secrets.randbelow(len(atoms))
+            del atoms[idx_to_remove]
             yield atoms
 
 

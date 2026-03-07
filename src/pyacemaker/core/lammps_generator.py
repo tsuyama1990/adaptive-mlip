@@ -1,4 +1,3 @@
-import shlex
 from functools import lru_cache
 from pathlib import Path
 from typing import TextIO
@@ -47,9 +46,10 @@ class LammpsScriptGenerator:
             msg = f"Path fails LAMMPS safe command pattern check: {safe_path}"
             raise ValueError(msg)
 
-        # Return safely formatted string using shlex.quote as requested.
-        # This guarantees proper escaping for shell and parsing levels.
-        return shlex.quote(str(safe_path))
+        # Return safely formatted string for LAMMPS parser.
+        # LAMMPS requires double quotes for strings with spaces, and inner quotes/slashes must be escaped.
+        escaped_path = str(safe_path).replace("\\", "\\\\").replace('"', '\\"')
+        return f'"{escaped_path}"'
 
     def _gen_potential_pure(self, buffer: TextIO, potential_path: Path, elements: list[str]) -> None:
         """Generates pure PACE potential commands."""

@@ -14,16 +14,11 @@ class LoopStatus(StrEnum):
     CONVERGED = "CONVERGED"
 
 
-class LoopState(BaseModel):
-    iteration: int = Field(default=0, ge=0)
-    status: LoopStatus = Field(default=LoopStatus.RUNNING)
-    current_potential: Path | None = Field(default=None)
+class StateValidator:
+    """Validates the properties of the loop state."""
 
-    model_config = ConfigDict(extra="forbid")
-
-    @field_validator("current_potential")
-    @classmethod
-    def validate_potential_path(cls, v: Path | None) -> Path | None:
+    @staticmethod
+    def validate_potential_path(v: Path | None) -> Path | None:
         """Ensures that if a potential path is set, it exists, is a file, and is safe."""
         if v is not None:
             # Resolve to absolute path to prevent traversal/ambiguity
@@ -53,7 +48,38 @@ class LoopState(BaseModel):
             return path
         return v
 
+def _raise_traversal_error(path: Path, cwd: Path, cause: Exception | None = None) -> None:
+    msg = f"Potential path {path} is outside the project directory {cwd}"
+    if cause:
+        raise ValueError(msg) from cause
+    raise ValueError(msg)
+
+class LoopState(BaseModel):
+    iteration: int = Field(default=0, ge=0)
+    status: LoopStatus = Field(default=LoopStatus.RUNNING)
+    current_potential: Path | None = Field(default=None)
+
+    model_config = ConfigDict(extra="forbid")
+
+    @field_validator("current_potential")
+    @classmethod
+    def validate_potential_path(cls, v: Path | None) -> Path | None:
+        return StateValidator.validate_potential_path(v)
+
     def save(self, path: Path) -> None:
+        StateSerializer.save(self, path)
+
+    @classmethod
+    def load(cls, path: Path) -> Self:
+        # Cast because StateSerializer.load returns LoopState which is basically Self here
+        return StateSerializer.load(cls, path)  # type: ignore
+
+
+class StateSerializer:
+    """Handles serialization and deserialization of the loop state."""
+
+    @staticmethod
+    def save(state: LoopState, path: Path) -> None:
         """Saves the state to a JSON file using atomic write and streaming."""
         path = path.resolve()
         directory = path.parent
@@ -61,7 +87,7 @@ class LoopState(BaseModel):
 
         # Use a temporary file in the same directory to ensure atomic move
         with tempfile.NamedTemporaryFile("w", dir=directory, delete=False) as tmp_file:
-            json.dump(self.model_dump(mode="json"), tmp_file, indent=2)
+            json.dump(state.model_dump(mode="json"), tmp_file, indent=2)
 
             # Ensure data is flushed to disk
             tmp_file.flush()
@@ -76,17 +102,17 @@ class LoopState(BaseModel):
             tmp_path.unlink(missing_ok=True)
             raise
 
-    @classmethod
-    def load(cls, path: Path) -> Self:
+    @staticmethod
+    def load(state_cls: type[LoopState], path: Path) -> LoopState:
         """Loads the state from a JSON file."""
         if not path.exists():
-            return cls()
+            return state_cls()
 
         try:
             with path.open("r") as f:
                 # Streaming load is automatic with json.load(f)
                 data = json.load(f)
-            return cls.model_validate(data)
+            return state_cls.model_validate(data)
         except (json.JSONDecodeError, ValueError) as e:
             msg = f"Failed to load loop state from {path}: {e}"
             raise ValueError(msg) from e

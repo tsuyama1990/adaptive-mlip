@@ -1,4 +1,3 @@
-import shlex
 from io import StringIO
 from pathlib import Path
 
@@ -28,7 +27,8 @@ def test_generator_pure_pace(tmp_path: Path) -> None:
     assert "pair_style pace" in script
     assert "pair_style hybrid" not in script
 
-    expected_pot = shlex.quote(str(pot_path))
+    escaped_pot = str(pot_path).replace("\\", "\\\\").replace('"', '\\"')
+    expected_pot = f'"{escaped_pot}"'
     assert f"pair_coeff * * pace {expected_pot} Al" in script
 
 
@@ -54,7 +54,8 @@ def test_generator_hybrid_potential(tmp_path: Path) -> None:
 
     assert "pair_style hybrid/overlay" in script
 
-    expected_pot = shlex.quote(str(pot_path))
+    escaped_pot = str(pot_path).replace("\\", "\\\\").replace('"', '\\"')
+    expected_pot = f'"{escaped_pot}"'
     assert f"pair_coeff * * pace {expected_pot} H He" in script
 
     # ZBL check
@@ -88,7 +89,8 @@ def test_generator_watchdog(tmp_path: Path) -> None:
     generator.write_script(buffer, pot_path, data_file, dump_file, ["Al"])
     script = buffer.getvalue()
 
-    expected_pot = shlex.quote(str(pot_path))
+    escaped_pot = str(pot_path).replace("\\", "\\\\").replace('"', '\\"')
+    expected_pot = f'"{escaped_pot}"'
     assert f"compute gamma all pace {expected_pot}" in script
     assert "compute max_gamma all reduce max c_gamma" in script
     assert "fix halt_check all halt 10 v_max_g > 5.0 error continue" in script
