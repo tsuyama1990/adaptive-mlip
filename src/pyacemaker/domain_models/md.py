@@ -214,9 +214,12 @@ class MDConfig(BaseModel):
         return self
 
     @model_validator(mode="after")
-    def validate_default_forces(self) -> "MDConfig":
+    def validate_default_forces_shape(self) -> "MDConfig":
+        if not isinstance(self.default_forces, list):
+            msg = "default_forces must be a list of lists"
+            raise TypeError(msg)
         for f in self.default_forces:
-            if len(f) != 3:
+            if not isinstance(f, list) or len(f) != 3:
                 msg = "Default forces must be a list of 3D vectors (list of 3 floats)"
                 raise ValueError(msg)
             if not all(isinstance(x, (int, float)) for x in f):

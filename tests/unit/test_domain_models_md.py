@@ -150,5 +150,7 @@ def test_md_config_with_ramping_and_mc() -> None:
         mc=mc,
     )
 
-    assert config.ramping and config.ramping.temp_start == 100.0
-    assert config.mc and config.mc.swap_freq == 50
+    assert config.ramping
+    assert config.ramping.temp_start == 100.0
+    assert config.mc
+    assert config.mc.swap_freq == 50

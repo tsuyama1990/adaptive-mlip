@@ -35,12 +35,28 @@ class PacemakerTrainer(BaseTrainer):
     """
 
     def __init__(self, config: TrainingConfig) -> None:
-        self.config = config
+        if config is None:
+            msg = "config cannot be None"
+            raise ValueError(msg)
+        self.config = TrainingConfig.model_validate(config)
         self.config_generator = PacemakerConfigGenerator(config)
 
     def train(
         self, training_data_path: str | Path, initial_potential: str | Path | None = None, replay_buffer_path: Path | None = None, replay_buffer_size: int = 500
     ) -> Path | None:
+        from pyacemaker.utils.path import validate_path_safe
+
+        # Validate all file paths
+        data_path = validate_path_safe(Path(training_data_path))
+        if initial_potential:
+            initial_potential_path = validate_path_safe(Path(initial_potential))
+        else:
+            initial_potential_path = None
+
+        if replay_buffer_path:
+            replay_buffer_path_safe = validate_path_safe(Path(replay_buffer_path))
+        else:
+            replay_buffer_path_safe = None
         """
         Trains a potential using the provided training data file.
 
@@ -66,12 +82,11 @@ class PacemakerTrainer(BaseTrainer):
             msg = f"Executable '{pace_train_exe}' not found in PATH."
             raise TrainerError(msg)
 
-        data_path = Path(training_data_path).resolve()
         self._validate_training_data(data_path)
 
         # Mix replay buffer if provided
         final_data_path = data_path
-        if replay_buffer_path and replay_buffer_path.exists():
+        if replay_buffer_path_safe and replay_buffer_path_safe.exists():
             import numpy as np
             from ase.io import read, write
 
@@ -79,7 +94,7 @@ class PacemakerTrainer(BaseTrainer):
             new_data = list(read(str(data_path), index=":"))
 
             # Load and sample from replay buffer
-            replay_data = list(read(str(replay_buffer_path), index=":"))
+            replay_data = list(read(str(replay_buffer_path_safe), index=":"))
             if len(replay_data) > replay_buffer_size:
                 rng = np.random.default_rng()
                 indices = rng.choice(len(replay_data), size=replay_buffer_size, replace=False)
@@ -111,15 +126,11 @@ class PacemakerTrainer(BaseTrainer):
         # Run pace_train
         cmd = [pace_train_exe, str(input_yaml_path)]
 
-        if initial_potential:
-            initial_path = Path(initial_potential)
-            if not initial_path.exists():
-                msg = f"Initial potential not found: {initial_path}"
+        if initial_potential_path:
+            if not initial_potential_path.exists():
+                msg = f"Initial potential not found: {initial_potential_path}"
                 raise TrainerError(msg)
-            from pyacemaker.utils.path import validate_path_safe
-
-            safe_initial_path = validate_path_safe(initial_path)
-            cmd.extend(["--initial_potential", str(safe_initial_path)])
+            cmd.extend(["--initial_potential", str(initial_potential_path)])
 
         try:
             run_command(cmd)

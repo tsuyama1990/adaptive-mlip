@@ -38,7 +38,7 @@ def test_scenario_2_1_nextgen_architecture(tmp_path: Path, monkeypatch: pytest.M
             "pseudopotentials": {"Fe": str(tmp_path / "Fe.UPF"), "Mg": str(tmp_path / "Mg.UPF"), "O": str(tmp_path / "O.UPF")}
         }
     )
-    config = PyAceConfig(**config_dict)
+    config = PyAceConfig.model_validate(config_dict)
 
     assert config.workflow.distillation.enable is True
     assert config.workflow.loop_strategy.use_tiered_oracle is True

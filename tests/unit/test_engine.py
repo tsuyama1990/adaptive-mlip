@@ -21,6 +21,7 @@ def mock_driver() -> Any:
 
 
 def test_lammps_engine_run(mock_md_config: MDConfig, mock_driver: Any, tmp_path: Path) -> None:
+    mock_md_config = MDConfig.model_validate(mock_md_config)
     # Set up mock driver
     driver_instance = mock_driver.return_value
     driver_instance.extract_variable.side_effect = lambda name: {
@@ -77,6 +78,7 @@ def test_lammps_engine_run(mock_md_config: MDConfig, mock_driver: Any, tmp_path:
 
 
 def test_lammps_engine_halted(mock_md_config: MDConfig, mock_driver: Any, tmp_path: Path) -> None:
+    mock_md_config = MDConfig.model_validate(mock_md_config)
     driver_instance = mock_driver.return_value
     driver_instance.extract_variable.side_effect = lambda name: {
         "pe": -90.0,
@@ -107,6 +109,7 @@ def test_lammps_engine_halted(mock_md_config: MDConfig, mock_driver: Any, tmp_pa
 
 
 def test_lammps_engine_resume(mock_md_config: MDConfig, mock_driver: Any, tmp_path: Path) -> None:
+    mock_md_config = MDConfig.model_validate(mock_md_config)
     driver_instance = mock_driver.return_value
     driver_instance.get_forces.return_value = np.zeros((1, 3))
     driver_instance.get_stress.return_value = np.zeros(6)
@@ -133,7 +136,7 @@ def test_lammps_engine_resume(mock_md_config: MDConfig, mock_driver: Any, tmp_pa
     pot_path.touch()
 
     # Pass resume_from_step
-    result = engine.run(atoms, pot_path, resume_from_step=1000)
+    engine.run(atoms, pot_path, resume_from_step=1000)
 
     # Check script contains resume logic
     assert len(script_content) == 1
@@ -145,6 +148,7 @@ def test_lammps_engine_resume(mock_md_config: MDConfig, mock_driver: Any, tmp_pa
 def test_lammps_engine_hybrid_potential(
     mock_md_config: MDConfig, mock_driver: Any, tmp_path: Path
 ) -> None:
+    mock_md_config = MDConfig.model_validate(mock_md_config)
     hybrid_params = MDConfig.HybridParams(zbl_cut_inner=1.0, zbl_cut_outer=1.5)
     config = mock_md_config.model_copy(
         update={"hybrid_potential": True, "hybrid_params": hybrid_params}
@@ -181,6 +185,7 @@ def test_lammps_engine_hybrid_potential(
 
 def test_run_empty_structure_error(mock_md_config: MDConfig, tmp_path: Path) -> None:
     """Tests error handling for empty structure."""
+    mock_md_config = MDConfig.model_validate(mock_md_config)
     engine = LammpsEngine(
         mock_md_config, LammpsScriptGenerator(mock_md_config), LammpsFileManager(mock_md_config)
     )
@@ -195,6 +200,7 @@ def test_run_empty_structure_error(mock_md_config: MDConfig, tmp_path: Path) -> 
 
 def test_run_missing_potential_error(mock_md_config: MDConfig) -> None:
     """Tests error handling for missing potential file."""
+    mock_md_config = MDConfig.model_validate(mock_md_config)
     engine = LammpsEngine(
         mock_md_config, LammpsScriptGenerator(mock_md_config), LammpsFileManager(mock_md_config)
     )
@@ -209,6 +215,7 @@ def test_run_large_structure_warning(
 ) -> None:
     """Tests info log for large structures (streaming)."""
     import logging
+    mock_md_config = MDConfig.model_validate(mock_md_config)
 
     caplog.set_level(logging.INFO)
     engine = LammpsEngine(
@@ -242,6 +249,7 @@ def test_run_large_structure_warning(
 
 def test_run_driver_failure(mock_md_config: MDConfig, mock_driver: Any, tmp_path: Path) -> None:
     """Tests error handling when LAMMPS execution fails."""
+    mock_md_config = MDConfig.model_validate(mock_md_config)
     driver_instance = mock_driver.return_value
     driver_instance.run_file.side_effect = RuntimeError("LAMMPS crashed")
 

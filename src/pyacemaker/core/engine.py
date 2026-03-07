@@ -9,7 +9,6 @@ from pyacemaker.core.io_manager import LammpsFileManager
 from pyacemaker.core.lammps_generator import LammpsScriptGenerator
 from pyacemaker.core.validator import LammpsInputValidator
 from pyacemaker.domain_models.constants import (
-    ERR_STRUCTURE_NONE,
     LAMMPS_SCREEN_ARG,
 )
 from pyacemaker.domain_models.md import MDConfig, MDSimulationResult
@@ -64,6 +63,16 @@ class LammpsEngine(BaseEngine):
         Initialize the engine with configuration.
         Requires strict dependency injection for generator and file manager.
         """
+        if config is None:
+            msg = "MDConfig cannot be None"
+            raise ValueError(msg)
+        if generator is None:
+            msg = "LammpsScriptGenerator cannot be None"
+            raise ValueError(msg)
+        if file_manager is None:
+            msg = "LammpsFileManager cannot be None"
+            raise ValueError(msg)
+
         self.config = config
         self.generator = generator
         self.file_manager = file_manager
@@ -78,7 +87,8 @@ class LammpsEngine(BaseEngine):
         Returns: (ctx, data_file, dump_file, log_file, elements, potential_path)
         """
         if structure is None:
-            raise ValueError(ERR_STRUCTURE_NONE)
+            msg = "Structure cannot be None. Please provide a valid Atoms object."
+            raise ValueError(msg)
 
         LammpsInputValidator.validate_structure(structure)
         potential_path = LammpsInputValidator.validate_potential(potential)

@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from ase import Atoms
+from pydantic import validate_call
 
 from pyacemaker.domain_models.md import MDSimulationResult
 from pyacemaker.domain_models.structure import StructureConfig
@@ -15,11 +16,13 @@ class BasePolicy(ABC):
     """
 
     @abstractmethod
+    @validate_call(config={'arbitrary_types_allowed': True})
     def generate(
         self, base_structure: Atoms, config: StructureConfig, n_structures: int = 1, **kwargs: Any
     ) -> Iterator[Atoms]:
         """
         Generates new candidates based on policy logic.
+        Validates config strictly at runtime.
         """
 
 
@@ -94,6 +97,8 @@ class BaseOracle(ABC):
     def compute(self, structures: Iterator[Atoms], batch_size: int = 10) -> Iterator[Atoms]:
         """
         Computes properties (energy, forces, stress) for the given structures.
+        Must strictly accept an Iterator to guarantee O(1) memory profiling and should
+        raise TypeError if a materialized list or tuple is provided.
 
         Args:
             structures: Iterator of ASE Atoms objects.
@@ -131,7 +136,8 @@ class BaseTrainer(ABC):
         Trains a potential using the provided training data file.
 
         To ensure scalability, training data should be passed as a file path
-        rather than an in-memory list.
+        rather than an in-memory list. Implementations must validate these paths using
+        `validate_path_safe()`.
 
         Args:
             training_data_path: Path to the file containing labelled structures (e.g., .xyz, .pckl).

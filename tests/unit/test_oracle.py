@@ -32,6 +32,7 @@ def mock_dft_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> DFTConfi
 
 def test_dft_manager_compute_success(mock_dft_config: DFTConfig) -> None:
     """Test successful computation using dependency injection."""
+    mock_dft_config = DFTConfig.model_validate(mock_dft_config)
     atoms = Atoms("H", cell=[10, 10, 10], pbc=True)
 
     # Create Mock Driver
@@ -57,6 +58,7 @@ def test_dft_manager_compute_success(mock_dft_config: DFTConfig) -> None:
 
 def test_dft_manager_self_healing(mock_dft_config: DFTConfig) -> None:
     """Test self-healing mechanism."""
+    mock_dft_config = DFTConfig.model_validate(mock_dft_config)
     atoms = Atoms("H", cell=[10, 10, 10], pbc=True)
 
     # Mock Driver
@@ -99,6 +101,7 @@ def test_dft_manager_self_healing(mock_dft_config: DFTConfig) -> None:
 
 def test_dft_manager_fatal_error(mock_dft_config: DFTConfig) -> None:
     """Test fatal error after exhausting retries."""
+    mock_dft_config = DFTConfig.model_validate(mock_dft_config)
     atoms = Atoms("H", cell=[10, 10, 10], pbc=True)
 
     mock_driver = MagicMock()
@@ -119,6 +122,7 @@ def test_dft_manager_fatal_error(mock_dft_config: DFTConfig) -> None:
 
 def test_dft_manager_setup_error(mock_dft_config: DFTConfig) -> None:
     """Test handling of CalculatorSetupError."""
+    mock_dft_config = DFTConfig.model_validate(mock_dft_config)
     atoms = Atoms("H", cell=[10, 10, 10], pbc=True)
 
     mock_driver = MagicMock()
@@ -139,6 +143,7 @@ def test_dft_manager_setup_error(mock_dft_config: DFTConfig) -> None:
 
 def test_dft_manager_strategies(mock_dft_config: DFTConfig) -> None:
     """Test that strategies are correctly defined."""
+    mock_dft_config = DFTConfig.model_validate(mock_dft_config)
     manager = DFTManager(mock_dft_config, MagicMock())
     strategies = manager._get_strategies()
 
@@ -171,6 +176,7 @@ def test_dft_manager_strategies(mock_dft_config: DFTConfig) -> None:
 
 def test_dft_manager_invalid_input(mock_dft_config: DFTConfig) -> None:
     """Test compute raises TypeError for non-iterator input."""
+    mock_dft_config = DFTConfig.model_validate(mock_dft_config)
     manager = DFTManager(mock_dft_config, MagicMock())
     atoms_list = [Atoms("H")]
 
@@ -181,6 +187,7 @@ def test_dft_manager_invalid_input(mock_dft_config: DFTConfig) -> None:
 
 def test_dft_manager_empty_iterator(mock_dft_config: DFTConfig) -> None:
     """Test compute handles empty iterator correctly with warning."""
+    mock_dft_config = DFTConfig.model_validate(mock_dft_config)
     manager = DFTManager(mock_dft_config, MagicMock())
     empty_iter: Iterator[Atoms] = iter([])
 
@@ -267,6 +274,7 @@ def test_dft_manager_embedding(mock_dft_config: DFTConfig, monkeypatch: pytest.M
 
     # Configure embedding buffer
     mock_dft_config.embedding_buffer = 5.0
+    mock_dft_config = DFTConfig.model_validate(mock_dft_config)
 
     # Mock embed_cluster
     mock_embed = MagicMock()

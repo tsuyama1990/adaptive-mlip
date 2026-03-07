@@ -26,6 +26,8 @@ def extract_intelligent_cluster(
         msg = "target_atoms list cannot be empty."
         raise ValueError(msg)
 
+    config = CutoutConfig.model_validate(config)
+
     total_cutoff = config.core_radius + config.buffer_radius
 
     # Use ASE's neighbor_list to find neighbors respecting PBC
@@ -64,7 +66,7 @@ def extract_intelligent_cluster(
     for i in target_atoms:
         idx_to_pos[i] = orig_pos[i] # Initial positions for targets
 
-    for j_idx, pos in zip(unique_j_indices, j_unwrapped):
+    for j_idx, pos in zip(unique_j_indices, j_unwrapped, strict=False):
         # We might overwrite targets with unwrapped versions if they are neighbors of other targets
         idx_to_pos[j_idx] = pos
 
@@ -182,6 +184,13 @@ def extract_local_region(
     Returns:
         Atoms: The embedded cluster with 'force_weight' array in arrays.
     """
+    if radius <= 0:
+        msg = f"Radius must be positive, got {radius}"
+        raise ValueError(msg)
+    if buffer < 0:
+        msg = f"Buffer must be non-negative, got {buffer}"
+        raise ValueError(msg)
+
     total_cutoff = radius + buffer
 
     # Use ASE's neighbor_list to find neighbors respecting PBC

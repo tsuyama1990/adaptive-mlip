@@ -41,6 +41,7 @@ def mock_shutil_which() -> Generator[MagicMock, None, None]:
 
 def test_train_missing_executable_error(trainer: PacemakerTrainer, tmp_path: Path) -> None:
     """Test that missing pace_train raises TrainerError."""
+    trainer.config = TrainingConfig.model_validate(trainer.config)
     dummy_data = tmp_path / "dummy.xyz"
     with (
         patch("shutil.which", return_value=None),
@@ -52,6 +53,7 @@ def test_train_missing_executable_error(trainer: PacemakerTrainer, tmp_path: Pat
 def test_train_element_detection_scanning(
     trainer: PacemakerTrainer, tmp_path: Path, mock_shutil_which: MagicMock
 ) -> None:
+    trainer.config = TrainingConfig.model_validate(trainer.config)
     # Create mixed dataset
     data_path = tmp_path / "train.xyz"
     atoms1 = Atoms("Fe", positions=[[0, 0, 0]])
@@ -92,6 +94,7 @@ def test_train_element_detection_scanning(
 def test_train_validation_empty_file(
     trainer: PacemakerTrainer, tmp_path: Path, mock_shutil_which: MagicMock
 ) -> None:
+    trainer.config = TrainingConfig.model_validate(trainer.config)
     data_path = tmp_path / "empty.xyz"
     data_path.touch()
 
@@ -102,6 +105,7 @@ def test_train_validation_empty_file(
 def test_train_process_fail_util(
     trainer: PacemakerTrainer, tmp_path: Path, mock_shutil_which: MagicMock
 ) -> None:
+    trainer.config = TrainingConfig.model_validate(trainer.config)
     data_path = tmp_path / "train.xyz"
     write(data_path, Atoms("H"))
 
@@ -116,6 +120,7 @@ def test_train_initial_potential(
     trainer: PacemakerTrainer, tmp_path: Path, mock_shutil_which: MagicMock
 ) -> None:
     """Test that initial_potential adds correct argument."""
+    trainer.config = TrainingConfig.model_validate(trainer.config)
     data_path = tmp_path / "train.xyz"
     write(data_path, Atoms("H"))
 
@@ -153,6 +158,7 @@ def test_finetune_manager_no_mock_raises() -> None:
 def test_train_with_replay_buffer(
     trainer: PacemakerTrainer, tmp_path: Path, mock_shutil_which: MagicMock
 ) -> None:
+    trainer.config = TrainingConfig.model_validate(trainer.config)
     data_path = tmp_path / "train.xyz"
     write(data_path, Atoms("H", positions=[[0,0,0]]))
 
@@ -162,7 +168,7 @@ def test_train_with_replay_buffer(
     write(replay_path, replay_atoms)
 
     with (
-        patch("pyacemaker.core.trainer.run_command") as mock_run,
+        patch("pyacemaker.core.trainer.run_command"),
         patch("pyacemaker.core.trainer.dump_yaml") as mock_dump,
     ):
         (data_path.parent / "test_pot.yace").touch()
@@ -171,7 +177,7 @@ def test_train_with_replay_buffer(
         trainer.train(data_path, replay_buffer_path=replay_path, replay_buffer_size=5)
 
         args, _ = mock_dump.call_args
-        generated_config = args[0]
+        args[0]
 
         # Data passed to pacemaker config generator should be the mixed file
         mixed_file = data_path.with_name(f"{data_path.stem}_mixed{data_path.suffix}")
@@ -187,6 +193,7 @@ def test_train_initial_potential_missing(
     trainer: PacemakerTrainer, tmp_path: Path, mock_shutil_which: MagicMock
 ) -> None:
     """Test that missing initial potential raises error."""
+    trainer.config = TrainingConfig.model_validate(trainer.config)
     data_path = tmp_path / "train.xyz"
     write(data_path, Atoms("H"))
 

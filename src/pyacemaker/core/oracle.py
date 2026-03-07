@@ -28,14 +28,22 @@ class MACEManager(BaseOracle):
     energy, forces, and dummy uncertainty values if MACE is not available.
     """
     def __init__(self, model_path: str = "mace-mp-0-medium", use_mock: bool = False) -> None:
-        self.model_path = model_path
+        from pyacemaker.utils.path import validate_path_safe
+        # Usually model_path is a string URL or name, but if it is a local file, validate it.
+        # To avoid breaking valid mace-mp-0-medium strings, we only validate if use_mock is False
+        # and it looks like a path.
+        if not use_mock and "/" in model_path:
+            self.model_path = str(validate_path_safe(Path(model_path)))
+        else:
+            self.model_path = model_path
         self.use_mock = use_mock
         # Real implementation would load mace torch model here
         # self.model = mace.calculators.mace_mp(model=model_path)
 
     def compute(self, structures: Iterator[Atoms], batch_size: int = 10) -> Iterator[Atoms]:
         if not isinstance(structures, Iterator):
-            raise TypeError(ERR_ORACLE_ITERATOR.format(type=type(structures)))
+            msg = f"Oracle failed to create iterator. Expected Iterator, got {type(structures)}"
+            raise TypeError(msg)
 
         for atoms in structures:
             yield self._infer(atoms)
@@ -70,13 +78,21 @@ class TieredOracle(BaseOracle):
     If its uncertainty exceeds a threshold, it falls back to DFT.
     """
     def __init__(self, mace_manager: MACEManager, dft_manager: "DFTManager", uncertainty_threshold: float = 0.05) -> None:
+        if mace_manager is None:
+            msg = "mace_manager cannot be None"
+            raise ValueError(msg)
+        if dft_manager is None:
+            msg = "dft_manager cannot be None"
+            raise ValueError(msg)
+
         self.mace_manager = mace_manager
         self.dft_manager = dft_manager
         self.uncertainty_threshold = uncertainty_threshold
 
     def compute(self, structures: Iterator[Atoms], batch_size: int = 10) -> Iterator[Atoms]:
         if not isinstance(structures, Iterator):
-            raise TypeError(ERR_ORACLE_ITERATOR.format(type=type(structures)))
+            msg = f"Oracle failed to create iterator. Expected Iterator, got {type(structures)}"
+            raise TypeError(msg)
 
         return self._compute_generator(structures, batch_size)
 
@@ -130,7 +146,14 @@ class DFTManager(BaseOracle):
             config: DFT configuration.
             driver: QEDriver instance (required for dependency injection).
         """
-        self.config = config
+        if config is None:
+            msg = "config cannot be None"
+            raise ValueError(msg)
+        if driver is None:
+            msg = "driver cannot be None"
+            raise ValueError(msg)
+
+        self.config = DFTConfig.model_validate(config)
         self.driver = driver
 
         # Cache strategies to avoid recreation on every compute call

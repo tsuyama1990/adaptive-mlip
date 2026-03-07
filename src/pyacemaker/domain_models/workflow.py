@@ -122,3 +122,16 @@ class WorkflowConfig(BaseModel):
             msg = "checkpoint_interval cannot be greater than max_iterations"
             raise ValueError(msg)
         return self
+
+    @model_validator(mode="after")
+    def validate_nested_configs(self) -> "WorkflowConfig":
+        """Ensures all nested configurations are strictly validated."""
+        if self.otf is not None:
+            OTFConfig.model_validate(self.otf)
+        if self.loop_strategy is not None:
+            LoopStrategyConfig.model_validate(self.loop_strategy)
+        if self.distillation is not None:
+            DistillationConfig.model_validate(self.distillation)
+        if self.cutout is not None:
+            CutoutConfig.model_validate(self.cutout)
+        return self
