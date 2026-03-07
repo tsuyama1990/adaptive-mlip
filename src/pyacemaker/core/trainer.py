@@ -65,22 +65,9 @@ class PacemakerTrainer(BaseTrainer):
         Raises:
             TrainerError: If the training data file does not exist or format is invalid.
         """
-        if not isinstance(replay_buffer_size, int) or replay_buffer_size < 0:
-            raise ValueError("replay_buffer_size must be a non-negative integer")
-
-        from pyacemaker.utils.path import validate_path_safe
-
-        # Validate all file paths
-        data_path = validate_path_safe(Path(training_data_path))
-        if initial_potential:
-            initial_potential_path = validate_path_safe(Path(initial_potential))
-        else:
-            initial_potential_path = None
-
-        if replay_buffer_path:
-            replay_buffer_path_safe = validate_path_safe(Path(replay_buffer_path))
-        else:
-            replay_buffer_path_safe = None
+        data_path = Path(training_data_path)
+        initial_potential_path = Path(initial_potential) if initial_potential else None
+        replay_buffer_path_safe = Path(replay_buffer_path) if replay_buffer_path else None
         # Ensure pace_train is installed
         import os
 
@@ -161,9 +148,6 @@ class PacemakerTrainer(BaseTrainer):
     @staticmethod
     def _validate_training_data(data_path: Path) -> None:
         """Validates existence and basic format of training data."""
-        if not isinstance(data_path, Path):
-            raise ValueError('data_path must be a Path object')
-
         if not data_path.exists():
             msg = f"Training data not found: {data_path}"
             raise TrainerError(msg)

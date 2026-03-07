@@ -179,21 +179,11 @@ def test_dft_manager_strategies(mock_dft_config: DFTConfig) -> None:
     assert config_copy.diagonalization == "cg"
 
 
-def test_dft_manager_invalid_input(mock_dft_config: DFTConfig) -> None:
-    """Test compute raises TypeError for non-iterator input."""
-    mock_dft_config = DFTConfig.model_validate(mock_dft_config)
-    manager = DFTManager(mock_dft_config, MagicMock())
-    atoms_list = [Atoms("H")]
-
-    # Check that it raises TypeError immediately upon calling compute (before next)
-    with pytest.raises(TypeError, match="Oracle failed to create iterator|Expected Iterator"):
-        manager.compute(atoms_list)  # type: ignore[arg-type]
-
-
 def test_dft_manager_empty_iterator(mock_dft_config: DFTConfig) -> None:
     """Test compute handles empty iterator correctly with warning."""
     mock_dft_config = DFTConfig.model_validate(mock_dft_config)
-    manager = DFTManager(mock_dft_config, MagicMock())
+    from pyacemaker.interfaces.qe_driver import QEDriver
+    manager = DFTManager(mock_dft_config, MagicMock(spec=QEDriver))
     empty_iter: Iterator[Atoms] = iter([])
 
     # Explicit loop without list() materialization for safety

@@ -22,11 +22,6 @@ def extract_intelligent_cluster(
     Returns:
         Atoms: The embedded cluster with 'force_weight' array in arrays, passivated.
     """
-    if structure is None:
-        raise ValueError("structure cannot be None")
-    if len(structure) == 0:
-        raise ValueError("structure cannot be empty")
-
     if not target_atoms:
         msg = "target_atoms list cannot be empty."
         raise ValueError(msg)
@@ -134,9 +129,6 @@ def _passivate_surface(cluster: Atoms, passivation_element: str) -> Atoms:
     Dummy passivation logic for UAT.
     Finds atoms with weight 0.0 at the outer edge and attaches a passivation atom.
     """
-    if not isinstance(passivation_element, str) or len(passivation_element) not in (1, 2):
-        raise ValueError("passivation_element must be a 1 or 2-character chemical symbol")
-
     # Simple heuristic: find buffer atoms (weight 0.0) and add a dummy atom radially outward.
     weights = cluster.get_array("force_weight")  # type: ignore[no-untyped-call]
     positions = cluster.get_positions()  # type: ignore[no-untyped-call]
@@ -192,17 +184,6 @@ def extract_local_region(
     Returns:
         Atoms: The embedded cluster with 'force_weight' array in arrays.
     """
-    if structure is None:
-        raise ValueError("structure cannot be None")
-    if len(structure) == 0:
-        raise ValueError("structure cannot be empty")
-
-    if radius <= 0:
-        msg = f"Radius must be positive, got {radius}"
-        raise ValueError(msg)
-    if buffer < 0:
-        msg = f"Buffer must be non-negative, got {buffer}"
-        raise ValueError(msg)
 
     total_cutoff = radius + buffer
 

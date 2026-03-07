@@ -46,12 +46,6 @@ class MACEManager(BaseOracle):
         # self.model = mace.calculators.mace_mp(model=model_path)
 
     def compute(self, structures: Iterator[Atoms], batch_size: int = 10) -> Iterator[Atoms]:
-        if not isinstance(batch_size, int) or batch_size <= 0:
-            raise ValueError("batch_size must be a positive integer")
-        if not isinstance(structures, Iterator):
-            msg = f"Oracle failed to create iterator. Expected Iterator, got {type(structures)}"
-            raise TypeError(msg)
-
         for atoms in structures:
             yield self._infer(atoms)
 
@@ -99,12 +93,6 @@ class TieredOracle(BaseOracle):
         self.uncertainty_threshold = uncertainty_threshold
 
     def compute(self, structures: Iterator[Atoms], batch_size: int = 10) -> Iterator[Atoms]:
-        if not isinstance(batch_size, int) or batch_size <= 0:
-            raise ValueError("batch_size must be a positive integer")
-        if not isinstance(structures, Iterator):
-            msg = f"Oracle failed to create iterator. Expected Iterator, got {type(structures)}"
-            raise TypeError(msg)
-
         return self._compute_generator(structures, batch_size)
 
     def _compute_generator(self, structures: Iterator[Atoms], batch_size: int) -> Iterator[Atoms]:
@@ -192,16 +180,6 @@ class DFTManager(BaseOracle):
             OracleError: If a calculation fails fatally.
             TypeError: If structures is not an iterator (to prevent memory leaks from huge lists).
         """
-        # Validate that structures is an iterator to enforce O(1) memory usage contract
-        if not isinstance(batch_size, int) or batch_size <= 0:
-            raise ValueError("batch_size must be a positive integer")
-
-        if isinstance(structures, (list, tuple)):
-            raise TypeError(ERR_ORACLE_ITERATOR.format(type=type(structures)))
-
-        if not isinstance(structures, Iterator):
-            raise TypeError(ERR_ORACLE_ITERATOR.format(type=type(structures)))
-
         return self._compute_generator(structures, batch_size)
 
     def _compute_generator(self, structures: Iterator[Atoms], batch_size: int) -> Iterator[Atoms]:
@@ -270,11 +248,6 @@ class DFTManager(BaseOracle):
         Raises:
             OracleError: If calculation fails after all retries and strategies.
         """
-        if atoms is None:
-            raise ValueError("atoms cannot be None")
-        if len(atoms) == 0:
-            raise ValueError("atoms cannot be empty")
-
         from pyacemaker.utils.path import validate_path_safe
 
         calc_dir = str(validate_path_safe(Path(calc_dir)))

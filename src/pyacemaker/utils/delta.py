@@ -16,11 +16,6 @@ def get_lj_params(element: str) -> dict[str, float]:
     Returns:
         Dictionary with "sigma" (Angstrom) and "epsilon" (eV).
     """
-    if not isinstance(element, str) or len(element) not in (1, 2):
-        raise ValueError("element must be a 1 or 2-character chemical symbol")
-    if element not in atomic_numbers:
-        msg = f"Invalid chemical symbol: {element}"
-        raise ValueError(msg)
     return DEFAULT_LJ_PARAMS.get(element, FALLBACK_LJ_PARAMS.copy())  # type: ignore[return-value]
 
 
@@ -36,13 +31,6 @@ def compute_zbl_energy(el1: str, el2: str, r: float) -> float:
     Returns:
         Energy in eV.
     """
-    if not isinstance(el1, str) or len(el1) not in (1, 2):
-        raise ValueError("element must be a 1 or 2-character chemical symbol")
-    if not isinstance(el2, str) or len(el2) not in (1, 2):
-        raise ValueError("element must be a 1 or 2-character chemical symbol")
-    if el1 not in atomic_numbers or el2 not in atomic_numbers:
-        msg = f"Invalid chemical symbols: {el1}, {el2}"
-        raise ValueError(msg)
 
     if r <= 0:
         msg = "Distance must be positive."
