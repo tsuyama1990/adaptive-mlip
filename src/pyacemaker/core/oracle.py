@@ -126,6 +126,11 @@ class DFTManager(BaseOracle):
         else:
             structure_to_compute = atoms
 
+        # Validate embedded cluster size to prevent massive DFT calculations
+        if len(structure_to_compute) > 10000:
+            msg = f"Embedded structure size ({len(structure_to_compute)}) exceeds safe computational limits (10000 atoms)."
+            raise ValueError(msg)
+
         return self._compute_single(structure_to_compute, calc_dir)
 
     def _get_strategies(self) -> list[Callable[[DFTConfig], None] | None]:
@@ -170,9 +175,9 @@ class DFTManager(BaseOracle):
 
             try:
                 self._run_calculator(atoms, current_config, calc_dir)
-            except Exception as e:
-                # Catch all exceptions (RuntimeError, CalculatorSetupError, JobFailedException etc)
-                # to ensure self-healing strategies are attempted.
+            except (RuntimeError, ValueError) as e:
+                # Catch specific exceptions related to computation or configuration
+                # Avoid catching system interrupts (like KeyboardInterrupt)
                 last_error = e
                 atoms.calc = None  # Clean up failed calculator
 

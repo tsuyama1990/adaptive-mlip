@@ -39,7 +39,7 @@ class StructureGenerator(BaseGenerator):
             raise TypeError(msg)
         self.config = config
 
-    def generate(self, n_candidates: int) -> Iterator[Atoms]:
+    def generate(self, n_candidates: int) -> Iterator[Atoms]:  # noqa: C901
         """
         Generates candidate structures.
 
@@ -69,6 +69,9 @@ class StructureGenerator(BaseGenerator):
         # Step 1: Base Structure Generation (Lazy)
         # We define composition here but don't call prediction yet
         composition = "".join(self.config.elements)
+        if len(composition) > 100:
+            msg = f"Composition string is excessively long ({len(composition)} chars), which may cause issues for M3GNet."
+            raise ValueError(msg)
 
         # Step 2: Apply Policy (Streaming)
         # Create the supercell template lazily inside the generator.

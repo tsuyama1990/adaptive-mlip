@@ -52,8 +52,6 @@ class MDMicroBurstPolicy(SafeBasePolicy):
     Policy using short MD bursts to explore phase space.
     """
     def generate(self, base_structure: Atoms, config: StructureConfig, n_structures: int = 1, engine: Any | None = None, potential: str | Path | None = None) -> Iterator[Atoms]:
-        super().generate(base_structure, config, n_structures=n_structures, engine=engine, potential=potential)
-
         if engine is not None:
             # Full implementation would run engine, for test stub, just read trajectory if possible
             for _ in range(n_structures):

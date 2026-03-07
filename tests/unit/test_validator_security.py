@@ -78,13 +78,12 @@ class TestLammpsInputValidator:
         # /etc/hosts is not in /tmp, not in CWD.
         # So it should raise ValueError from validate_path_safe
 
-        # We now catch symlinks before resolving them.
-        with pytest.raises(ValueError, match="Path cannot be a symlink"):
+        # We now catch symlinks traversing outside.
+        with pytest.raises(ValueError, match="Path traversal detected"):
             LammpsInputValidator.validate_potential(symlink)
 
     def test_validate_potential_symlink_internal(self, tmp_path, monkeypatch):
-        """Test symlink resolving to inside (should pass/fail).
-        Wait, we completely disallowed symlinks for security, so it should fail."""
+        """Test symlink resolving to inside (should pass)."""
         monkeypatch.chdir(tmp_path)
         real_file = tmp_path / "real.yace"
         real_file.touch()
@@ -92,5 +91,5 @@ class TestLammpsInputValidator:
         symlink = tmp_path / "link.yace"
         symlink.symlink_to(real_file)
 
-        with pytest.raises(ValueError, match="Path cannot be a symlink"):
-            LammpsInputValidator.validate_potential(symlink)
+        valid = LammpsInputValidator.validate_potential(symlink)
+        assert valid == real_file.resolve()

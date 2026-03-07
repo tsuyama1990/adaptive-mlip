@@ -11,7 +11,6 @@ from pyacemaker.domain_models.constants import (
     ERR_SIM_EXEC_FAIL,
     ERR_SIM_SECURITY_FAIL,
     ERR_SIM_SETUP_FAIL,
-    ERR_SIM_UNEXPECTED,
     ERR_STRUCTURE_NONE,
     LAMMPS_SCREEN_ARG,
 )
@@ -53,6 +52,10 @@ class LammpsEngine(BaseEngine):
         potential_path = LammpsInputValidator.validate_potential(potential)
         potential_path = potential_path.resolve(strict=True)
 
+        import os
+        if not os.access(potential_path, os.R_OK):
+            raise PermissionError(f"Potential file is not readable: {potential_path}")
+
         ctx, data_file, dump_file, log_file, elements = self.file_manager.prepare_workspace(structure)
         return ctx, data_file, dump_file, log_file, elements, potential_path
 
@@ -77,8 +80,6 @@ class LammpsEngine(BaseEngine):
             raise RuntimeError(ERR_SIM_SECURITY_FAIL.format(error=e)) from e
         except RuntimeError as e:
             raise RuntimeError(ERR_SIM_EXEC_FAIL.format(error=e)) from e
-        except Exception as e:
-            raise RuntimeError(ERR_SIM_UNEXPECTED.format(error=e)) from e
 
     def run(self, structure: Atoms | None, potential: str | Path | None) -> MDSimulationResult:
         """

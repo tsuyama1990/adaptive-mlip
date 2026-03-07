@@ -33,7 +33,7 @@ class LammpsInputValidator:
     """
 
     @staticmethod
-    def validate_structure(structure: Any) -> None:
+    def validate_structure(structure: Any) -> None:  # noqa: C901
         """
         Validates the atomic structure.
 
@@ -52,6 +52,10 @@ class LammpsInputValidator:
 
         if len(structure) == 0:
             raise ValueError(ERR_VAL_STRUCT_EMPTY)
+
+        if len(structure) > 1_000_000:
+            msg = f"Structure size ({len(structure)}) exceeds maximum allowed atoms (1,000,000) preventing resource exhaustion."
+            raise ValueError(msg)
 
         # Validate structure physical properties
         try:

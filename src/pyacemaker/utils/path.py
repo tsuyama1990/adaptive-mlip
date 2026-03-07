@@ -1,4 +1,3 @@
-import os
 import tempfile
 from pathlib import Path
 
@@ -37,13 +36,6 @@ def validate_path_safe(path: Path) -> Path:
         raise ValueError(msg)
 
     try:
-        if path.is_symlink():
-            msg = f"Path cannot be a symlink: {path}"
-            raise ValueError(msg)
-    except OSError:
-        pass
-
-    try:
         # Canonicalize path.
         # Enforce strict=True if the path exists to catch symlink attacks immediately.
         # If it doesn't exist (e.g. output file), we must resolve based on parent.
@@ -74,15 +66,10 @@ def validate_path_safe(path: Path) -> Path:
 
     is_safe = False
     for root in allowed_roots:
-        # Robust check using os.path.commonpath to ensure resolved path is under root
-        try:
-            # commonpath resolves mixed relative/absolute issues, but we used absolute resolved paths
-            common = Path(os.path.commonpath([root, resolved]))
-            if common == root:
-                is_safe = True
-                break
-        except ValueError:
-            continue
+        # Robust check using is_relative_to to ensure resolved path is under root securely
+        if resolved.is_relative_to(root):
+            is_safe = True
+            break
 
     if not is_safe:
          msg = f"Path traversal detected: {resolved} is outside allowed roots {allowed_roots}"
