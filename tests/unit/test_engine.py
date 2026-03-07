@@ -106,6 +106,42 @@ def test_lammps_engine_halted(mock_md_config: MDConfig, mock_driver: Any, tmp_pa
     assert result.halt_structure_path == result.trajectory_path
 
 
+def test_lammps_engine_resume(mock_md_config: MDConfig, mock_driver: Any, tmp_path: Path) -> None:
+    driver_instance = mock_driver.return_value
+    driver_instance.get_forces.return_value = np.zeros((1, 3))
+    driver_instance.get_stress.return_value = np.zeros(6)
+
+    driver_instance.get_atoms.return_value = Atoms("H", cell=[10, 10, 10], pbc=True)
+    driver_instance.extract_variable.side_effect = lambda name: {
+        "pe": -100.0,
+        "step": 2000,
+        "temp": 300.0,
+        "halted": 0.0,
+    }.get(name, 0.0)
+
+    # Capture script content
+    script_content = []
+
+    def capture_run(path: str) -> None:
+        script_content.append(Path(path).read_text())
+
+    driver_instance.run_file.side_effect = capture_run
+
+    engine = LammpsEngine(mock_md_config, LammpsScriptGenerator(mock_md_config), LammpsFileManager(mock_md_config))
+    atoms = Atoms("H", cell=[10, 10, 10], pbc=True)
+    pot_path = tmp_path / "potential.yace"
+    pot_path.touch()
+
+    # Pass resume_from_step
+    result = engine.run(atoms, pot_path, resume_from_step=1000)
+
+    # Check script contains resume logic
+    assert len(script_content) == 1
+    script = script_content[0]
+
+    assert "Seamless Resume from step 1000" in script
+    assert "fix soft_start all langevin" in script
+
 def test_lammps_engine_hybrid_potential(
     mock_md_config: MDConfig, mock_driver: Any, tmp_path: Path
 ) -> None:

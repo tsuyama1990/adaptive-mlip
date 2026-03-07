@@ -6,7 +6,7 @@ import pytest
 from ase import Atoms
 
 from pyacemaker.core.exceptions import OracleError
-from pyacemaker.core.oracle import DFTManager
+from pyacemaker.core.oracle import DFTManager, MACEManager, TieredOracle
 from pyacemaker.domain_models import DFTConfig
 from tests.conftest import MockCalculator, create_dummy_pseudopotentials
 from tests.constants import TEST_ENERGY_GENERIC
@@ -189,6 +189,76 @@ def test_dft_manager_empty_iterator(mock_dft_config: DFTConfig) -> None:
     from collections import deque
 
     deque(manager.compute(empty_iter), maxlen=0)
+
+
+def test_mace_manager_mock() -> None:
+    atoms = Atoms("H", positions=[[0, 0, 0]])
+    mace = MACEManager(use_mock=True)
+
+    gen = mace.compute(iter([atoms]))
+    result = next(gen)
+
+    assert "energy" in result.info
+    assert "forces" in result.arrays
+    assert "c_gamma" in result.arrays
+
+
+def test_mace_manager_no_mock_raises() -> None:
+    atoms = Atoms("H", positions=[[0, 0, 0]])
+    mace = MACEManager(use_mock=False)
+
+    gen = mace.compute(iter([atoms]))
+    with pytest.raises(RuntimeError, match="MACE model is not installed"):
+        next(gen)
+
+def test_tiered_oracle_fallback() -> None:
+    atoms = Atoms("H", positions=[[0, 0, 0]])
+
+    mace_mock = MagicMock()
+    dft_mock = MagicMock()
+
+    # MACE returns structure with high uncertainty
+    high_uncertainty_atoms = Atoms("H", positions=[[0, 0, 0]])
+    import numpy as np
+    high_uncertainty_atoms.new_array("c_gamma", np.array([0.1])) # > 0.05
+
+    mace_mock.compute.return_value = iter([high_uncertainty_atoms])
+
+    dft_result = Atoms("H", positions=[[0, 0, 0]])
+    dft_result.info["dft"] = True
+    dft_mock.compute.return_value = iter([dft_result])
+
+    tiered = TieredOracle(mace_manager=mace_mock, dft_manager=dft_mock, uncertainty_threshold=0.05)
+
+    gen = tiered.compute(iter([atoms]))
+    result = next(gen)
+
+    # Because uncertainty 0.1 > 0.05, it should fallback to DFT
+    assert "dft" in result.info
+    dft_mock.compute.assert_called_once()
+
+def test_tiered_oracle_no_fallback() -> None:
+    atoms = Atoms("H", positions=[[0, 0, 0]])
+
+    mace_mock = MagicMock()
+    dft_mock = MagicMock()
+
+    # MACE returns structure with low uncertainty
+    low_uncertainty_atoms = Atoms("H", positions=[[0, 0, 0]])
+    import numpy as np
+    low_uncertainty_atoms.new_array("c_gamma", np.array([0.01])) # < 0.05
+    low_uncertainty_atoms.info["mace"] = True
+
+    mace_mock.compute.return_value = iter([low_uncertainty_atoms])
+
+    tiered = TieredOracle(mace_manager=mace_mock, dft_manager=dft_mock, uncertainty_threshold=0.05)
+
+    gen = tiered.compute(iter([atoms]))
+    result = next(gen)
+
+    # Because uncertainty 0.01 < 0.05, it should NOT fallback to DFT
+    assert "mace" in result.info
+    dft_mock.compute.assert_not_called()
 
 
 def test_dft_manager_embedding(mock_dft_config: DFTConfig, monkeypatch: pytest.MonkeyPatch) -> None:

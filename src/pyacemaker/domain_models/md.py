@@ -19,7 +19,6 @@ from pyacemaker.domain_models.constants import (
 from pyacemaker.domain_models.defaults import (
     DEFAULT_MD_ATOM_STYLE,
     DEFAULT_MD_BASE_ENERGY,
-    DEFAULT_MD_CHECK_INTERVAL,
     DEFAULT_MD_DUMP_FREQ,
     DEFAULT_MD_HYBRID_ZBL_INNER,
     DEFAULT_MD_HYBRID_ZBL_OUTER,
@@ -27,7 +26,6 @@ from pyacemaker.domain_models.defaults import (
     DEFAULT_MD_PDAMP_FACTOR,
     DEFAULT_MD_TDAMP_FACTOR,
     DEFAULT_MD_THERMO_FREQ,
-    DEFAULT_OTF_UNCERTAINTY_THRESHOLD,
 )
 
 

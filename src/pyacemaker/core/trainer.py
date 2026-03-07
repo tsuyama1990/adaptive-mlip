@@ -10,6 +10,24 @@ from pyacemaker.utils.io import dump_yaml
 from pyacemaker.utils.process import run_command
 
 
+class FinetuneManager:
+    """
+    Mocked manager for fine-tuning the MACE foundational model.
+    Real implementation would load the PyTorch MACE model and run a short
+    fine-tuning loop on the newly acquired DFT data.
+    """
+    def __init__(self, use_mock: bool = False) -> None:
+        self.use_mock = use_mock
+
+    def finetune(self, dft_data_path: Path) -> None:
+        if self.use_mock:
+            import logging
+            logging.getLogger(__name__).info(f"Mock MACE fine-tuning completed using {dft_data_path}")
+        else:
+            msg = "MACE model is not installed or available for fine-tuning."
+            raise RuntimeError(msg)
+
+
 class PacemakerTrainer(BaseTrainer):
     """
     Pacemaker implementation of BaseTrainer.
@@ -21,7 +39,7 @@ class PacemakerTrainer(BaseTrainer):
         self.config_generator = PacemakerConfigGenerator(config)
 
     def train(
-        self, training_data_path: str | Path, initial_potential: str | Path | None = None
+        self, training_data_path: str | Path, initial_potential: str | Path | None = None, replay_buffer_path: Path | None = None, replay_buffer_size: int = 500
     ) -> Path | None:
         """
         Trains a potential using the provided training data file.
@@ -51,15 +69,43 @@ class PacemakerTrainer(BaseTrainer):
         data_path = Path(training_data_path).resolve()
         self._validate_training_data(data_path)
 
+        # Mix replay buffer if provided
+        final_data_path = data_path
+        if replay_buffer_path and replay_buffer_path.exists():
+            import numpy as np
+            from ase.io import read, write
+
+            # Load new data
+            new_data = list(read(str(data_path), index=":"))
+
+            # Load and sample from replay buffer
+            replay_data = list(read(str(replay_buffer_path), index=":"))
+            if len(replay_data) > replay_buffer_size:
+                rng = np.random.default_rng()
+                indices = rng.choice(len(replay_data), size=replay_buffer_size, replace=False)
+                sampled_replay = [replay_data[i] for i in indices]
+            else:
+                sampled_replay = replay_data
+
+            mixed_data = new_data + sampled_replay
+
+            # Create a new mixed data file
+            mixed_data_path = data_path.with_name(f"{data_path.stem}_mixed{data_path.suffix}")
+            write(str(mixed_data_path), mixed_data)
+            final_data_path = mixed_data_path
+
+            import logging
+            logging.getLogger(__name__).info(f"Mixed {len(new_data)} new structures with {len(sampled_replay)} replay structures.")
+
         # Determine output directory (same as data file)
         from pyacemaker.utils.path import validate_path_safe
 
-        output_dir = validate_path_safe(data_path.parent)
+        output_dir = validate_path_safe(final_data_path.parent)
         input_yaml_path = output_dir / "input.yaml"
         potential_path = validate_path_safe(output_dir / self.config.output_filename)
 
         # Generate configuration
-        pacemaker_config = self.config_generator.generate(str(data_path), str(potential_path))
+        pacemaker_config = self.config_generator.generate(str(final_data_path), str(potential_path))
         dump_yaml(pacemaker_config, input_yaml_path)
 
         # Run pace_train

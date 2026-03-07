@@ -8,7 +8,7 @@ from ase import Atoms
 from ase.io import write
 
 from pyacemaker.core.exceptions import TrainerError
-from pyacemaker.core.trainer import PacemakerTrainer
+from pyacemaker.core.trainer import FinetuneManager, PacemakerTrainer
 from pyacemaker.domain_models.training import TrainingConfig
 
 
@@ -136,6 +136,51 @@ def test_train_initial_potential(
 
         assert "--initial_potential" in cmd
         assert str(initial_pot) in cmd
+
+
+def test_finetune_manager_mock(caplog: pytest.LogCaptureFixture) -> None:
+    import logging
+    caplog.set_level(logging.INFO)
+    manager = FinetuneManager(use_mock=True)
+    manager.finetune(Path("dummy.xyz"))
+    assert "Mock MACE fine-tuning completed" in caplog.text
+
+def test_finetune_manager_no_mock_raises() -> None:
+    manager = FinetuneManager(use_mock=False)
+    with pytest.raises(RuntimeError, match="MACE model is not installed"):
+        manager.finetune(Path("dummy.xyz"))
+
+def test_train_with_replay_buffer(
+    trainer: PacemakerTrainer, tmp_path: Path, mock_shutil_which: MagicMock
+) -> None:
+    data_path = tmp_path / "train.xyz"
+    write(data_path, Atoms("H", positions=[[0,0,0]]))
+
+    replay_path = tmp_path / "replay.xyz"
+    # Create 10 structures in replay buffer
+    replay_atoms = [Atoms("H", positions=[[i,i,i]]) for i in range(10)]
+    write(replay_path, replay_atoms)
+
+    with (
+        patch("pyacemaker.core.trainer.run_command") as mock_run,
+        patch("pyacemaker.core.trainer.dump_yaml") as mock_dump,
+    ):
+        (data_path.parent / "test_pot.yace").touch()
+
+        # Limit to 5 replay structures
+        trainer.train(data_path, replay_buffer_path=replay_path, replay_buffer_size=5)
+
+        args, _ = mock_dump.call_args
+        generated_config = args[0]
+
+        # Data passed to pacemaker config generator should be the mixed file
+        mixed_file = data_path.with_name(f"{data_path.stem}_mixed{data_path.suffix}")
+        assert mixed_file.exists()
+
+        from ase.io import read
+        mixed_atoms = list(read(mixed_file, index=":"))
+        # 1 new + 5 sampled from replay = 6 total
+        assert len(mixed_atoms) == 6
 
 
 def test_train_initial_potential_missing(

@@ -4,6 +4,7 @@ import tempfile
 from collections.abc import Callable, Iterator
 from pathlib import Path
 
+import numpy as np
 from ase import Atoms
 from ase.calculators.calculator import (
     CalculationFailed,
@@ -19,6 +20,97 @@ from pyacemaker.interfaces.qe_driver import QEDriver
 from pyacemaker.utils.embedding import embed_cluster
 
 logger = logging.getLogger(__name__)
+
+
+class MACEManager(BaseOracle):
+    """
+    Wraps MACE foundational model inference. Currently mocked to output
+    energy, forces, and dummy uncertainty values if MACE is not available.
+    """
+    def __init__(self, model_path: str = "mace-mp-0-medium", use_mock: bool = False) -> None:
+        self.model_path = model_path
+        self.use_mock = use_mock
+        # Real implementation would load mace torch model here
+        # self.model = mace.calculators.mace_mp(model=model_path)
+
+    def compute(self, structures: Iterator[Atoms], batch_size: int = 10) -> Iterator[Atoms]:
+        if not isinstance(structures, Iterator):
+            raise TypeError(ERR_ORACLE_ITERATOR.format(type=type(structures)))
+
+        for atoms in structures:
+            yield self._infer(atoms)
+
+    def _infer(self, atoms: Atoms) -> Atoms:
+        result = atoms.copy()  # type: ignore[no-untyped-call]
+        n_atoms = len(result)
+
+        if self.use_mock:
+            # Mock inference: Random dummy energy, forces, and uncertainty
+            rng = np.random.default_rng()
+            result.info["energy"] = rng.uniform(-10.0, -5.0) * n_atoms
+            result.arrays["forces"] = rng.uniform(-1.0, 1.0, size=(n_atoms, 3))
+            # Uncertainty output (gamma)
+            result.arrays["c_gamma"] = rng.uniform(0.001, 0.05, size=n_atoms)
+        else:
+            # Placeholder for actual MACE call
+            # result.calc = self.model
+            # result.get_potential_energy()
+            # result.get_forces()
+            # If MACE is missing and use_mock is False, we should raise an error as per requirements.
+            # But wait, MACE is an external dependency. We'll raise a RuntimeError.
+            msg = "MACE model is not installed or available, and use_mock is False."
+            raise RuntimeError(msg)
+
+        return result
+
+
+class TieredOracle(BaseOracle):
+    """
+    Implements a query strategy where MACE is queried first.
+    If its uncertainty exceeds a threshold, it falls back to DFT.
+    """
+    def __init__(self, mace_manager: MACEManager, dft_manager: "DFTManager", uncertainty_threshold: float = 0.05) -> None:
+        self.mace_manager = mace_manager
+        self.dft_manager = dft_manager
+        self.uncertainty_threshold = uncertainty_threshold
+
+    def compute(self, structures: Iterator[Atoms], batch_size: int = 10) -> Iterator[Atoms]:
+        if not isinstance(structures, Iterator):
+            raise TypeError(ERR_ORACLE_ITERATOR.format(type=type(structures)))
+
+        return self._compute_generator(structures, batch_size)
+
+    def _compute_generator(self, structures: Iterator[Atoms], batch_size: int) -> Iterator[Atoms]:
+        for batch in self._batched(structures, batch_size):
+            # 1. Infer with MACE
+            mace_results = list(self.mace_manager.compute(iter(batch), batch_size))
+
+            # 2. Check Uncertainty and conditionally call DFT
+            for i, atoms in enumerate(mace_results):
+                max_gamma = 0.0
+                if "c_gamma" in atoms.arrays:
+                    max_gamma = np.max(atoms.get_array("c_gamma"))  # type: ignore[no-untyped-call]
+
+                if max_gamma > self.uncertainty_threshold:
+                    logger.info(f"MACE uncertainty {max_gamma:.4f} > {self.uncertainty_threshold}. Falling back to DFT.")
+                    # Pass the original structure (from batch) to DFT to avoid passing MACE properties back in
+                    orig_structure = batch[i]
+                    # We pass a single item iterator to DFTManager
+                    dft_result = next(self.dft_manager.compute(iter([orig_structure]), batch_size=1))
+                    yield dft_result
+                else:
+                    yield atoms
+
+    @staticmethod
+    def _batched(iterable: Iterator[Atoms], n: int) -> Iterator[list[Atoms]]:
+        batch = []
+        for item in iterable:
+            batch.append(item)
+            if len(batch) == n:
+                yield batch
+                batch = []
+        if batch:
+            yield batch
 
 
 class DFTManager(BaseOracle):
