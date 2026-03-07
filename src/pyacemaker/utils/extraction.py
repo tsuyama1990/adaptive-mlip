@@ -6,7 +6,7 @@ from pyacemaker.domain_models.workflow import CutoutConfig
 from pyacemaker.utils.embedding import embed_cluster
 
 
-def extract_intelligent_cluster(
+def extract_intelligent_cluster(  # noqa: PLR0915
     structure: Atoms, target_atoms: list[int], config: CutoutConfig
 ) -> Atoms:
     """
@@ -28,7 +28,8 @@ def extract_intelligent_cluster(
 
     n_atoms = len(structure)
     if max(target_atoms) >= n_atoms or min(target_atoms) < 0:
-        raise ValueError(f"target_atoms indices must be between 0 and {n_atoms - 1}")
+        msg = f"target_atoms indices must be between 0 and {n_atoms - 1}"
+        raise ValueError(msg)
 
     config = CutoutConfig.model_validate(config)
 
@@ -68,7 +69,7 @@ def extract_intelligent_cluster(
     # Map index to unwrapped position
     idx_to_pos = {}
     for i in target_atoms:
-        idx_to_pos[i] = orig_pos[i] # Initial positions for targets
+        idx_to_pos[i] = orig_pos[i]  # Initial positions for targets
 
     for j_idx, pos in zip(unique_j_indices, j_unwrapped, strict=False):
         # We might overwrite targets with unwrapped versions if they are neighbors of other targets
@@ -128,14 +129,17 @@ def extract_intelligent_cluster(
 
     return embed_cluster(cluster, buffer=5.0)
 
+
 def _passivate_surface(cluster: Atoms, passivation_element: str) -> Atoms:
     """
     Dummy passivation logic for UAT.
     Finds atoms with weight 0.0 at the outer edge and attaches a passivation atom.
     """
     from ase.data import atomic_numbers
+
     if passivation_element not in atomic_numbers:
-        raise ValueError(f"passivation_element must be a valid chemical symbol, got {passivation_element}")
+        msg = f"passivation_element must be a valid chemical symbol, got {passivation_element}"
+        raise ValueError(msg)
 
     # Simple heuristic: find buffer atoms (weight 0.0) and add a dummy atom radially outward.
     weights = cluster.get_array("force_weight")  # type: ignore[no-untyped-call]
@@ -158,7 +162,7 @@ def _passivate_surface(cluster: Atoms, passivation_element: str) -> Atoms:
                 new_pos = positions[i] + direction * 1.0
                 new_symbols.append(passivation_element)
                 new_positions.append(new_pos)
-                new_weights.append(0.0) # Passivation atoms are also buffer
+                new_weights.append(0.0)  # Passivation atoms are also buffer
 
     if new_symbols:
         cluster.extend(Atoms(symbols=new_symbols, positions=new_positions))  # type: ignore[no-untyped-call]

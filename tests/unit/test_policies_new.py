@@ -25,9 +25,7 @@ class MockPolicy(BasePolicy):
             a.info["policy"] = self.name
             yield a
 
-    def generate_local(
-        self, base_structure: Atoms, n_candidates: int, **kwargs: Any
-    ):
+    def generate_local(self, base_structure: Atoms, n_candidates: int, **kwargs: Any):
         for _ in range(n_candidates):
             yield base_structure.copy()
 
@@ -35,14 +33,13 @@ class MockPolicy(BasePolicy):
 class MockEngine:
     # Class-level attribute to control return value from instances created inside policy
     result_to_return: Any = None
+    last_kwargs: Any = None
 
     def __init__(self, config: Any) -> None:
         self.config = config
-        # Ensure config has model_copy
-        if not hasattr(self.config, "model_copy"):
-            self.config.model_copy = MagicMock(return_value=config)
 
-    def run(self, structure: Any, potential: Any) -> Any:
+    def run(self, structure: Any, potential: Any, **kwargs: Any) -> Any:
+        self.__class__.last_kwargs = kwargs
         return self.result_to_return
 
 
@@ -83,10 +80,10 @@ def test_md_micro_burst_policy() -> None:
     mock_result.trajectory_path = "dummy.traj"
 
     MockEngine.result_to_return = mock_result
+    MockEngine.last_kwargs = None
 
     # Setup initial engine
     config_mock = MagicMock()
-    config_mock.model_copy.return_value = config_mock
     initial_engine = MockEngine(config_mock)
 
     # Mock trajectory read
@@ -105,6 +102,7 @@ def test_md_micro_burst_policy() -> None:
         assert len(results) == 1
         assert results[0] == final_atoms
         mock_read.assert_called_with("dummy.traj", index=-1)
+        assert MockEngine.last_kwargs == {"override_n_steps": 100}
 
 
 def test_md_micro_burst_fallback() -> None:

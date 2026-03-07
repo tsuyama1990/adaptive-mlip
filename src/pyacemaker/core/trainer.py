@@ -16,6 +16,7 @@ class FinetuneManager:
     Real implementation would load the PyTorch MACE model and run a short
     fine-tuning loop on the newly acquired DFT data.
     """
+
     def __init__(self, use_mock: bool = False) -> None:
         if not isinstance(use_mock, bool):
             msg = "use_mock must be a boolean"
@@ -24,10 +25,14 @@ class FinetuneManager:
 
     def finetune(self, dft_data_path: Path) -> None:
         from pyacemaker.utils.path import validate_path_safe
+
         dft_data_path = validate_path_safe(dft_data_path)
         if self.use_mock:
             import logging
-            logging.getLogger(__name__).info(f"Mock MACE fine-tuning completed using {dft_data_path}")
+
+            logging.getLogger(__name__).info(
+                f"Mock MACE fine-tuning completed using {dft_data_path}"
+            )
         else:
             msg = "MACE model is not installed or available for fine-tuning."
             raise RuntimeError(msg)
@@ -47,7 +52,8 @@ class PacemakerTrainer(BaseTrainer):
         try:
             self.config_generator = PacemakerConfigGenerator(config)
         except Exception as e:
-            raise ValueError(f"Failed to initialize PacemakerConfigGenerator: {e}") from e
+            msg = f"Failed to initialize PacemakerConfigGenerator: {e}"
+            raise ValueError(msg) from e
 
     def train(
         self, training_data_path: str | Path, initial_potential: str | Path | None = None
@@ -122,7 +128,10 @@ class PacemakerTrainer(BaseTrainer):
         return potential_path
 
     def incremental_train(
-        self, new_data_path: str | Path, replay_buffer_path: str | Path | None = None, replay_buffer_size: int = 500
+        self,
+        new_data_path: str | Path,
+        replay_buffer_path: str | Path | None = None,
+        replay_buffer_size: int = 500,
     ) -> Path | None:
         """
         Performs Delta Learning using an active replay buffer to prevent catastrophic forgetting.
@@ -147,7 +156,7 @@ class PacemakerTrainer(BaseTrainer):
             # Read new data using iterator
             new_data_iter = iread(str(data_path), index=":")
             # Write new data out to the mixed file (overwrite mode initially)
-            for chunk in itertools.batched(new_data_iter, 50): # type: ignore[attr-defined]
+            for chunk in itertools.batched(new_data_iter, 50):  # type: ignore[attr-defined]
                 write(str(mixed_data_path), chunk, append=True)
 
             # Sample replay buffer using memory-efficient reservoir sampling or bounded generator
@@ -165,10 +174,12 @@ class PacemakerTrainer(BaseTrainer):
                 replay_count += 1
 
             # Write sampled replay to the mixed file
-            for chunk in itertools.batched(reservoir, 50): # type: ignore[attr-defined]
+            for chunk in itertools.batched(reservoir, 50):  # type: ignore[attr-defined]
                 write(str(mixed_data_path), chunk, append=True)
 
-            logging.getLogger(__name__).info(f"Mixed new structures with {min(replay_count, replay_buffer_size)} replay structures.")
+            logging.getLogger(__name__).info(
+                f"Mixed new structures with {min(replay_count, replay_buffer_size)} replay structures."
+            )
 
         # Now fallback to train using the previous potential (or base potential) as initial
         return self.train(mixed_data_path)

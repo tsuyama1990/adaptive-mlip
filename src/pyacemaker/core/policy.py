@@ -50,18 +50,12 @@ class MDExecutionStrategy:
     def execute(
         self, base_structure: Atoms, engine: Any, potential: Any, n_structures: int
     ) -> Iterator[Atoms]:
-        original_config = engine.config
-        try:
-            # Create a temporary config for the burst without mutating the original reference long-term
-            engine.config = engine.config.model_copy(update={"n_steps": 100})
-            for _ in range(n_structures):
-                result = engine.run(base_structure, potential)
-                if result and result.trajectory_path:
-                    yield read(result.trajectory_path, index=-1)
-                else:
-                    yield base_structure.copy()
-        finally:
-            engine.config = original_config
+        for _ in range(n_structures):
+            result = engine.run(base_structure, potential, override_n_steps=100)
+            if result and result.trajectory_path:
+                yield read(result.trajectory_path, index=-1)
+            else:
+                yield base_structure.copy()
 
 
 class MDMicroBurstPolicy(SafeBasePolicy):
