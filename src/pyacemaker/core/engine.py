@@ -126,7 +126,31 @@ class LammpsEngine(BaseEngine):
         Loads the internal state of the engine.
         """
 
-    def run(self, structure: Atoms | None, potential: Any, **kwargs: Any) -> MDSimulationResult:  # noqa: PLR0915
+    def _write_run_script(
+        self,
+        f: Any,
+        potential_path: Path,
+        data_file: Path,
+        dump_file: Path,
+        elements: list[str],
+        resume_from_step: int | None,
+        use_python_invoke: bool,
+        generator_to_use: LammpsScriptGenerator,
+    ) -> None:
+        generator_to_use.write_script(f, potential_path, data_file, dump_file, elements)
+        # Use fix python/invoke for true Master-Slave inversion if configured
+        if use_python_invoke:
+            f.write("\n# Master-Slave Inversion via fix python/invoke\n")
+            f.write("python check_uncertainty file pyacemaker_callback.py\n")
+            f.write("fix check_otf all python/invoke 10 post_force check_uncertainty\n")
+        elif resume_from_step is not None:
+            # Fallback for subprocess simulated resume
+            f.write(f"\n# Seamless Resume from step {resume_from_step}\n")
+            f.write("fix soft_start all langevin 300.0 300.0 100.0 48279\n")
+            f.write("run 50\n")
+            f.write("unfix soft_start\n")
+
+    def run(self, structure: Atoms | None, potential: Any, **kwargs: Any) -> MDSimulationResult:
         """
         Runs the MD simulation.
         If resume_from_step is provided, skips initialization and applies a soft-start.
@@ -154,19 +178,16 @@ class LammpsEngine(BaseEngine):
             input_script_path = temp_dir / "input.lmp"
 
             with input_script_path.open("w") as f:
-                generator_to_use.write_script(f, potential_path, data_file, dump_file, elements)
-
-                # Use fix python/invoke for true Master-Slave inversion if configured
-                if use_python_invoke:
-                    f.write("\n# Master-Slave Inversion via fix python/invoke\n")
-                    f.write("python check_uncertainty file pyacemaker_callback.py\n")
-                    f.write("fix check_otf all python/invoke 10 post_force check_uncertainty\n")
-                elif resume_from_step is not None:
-                    # Fallback for subprocess simulated resume
-                    f.write(f"\n# Seamless Resume from step {resume_from_step}\n")
-                    f.write("fix soft_start all langevin 300.0 300.0 100.0 48279\n")
-                    f.write("run 50\n")
-                    f.write("unfix soft_start\n")
+                self._write_run_script(
+                    f,
+                    potential_path,
+                    data_file,
+                    dump_file,
+                    elements,
+                    resume_from_step,
+                    use_python_invoke,
+                    generator_to_use,
+                )
 
             # Initialize Driver with unique log file
             driver = LammpsDriver(["-screen", LAMMPS_SCREEN_ARG, "-log", str(log_file)])
