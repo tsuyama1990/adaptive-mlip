@@ -44,7 +44,10 @@ class PacemakerTrainer(BaseTrainer):
             msg = "config cannot be None"
             raise ValueError(msg)
         self.config = TrainingConfig.model_validate(config)
-        self.config_generator = PacemakerConfigGenerator(config)
+        try:
+            self.config_generator = PacemakerConfigGenerator(config)
+        except Exception as e:
+            raise ValueError(f"Failed to initialize PacemakerConfigGenerator: {e}") from e
 
     def train(
         self, training_data_path: str | Path, initial_potential: str | Path | None = None

@@ -99,6 +99,12 @@ class WorkflowConfig(BaseModel):
     convergence_force: float = Field(
         default=0.01, ge=1e-4, le=1.0, description="Force convergence criteria in eV/Angstrom"
     )
+
+    @model_validator(mode="after")
+    def validate_convergence_criteria(self) -> "WorkflowConfig":
+        if self.convergence_energy >= self.convergence_force:
+            raise ValueError('convergence_energy (eV/atom) should typically be strictly smaller than convergence_force (eV/A) to ensure correct optimization paths')
+        return self
     state_file_path: str = Field(
         default=DEFAULT_STATE_FILE, description="Path to the state checkpoint file"
     )

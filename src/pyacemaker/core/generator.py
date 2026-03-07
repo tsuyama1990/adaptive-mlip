@@ -19,7 +19,10 @@ class StructureGenerator(BaseGenerator):
 
     def __init__(self, config: StructureConfig) -> None:
         self.config = StructureConfig.model_validate(config)
-        self.m3gnet = M3GNetWrapper()
+        try:
+            self.m3gnet = M3GNetWrapper()
+        except Exception as e:
+            raise RuntimeError(f"Failed to initialize M3GNetWrapper: {e}") from e
 
     def update_config(self, config: StructureConfig) -> None:
         """

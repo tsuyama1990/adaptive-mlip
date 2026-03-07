@@ -36,10 +36,16 @@ class MACEManager(BaseOracle):
             raise TypeError(msg)
 
         from pyacemaker.utils.path import validate_path_safe
+
+        # Validate model path format (either a known valid string like 'mace-mp-0-medium', or a valid path/URL)
+        if not use_mock and not model_path.startswith("mace-") and not model_path.startswith("http"):
+            if not Path(model_path).exists():
+                raise ValueError(f"model_path {model_path} does not exist or is not a valid MACE identifier.")
+
         # Usually model_path is a string URL or name, but if it is a local file, validate it.
         # To avoid breaking valid mace-mp-0-medium strings, we only validate if use_mock is False
         # and it looks like a path.
-        if not use_mock and "/" in model_path:
+        if not use_mock and ("/" in model_path or "\\" in model_path) and not model_path.startswith("http"):
             self.model_path = str(validate_path_safe(Path(model_path)))
         else:
             self.model_path = model_path

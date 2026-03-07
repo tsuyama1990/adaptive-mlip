@@ -105,6 +105,12 @@ class MDConfig(BaseModel):
             DEFAULT_MD_HYBRID_ZBL_OUTER, description="Outer cutoff radius for ZBL potential (Angstrom)", ge=0.1, le=20.0
         )
 
+        @model_validator(mode="after")
+        def validate_cutoffs(self) -> "MDConfig.HybridParams":
+            if self.zbl_cut_inner >= self.zbl_cut_outer:
+                raise ValueError('zbl_cut_outer must be strictly greater than zbl_cut_inner')
+            return self
+
     class MDRampingConfig(BaseModel):
         model_config = ConfigDict(extra="forbid")
 

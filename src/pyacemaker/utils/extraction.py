@@ -26,6 +26,10 @@ def extract_intelligent_cluster(
         msg = "target_atoms list cannot be empty."
         raise ValueError(msg)
 
+    n_atoms = len(structure)
+    if max(target_atoms) >= n_atoms or min(target_atoms) < 0:
+        raise ValueError(f"target_atoms indices must be between 0 and {n_atoms - 1}")
+
     config = CutoutConfig.model_validate(config)
 
     total_cutoff = config.core_radius + config.buffer_radius
@@ -129,6 +133,10 @@ def _passivate_surface(cluster: Atoms, passivation_element: str) -> Atoms:
     Dummy passivation logic for UAT.
     Finds atoms with weight 0.0 at the outer edge and attaches a passivation atom.
     """
+    from ase.data import atomic_numbers
+    if passivation_element not in atomic_numbers:
+        raise ValueError(f"passivation_element must be a valid chemical symbol, got {passivation_element}")
+
     # Simple heuristic: find buffer atoms (weight 0.0) and add a dummy atom radially outward.
     weights = cluster.get_array("force_weight")  # type: ignore[no-untyped-call]
     positions = cluster.get_positions()  # type: ignore[no-untyped-call]
