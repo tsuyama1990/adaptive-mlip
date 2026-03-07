@@ -27,11 +27,10 @@ class SafeBasePolicy(BasePolicy):
     def generate(self, base_structure: Atoms, config: StructureConfig, n_structures: int = 1, engine: Any | None = None, potential: str | Path | None = None) -> Iterator[Atoms]:
         """
         Generates new candidates based on policy logic.
+        Must be explicitly implemented by subclasses.
         """
-        # Abstract method conceptually, but memory requires actual fallbacks if called directly
-        # We will yield base_structure as the ultimate fallback if a subclass forgets
-        for _ in range(n_structures):
-            yield base_structure.copy() # type: ignore[no-untyped-call]
+        msg = "Subclasses must implement actual generation logic."
+        raise NotImplementedError(msg)
 
 
 # Re-implement ColdStartPolicy and others that might have been overwritten or missing
@@ -41,7 +40,6 @@ class ColdStartPolicy(SafeBasePolicy):
     Usually implies random structure generation or grid search.
     """
     def generate(self, base_structure: Atoms, config: StructureConfig, n_structures: int = 1, engine: Any | None = None, potential: str | Path | None = None) -> Iterator[Atoms]:
-        super().generate(base_structure, config, n_structures=1, engine=engine, potential=potential)
         # Cold start yields 1 structure regardless of n (based on tests)
         yield base_structure.copy() # type: ignore[no-untyped-call]
 
@@ -86,7 +84,6 @@ class CompositePolicy(SafeBasePolicy):
         self.policies = policies or []
 
     def generate(self, base_structure: Atoms, config: StructureConfig, n_structures: int = 1, engine: Any | None = None, potential: str | Path | None = None) -> Iterator[Atoms]:
-        super().generate(base_structure, config, n_structures=n_structures, engine=engine, potential=potential)
         if not self.policies:
             return
 
@@ -98,6 +95,8 @@ class CompositePolicy(SafeBasePolicy):
             count = base_count + (1 if i < remainder else 0)
             if count > 0:
                 yield from p.generate(base_structure, config, n_structures=count, engine=engine, potential=potential)
+
+
 
 
 class DefectPolicy(SafeBasePolicy):
@@ -125,7 +124,6 @@ class RattlePolicy(SafeBasePolicy):
     Policy for rattling structures (random perturbation).
     """
     def generate(self, base_structure: Atoms, config: StructureConfig, n_structures: int = 1, engine: Any | None = None, potential: str | Path | None = None) -> Iterator[Atoms]:
-        super().generate(base_structure, config, n_structures=n_structures, engine=engine, potential=potential)
         for _ in range(n_structures):
             atoms = base_structure.copy() # type: ignore[no-untyped-call]
             # Add random normal noise to positions
@@ -139,7 +137,6 @@ class StrainPolicy(SafeBasePolicy):
     Policy for applying strain to structures.
     """
     def generate(self, base_structure: Atoms, config: StructureConfig, n_structures: int = 1, engine: Any | None = None, potential: str | Path | None = None) -> Iterator[Atoms]:
-        super().generate(base_structure, config, n_structures=n_structures, engine=engine, potential=potential)
         for _ in range(n_structures):
             atoms = base_structure.copy() # type: ignore[no-untyped-call]
 

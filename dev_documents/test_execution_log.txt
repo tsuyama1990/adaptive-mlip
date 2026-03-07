@@ -4,14 +4,14 @@ rootdir: /app
 configfile: pyproject.toml
 testpaths: tests
 plugins: cov-7.0.0
-collected 243 items
+collected 242 items
 
 tests/e2e/test_engine_integration.py ..                                  [  0%]
 tests/e2e/test_orchestrator.py .......                                   [  3%]
 tests/e2e/test_orchestrator_loop.py ...                                  [  4%]
 tests/e2e/test_orchestrator_refinement.py ..                             [  5%]
 tests/integration/test_pacemaker_integration.py ..                       [  6%]
-tests/integration/test_scenarios.py .                                    [  6%]
+tests/integration/test_scenarios.py .                                    [  7%]
 tests/uat/test_cycle01_uat.py ...                                        [  8%]
 tests/uat/test_cycle02_uat.py ..                                         [  9%]
 tests/uat/test_cycle03_uat.py ..                                         [  9%]
@@ -32,27 +32,27 @@ tests/unit/test_domain_models_validation.py ....                         [ 40%]
 tests/unit/test_elastic.py ....                                          [ 42%]
 tests/unit/test_embedding.py .......                                     [ 45%]
 tests/unit/test_engine.py .......                                        [ 48%]
-tests/unit/test_engine_halt_step.py ..                                   [ 48%]
+tests/unit/test_engine_halt_step.py ..                                   [ 49%]
 tests/unit/test_engine_relax.py ...                                      [ 50%]
 tests/unit/test_eon_driver.py .....                                      [ 52%]
 tests/unit/test_extraction.py ..                                         [ 53%]
-tests/unit/test_factory.py ..                                            [ 53%]
+tests/unit/test_factory.py ..                                            [ 54%]
 tests/unit/test_generator.py ......                                      [ 56%]
 tests/unit/test_generator_local.py ..                                    [ 57%]
 tests/unit/test_io.py ........                                           [ 60%]
 tests/unit/test_io_manager.py ..                                         [ 61%]
-tests/unit/test_lammps_driver.py ...........                             [ 65%]
+tests/unit/test_lammps_driver.py ...........                             [ 66%]
 tests/unit/test_lammps_driver_security.py ...                            [ 67%]
 tests/unit/test_lammps_generator.py ...                                  [ 68%]
 tests/unit/test_lammps_generator_reorder.py ..                           [ 69%]
 tests/unit/test_loop.py .......                                          [ 72%]
 tests/unit/test_main.py ...                                              [ 73%]
 tests/unit/test_oracle.py ........                                       [ 76%]
-tests/unit/test_oracle_streaming.py .                                    [ 76%]
+tests/unit/test_oracle_streaming.py .                                    [ 77%]
 tests/unit/test_path_validation.py .....                                 [ 79%]
 tests/unit/test_perturbations.py ...                                     [ 80%]
 tests/unit/test_phonons.py ..                                            [ 81%]
-tests/unit/test_policies_new.py ....                                     [ 82%]
+tests/unit/test_policies_new.py ...                                      [ 82%]
 tests/unit/test_policy_factory.py ...                                    [ 83%]
 tests/unit/test_qe_driver.py .......                                     [ 86%]
 tests/unit/test_report.py ..                                             [ 87%]
@@ -79,20 +79,21 @@ src/pyacemaker/core/active_set.py               71     10    86%   46-47, 60-61,
 src/pyacemaker/core/base.py                     30      0   100%
 src/pyacemaker/core/config_generator.py         36      3    92%   58-60
 src/pyacemaker/core/directory_manager.py        20      0   100%
-src/pyacemaker/core/engine.py                   90     18    80%   50, 62-63, 75, 77, 80-81, 116-121, 127-128, 158-166
+src/pyacemaker/core/engine.py                   85     16    81%   43-44, 56, 58, 68, 98-101, 107-109, 139-147, 155
 src/pyacemaker/core/exceptions.py                8      0   100%
-src/pyacemaker/core/generator.py                53     11    79%   37-40, 60, 63, 96, 106, 112, 114, 136
-src/pyacemaker/core/io_manager.py               60     23    62%   56-68, 77-80, 93-94, 97-103
-src/pyacemaker/core/lammps_generator.py        134     19    86%   46-47, 116-132, 140, 159-166
-src/pyacemaker/core/loop.py                     69      3    96%   74-77
+src/pyacemaker/core/generator.py                71     14    80%   24-25, 33, 52, 54, 79-84, 88, 90, 100
+src/pyacemaker/core/healing.py                  19      1    95%   9
+src/pyacemaker/core/io_manager.py               75     25    67%   47, 57, 84-96, 105-108, 121-122, 125-131
+src/pyacemaker/core/lammps_generator.py        135     19    86%   46-47, 117-133, 141, 160-167
+src/pyacemaker/core/loop.py                     80      3    96%   95-98
 src/pyacemaker/core/m3gnet_wrapper.py           16      4    75%   26-28, 45-47
-src/pyacemaker/core/oracle.py                   83      1    99%   73
-src/pyacemaker/core/policy.py                   81      7    91%   34-35, 65, 94, 156-158
+src/pyacemaker/core/oracle.py                   79      3    96%   108, 163-164
+src/pyacemaker/core/policy.py                   77     12    84%   32-33, 60, 73-76, 88, 110-111, 155-157
 src/pyacemaker/core/policy_factory.py           27      5    81%   46, 52-53, 80-81
 src/pyacemaker/core/report.py                   12      1    92%   85
 src/pyacemaker/core/state_manager.py            34      2    94%   37-38
 src/pyacemaker/core/trainer.py                  54      9    83%   79-82, 85-86, 93-94, 97-98
-src/pyacemaker/core/validator.py                66      5    92%   64, 69, 75, 109, 148
+src/pyacemaker/core/validator.py               106     17    84%   57-58, 68, 73, 79, 113, 175, 192-193, 199-204, 218-220
 src/pyacemaker/domain_models/__init__.py        11      0   100%
 src/pyacemaker/domain_models/config.py          22      0   100%
 src/pyacemaker/domain_models/constants.py       10      0   100%
@@ -106,7 +107,7 @@ src/pyacemaker/domain_models/structure.py       61      4    93%   88-89, 107-10
 src/pyacemaker/domain_models/training.py        46      0   100%
 src/pyacemaker/domain_models/validation.py      17      0   100%
 src/pyacemaker/domain_models/workflow.py        21      0   100%
-src/pyacemaker/factory.py                       32      3    91%   84-86
+src/pyacemaker/factory.py                       33      3    91%   95-97
 src/pyacemaker/interfaces/__init__.py            5      0   100%
 src/pyacemaker/interfaces/eon_driver.py         74     12    84%   86, 133-142, 158, 162
 src/pyacemaker/interfaces/lammps_driver.py      89      8    91%   82-83, 102, 135, 172, 191-193
@@ -122,12 +123,12 @@ src/pyacemaker/utils/delta.py                   17      2    88%   34-35
 src/pyacemaker/utils/elastic.py                 80     52    35%   34-35, 46-137, 146, 154
 src/pyacemaker/utils/embedding.py               36      6    83%   41-42, 49-50, 61-62
 src/pyacemaker/utils/extraction.py              31      0   100%
-src/pyacemaker/utils/io.py                      76      2    97%   102-103
-src/pyacemaker/utils/path.py                    46      7    85%   44, 60-64, 84-85
+src/pyacemaker/utils/io.py                      84      2    98%   105-106
+src/pyacemaker/utils/path.py                    40      9    78%   24-25, 33-34, 43-48
 src/pyacemaker/utils/perturbations.py           43      1    98%   77
 src/pyacemaker/utils/phonons.py                 51      2    96%   51, 69
 src/pyacemaker/utils/process.py                 25     21    16%   34-74
 src/pyacemaker/utils/structure.py                6      2    67%   19-20
 --------------------------------------------------------------------------
-TOTAL                                         2674    362    86%
-======================== 243 passed, 1 warning in 2.35s ========================
+TOTAL                                         2768    387    86%
+======================== 242 passed, 1 warning in 2.82s ========================

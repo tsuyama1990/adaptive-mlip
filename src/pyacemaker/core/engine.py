@@ -1,3 +1,4 @@
+import logging
 from pathlib import Path
 
 from ase import Atoms
@@ -14,6 +15,7 @@ from pyacemaker.domain_models.constants import (
 from pyacemaker.domain_models.md import MDConfig, MDSimulationResult
 from pyacemaker.interfaces.lammps_driver import LammpsDriver
 
+logger = logging.getLogger(__name__)
 
 class LammpsEngine(BaseEngine):
     """
@@ -93,18 +95,17 @@ class LammpsEngine(BaseEngine):
                     step = int(driver.extract_variable("step"))
                     forces = driver.get_forces().tolist()
                     stress = driver.get_stress().tolist()
-                except Exception:
-                    energy = 0.0
-                    temperature = 0.0
-                    step = 0
-                    forces = [[0.0, 0.0, 0.0]]
-                    stress = [0.0] * 6
+                except (ValueError, KeyError, AttributeError) as e:
+                    msg = f"Failed to extract mandatory properties from simulation driver: {e}"
+                    logger.exception(msg)
+                    raise RuntimeError(msg) from e
 
                 max_gamma = 0.0
                 if self.config.fix_halt:
                     try:
                         max_gamma = driver.extract_variable("max_g")
-                    except Exception:
+                    except (ValueError, KeyError, AttributeError) as e:
+                        logger.warning("Uncertainty metrics ('max_g') requested but unavailable: %s", e)
                         max_gamma = 0.0
 
                 halted = False

@@ -19,11 +19,30 @@ def validate_path_safe(path: Path) -> Path:
         ValueError: If the path contains dangerous characters, traversal attempts,
                     or resolves outside allowed directories (CWD, temp, /dev/shm).
     """
+    # Pre-check original path for raw directory traversal string before any resolution
+    if ".." in str(path):
+        msg = f"Path traversal attempt detected (parent directory reference): {path}"
+        raise ValueError(msg)
+
     try:
         import os
+
+        is_link = False
+        try:
+            is_link = path.is_symlink()
+        except OSError:
+            pass
+
         # Canonicalize path using realpath which aggressively resolves all symlinks
         # without raising errors on non-existent files, avoiding TOCTOU bugs.
         resolved = Path(os.path.realpath(path))
+
+        if is_link:
+            # Check if the resolved symlink target still attempts traversal strings
+            if ".." in str(resolved):
+                msg = f"Symlink resolved to traversal path: {resolved}"
+                raise ValueError(msg)
+
     except Exception as e:
          msg = f"Invalid path resolution: {path}"
          raise ValueError(msg) from e

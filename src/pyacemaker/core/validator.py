@@ -168,24 +168,40 @@ class ValidationCoordinator:
     def validate(
         self, potential_path: Path, output_path: Path, structure: Atoms | None = None
     ) -> ValidationResult:
+        import logging
+        logger = logging.getLogger(__name__)
+
         if structure is None:
             raise ValueError(ERR_VAL_REQ_STRUCT)
 
         # Data Integrity Fix: Validate structure input
         LammpsInputValidator.validate_structure(structure)
 
-        # Relax structure
-        relaxed_structure = self.relaxer.relax(structure, potential_path)
+        phonon_stable, phonon_plot = False, ""
+        elastic_stable, c_ij, B, elastic_plot = False, {}, 0.0, ""  # type: bool, dict[str, float], float, str
 
-        # Phonons
-        phonon_stable, phonon_plot = self.phonon_validator.validate(
-            relaxed_structure, potential_path
-        )
+        try:
+            # Relax structure
+            relaxed_structure = self.relaxer.relax(structure, potential_path)
 
-        # Elastic
-        elastic_stable, c_ij, B, elastic_plot = self.elastic_validator.validate(
-            relaxed_structure, potential_path
-        )
+            # Parallelizing or sequential depending on infrastructure, but wrap safely
+            try:
+                phonon_stable, phonon_plot = self.phonon_validator.validate(
+                    relaxed_structure, potential_path
+                )
+            except Exception as e:
+                logger.warning(f"Phonon validation failed: {e}")
+
+            try:
+                elastic_stable, c_ij, B, elastic_plot = self.elastic_validator.validate(
+                    relaxed_structure, potential_path
+                )
+            except Exception as e:
+                logger.warning(f"Elastic validation failed: {e}")
+
+        except Exception as e:
+            msg = f"Structural relaxation or critical validation step failed: {e}"
+            logger.warning(msg)
 
         result = ValidationResult(
             phonon_stable=phonon_stable,
@@ -196,8 +212,12 @@ class ValidationCoordinator:
             report_path=str(output_path),
         )
 
-        # Generate Report
-        self.report_validator.write_report(result, output_path)
+        # Generate Report safely
+        try:
+            self.report_validator.write_report(result, output_path)
+        except Exception as e:
+            msg = f"Failed to generate validation report: {e}"
+            logger.warning(msg)
 
         return result
 

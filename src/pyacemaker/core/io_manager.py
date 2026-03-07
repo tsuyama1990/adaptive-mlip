@@ -56,18 +56,27 @@ class LammpsFileManager:
         if not os.access(potential_path, os.R_OK):
             raise PermissionError(f"Potential file is not readable: {potential_path}")
 
+        from pyacemaker.utils.path import validate_path_safe
+
+        # Validate configured temporary directory using standard rules
+        valid_temp_dir = None
+        if self.config.temp_dir:
+            valid_temp_dir = validate_path_safe(Path(self.config.temp_dir))
+
         # RAM disk usage optimization via config
-        temp_dir_ctx = tempfile.TemporaryDirectory(dir=self.config.temp_dir)
+        temp_dir_ctx = tempfile.TemporaryDirectory(dir=valid_temp_dir)
         try:
             temp_dir = Path(temp_dir_ctx.name)
 
             run_id = uuid.uuid4().hex[:8]
+            # Verify no injection in prefix
             data_file = temp_dir / f"data_{run_id}.lmp"
 
             # Persistence: Outputs go to current working directory
-            cwd = Path.cwd()
-            dump_file = cwd / f"dump_{run_id}.lammpstrj"
-            log_file = cwd / f"log_{run_id}.lammps"
+            # Verify CWD is safe and secure target locations
+            cwd = validate_path_safe(Path.cwd())
+            dump_file = validate_path_safe(cwd / f"dump_{run_id}.lammpstrj")
+            log_file = validate_path_safe(cwd / f"log_{run_id}.lammps")
 
             # Handle different input types
             if isinstance(structure, (str, Path)):

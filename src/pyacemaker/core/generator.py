@@ -32,7 +32,7 @@ class BaseStructureGenerator:
         if tuple(self.config.supercell_size) == (1, 1, 1):
             return base_structure
 
-        return base_structure.repeat(self.config.supercell_size)  # type: ignore[no-untyped-call]
+        return base_structure.repeat(self.config.supercell_size)  # type: ignore
 
 
 class PolicyOrchestrator:

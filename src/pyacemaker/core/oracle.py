@@ -3,7 +3,6 @@ import logging
 import tempfile
 import warnings
 from collections.abc import Callable, Iterator
-from pathlib import Path
 
 from ase import Atoms
 from ase.calculators.calculator import PropertyNotImplementedError
@@ -122,22 +121,19 @@ class DFTManager(BaseOracle):
         while not iterator_exhausted:
             # We process structures one-by-one without materializing a list,
             # using a temporary directory for a batch of up to `batch_size` items.
+            # Avoid creating N temp dirs for N structures to reduce wasteful I/O.
             with tempfile.TemporaryDirectory() as work_dir:
-                work_path = Path(work_dir)
-                for i in range(batch_size):
+                for _i in range(batch_size):
                     try:
                         atoms = next(structures)
                     except StopIteration:
                         iterator_exhausted = True
                         break
 
-                    calc_dir = work_path / f"calc_{i}"
-                    calc_dir.mkdir()
-
-                    # Yielding inside a tempdir context can be tricky if the consumer stops iteration early.
-                    # We process the structure, store the result, and then yield it so the generator
-                    # flow controls the tempo and resources are cleaned up correctly even if interrupted.
-                    processed_atoms = self._process_structure(atoms, str(calc_dir))
+                    # Provide the main shared work_dir for execution rather than isolated subdirectories.
+                    # Driver must use run-specific file prefixes if necessary, but for individual
+                    # sequence processing, sharing the root temp dir is optimal.
+                    processed_atoms = self._process_structure(atoms, work_dir)
                     yield processed_atoms
                     count += 1
 
