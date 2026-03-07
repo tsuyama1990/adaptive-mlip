@@ -25,7 +25,9 @@ class MockPolicy(BasePolicy):
             a.info["policy"] = self.name
             yield a
 
-    def generate_local(self, base_structure: Atoms, n_candidates: int, **kwargs: Any):
+    def generate_local(
+        self, base_structure: Atoms, n_candidates: int, **kwargs: Any
+    ):
         for _ in range(n_candidates):
             yield base_structure.copy()
 

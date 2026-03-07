@@ -165,10 +165,7 @@ class BaseTrainer(ABC):
 
     @abstractmethod
     def incremental_train(
-        self,
-        new_data_path: str | Path,
-        replay_buffer_path: str | Path | None = None,
-        replay_buffer_size: int = 500,
+        self, new_data_path: str | Path, replay_buffer_path: str | Path | None = None, replay_buffer_size: int = 500
     ) -> Path | None:
         """
         Performs Delta Learning using an active replay buffer to prevent catastrophic forgetting.

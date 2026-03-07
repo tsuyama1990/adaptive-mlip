@@ -99,23 +99,16 @@ class MDConfig(BaseModel):
         model_config = ConfigDict(extra="forbid")
 
         zbl_cut_inner: PositiveFloat = Field(
-            DEFAULT_MD_HYBRID_ZBL_INNER,
-            description="Inner cutoff radius for ZBL potential (Angstrom)",
-            ge=0.1,
-            le=10.0,
+            DEFAULT_MD_HYBRID_ZBL_INNER, description="Inner cutoff radius for ZBL potential (Angstrom)", ge=0.1, le=10.0
         )
         zbl_cut_outer: PositiveFloat = Field(
-            DEFAULT_MD_HYBRID_ZBL_OUTER,
-            description="Outer cutoff radius for ZBL potential (Angstrom)",
-            ge=0.1,
-            le=20.0,
+            DEFAULT_MD_HYBRID_ZBL_OUTER, description="Outer cutoff radius for ZBL potential (Angstrom)", ge=0.1, le=20.0
         )
 
         @model_validator(mode="after")
         def validate_cutoffs(self) -> "MDConfig.HybridParams":
             if self.zbl_cut_inner >= self.zbl_cut_outer:
-                msg = "zbl_cut_outer must be strictly greater than zbl_cut_inner"
-                raise ValueError(msg)
+                raise ValueError('zbl_cut_outer must be strictly greater than zbl_cut_inner')
             return self
 
     class MDRampingConfig(BaseModel):
@@ -128,12 +121,8 @@ class MDConfig(BaseModel):
 
         @model_validator(mode="after")
         def validate_ramping(self) -> "MDConfig.MDRampingConfig":
-            if (
-                self.temp_start is not None
-                and self.temp_end is not None
-                and self.temp_start > self.temp_end
-            ):
-                msg = "temp_start must be <= temp_end"
+            if self.temp_start is not None and self.temp_end is not None and self.temp_start > self.temp_end:
+                msg = 'temp_start must be <= temp_end'
                 raise ValueError(msg)
             return self
 
@@ -143,6 +132,7 @@ class MDConfig(BaseModel):
         swap_freq: int = Field(..., gt=0, description="Frequency of MC swaps (steps)")
         swap_prob: float = Field(..., gt=0.01, le=0.99, description="Probability of swapping atoms")
         seed: int = Field(DEFAULT_MC_SEED, description="Random seed for MC swaps")
+
 
     model_config = ConfigDict(extra="forbid")
 
@@ -220,7 +210,7 @@ class MDConfig(BaseModel):
     def validate_simulation_physics(self) -> "MDConfig":
         total_time = self.n_steps * self.timestep
         if total_time > MAX_MD_DURATION:
-            msg = f"Total simulation time {total_time} exceeds maximum allowed duration {MAX_MD_DURATION}"
+            msg = f'Total simulation time {total_time} exceeds maximum allowed duration {MAX_MD_DURATION}'
             raise ValueError(msg)
         return self
 

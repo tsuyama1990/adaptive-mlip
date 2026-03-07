@@ -22,8 +22,7 @@ class StructureGenerator(BaseGenerator):
         try:
             self.m3gnet = M3GNetWrapper()
         except Exception as e:
-            msg = f"Failed to initialize M3GNetWrapper: {e}"
-            raise RuntimeError(msg) from e
+            raise RuntimeError(f"Failed to initialize M3GNetWrapper: {e}") from e
 
     def update_config(self, config: StructureConfig) -> None:
         """
@@ -101,7 +100,7 @@ class StructureGenerator(BaseGenerator):
                     break
                 finally:
                     # Explicitly free massive objects from memory
-                    base_structure = None  # type: ignore[assignment]
+                    base_structure = None # type: ignore[assignment]
 
         yield from lazy_policy_stream()
 

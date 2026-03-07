@@ -62,10 +62,7 @@ class FakeTrainer(BaseTrainer):
         return self.output_path
 
     def incremental_train(
-        self,
-        new_data_path: str | Path,
-        replay_buffer_path: str | Path | None = None,
-        replay_buffer_size: int = 500,
+        self, new_data_path: str | Path, replay_buffer_path: str | Path | None = None, replay_buffer_size: int = 500
     ) -> Path | None:
         return self.train(new_data_path)
 

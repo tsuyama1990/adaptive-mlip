@@ -49,12 +49,7 @@ def test_lammps_engine_run(mock_md_config: MDConfig, mock_driver: Any, tmp_path:
 
     # Enable fix_halt to test gamma extraction
     otf_config = OTFConfig(fix_halt=True)
-    engine = LammpsEngine(
-        mock_md_config,
-        LammpsScriptGenerator(mock_md_config, otf_config=otf_config),
-        LammpsFileManager(mock_md_config),
-        otf_config=otf_config,
-    )
+    engine = LammpsEngine(mock_md_config, LammpsScriptGenerator(mock_md_config, otf_config=otf_config), LammpsFileManager(mock_md_config), otf_config=otf_config)
     atoms = Atoms("H", cell=[10, 10, 10], pbc=True)
 
     # Create dummy potential file
@@ -100,12 +95,7 @@ def test_lammps_engine_halted(mock_md_config: MDConfig, mock_driver: Any, tmp_pa
 
     # Enable fix_halt to test halted logic
     otf_config = OTFConfig(fix_halt=True)
-    engine = LammpsEngine(
-        mock_md_config,
-        LammpsScriptGenerator(mock_md_config, otf_config=otf_config),
-        LammpsFileManager(mock_md_config),
-        otf_config=otf_config,
-    )
+    engine = LammpsEngine(mock_md_config, LammpsScriptGenerator(mock_md_config, otf_config=otf_config), LammpsFileManager(mock_md_config), otf_config=otf_config)
     atoms = Atoms("H", cell=[10, 10, 10], pbc=True)
     pot_path = tmp_path / "potential.yace"
     pot_path.touch()
@@ -140,9 +130,7 @@ def test_lammps_engine_resume(mock_md_config: MDConfig, mock_driver: Any, tmp_pa
 
     driver_instance.run_file.side_effect = capture_run
 
-    engine = LammpsEngine(
-        mock_md_config, LammpsScriptGenerator(mock_md_config), LammpsFileManager(mock_md_config)
-    )
+    engine = LammpsEngine(mock_md_config, LammpsScriptGenerator(mock_md_config), LammpsFileManager(mock_md_config))
     atoms = Atoms("H", cell=[10, 10, 10], pbc=True)
     pot_path = tmp_path / "potential.yace"
     pot_path.touch()
@@ -156,7 +144,6 @@ def test_lammps_engine_resume(mock_md_config: MDConfig, mock_driver: Any, tmp_pa
 
     assert "Seamless Resume from step 1000" in script
     assert "fix soft_start all langevin" in script
-
 
 def test_lammps_engine_hybrid_potential(
     mock_md_config: MDConfig, mock_driver: Any, tmp_path: Path
@@ -228,7 +215,6 @@ def test_run_large_structure_warning(
 ) -> None:
     """Tests info log for large structures (streaming)."""
     import logging
-
     mock_md_config = MDConfig.model_validate(mock_md_config)
 
     caplog.set_level(logging.INFO)

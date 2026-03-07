@@ -10,10 +10,10 @@ def test_extract_intelligent_cluster_basic() -> None:
     atoms = bulk("Cu", "sc", a=2.5).repeat((3, 3, 3))  # type: ignore[no-untyped-call]
 
     config = CutoutConfig(
-        core_radius=2.6,  # Includes 1st shell
-        buffer_radius=1.0,  # Total cutoff 3.6 (Includes 2nd shell)
+        core_radius=2.6, # Includes 1st shell
+        buffer_radius=1.0, # Total cutoff 3.6 (Includes 2nd shell)
         enable_passivation=True,
-        passivation_element="H",
+        passivation_element="H"
     )
 
     target_atoms = [13]
@@ -39,7 +39,6 @@ def test_extract_intelligent_cluster_basic() -> None:
     # Count H atoms
     h_atoms = sum(1 for s in symbols if s == "H")
     assert h_atoms == 12
-
 
 def test_extract_intelligent_cluster_no_passivation() -> None:
     atoms = bulk("Cu", "sc", a=2.5).repeat((3, 3, 3))  # type: ignore[no-untyped-call]

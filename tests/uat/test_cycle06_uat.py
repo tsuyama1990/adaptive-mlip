@@ -54,7 +54,7 @@ def uat_config(tmp_path: Path) -> PyAceConfig:
             "otf": {
                 "fix_halt": True,
                 "check_interval": 10,
-            },
+            }
         },
         "logging": {},
     }
