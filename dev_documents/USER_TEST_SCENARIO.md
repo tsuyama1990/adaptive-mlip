@@ -1,128 +1,162 @@
-ご提示いただいた「PYACEMAKER 次世代アーキテクチャ要求定義書 (PRD) Version: 2.1.0」を拝見しました。非常に野心的かつ、HPC環境での長期間MDシミュレーションにおける物理的・システム的なボトルネック（連続性の欠如、熱ノイズへの過敏反応、切り出し時の物理的破綻、計算量爆発など）を的確に解消する、極めて論理的で優れたアーキテクチャだと感じます。特にFLAREの教訓を活かした「Master-Slave逆転」と「物理的修復を伴う局所切り出し」の組み合わせは強力ですね。
+# PYACEMAKER v2.1.0 User Acceptance Testing (UAT) and Tutorial Scenarios
 
-このPRDに基づくシステムの品質と実用性を担保するため、研究者（ユーザー）視点での**受入テスト（UAT: User Acceptance Testing）シナリオ**を策定しました。各Phaseのパラダイムシフトが正しく機能しているかを検証する構成にしています。
+This document outlines the exhaustive User Acceptance Testing (UAT) scenarios designed from a researcher's (user's) perspective to rigorously validate the quality, usability, and physical correctness of the PyAceMaker NextGen Architecture (Version 2.1.0). These scenarios also serve as a comprehensive tutorial strategy to guide new users through the advanced capabilities of the system.
 
----
+## 1. Tutorial Strategy
 
-# PYACEMAKER v2.1.0 受入テスト（UAT）シナリオ
+To ensure absolute reproducibility and ease of use, all scenarios defined below will be compiled into a single interactive, executable tutorial file.
 
-## シナリオ1：Phase 1 - ゼロショット蒸留とベースライン構築の検証
+*   **Executable Tutorial:** We will create a single Marimo notebook file named `tutorials/UAT_AND_TUTORIAL.py`. This single file will contain both "Quick Start" and "Advanced" scenarios, allowing researchers to easily execute, modify, and verify the workflow interactively using `marimo edit tutorials/UAT_AND_TUTORIAL.py`.
+*   **Mock Mode vs. Real Mode:** To facilitate rapid testing in CI environments, or on personal laptops without access to large HPC clusters, GPUs, or Quantum Espresso installations, the tutorial will inherently support a "Mock Mode". In Mock Mode, the `DFTManager` is replaced with a dummy oracle that returns fixed analytical forces (e.g., using a simple Lennard-Jones definition), allowing the entire sophisticated pipeline to execute in minutes rather than days. Real Mode can be toggled via a simple configuration flag.
+*   **Visual Validation:** The tutorial will output standard `.xyz` trajectory files at critical algorithmic steps (e.g., before cutout, after cutout, after MACE relaxation, after fractional passivation). This allows users to visually inspect the physical validity of the operations and geometric boundary constraints using external tools like OVITO or VMD.
 
-**目的:** DFTを一切呼び出さず、MACEの推論のみで物理的に妥当な初期ポテンシャル（LJ Delta Learning適用）が構築されることを確認する。
+## 2. Test Scenarios
 
-* **前提条件:**
-* 入力元素として4元系（例: Fe, Pt, Mg, O）が指定されている。
-* `DistillationConfig` が有効（`enable: True`）になっている。
+### Scenario ID: UAT-01
+**Title:** Phase 1 - Zero-Shot Distillation and Baseline Construction
+**Priority:** High
+**Objective:** Verify that a physically reasonable initial potential (using LJ Delta Learning) is constructed solely through MACE inference, without calling DFT, and that the resulting `base.yace` is stable at short atomic distances.
 
+*   **Pre-conditions:**
+    *   The input elements are specified as a complex 4-element system (e.g., Fe, Pt, Mg, O).
+    *   The `DistillationConfig` is enabled (`enable: True`).
+    *   The `MACEManager` is configured to run in memory-resident mode.
+*   **Action:**
+    1.  Execute the initialization script to launch Phase 1.
+    2.  Monitor the logs, structure pools, and the output directory for `base.yace`.
+*   **Expected Results (Acceptance Criteria):**
+    *   The system automatically generates structural pools for all single-element and binary sub-systems, including random, strained, and defected structures (vacancies).
+    *   DIRECT sampling (KDTree-assisted D-Optimality) successfully reduces the massive pool to the requested sampling size (e.g., 1000 structures) while maximizing diversity in feature space.
+    *   MACE inference is performed in memory, and only structures with uncertainty strictly below the `uncertainty_threshold` are extracted into the training dataset.
+    *   **Crucially, DFT (Quantum Espresso) is never called or initialized.**
+    *   The `PacemakerTrainer` generates `base.yace` using the extracted data, successfully applying LJ Delta Learning as the mathematical baseline to prevent atomic overlap crashes.
 
-* **操作手順:**
-1. 初期化スクリプトを実行し、Phase 1を起動する。
-2. ログおよび出力ディレクトリを監視する。
+### Scenario ID: UAT-02
+**Title:** Phase 2 - Physical Validation and Auto-Retraining
+**Priority:** High
+**Objective:** Confirm that if the constructed potential fails minimum physical stability criteria (e.g., imaginary phonons), the system automatically detects this, expands sampling, and triggers a state-machine retraining loop.
 
+*   **Pre-conditions:**
+    *   `base.yace` from Phase 1 exists.
+    *   For testing purposes, the potential is intentionally degraded by severely restricting the sampling density or altering the LJ parameters in Phase 1 to induce instability.
+*   **Action:**
+    1.  Launch the `Validator` module to execute Phase 2 via the orchestrator.
+*   **Expected Results (Acceptance Criteria):**
+    *   The Validator attempts to calculate elastic constants, phonon dispersions, and the Equation of State (EOS) for all stable crystal phases.
+    *   Upon detecting a severe instability (e.g., imaginary frequencies in the acoustic branches of the phonon dispersion) in the intentionally degraded potential, **the system automatically triggers a rollback to the `DISTILLING` state, expanding the Phase 1 sampling density and re-initiating the entire training loop.**
+    *   A miniature MD stress test (e.g., NPT ensemble) completes or halts, successfully outputting an Uncertainty Map (a profile of MACE uncertainty variance versus simulation temperature).
 
-* **期待される結果（合格基準）:**
-* 自動的に単体・二元系のサブシステム構造プール（ランダム、歪み、欠陥入り等）が生成されること。
-* DIRECTサンプリングにより、構造数が指定のサンプリング数（例: 1000）に絞り込まれること。
-* MACEによる推論が行われ、不確実性が `uncertainty_threshold` を下回る構造のみが抽出されること。
-* **DFT（QE）が一度も呼び出されずに**、LJポテンシャルをベースラインとした `base.yace` が生成されること。
+### Scenario ID: UAT-03
+**Title:** Phase 3 - Thermal Noise Exclusion and Intelligent Cluster Extraction
+**Priority:** Critical
+**Objective:** Validate the core paradigm shift: the two-tier threshold for noise resilience (`smooth_steps`), and the generation of a clean, passivated cluster free of dangling bonds utilizing KDTree extraction.
 
+*   **Pre-conditions:**
+    *   A production-scale MD simulation (tens of thousands of atoms) is set up and thermalized.
+    *   `ActiveLearningThresholds` and `CutoutConfig` are correctly configured.
+*   **Action:**
+    1.  Start the MD simulation.
+    2.  Simulate severe thermal noise by artificially spiking the uncertainty array of a single atom above `threshold_call_dft` for only 1 or 2 integration steps.
+    3.  Simulate a true unknown physical event by introducing an unknown defect or interface collision, causing a sustained uncertainty spike over $N >$ `smooth_steps`.
+*   **Expected Results (Acceptance Criteria):**
+    *   **Thermal Noise Resilience:** The MD simulation does not halt during the artificial 1-2 step spike (proving the `smooth_steps` logic correctly filters outliers).
+    *   **Epicenter Identification:** When the sustained spike occurs, the system formally halts. Only the specific atoms exceeding the lower `threshold_add_train` are identified as the extraction "epicenter".
+    *   **Physical Repair Cutout (KDTree):**
+        *   The core region (`force_weight=1.0`) and buffer region (`force_weight=0.0`) are correctly extracted spherically using $O(\log N)$ KDTree queries.
+        *   **With the core atoms strictly frozen (`FixAtoms`), MACE successfully pre-relaxes the buffer region.**
+        *   Auto-passivation correctly identifies broken coordination bonds at the surface and injects dummy atoms (e.g., fractional H) to electrically neutralize the cluster. The minimum distance between dummy atoms and the core is rigorously $> 0.8 \AA$.
+    *   **DFT Convergence:** The resulting extracted, passivated cluster allows the DFT calculation (SCF loop) to converge efficiently without electron density divergence, successfully acquiring Ground Truth Forces for the core.
 
+### Scenario ID: UAT-04
+**Title:** Phase 4 - Hierarchical Fine-Tuning and Seamless Resume
+**Priority:** Critical
+**Objective:** Verify that incremental update prevents catastrophic forgetting (via replay buffers) and that the MD simulation resumes smoothly without rewinding simulation time or losing thermostat state.
 
-## シナリオ2：Phase 2 - 物理バリデーションと自動再学習の検証
+*   **Pre-conditions:**
+    *   Scenario UAT-03 has completed, yielding a small amount of highly valuable, clean DFT data.
+    *   A historical `training_history.extxyz` exists.
+*   **Action:**
+    1.  Monitor the Phase 4 training process and the subsequent MD resumption via LAMMPS.
+    2.  Check the thermodynamic energy logs of the MD immediately after the resumption command.
+*   **Expected Results (Acceptance Criteria):**
+    *   MACE is briefly fine-tuned using the newly acquired DFT data via the `FinetuneManager`.
+    *   The awakened MACE instantly generates thousands of surrogate data points in a localized spatial grid around the halt state.
+    *   **Prevention of Catastrophic Forgetting:** The system executes **Delta Learning** using the surrogate data, the true DFT anchor, and exactly `replay_buffer_size` structures drawn from the historical data, completing the training in O(1) time without rebuilding the entire massive dataset from scratch.
+    *   **Continuity Guarantee:** Following the potential update, the MD simulation **resumes from the exact step number, coordinates, and atomic velocities where it halted** (proving the Master-Slave inversion or perfect `.restart` execution).
+    *   **Soft Start:** A Langevin thermostat (or `velocity scale`) mechanism functions during the first few resumed integration steps, preventing unphysical thermodynamic energy explosions due to the updated potential surface.
 
-**目的:** 構築されたポテンシャルが物理的安定性の基準を満たさない場合、自動でサンプリング密度を上げて自己修復（再学習）ループを回すか確認する。
+### Scenario ID: UAT-05
+**Title:** Non-Functional - HPC Robustness, Repository Pattern, and Cleanup
+**Priority:** Medium
+**Objective:** Verify resilience against forced job terminations (using the JsonLinesRepository) and the automatic, asynchronous cleanup of massive computational artifacts.
 
-* **前提条件:**
-* Phase 1で生成された `base.yace` が存在する。
-* わざと精度が低くなるよう、Phase 1のサンプリング数を極端に減らした状態のポテンシャルを用意する。
+*   **Pre-conditions:**
+    *   Running in an HPC-like environment (or using process-level emulation via `multiprocessing`).
+*   **Action:**
+    1.  During a massive surrogate generation task or MD loop, intentionally kill the main Python orchestrator process using `kill -9` (simulating a strict SLURM wall-time timeout).
+    2.  Resubmit the identical job in the exact same directory.
+    3.  Monitor the generation of massive `.wfc` (wavefunction) files during a DFT fallback.
+*   **Expected Results (Acceptance Criteria):**
+    *   **State Recovery (Repository Pattern):** Upon resubmission, the system does not foolishly start from the beginning. Using the fine-grained `.jsonl` state checkpoints, it recovers its exact FSM state within seconds and resumes from the exact micro-task it was executing (e.g., midway through surrogate generation or immediately after a DFT completion).
+    *   **Auto-Cleanup Daemon:** Massive artifact files (like `.wfc` or huge `.dump` trajectories) that are no longer needed after successful training or inference are automatically deleted or compressed (`tar -czf`) by an isolated background Python daemon, guaranteeing storage quotas are not exceeded without blocking the main event loop.
 
+## 3. Behavior Definitions (Gherkin)
 
-* **操作手順:**
-1. Validatorを起動し、Phase 2を実行する。
+The following Gherkin scenarios define the explicit contracts that the system must uphold during automated integration testing.
 
+**Feature: Zero-Shot Baseline Construction**
+> **GIVEN** a 4-element system definition and DistillationConfig is enabled with memory-resident MACE
+> **WHEN** Phase 1 initialization is triggered by the Orchestrator
+> **THEN** structural pools are generated via combinatorial and defect algorithms
+> **AND** structures are strictly filtered using the MACE uncertainty array against `uncertainty_threshold`
+> **AND** a baseline potential is trained using LJ Delta Learning without any DFT engine calls being invoked.
 
-* **期待される結果（合格基準）:**
-* 安定相の弾性定数、フォノン分散、EOSが計算されること。
-* 意図的に低精度にしたポテンシャルにおいて、フォノン分散に虚数振動（不安定性）が検出された際、**自動的にPhase 1のサンプリング密度（または範囲）が拡張され、再学習がトリガーされる**こと。
-* ミニチュアMDによるストレステストが完走、またはHaltした場合にUncertainty Map（不確実性の温度依存性プロファイル）が出力されること。
+**Feature: Two-Tier Noise Filtering and Smoothing**
+> **GIVEN** an active MD simulation with `threshold_call_dft` set to 0.05 and `smooth_steps` set to 3
+> **WHEN** a single atom's evaluated uncertainty spikes to 0.08 for exactly 1 integration step
+> **THEN** the simulation does not halt and continues integration
+> **WHEN** the evaluated uncertainty remains at 0.08 for 4 consecutive integration steps
+> **THEN** the simulation explicitly halts and writes a restart state
+> **AND** only atoms with uncertainty strictly above the secondary `threshold_add_train` are selected for extraction.
 
+**Feature: Intelligent Extraction with KDTree and Pre-relaxation**
+> **GIVEN** an identified epicenter in a halted MD simulation
+> **WHEN** the intelligent cluster is extracted via KDTree querying
+> **THEN** a core region and a buffer region are defined spherically
+> **AND** the core atoms are constrained (frozen) using ASE `FixAtoms`
+> **AND** the memory-resident MACE relaxes the coordinates of the buffer atoms via LBFGS
+> **AND** dummy atoms are added to passivate surface dangling bonds, maintaining a minimum $0.8 \AA$ clearance from the core.
 
+**Feature: Seamless MD Resume with Delta Learning**
+> **GIVEN** a halted MD simulation at step 500,000 due to sustained high uncertainty
+> **WHEN** the new ACE potential is incrementally trained using a replay buffer and loaded
+> **THEN** the MD simulation resumes exactly at step 500,001
+> **AND** the atomic coordinates, velocities, and thermostat state are mathematically identical to the moment of the halt.
 
-## シナリオ3：Phase 3 - 熱ノイズの排除とインテリジェント・クラスター抽出
+**Feature: FSM Checkpoint Recovery**
+> **GIVEN** the Orchestrator is in the `EXTRACTING` state
+> **WHEN** the process receives a SIGKILL signal
+> **THEN** the state is preserved in the `.jsonl` repository
+> **WHEN** the process is restarted
+> **THEN** it resumes operation immediately in the `EXTRACTING` state without rewinding to `DISTILLING`.
 
-**目的:** 新アーキテクチャの核心である「二段階閾値」によるノイズ耐性と、ダングリングボンドを排除したクリーンな切り出しを検証する。
+## 4. Tutorial Plan
 
-* **前提条件:**
-* 本番環境規模（数万原子）のMDをセットアップする。
-* `ActiveLearningThresholds` と `CutoutConfig` が適切に設定されている。
+As stated in the Tutorial Strategy, we will create a **SINGLE** executable interactive file to validate these complex scenarios.
 
+**File:** `tutorials/UAT_AND_TUTORIAL.py`
 
-* **操作手順:**
-1. MDをスタートさせる。
-2. 熱ノイズを模倣するため、1〜2ステップだけ単一原子の不確実性を `threshold_call_dft` 以上に跳ね上がらせる（擬似的にデータを操作、または高温設定にする）。
-3. その後、未知の界面や欠陥構造を系に衝突・導入させ、持続的な不確実性上昇を発生させる。
+This Marimo notebook file will be structured sequentially as follows:
+1.  **Introduction & Setup:** Explains the NextGen architecture and initializes the strongly-typed configuration objects (Pydantic models like `ActiveLearningThresholds`).
+2.  **Scenario 1: Phase 1 Distillation:** Executes the zero-shot baseline construction interactively, rendering the generated `extxyz` pool using `marimo.ui.slider` for visualization.
+3.  **Scenario 2: Validation Stress Test:** Runs the physical validator on the generated baseline, plotting the resulting phonon dispersion bands.
+4.  **Scenario 3: The Halt Event:** Simulates a small MD run, injects a fake high-uncertainty event array to trigger a halt, and demonstrates the intelligent cluster extraction (outputting 3D interactive renders of the passivated cluster).
+5.  **Scenario 4: Incremental Update & Resume:** Runs the Pacemaker training using a tiny mock replay buffer and shows how the MD state dictionary is perfectly preserved for resumption.
+6.  **Scenario 5: State Recovery:** Demonstrates reading a mock `.jsonl` log to recover a failed state.
 
-
-* **期待される結果（合格基準）:**
-* **熱ノイズ耐性:** 手順2の瞬間的なスパイクではMDがHaltせず、継続すること（`smooth_steps` の機能証明）。
-* **震源地特定:** 手順3で持続的なスパイクが起きた際、初めてHaltし、`threshold_add_train` を超えた原子群のみが「震源地」として特定されること。
-* **物理的修復切り出し:**
-* Core（`force_weight=1.0`）とBuffer（`force_weight=0.0`）が正しく切り出されていること。
-* **Core原子が固定（Freeze）された状態で、MACEによってBuffer領域のみが事前緩和（Relax）されること。**
-* 表面の切断手に対して自動終端処理（H原子などのダミー付与）が行われ、クラスターが電気的に中性化されていること。
-
-
-* **DFTの確実な収束:** 抽出されたクラスターのDFT計算（SCFループ）が発散することなく、正常にGround Truth Forceを取得して完了すること。
-
-
-
-## シナリオ4：Phase 4 - 階層的ファインチューニングとシームレス再開
-
-**目的:** 破滅的忘却を防ぐインクリメンタル更新と、MDが初期化されずに「巻き戻しなし」で再開できるかを検証する。
-
-* **前提条件:**
-* シナリオ3を通過し、少数のクリーンなDFTデータが取得されている状態。
-
-
-* **操作手順:**
-1. Phase 4の学習プロセスからMD再開までのフローを監視する。
-2. 再開直後のMDのエネルギー変化（ログ）を確認する。
-
-
-* **期待される結果（合格基準）:**
-* 取得したDFTデータを用いてMACEがファインチューニングされること。
-* 覚醒MACEにより数千のサロゲートデータが瞬時に生成されること。
-* **破滅的忘却の防止:** 過去のデータ（リプレイバッファ）とサロゲートデータを用いて、バッチ再学習ではなく**差分学習（Delta Learning）**が実行され、学習が短時間（O(1)の計算量）で完了すること。
-* **連続性の担保:** ポテンシャル更新後、MDが「Step 0」からではなく、**Haltした直後のステップ番号・座標・速度を引き継いで再開**すること（Master-Slave逆転の証明）。
-* **ソフトスタート:** 再開直後の数ステップでLangevin熱浴等のソフトスタートが機能し、エネルギーの非連続的な爆発（系が吹っ飛ぶ現象）が起きないこと。
-
-
-
-## シナリオ5：HPC環境での堅牢性（非機能要件）ストレステスト
-
-**目的:** ジョブの強制終了やプロセスダウンに対する耐性と、アーティファクトの自動クリーンアップを検証する。
-
-* **前提条件:**
-* 実際のHPC環境（Slurm等）、または並列実行をエミュレートできる環境。
-
-
-* **操作手順:**
-1. MDループ、またはサロゲート生成タスクの実行中に、意図的にPythonメインプロセスを `kill -9` で強制終了させる（Wall-time切れの模倣）。
-2. 再度、同じディレクトリでジョブを投入（レジューム）する。
-3. 裏で巨大な `.wfc` ファイル（波動関数ファイル）が生成されるのを監視する。
-
-
-* **期待される結果（合格基準）:**
-* **ステート復旧:** 再投入時、最初からやり直すのではなく、SQLite/JSONの細粒度チェックポイントから直前の状態（特定のサロゲート生成の途中、またはDFT計算完了直後など）から数秒〜数分以内で復帰すること。
-* **自動クリーンアップ:** 学習と推論が成功し不要になった `.wfc` ファイルや巨大なダンプファイルが、デーモンプロセスによって自動的に削除または圧縮され、ストレージ容量を圧迫しないこと。
-
-
-
----
-
-### テスト実施に向けた推奨事項
-
-* **モック（Mock）の活用:** シナリオ3や4を毎回フルにDFTを回してテストすると時間がかかりすぎるため、QE_Driverが常に固定のダミーForceを返す「モックDFTモード」を開発用実装に組み込んでおくことを強くお勧めします。これにより、インフラやパイプラインの結合テストを数分で回せるようになります。
-* **可視化による確認:** クラスター切り出しと事前緩和（Phase 3）の妥当性は、数字だけでは直感的に分かりづらいため、抽出前・抽出後・緩和後・終端処理後の構造を`.xyz`ファイル等で出力し、OVITOなどのビジュアライザーで目視確認するステップを最初の数回は必ず設けてください。
-
-このPRDのスコープは非常に高度ですが、このテストをクリアできれば、間違いなく世界トップクラスの大規模材料シミュレーション基盤になるはずです。テストシナリオの粒度の調整や、特定のモジュールについての深掘りが必要であれば、いつでもお知らせください。
+## 5. Tutorial Validation
+Before developers submit code related to this architecture, they must run:
+```bash
+uv run marimo run tutorials/UAT_AND_TUTORIAL.py
+```
+This command must execute successfully from top to bottom, proving that the strict API contracts defined in the architecture are sound, the physics bounds are respected, and that the user experience is flawless.
