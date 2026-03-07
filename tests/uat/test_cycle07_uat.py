@@ -1,10 +1,17 @@
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from typing import Any
+from unittest.mock import MagicMock
 
 import pytest
 from ase import Atoms
 
-from pyacemaker.core.validator import Validator
+from pyacemaker.core.validator import (
+    ElasticValidator,
+    PhononValidator,
+    ReportValidator,
+    StructureRelaxer,
+    ValidationCoordinator,
+)
 from pyacemaker.domain_models.validation import ValidationConfig
 
 
@@ -19,14 +26,18 @@ def validator_dependencies():
 @pytest.fixture
 def validator(validator_dependencies):
     config = ValidationConfig()
-    return Validator(
-        config,
-        validator_dependencies["phonon"],
-        validator_dependencies["elastic"],
-        validator_dependencies["report"]
+    engine = MagicMock()
+    return ValidationCoordinator(
+        config=config,
+        relaxer=StructureRelaxer(engine),
+        phonon_validator=PhononValidator(validator_dependencies["phonon"]),
+        elastic_validator=ElasticValidator(validator_dependencies["elastic"]),
+        report_validator=ReportValidator(validator_dependencies["report"])
     )
 
-def test_uat_07_01_validate_potential_pass(validator, validator_dependencies):
+
+
+def test_uat_07_01_validate_potential_pass(validator: Any, validator_dependencies: Any):
     """Scenario 07-01: 'Validate Potential' (PASS)"""
     # 1. Preparation
     potential_path = Path("test_potential.yace")
@@ -42,9 +53,8 @@ def test_uat_07_01_validate_potential_pass(validator, validator_dependencies):
     # 2. Action
     structure = Atoms("Fe", positions=[[0,0,0]], cell=[2.8,2.8,2.8])
 
-    with patch.object(validator, "_relax_structure") as mock_relax:
-        mock_relax.return_value = structure
-        result = validator.validate(potential_path, report_path, structure=structure)
+    validator.relaxer.engine.relax.return_value = structure
+    result = validator.validate(potential_path, report_path, structure=structure)
 
     # 3. Expectation
     assert result.phonon_stable is True
@@ -58,7 +68,7 @@ def test_uat_07_01_validate_potential_pass(validator, validator_dependencies):
     if potential_path.exists():
         potential_path.unlink()
 
-def test_uat_07_02_unstable_detection(validator, validator_dependencies):
+def test_uat_07_02_unstable_detection(validator: Any, validator_dependencies: Any):
     """Scenario 07-02: 'Unstable Detection'"""
     # 1. Preparation
     potential_path = Path("test_unstable.yace")
@@ -74,9 +84,8 @@ def test_uat_07_02_unstable_detection(validator, validator_dependencies):
     # 2. Action
     structure = Atoms("Fe", positions=[[0,0,0]], cell=[2.8,2.8,2.8])
 
-    with patch.object(validator, "_relax_structure") as mock_relax:
-        mock_relax.return_value = structure
-        result = validator.validate(potential_path, report_path, structure=structure)
+    validator.relaxer.engine.relax.return_value = structure
+    result = validator.validate(potential_path, report_path, structure=structure)
 
     # 3. Expectation
     assert result.phonon_stable is False

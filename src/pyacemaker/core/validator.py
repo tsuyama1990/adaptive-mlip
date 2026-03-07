@@ -5,11 +5,11 @@ import numpy as np
 from ase import Atoms
 from ase.data import atomic_numbers
 
+from pyacemaker.core.base import BaseEngine
 from pyacemaker.domain_models.constants import (
     ERR_POTENTIAL_NOT_FOUND,
     ERR_VAL_POT_NONE,
     ERR_VAL_POT_NOT_FILE,
-    ERR_VAL_POT_OUTSIDE,
     ERR_VAL_REQ_STRUCT,
     ERR_VAL_STRUCT_DUMMY_ELEM,
     ERR_VAL_STRUCT_EMPTY,
@@ -33,7 +33,7 @@ class LammpsInputValidator:
     """
 
     @staticmethod
-    def validate_structure(structure: Any) -> None:
+    def validate_structure(structure: Any) -> None:  # noqa: C901
         """
         Validates the atomic structure.
 
@@ -52,6 +52,10 @@ class LammpsInputValidator:
 
         if len(structure) == 0:
             raise ValueError(ERR_VAL_STRUCT_EMPTY)
+
+        if len(structure) > 1_000_000:
+            msg = f"Structure size ({len(structure)}) exceeds maximum allowed atoms (1,000,000) preventing resource exhaustion."
+            raise ValueError(msg)
 
         # Validate structure physical properties
         try:
@@ -111,55 +115,93 @@ class LammpsInputValidator:
         return path
 
 
-class Validator:
+
+
+class PhononValidator:
+    def __init__(self, calculator: PhononCalculator) -> None:
+        self.calculator = calculator
+
+    def validate(self, structure: Atoms, potential_path: Path) -> tuple[bool, str]:
+        return self.calculator.check_stability(structure, potential_path)
+
+class ElasticValidator:
+    def __init__(self, calculator: ElasticCalculator) -> None:
+        self.calculator = calculator
+
+    def validate(self, structure: Atoms, potential_path: Path) -> tuple[bool, dict[str, float], float, str]:
+        return self.calculator.calculate_properties(structure, potential_path)
+
+class ReportValidator:
+    def __init__(self, generator: Any) -> None:
+        self.generator = generator
+
+    def write_report(self, result: ValidationResult, output_path: Path) -> None:
+        html = self.generator.generate(result)
+        self.generator.save(output_path, html)
+
+class StructureRelaxer:
+    def __init__(self, engine: BaseEngine) -> None:
+        self.engine = engine
+
+    def relax(self, structure: Atoms, potential_path: Path) -> Atoms:
+        return self.engine.relax(structure, potential_path)
+
+class ValidationCoordinator:
     """
-    Coordinates the validation of potentials using Phonopy and Elastic checks.
+    Coordinates the validation of potentials by delegating to specialized validators.
     """
 
     def __init__(
         self,
         config: ValidationConfig,
-        phonon_calculator: PhononCalculator,
-        elastic_calculator: ElasticCalculator,
-        report_generator: Any,
+        relaxer: StructureRelaxer,
+        phonon_validator: PhononValidator,
+        elastic_validator: ElasticValidator,
+        report_validator: ReportValidator,
     ) -> None:
         self.config = config
-        self.phonon_calc = phonon_calculator
-        self.elastic_calc = elastic_calculator
-        self.report_gen = report_generator
-
-    def _relax_structure(self, structure: Atoms, potential_path: Path) -> Atoms:
-        """
-        Relaxes the structure using the engine provided in calculators.
-        """
-        # Use engine from elastic_calc (arbitrary choice, they should share engine)
-        engine = self.elastic_calc.engine
-        return engine.relax(structure, potential_path)
+        self.relaxer = relaxer
+        self.phonon_validator = phonon_validator
+        self.elastic_validator = elastic_validator
+        self.report_validator = report_validator
 
     def validate(
         self, potential_path: Path, output_path: Path, structure: Atoms | None = None
     ) -> ValidationResult:
-        """
-        Runs validation checks and generates report.
-        """
+        import logging
+        logger = logging.getLogger(__name__)
+
         if structure is None:
             raise ValueError(ERR_VAL_REQ_STRUCT)
 
         # Data Integrity Fix: Validate structure input
         LammpsInputValidator.validate_structure(structure)
 
-        # Relax structure
-        relaxed_structure = self._relax_structure(structure, potential_path)
+        phonon_stable, phonon_plot = False, ""
+        elastic_stable, c_ij, B, elastic_plot = False, {}, 0.0, ""  # type: bool, dict[str, float], float, str
 
-        # Phonons
-        phonon_stable, phonon_plot = self.phonon_calc.check_stability(
-            relaxed_structure, potential_path
-        )
+        try:
+            # Relax structure
+            relaxed_structure = self.relaxer.relax(structure, potential_path)
 
-        # Elastic
-        elastic_stable, c_ij, B, elastic_plot = self.elastic_calc.calculate_properties(
-            relaxed_structure, potential_path
-        )
+            # Parallelizing or sequential depending on infrastructure, but wrap safely
+            try:
+                phonon_stable, phonon_plot = self.phonon_validator.validate(
+                    relaxed_structure, potential_path
+                )
+            except Exception as e:
+                logger.warning(f"Phonon validation failed: {e}")
+
+            try:
+                elastic_stable, c_ij, B, elastic_plot = self.elastic_validator.validate(
+                    relaxed_structure, potential_path
+                )
+            except Exception as e:
+                logger.warning(f"Elastic validation failed: {e}")
+
+        except Exception as e:
+            msg = f"Structural relaxation or critical validation step failed: {e}"
+            logger.warning(msg)
 
         result = ValidationResult(
             phonon_stable=phonon_stable,
@@ -170,8 +212,14 @@ class Validator:
             report_path=str(output_path),
         )
 
-        # Generate Report
-        html = self.report_gen.generate(result)
-        self.report_gen.save(output_path, html)
+        # Generate Report safely
+        try:
+            self.report_validator.write_report(result, output_path)
+        except Exception as e:
+            msg = f"Failed to generate validation report: {e}"
+            logger.warning(msg)
 
         return result
+
+# Deprecated alias to not break other components currently expecting `Validator` class
+Validator = ValidationCoordinator

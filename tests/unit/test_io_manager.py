@@ -13,22 +13,24 @@ def test_prepare_workspace(tmp_path: Path, mock_md_config: MDConfig) -> None:
     config = mock_md_config.model_copy(update={"temp_dir": str(tmp_path)})
     manager = LammpsFileManager(config)
     atoms = Atoms("H", cell=[10, 10, 10], pbc=True)
+    potential_file = tmp_path / "pot.yace"
+    potential_file.touch()
 
-    ctx, data, dump, log, els = manager.prepare_workspace(atoms)
+    ctx, data_file, dump_file, log_file, elements, potential_path = manager.prepare_workspace(atoms, potential_file)
 
     with ctx:
-        assert data.exists()
+        assert data_file.exists()
         # Verify data file is inside the temp_dir (which is inside tmp_path)
-        assert tmp_path in data.parents
-        assert dump.name.startswith("dump_")
-        assert log.name.startswith("log_")
-        assert els == ["H"]
+        assert tmp_path in data_file.parents
+        assert dump_file.name.startswith("dump_")
+        assert log_file.name.startswith("log_")
+        assert elements == ["H"]
 
     # After exit, the file inside temp dir should be gone
-    assert not data.exists()
+    assert not data_file.exists()
 
 
-def test_prepare_workspace_large_structure_warning(mock_md_config: MDConfig, caplog: Any) -> None:
+def test_prepare_workspace_large_structure_warning(tmp_path: Path, mock_md_config: MDConfig, caplog: Any) -> None:
     import logging
     caplog.set_level(logging.INFO)
     manager = LammpsFileManager(mock_md_config)
@@ -38,9 +40,12 @@ def test_prepare_workspace_large_structure_warning(mock_md_config: MDConfig, cap
     caplog.set_level(logging.INFO, logger="pyacemaker.core.io_manager")
 
     # We patch write_lammps_streaming to avoid actual I/O for large structure test
+    potential_file = tmp_path / "pot.yace"
+    potential_file.touch()
+
     with patch("pyacemaker.core.io_manager.write_lammps_streaming") as mock_stream, \
          patch("pyacemaker.core.io_manager.get_species_order", return_value=["H"]):
-            ctx, _, _, _, _ = manager.prepare_workspace(atoms)
+            ctx, _, _, _, _, _ = manager.prepare_workspace(atoms, potential_file)
             with ctx:
                 pass
             mock_stream.assert_called_once()

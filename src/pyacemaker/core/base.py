@@ -6,6 +6,7 @@ from typing import Any
 from ase import Atoms
 
 from pyacemaker.domain_models.md import MDSimulationResult
+from pyacemaker.domain_models.structure import StructureConfig
 
 
 class BasePolicy(ABC):
@@ -13,7 +14,7 @@ class BasePolicy(ABC):
     Abstract base class for exploration policies.
     """
     @abstractmethod
-    def generate(self, **kwargs: Any) -> None:
+    def generate(self, base_structure: Atoms, config: StructureConfig, n_structures: int = 1, engine: Any | None = None, potential: str | Path | None = None) -> Iterator[Atoms]:
         """
         Generates new candidates based on policy logic.
         """
@@ -63,7 +64,7 @@ class BaseGenerator(ABC):
         """
 
     @abstractmethod
-    def generate_local(self, base_structure: Atoms, n_candidates: int, **kwargs: Any) -> Iterator[Atoms]:
+    def generate_local(self, base_structure: Atoms, n_candidates: int, engine: Any | None = None, potential: str | Path | None = None) -> Iterator[Atoms]:
         """
         Generates candidate structures by perturbing a base structure.
         Used in OTF loops to explore the local neighborhood of a high-uncertainty configuration.
@@ -71,7 +72,8 @@ class BaseGenerator(ABC):
         Args:
             base_structure: The reference structure to perturb.
             n_candidates: Number of structures to generate.
-            **kwargs: Additional arguments (e.g., engine).
+            engine: Simulation engine for advanced policies.
+            potential: Path to potential for advanced policies.
 
         Returns:
             Iterator yielding ASE Atoms objects.
@@ -158,13 +160,13 @@ class BaseEngine(ABC):
     """
 
     @abstractmethod
-    def run(self, structure: Atoms | None, potential: Any) -> MDSimulationResult:
+    def run(self, structure: Atoms | None, potential: str | Path | None) -> MDSimulationResult:
         """
         Runs a simulation using the given structure and potential.
 
         Args:
             structure: Initial structure. May be None if engine loads from file/config.
-            potential: Trained potential. May be None if engine loads from file/config.
+            potential: Path to trained potential. May be None if engine loads from file/config.
 
         Returns:
             MDSimulationResult containing trajectory path, halt status, etc.
@@ -181,27 +183,27 @@ class BaseEngine(ABC):
         """
 
     @abstractmethod
-    def compute_static_properties(self, structure: Atoms, potential: Any) -> MDSimulationResult:
+    def compute_static_properties(self, structure: Atoms, potential: str | Path | None) -> MDSimulationResult:
         """
         Computes static properties (energy, forces, stress) for a structure.
         Equivalent to a 0-step MD run or minimization.
 
         Args:
             structure: Structure to compute properties for.
-            potential: Potential to use.
+            potential: Path to potential to use.
 
         Returns:
             MDSimulationResult containing energy, forces, etc.
         """
 
     @abstractmethod
-    def relax(self, structure: Atoms, potential: Any) -> Atoms:
+    def relax(self, structure: Atoms, potential: str | Path | None) -> Atoms:
         """
         Relaxes the structure to a local minimum.
 
         Args:
             structure: Structure to relax.
-            potential: Potential to use.
+            potential: Path to potential to use.
 
         Returns:
             Relaxed structure as an ASE Atoms object.

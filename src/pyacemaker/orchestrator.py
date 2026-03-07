@@ -422,7 +422,6 @@ class Orchestrator:
         Note: This method is intended to implement the "Adaptive Exploration Policy" described in the Spec.
         Currently, it is a no-op as the complex adaptation logic requires further requirements analysis.
         """
-        pass
 
     def _execute_iteration_logic(self, iteration: int, paths: dict[str, Path]) -> None:
         """

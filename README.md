@@ -64,6 +64,13 @@ cd pyacemaker
 uv sync
 ```
 
+## Features Validated
+
+*   **Pydantic Workflow Validation**: Robust models (e.g. `MDConfig`, `WorkflowConfig`) rigorously define input types to reject unphysical parameters early.
+*   **Flexible Generator Policies**: Object-oriented exploration policies correctly yield single or complex sets of perturbed atomic structures.
+*   **DFT Wrapper Resiliency**: Transient physical failures inside the Quantum Espresso `Oracle` will securely iterate over reduction/smearing strategies before gracefully bubbling errors.
+*   **Streaming & Memory Caching Safety**: Large iterator operations appropriately manage O(1) structures while avoiding internal `lru_cache` memory leaks on classes.
+
 ## Usage
 
 ### Quick Start

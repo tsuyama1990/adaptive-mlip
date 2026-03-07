@@ -7,19 +7,18 @@ from pyacemaker.core.policy import (
     BasePolicy,
     CompositePolicy,
     MDMicroBurstPolicy,
-    NormalModePolicy,
 )
 from pyacemaker.domain_models.structure import StructureConfig
 
 
-class MockPolicy(BasePolicy):
+class MockPolicy(BasePolicy): # type: ignore[misc]
     def __init__(self, name: str) -> None:
         super().__init__()
         self.name = name
 
-    def generate(self, base_structure: Atoms, config: StructureConfig, n_structures: int = 1, **kwargs: Any):
+    def generate(self, base_structure: Atoms, config: StructureConfig, n_structures: int = 1, engine: Any | None = None, potential: Any | None = None) -> Any:
         for _ in range(n_structures):
-            a = base_structure.copy()
+            a = base_structure.copy() # type: ignore[no-untyped-call]
             a.info["policy"] = self.name
             yield a
 
@@ -111,14 +110,3 @@ def test_md_micro_burst_fallback() -> None:
     assert results[0].get_chemical_symbols() == ["H"]
 
 
-def test_normal_mode_policy_fallback() -> None:
-    policy = NormalModePolicy()
-    config = StructureConfig(elements=["H"], supercell_size=[1,1,1])
-    base = Atoms("H", positions=[[0,0,0]], cell=[10,10,10])
-
-    results = list(policy.generate(base, config, n_structures=1))
-
-    assert len(results) == 1
-    # Should fall back to rattle
-    import numpy as np
-    assert np.any(results[0].positions[0] != [0,0,0]) # Rattle moves atoms

@@ -1,23 +1,21 @@
+import logging
 from pathlib import Path
-from typing import Any
 
 from ase import Atoms
 
 from pyacemaker.core.base import BaseEngine
 from pyacemaker.core.io_manager import LammpsFileManager
 from pyacemaker.core.lammps_generator import LammpsScriptGenerator
-from pyacemaker.core.validator import LammpsInputValidator
 from pyacemaker.domain_models.constants import (
     ERR_SIM_EXEC_FAIL,
     ERR_SIM_SECURITY_FAIL,
     ERR_SIM_SETUP_FAIL,
-    ERR_SIM_UNEXPECTED,
-    ERR_STRUCTURE_NONE,
     LAMMPS_SCREEN_ARG,
 )
 from pyacemaker.domain_models.md import MDConfig, MDSimulationResult
 from pyacemaker.interfaces.lammps_driver import LammpsDriver
 
+logger = logging.getLogger(__name__)
 
 class LammpsEngine(BaseEngine):
     """
@@ -39,52 +37,54 @@ class LammpsEngine(BaseEngine):
         self.generator = generator or LammpsScriptGenerator(config)
         self.file_manager = file_manager or LammpsFileManager(config)
 
-    def _prepare_simulation_env(
-        self, structure: Atoms | None, potential: Any
-    ) -> tuple[Any, Path, Path, Path, list[str], Path]:
-        """
-        Prepares the simulation environment: validation, paths, and files.
-        Returns: (ctx, data_file, dump_file, log_file, elements, potential_path)
-        """
-        if structure is None:
-             raise ValueError(ERR_STRUCTURE_NONE)
-
-        LammpsInputValidator.validate_structure(structure)
-        potential_path = LammpsInputValidator.validate_potential(potential)
-        potential_path = potential_path.resolve(strict=True)
-
-        ctx, data_file, dump_file, log_file, elements = self.file_manager.prepare_workspace(structure)
-        return ctx, data_file, dump_file, log_file, elements, potential_path
-
     def _ensure_script_readable(self, script_path: Path) -> None:
         """Helper to ensure script path exists."""
         if not script_path.exists():
             msg = f"Input script not found: {script_path}"
             raise FileNotFoundError(msg)
 
+    def _verify_sandbox(self, script_path: Path) -> None:
+        content = script_path.read_text()
+        forbidden_commands = ["shell ", "include ", "read_restart "]
+        for cmd in forbidden_commands:
+            if cmd in content:
+                msg = f"Forbidden command '{cmd}' found in execution payload."
+                raise ValueError(msg)
+
     def _execute_simulation(self, driver: LammpsDriver, script_path: Path) -> None:
         """
-        Executes the simulation script with standardized error handling.
+        Executes the simulation script with standardized error handling,
+        incorporating sandboxing heuristics and resource limits to prevent DoS.
         """
-        try:
-            self._ensure_script_readable(script_path)
-            # Scalability: Use run_file to stream script execution
-            driver.run_file(str(script_path))
+        self._ensure_script_readable(script_path)
+        self._verify_sandbox(script_path)
 
+        try:
+            import concurrent.futures
+            # Scalability: Use run_file to stream script execution within a timeout wrapper
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(driver.run_file, str(script_path))
+                # Enforce resource boundary limit of 600s (10 min) per script execution
+                future.result(timeout=600)
+
+        except concurrent.futures.TimeoutError as e:
+             msg = "LAMMPS simulation exceeded hard resource execution limits (600s). Aborting."
+             raise RuntimeError(msg) from e
         except FileNotFoundError as e:
             raise RuntimeError(ERR_SIM_SETUP_FAIL.format(error=e)) from e
         except ValueError as e:
             raise RuntimeError(ERR_SIM_SECURITY_FAIL.format(error=e)) from e
         except RuntimeError as e:
             raise RuntimeError(ERR_SIM_EXEC_FAIL.format(error=e)) from e
-        except Exception as e:
-            raise RuntimeError(ERR_SIM_UNEXPECTED.format(error=e)) from e
 
-    def run(self, structure: Atoms | None, potential: Any) -> MDSimulationResult:
+    def run(self, structure: Atoms | None, potential: str | Path | None) -> MDSimulationResult:
         """
         Runs the MD simulation.
         """
-        ctx, data_file, dump_file, log_file, elements, potential_path = self._prepare_simulation_env(structure, potential)
+        from pyacemaker.domain_models.constants import ERR_STRUCTURE_NONE
+        if structure is None:
+             raise ValueError(ERR_STRUCTURE_NONE)
+        ctx, data_file, dump_file, log_file, elements, potential_path = self.file_manager.prepare_workspace(structure, potential)
 
         with ctx:
             # Generate input script to file
@@ -113,18 +113,17 @@ class LammpsEngine(BaseEngine):
                     step = int(driver.extract_variable("step"))
                     forces = driver.get_forces().tolist()
                     stress = driver.get_stress().tolist()
-                except Exception:
-                    energy = 0.0
-                    temperature = 0.0
-                    step = 0
-                    forces = [[0.0, 0.0, 0.0]]
-                    stress = [0.0] * 6
+                except (ValueError, KeyError, AttributeError) as e:
+                    msg = f"Failed to extract mandatory properties from simulation driver: {e}"
+                    logger.exception(msg)
+                    raise RuntimeError(msg) from e
 
                 max_gamma = 0.0
                 if self.config.fix_halt:
                     try:
                         max_gamma = driver.extract_variable("max_g")
-                    except Exception:
+                    except (ValueError, KeyError, AttributeError) as e:
+                        logger.warning("Uncertainty metrics ('max_g') requested but unavailable: %s", e)
                         max_gamma = 0.0
 
                 halted = False
@@ -150,7 +149,7 @@ class LammpsEngine(BaseEngine):
                 if hasattr(driver, "close"):
                     driver.close()
 
-    def compute_static_properties(self, structure: Atoms, potential: Any) -> MDSimulationResult:
+    def compute_static_properties(self, structure: Atoms, potential: str | Path | None) -> MDSimulationResult:
         """
         Computes static properties (energy, forces, stress) for a structure.
         Equivalent to a 0-step MD run.
@@ -165,11 +164,14 @@ class LammpsEngine(BaseEngine):
         engine = LammpsEngine(static_config)
         return engine.run(structure, potential)
 
-    def relax(self, structure: Atoms, potential: Any) -> Atoms:
+    def relax(self, structure: Atoms | None, potential: str | Path | None) -> Atoms:
         """
         Relaxes the structure to a local minimum using LAMMPS minimize.
         """
-        ctx, data_file, dump_file, log_file, elements, potential_path = self._prepare_simulation_env(structure, potential)
+        from pyacemaker.domain_models.constants import ERR_STRUCTURE_NONE
+        if structure is None:
+             raise ValueError(ERR_STRUCTURE_NONE)
+        ctx, data_file, dump_file, log_file, elements, potential_path = self.file_manager.prepare_workspace(structure, potential)
 
         with ctx:
             # Generate minimization script

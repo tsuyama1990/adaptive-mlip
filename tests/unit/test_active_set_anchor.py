@@ -65,9 +65,11 @@ def test_validate_path_resolution_safety() -> None:
     """Test that paths are resolved to absolute, mitigating simple flag injection and traversal."""
     selector = ActiveSetSelector()
 
-    # Explicit traversal attempts should now be rejected for security
-    with pytest.raises(ActiveSetError, match="Path traversal attempt"):
-        selector._validate_path_safe(Path("foo/../bar"))
+    # Explicit traversal attempts out of allowed roots should be rejected.
+    # Note: "foo/../bar" resolves to CWD/bar which is inside allowed roots, so it's not a traversal.
+    # We should test a real traversal out of roots, like "/etc/passwd".
+    with pytest.raises(ActiveSetError, match="Path traversal detected"):
+        selector._validate_path_safe(Path("/etc/passwd"))
 
     # -rf is now explicitly rejected even if resolved, as filenames cannot start with -
     with pytest.raises(ActiveSetError, match="Filename cannot start with '-'"):

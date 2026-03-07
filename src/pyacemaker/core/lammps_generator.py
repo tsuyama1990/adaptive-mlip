@@ -1,7 +1,6 @@
 from functools import lru_cache
 from pathlib import Path
 from typing import TextIO
-import shlex
 
 from ase.data import atomic_numbers
 
@@ -33,11 +32,24 @@ class LammpsScriptGenerator:
         Quotes a path for LAMMPS script safety after validation.
         Uses caching to avoid redundant validation calls.
         """
+        import re
+
+        from pyacemaker.domain_models.constants import LAMMPS_SAFE_CMD_PATTERN
+
         # Sanitize input path
         # Note: path must be string for lru_cache
         safe_path = validate_path_safe(Path(path))
-        # Use shlex.quote for shell safety
-        return shlex.quote(str(safe_path))
+
+        # Validate against LAMMPS safe pattern whitelist to ensure it won't break LAMMPS parser
+        # Allow alphanumeric, dot, underscore, dash, slash, equals, star
+        if not re.match(LAMMPS_SAFE_CMD_PATTERN, str(safe_path)):
+            msg = f"Path fails LAMMPS safe command pattern check: {safe_path}"
+            raise ValueError(msg)
+
+        # Return safely formatted string for LAMMPS parser.
+        # LAMMPS requires double quotes for strings with spaces, and inner quotes/slashes must be escaped.
+        escaped_path = str(safe_path).replace("\\", "\\\\").replace('"', '\\"')
+        return f'"{escaped_path}"'
 
     def _gen_potential_pure(self, buffer: TextIO, potential_path: Path, elements: list[str]) -> None:
         """Generates pure PACE potential commands."""

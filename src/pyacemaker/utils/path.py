@@ -1,5 +1,4 @@
 import tempfile
-import os
 from pathlib import Path
 
 from pyacemaker.domain_models.constants import DANGEROUS_PATH_CHARS, DEFAULT_RAM_DISK_PATH
@@ -20,42 +19,43 @@ def validate_path_safe(path: Path) -> Path:
         ValueError: If the path contains dangerous characters, traversal attempts,
                     or resolves outside allowed directories (CWD, temp, /dev/shm).
     """
-    s = str(path)
+    # Pre-check original path for raw directory traversal string before any resolution
+    if ".." in str(path):
+        msg = f"Path traversal attempt detected (parent directory reference): {path}"
+        raise ValueError(msg)
 
-    # Check for dangerous patterns in string representation BEFORE resolve
-    if ".." in s:
-         msg = f"Path traversal attempt detected (parent directory reference): {path}"
-         raise ValueError(msg)
+    try:
+        import os
+
+        is_link = False
+        try:
+            is_link = path.is_symlink()
+        except OSError:
+            pass
+
+        # Canonicalize path using realpath which aggressively resolves all symlinks
+        # without raising errors on non-existent files, avoiding TOCTOU bugs.
+        resolved = Path(os.path.realpath(path))
+
+        # Explicitly check resolved path for traversal components per security audit
+        if ".." in str(resolved):
+             msg = f"Resolved path still contains traversal components: {resolved}"
+             raise ValueError(msg)
+
+    except Exception as e:
+         msg = f"Invalid path resolution: {path}"
+         raise ValueError(msg) from e
+
+    s = str(resolved)
 
     if any(c in s for c in DANGEROUS_PATH_CHARS):
         msg = f"Path contains invalid characters: {path}"
         raise ValueError(msg)
 
     # Ensure filename doesn't start with dash (flag injection)
-    if path.name.startswith("-"):
-        msg = f"Filename cannot start with '-': {path.name}"
+    if resolved.name.startswith("-"):
+        msg = f"Filename cannot start with '-': {resolved.name}"
         raise ValueError(msg)
-
-    try:
-        # Canonicalize path.
-        # Enforce strict=True if the path exists to catch symlink attacks immediately.
-        # If it doesn't exist (e.g. output file), we must resolve based on parent.
-        if path.exists():
-            resolved = path.resolve(strict=True)
-        else:
-            # For non-existent files, check parent
-            if path.parent.exists():
-                resolved_parent = path.parent.resolve(strict=True)
-                # Combine resolved parent with filename
-                resolved = resolved_parent / path.name
-            else:
-                # If even parent doesn't exist, this is likely unsafe or too deep
-                # Fallback to loose resolve but we will check containment
-                resolved = path.resolve(strict=False)
-
-    except Exception as e:
-         msg = f"Invalid path resolution: {path}"
-         raise ValueError(msg) from e
 
     base_dir = Path.cwd().resolve()
 
@@ -67,12 +67,15 @@ def validate_path_safe(path: Path) -> Path:
     ]
 
     is_safe = False
+    import os
     for root in allowed_roots:
-        # Robust check using os.path.commonpath to ensure resolved path is under root
+        # Robust check using os.path.realpath and os.path.commonpath to ensure resolved path is under root securely
+        # This addresses the audit finding specifically requiring commonpath over is_relative_to
         try:
-            # commonpath resolves mixed relative/absolute issues, but we used absolute resolved paths
-            common = Path(os.path.commonpath([root, resolved]))
-            if common == root:
+            r_str = str(root)
+            res_str = str(resolved)
+            common = os.path.commonpath([r_str, res_str])
+            if common == r_str:
                 is_safe = True
                 break
         except ValueError:

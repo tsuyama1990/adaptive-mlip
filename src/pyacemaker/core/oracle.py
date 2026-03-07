@@ -1,21 +1,61 @@
 import contextlib
+import logging
 import tempfile
+import warnings
 from collections.abc import Callable, Iterator
-from itertools import islice
-from pathlib import Path
 
 from ase import Atoms
 from ase.calculators.calculator import PropertyNotImplementedError
 
 from pyacemaker.core.base import BaseOracle
 from pyacemaker.core.exceptions import OracleError
+from pyacemaker.core.healing import (
+    HealingStrategy,
+    IncreaseSmearingStrategy,
+    ReduceBetaStrategy,
+    UseCGDiagonalizationStrategy,
+)
 from pyacemaker.domain_models import DFTConfig
-from pyacemaker.domain_models.constants import ERR_ORACLE_FAILED, ERR_ORACLE_ITERATOR
+from pyacemaker.domain_models.constants import (
+    ERR_ORACLE_FAILED,
+    ERR_ORACLE_ITERATOR,
+    ERR_ORACLE_WARN_EMPTY,
+)
 from pyacemaker.interfaces.qe_driver import QEDriver
 from pyacemaker.utils.embedding import embed_cluster
-import logging
 
 logger = logging.getLogger(__name__)
+
+class RetryManager:
+    """Handles the self-healing retry loop."""
+    def __init__(self, strategies: list[HealingStrategy | None]) -> None:
+        self.strategies = strategies
+
+    def execute(self, atoms: Atoms, base_config: DFTConfig, calc_dir: str, runner: Callable[[Atoms, DFTConfig, str], None]) -> Atoms:
+        current_config = base_config.model_copy()
+        last_error: Exception | None = None
+
+        for i, strategy in enumerate(self.strategies):
+            if strategy:
+                strategy.apply(current_config)
+                strategy_name = strategy.__class__.__name__
+            else:
+                strategy_name = "Initial"
+
+            try:
+                runner(atoms, current_config, calc_dir)
+            except (RuntimeError, ValueError) as e:
+                last_error = e
+                atoms.calc = None  # Clean up failed calculator
+                logger.warning(
+                    f"DFT calculation attempt {i+1} ({strategy_name}) failed. Error: {e!s}. Retrying..."
+                )
+                continue
+            else:
+                return atoms
+
+        raise OracleError(ERR_ORACLE_FAILED.format(error=last_error)) from last_error
+
 
 class DFTManager(BaseOracle):
     """
@@ -38,13 +78,12 @@ class DFTManager(BaseOracle):
         self.config = config
         self.driver = driver or QEDriver()
 
-        # Cache strategies to avoid recreation on every compute call
-        self.strategies: list[Callable[[DFTConfig], None] | None] = [
+        self.retry_manager = RetryManager([
             None,
-            self._strategy_reduce_beta,
-            self._strategy_increase_smearing,
-            self._strategy_use_cg
-        ]
+            ReduceBetaStrategy(config.mixing_beta_factor),
+            IncreaseSmearingStrategy(config.smearing_width_factor),
+            UseCGDiagonalizationStrategy()
+        ])
 
     def compute(self, structures: Iterator[Atoms], batch_size: int = 10) -> Iterator[Atoms]:
         """
@@ -76,42 +115,40 @@ class DFTManager(BaseOracle):
         # without materializing the whole batch in memory list.
         # However, islice consumes the iterator.
 
-        while True:
-            # Create a batch generator (iterator slice)
-            # Note: list(islice(...)) materializes the batch.
-            # To avoid materializing even the batch if batch_size is huge, we should process one by one
-            # BUT reuse the context.
-            # The audit requirement was: "DFTManager.compute method accepts batch_size parameter but ignores it... Implement proper batching logic"
-            # Batching usually implies grouping. If we process 1 by 1 inside a loop of batch_size, we achieve the goal.
+        count = 0
+        iterator_exhausted = False
 
-            # We can use a single temp dir for 'batch_size' items.
-            # But since we want to yield as soon as one is done, we iterate `batch_size` times.
+        while not iterator_exhausted:
+            # We process structures one-by-one without materializing a list,
+            # using a temporary directory for a batch of up to `batch_size` items.
+            # Avoid creating N temp dirs for N structures to reduce wasteful I/O.
+            work_dir_obj = tempfile.TemporaryDirectory()
+            try:
+                work_dir = work_dir_obj.name
 
-            # Since we can't easily peek existence of next item without consuming,
-            # we iterate until exhaustion.
+                # We need to process and store results before yielding to ensure
+                # the directory is safely cleaned up if the generator is interrupted
+                # by the caller dropping the reference.
+                batch_results = []
+                for _i in range(batch_size):
+                    try:
+                        atoms = next(structures)
+                    except StopIteration:
+                        iterator_exhausted = True
+                        break
 
-            # Efficient pattern:
-            # Create temp dir. Process N items. Close temp dir. Repeat.
+                    # Provide the main shared work_dir for execution rather than isolated subdirectories.
+                    processed_atoms = self._process_structure(atoms, work_dir)
+                    batch_results.append(processed_atoms)
+                    count += 1
+            finally:
+                work_dir_obj.cleanup()
 
-            # Check if there are items left?
-            # We can just try to take `batch_size` items.
-            # list(islice) is standard but creates a list of `batch_size`.
-            # If batch_size is small (e.g. 10-100), this is fine.
-            # If batch_size is huge (unlikely default), it might be an issue.
-            # Let's assume batch_size is reasonable (10-1000).
+            # Yield the computed results after the directory is safely cleaned up
+            yield from batch_results
 
-            batch = list(islice(structures, batch_size))
-            if not batch:
-                break
-
-            with tempfile.TemporaryDirectory() as work_dir:
-                work_path = Path(work_dir)
-                for i, atoms in enumerate(batch):
-                    # Use unique subdirs or filenames to avoid collision if artifacts persist
-                    # though we process sequentially here.
-                    calc_dir = work_path / f"calc_{i}"
-                    calc_dir.mkdir()
-                    yield self._process_structure(atoms, str(calc_dir))
+        if count == 0:
+            warnings.warn(ERR_ORACLE_WARN_EMPTY, stacklevel=2)
 
     def _process_structure(self, atoms: Atoms, calc_dir: str) -> Atoms:
         """
@@ -131,22 +168,12 @@ class DFTManager(BaseOracle):
         else:
             structure_to_compute = atoms
 
+        # Validate embedded cluster size to prevent massive DFT calculations
+        if len(structure_to_compute) > 10000:
+            msg = f"Embedded structure size ({len(structure_to_compute)}) exceeds safe computational limits (10000 atoms)."
+            raise ValueError(msg)
+
         return self._compute_single(structure_to_compute, calc_dir)
-
-    def _get_strategies(self) -> list[Callable[[DFTConfig], None] | None]:
-        """
-        Returns a list of self-healing strategies.
-        """
-        return self.strategies
-
-    def _strategy_reduce_beta(self, c: DFTConfig) -> None:
-        c.mixing_beta *= self.config.mixing_beta_factor
-
-    def _strategy_increase_smearing(self, c: DFTConfig) -> None:
-        c.smearing_width *= self.config.smearing_width_factor
-
-    def _strategy_use_cg(self, c: DFTConfig) -> None:
-        c.diagonalization = "cg"
 
     def _compute_single(self, atoms: Atoms, calc_dir: str) -> Atoms:
         """
@@ -162,35 +189,7 @@ class DFTManager(BaseOracle):
         Raises:
             OracleError: If calculation fails after all retries and strategies.
         """
-        current_config = self.config.model_copy()
-        strategies = self._get_strategies()
-        last_error: Exception | None = None
-
-        for i, strategy in enumerate(strategies):
-            if strategy:
-                strategy(current_config)
-                strategy_name = strategy.__name__
-            else:
-                strategy_name = "Initial"
-
-            try:
-                self._run_calculator(atoms, current_config, calc_dir)
-            except Exception as e:
-                # Catch all exceptions (RuntimeError, CalculatorSetupError, JobFailedException etc)
-                # to ensure self-healing strategies are attempted.
-                last_error = e
-                atoms.calc = None  # Clean up failed calculator
-
-                # Enhanced Logging for debugging
-                logger.warning(
-                    f"DFT calculation attempt {i+1} ({strategy_name}) failed. Error: {e!s}. Retrying..."
-                )
-                continue
-            else:
-                return atoms
-
-        # Correctly format the error message with the captured exception
-        raise OracleError(ERR_ORACLE_FAILED.format(error=last_error)) from last_error
+        return self.retry_manager.execute(atoms, self.config, calc_dir, self._run_calculator)
 
     def _run_calculator(self, atoms: Atoms, config: DFTConfig, calc_dir: str) -> None:
         """Helper to run a single calculation attempt."""

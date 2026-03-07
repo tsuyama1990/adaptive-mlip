@@ -139,7 +139,7 @@ def test_dft_manager_setup_error(mock_dft_config: DFTConfig) -> None:
 def test_dft_manager_strategies(mock_dft_config: DFTConfig) -> None:
     """Test that strategies are correctly defined."""
     manager = DFTManager(mock_dft_config)
-    strategies = manager._get_strategies()
+    strategies = manager.retry_manager.strategies
 
     assert len(strategies) > 0
     assert strategies[0] is None # First attempt is vanilla
@@ -149,7 +149,7 @@ def test_dft_manager_strategies(mock_dft_config: DFTConfig) -> None:
     assert strat_beta is not None
     config_copy = mock_dft_config.model_copy()
     original_beta = config_copy.mixing_beta
-    strat_beta(config_copy)
+    strat_beta.apply(config_copy)
     assert config_copy.mixing_beta == original_beta * 0.5
 
     # Strategy 2: Increase Smearing
@@ -157,14 +157,14 @@ def test_dft_manager_strategies(mock_dft_config: DFTConfig) -> None:
     assert strat_smearing is not None
     config_copy = mock_dft_config.model_copy()
     original_smearing = config_copy.smearing_width
-    strat_smearing(config_copy)
+    strat_smearing.apply(config_copy)
     assert config_copy.smearing_width == original_smearing * 2.0
 
     # Strategy 3: CG Diagonalization
     strat_cg = strategies[3]
     assert strat_cg is not None
     config_copy = mock_dft_config.model_copy()
-    strat_cg(config_copy)
+    strat_cg.apply(config_copy)
     assert config_copy.diagonalization == "cg"
 
 def test_dft_manager_invalid_input(mock_dft_config: DFTConfig) -> None:
