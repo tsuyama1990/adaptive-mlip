@@ -37,11 +37,10 @@ def validate_path_safe(path: Path) -> Path:
         # without raising errors on non-existent files, avoiding TOCTOU bugs.
         resolved = Path(os.path.realpath(path))
 
-        if is_link:
-            # Check if the resolved symlink target still attempts traversal strings
-            if ".." in str(resolved):
-                msg = f"Symlink resolved to traversal path: {resolved}"
-                raise ValueError(msg)
+        # Explicitly check resolved path for traversal components per security audit
+        if ".." in str(resolved):
+             msg = f"Resolved path still contains traversal components: {resolved}"
+             raise ValueError(msg)
 
     except Exception as e:
          msg = f"Invalid path resolution: {path}"
@@ -68,11 +67,19 @@ def validate_path_safe(path: Path) -> Path:
     ]
 
     is_safe = False
+    import os
     for root in allowed_roots:
-        # Robust check using is_relative_to to ensure resolved path is under root securely
-        if resolved.is_relative_to(root):
-            is_safe = True
-            break
+        # Robust check using os.path.realpath and os.path.commonpath to ensure resolved path is under root securely
+        # This addresses the audit finding specifically requiring commonpath over is_relative_to
+        try:
+            r_str = str(root)
+            res_str = str(resolved)
+            common = os.path.commonpath([r_str, res_str])
+            if common == r_str:
+                is_safe = True
+                break
+        except ValueError:
+            continue
 
     if not is_safe:
          msg = f"Path traversal detected: {resolved} is outside allowed roots {allowed_roots}"

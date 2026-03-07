@@ -54,7 +54,8 @@ class LammpsFileManager:
 
         import os
         if not os.access(potential_path, os.R_OK):
-            raise PermissionError(f"Potential file is not readable: {potential_path}")
+            msg = f"Potential file is not readable: {potential_path}"
+            raise PermissionError(msg)
 
         from pyacemaker.utils.path import validate_path_safe
 

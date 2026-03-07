@@ -7,7 +7,6 @@ from pyacemaker.core.policy import (
     BasePolicy,
     CompositePolicy,
     MDMicroBurstPolicy,
-    NormalModePolicy,
 )
 from pyacemaker.domain_models.structure import StructureConfig
 

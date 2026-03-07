@@ -122,7 +122,14 @@ class DFTManager(BaseOracle):
             # We process structures one-by-one without materializing a list,
             # using a temporary directory for a batch of up to `batch_size` items.
             # Avoid creating N temp dirs for N structures to reduce wasteful I/O.
-            with tempfile.TemporaryDirectory() as work_dir:
+            work_dir_obj = tempfile.TemporaryDirectory()
+            try:
+                work_dir = work_dir_obj.name
+
+                # We need to process and store results before yielding to ensure
+                # the directory is safely cleaned up if the generator is interrupted
+                # by the caller dropping the reference.
+                batch_results = []
                 for _i in range(batch_size):
                     try:
                         atoms = next(structures)
@@ -131,11 +138,14 @@ class DFTManager(BaseOracle):
                         break
 
                     # Provide the main shared work_dir for execution rather than isolated subdirectories.
-                    # Driver must use run-specific file prefixes if necessary, but for individual
-                    # sequence processing, sharing the root temp dir is optimal.
                     processed_atoms = self._process_structure(atoms, work_dir)
-                    yield processed_atoms
+                    batch_results.append(processed_atoms)
                     count += 1
+            finally:
+                work_dir_obj.cleanup()
+
+            # Yield the computed results after the directory is safely cleaned up
+            yield from batch_results
 
         if count == 0:
             warnings.warn(ERR_ORACLE_WARN_EMPTY, stacklevel=2)

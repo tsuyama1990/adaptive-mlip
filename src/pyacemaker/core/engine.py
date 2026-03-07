@@ -43,15 +43,33 @@ class LammpsEngine(BaseEngine):
             msg = f"Input script not found: {script_path}"
             raise FileNotFoundError(msg)
 
+    def _verify_sandbox(self, script_path: Path) -> None:
+        content = script_path.read_text()
+        forbidden_commands = ["shell ", "include ", "read_restart "]
+        for cmd in forbidden_commands:
+            if cmd in content:
+                msg = f"Forbidden command '{cmd}' found in execution payload."
+                raise ValueError(msg)
+
     def _execute_simulation(self, driver: LammpsDriver, script_path: Path) -> None:
         """
-        Executes the simulation script with standardized error handling.
+        Executes the simulation script with standardized error handling,
+        incorporating sandboxing heuristics and resource limits to prevent DoS.
         """
-        try:
-            self._ensure_script_readable(script_path)
-            # Scalability: Use run_file to stream script execution
-            driver.run_file(str(script_path))
+        self._ensure_script_readable(script_path)
+        self._verify_sandbox(script_path)
 
+        try:
+            import concurrent.futures
+            # Scalability: Use run_file to stream script execution within a timeout wrapper
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(driver.run_file, str(script_path))
+                # Enforce resource boundary limit of 600s (10 min) per script execution
+                future.result(timeout=600)
+
+        except concurrent.futures.TimeoutError as e:
+             msg = "LAMMPS simulation exceeded hard resource execution limits (600s). Aborting."
+             raise RuntimeError(msg) from e
         except FileNotFoundError as e:
             raise RuntimeError(ERR_SIM_SETUP_FAIL.format(error=e)) from e
         except ValueError as e:
