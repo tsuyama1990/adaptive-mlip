@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
@@ -17,23 +18,23 @@ from pyacemaker.domain_models.validation import ValidationConfig, ValidationResu
 
 class TestValidator:
     @pytest.fixture
-    def mock_phonon_calc(self):
+    def mock_phonon_calc(self) -> MagicMock:
         return MagicMock()
 
     @pytest.fixture
-    def mock_elastic_calc(self):
+    def mock_elastic_calc(self) -> MagicMock:
         return MagicMock()
 
     @pytest.fixture
-    def mock_report_gen(self):
+    def mock_report_gen(self) -> MagicMock:
         return MagicMock()
 
     @pytest.fixture
-    def engine(self):
+    def engine(self) -> MagicMock:
         return MagicMock()
 
     @pytest.fixture
-    def validator(self, engine, mock_phonon_calc, mock_elastic_calc, mock_report_gen):
+    def validator(self, engine: MagicMock, mock_phonon_calc: MagicMock, mock_elastic_calc: MagicMock, mock_report_gen: MagicMock) -> ValidationCoordinator:
         config = ValidationConfig()
 
         return ValidationCoordinator(
@@ -44,7 +45,7 @@ class TestValidator:
             report_validator=ReportValidator(mock_report_gen)
         )
 
-    def test_validate_pass(self, validator, engine, mock_phonon_calc, mock_elastic_calc, mock_report_gen):
+    def test_validate_pass(self, validator: Any, engine: Any, mock_phonon_calc: Any, mock_elastic_calc: Any, mock_report_gen: Any) -> None:
         mock_phonon_calc.check_stability.return_value = (True, "base64_phonon")
         mock_elastic_calc.calculate_properties.return_value = (True, {"C11": 100.0}, 150.0, "base64_elastic")
 
@@ -67,7 +68,7 @@ class TestValidator:
         mock_report_gen.generate.assert_called_once()
         mock_report_gen.save.assert_called_once()
 
-    def test_validate_fail_phonon(self, validator, engine, mock_phonon_calc, mock_elastic_calc):
+    def test_validate_fail_phonon(self, validator: Any, engine: Any, mock_phonon_calc: Any, mock_elastic_calc: Any) -> None:
         mock_phonon_calc.check_stability.return_value = (False, "base64_phonon_unstable")
         mock_elastic_calc.calculate_properties.return_value = (True, {"C11": 100.0}, 150.0, "base64_elastic")
 
@@ -82,7 +83,7 @@ class TestValidator:
         assert result.phonon_stable is False
         assert result.elastic_stable is True
 
-    def test_relax_structure(self, validator, engine):
+    def test_relax_structure(self, validator: Any, engine: Any) -> None:
         structure = MagicMock()
         pot_path = Path("pot.yace")
 
@@ -93,7 +94,7 @@ class TestValidator:
         assert relaxed == "relaxed_structure"
         engine.relax.assert_called_once_with(structure, pot_path)
 
-    def test_validate_structure_invalid_element(self):
+    def test_validate_structure_invalid_element(self) -> None:
         """Test rejection of structure with invalid chemical symbol (dummy X)."""
         # 'X' is in atomic_numbers but Z=0
         # Need pbc and cell for get_volume() check to pass first if we want to hit the element check.

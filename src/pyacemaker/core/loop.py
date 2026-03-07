@@ -48,11 +48,6 @@ class StateValidator:
             return path
         return v
 
-def _raise_traversal_error(path: Path, cwd: Path, cause: Exception | None = None) -> None:
-    msg = f"Potential path {path} is outside the project directory {cwd}"
-    if cause:
-        raise ValueError(msg) from cause
-    raise ValueError(msg)
 
 class LoopState(BaseModel):
     iteration: int = Field(default=0, ge=0)

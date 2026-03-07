@@ -16,7 +16,7 @@ class BaseStructureGenerator:
     """Generates the foundational atomic structure."""
     def __init__(self, config: StructureConfig) -> None:
         self.config = config
-        self.m3gnet = M3GNetWrapper()
+        self.m3gnet: M3GNetWrapper = M3GNetWrapper()
 
     def get_base_supercell(self) -> Atoms:
         composition = "".join(self.config.elements)
