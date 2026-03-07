@@ -70,16 +70,21 @@ class LammpsEngine(BaseEngine):
             msg = "LammpsScriptGenerator cannot be None"
             raise ValueError(msg)
         if not isinstance(generator, LammpsScriptGenerator):
-            raise TypeError("generator must be an instance of LammpsScriptGenerator")
+            msg = "generator must be an instance of LammpsScriptGenerator"
+            raise TypeError(msg)
 
         if file_manager is None:
             msg = "LammpsFileManager cannot be None"
             raise ValueError(msg)
         if not isinstance(file_manager, LammpsFileManager):
-            raise TypeError("file_manager must be an instance of LammpsFileManager")
+            msg = "file_manager must be an instance of LammpsFileManager"
+            raise TypeError(msg)
 
-        if execution_strategy is not None and not isinstance(execution_strategy, SimulationExecutionStrategy):
-            raise TypeError("execution_strategy must be an instance of SimulationExecutionStrategy")
+        if execution_strategy is not None and not isinstance(
+            execution_strategy, SimulationExecutionStrategy
+        ):
+            msg = "execution_strategy must be an instance of SimulationExecutionStrategy"
+            raise TypeError(msg)
 
         self.config = MDConfig.model_validate(config)
         self.generator = generator
@@ -121,10 +126,11 @@ class LammpsEngine(BaseEngine):
         Loads the internal state of the engine.
         """
 
-    def run(self, structure: Atoms | None, potential: Any, **kwargs: Any) -> MDSimulationResult:
+    def run(self, structure: Atoms | None, potential: Any, **kwargs: Any) -> MDSimulationResult:  # noqa: PLR0915
         """
         Runs the MD simulation.
         If resume_from_step is provided, skips initialization and applies a soft-start.
+        Accepts override_n_steps to temporarily change simulation length (e.g., for MicroBurst).
         """
         ctx, data_file, dump_file, log_file, elements, potential_path = (
             self._prepare_simulation_env(structure, potential)
@@ -132,6 +138,15 @@ class LammpsEngine(BaseEngine):
 
         resume_from_step = kwargs.get("resume_from_step")
         use_python_invoke = kwargs.get("use_python_invoke", False)
+        override_n_steps = kwargs.get("override_n_steps")
+
+        # Determine which generator to use
+        generator_to_use = self.generator
+        if override_n_steps is not None:
+            temp_config = self.config.model_copy(update={"n_steps": override_n_steps})
+            generator_to_use = LammpsScriptGenerator(
+                config=temp_config, otf_config=self.otf_config, thresholds=self.generator.thresholds
+            )
 
         with ctx:
             # Generate input script to file
@@ -139,7 +154,7 @@ class LammpsEngine(BaseEngine):
             input_script_path = temp_dir / "input.lmp"
 
             with input_script_path.open("w") as f:
-                self.generator.write_script(f, potential_path, data_file, dump_file, elements)
+                generator_to_use.write_script(f, potential_path, data_file, dump_file, elements)
 
                 # Use fix python/invoke for true Master-Slave inversion if configured
                 if use_python_invoke:
@@ -183,7 +198,10 @@ class LammpsEngine(BaseEngine):
                 halted = False
                 if self.otf_config and self.otf_config.fix_halt:
                     # If using fix halt, checking step count is a proxy for early termination
-                    halted = step < self.config.n_steps
+                    target_steps = (
+                        override_n_steps if override_n_steps is not None else self.config.n_steps
+                    )
+                    halted = step < target_steps
 
                 # Result
                 return MDSimulationResult(

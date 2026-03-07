@@ -55,7 +55,7 @@ def test_generate_local_md_burst():
         def __init__(self, config) -> None:
             self.config = config
 
-        def run(self, s, p):
+        def run(self, s, p, **kwargs):
             return mock_result
 
     real_mock_engine = MockEngineClass(MagicMock())

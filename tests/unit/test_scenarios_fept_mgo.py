@@ -26,6 +26,7 @@ def mock_config() -> Any:
 
         # Need actual MDConfig for LammpsEngine init type check
         from pyacemaker.domain_models.md import MDConfig
+
         mock_conf.md = MDConfig(
             temperature=300.0,
             pressure=0.0,

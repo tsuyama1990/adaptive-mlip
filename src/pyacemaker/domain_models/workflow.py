@@ -16,21 +16,28 @@ from pyacemaker.domain_models.defaults import (
 
 class ActiveLearningThresholds(BaseModel):
     """Two-Tier Thresholds inspired by FLARE"""
+
     model_config = ConfigDict(extra="forbid")
 
     threshold_call_dft: float = Field(0.05, description="Criteria to halt MD and call DFT")
-    threshold_add_train: float = Field(0.02, description="Criteria to select atoms for training set")
-    smooth_steps: int = Field(3, description="Consecutive steps threshold exceedance required to eliminate thermal noise")
+    threshold_add_train: float = Field(
+        0.02, description="Criteria to select atoms for training set"
+    )
+    smooth_steps: int = Field(
+        3, description="Consecutive steps threshold exceedance required to eliminate thermal noise"
+    )
 
     @model_validator(mode="after")
     def validate_thresholds(self) -> "ActiveLearningThresholds":
         if self.threshold_add_train > self.threshold_call_dft:
-            msg = 'threshold_add_train must be <= threshold_call_dft'
+            msg = "threshold_add_train must be <= threshold_call_dft"
             raise ValueError(msg)
         return self
 
+
 class CutoutConfig(BaseModel):
     """Phase 3: Intelligent Cutout Settings"""
+
     model_config = ConfigDict(extra="forbid")
 
     core_radius: float = Field(4.0, description="Radius for Force Weight 1.0")
@@ -42,28 +49,40 @@ class CutoutConfig(BaseModel):
     @model_validator(mode="after")
     def validate_radii(self) -> "CutoutConfig":
         if self.buffer_radius > self.core_radius:
-            msg = 'buffer_radius must be <= core_radius'
+            msg = "buffer_radius must be <= core_radius"
             raise ValueError(msg)
         return self
 
+
 class DistillationConfig(BaseModel):
     """Phase 1: Zero-Shot Distillation Settings"""
+
     model_config = ConfigDict(extra="forbid")
 
     enable: bool = True
     mace_model_path: str = "mace-mp-0-medium"
     uncertainty_threshold: float = Field(0.05, description="Safe threshold for MACE")
-    sampling_structures_per_system: int = Field(1000, ge=100, le=10000, description="Safe threshold for MACE")
+    sampling_structures_per_system: int = Field(
+        1000, ge=100, le=10000, description="Safe threshold for MACE"
+    )
+
 
 class LoopStrategyConfig(BaseModel):
     """Active Learning Loop Strategy Settings"""
+
     model_config = ConfigDict(extra="forbid")
 
     use_tiered_oracle: bool = True
     incremental_update: bool = True
-    replay_buffer_size: int = Field(500, ge=10, le=10000, description="Number of past data points to retain to prevent catastrophic forgetting")
+    replay_buffer_size: int = Field(
+        500,
+        ge=10,
+        le=10000,
+        description="Number of past data points to retain to prevent catastrophic forgetting",
+    )
     baseline_potential_type: str = Field("LJ", description="Physical baseline potential (e.g., LJ)")
     thresholds: ActiveLearningThresholds = Field(default_factory=ActiveLearningThresholds)
+
 
 class OTFConfig(BaseModel):
     """Configuration for On-The-Fly (OTF) Active Learning loop."""
@@ -103,8 +122,10 @@ class WorkflowConfig(BaseModel):
     @model_validator(mode="after")
     def validate_convergence_criteria(self) -> "WorkflowConfig":
         if self.convergence_energy >= self.convergence_force:
-            raise ValueError('convergence_energy (eV/atom) should typically be strictly smaller than convergence_force (eV/A) to ensure correct optimization paths')
+            msg = "convergence_energy (eV/atom) should typically be strictly smaller than convergence_force (eV/A) to ensure correct optimization paths"
+            raise ValueError(msg)
         return self
+
     state_file_path: str = Field(
         default=DEFAULT_STATE_FILE, description="Path to the state checkpoint file"
     )
@@ -131,9 +152,15 @@ class WorkflowConfig(BaseModel):
     )
 
     otf: OTFConfig = Field(default_factory=OTFConfig, description="Configuration for OTF loop.")
-    loop_strategy: LoopStrategyConfig = Field(default_factory=LoopStrategyConfig, description="Configuration for loop strategy.")
-    distillation: DistillationConfig = Field(default_factory=DistillationConfig, description="Configuration for distillation.")
-    cutout: CutoutConfig = Field(default_factory=CutoutConfig, description="Configuration for cutout.")
+    loop_strategy: LoopStrategyConfig = Field(
+        default_factory=LoopStrategyConfig, description="Configuration for loop strategy."
+    )
+    distillation: DistillationConfig = Field(
+        default_factory=DistillationConfig, description="Configuration for distillation."
+    )
+    cutout: CutoutConfig = Field(
+        default_factory=CutoutConfig, description="Configuration for cutout."
+    )
 
     @model_validator(mode="after")
     def validate_checkpoint_interval(self) -> "WorkflowConfig":
