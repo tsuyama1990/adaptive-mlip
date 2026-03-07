@@ -174,7 +174,7 @@ def test_train_with_replay_buffer(
         (data_path.parent / "test_pot.yace").touch()
 
         # Limit to 5 replay structures
-        trainer.train(data_path, replay_buffer_path=replay_path, replay_buffer_size=5)
+        trainer.incremental_train(data_path, replay_buffer_path=replay_path, replay_buffer_size=5)
 
         args, _ = mock_dump.call_args
         args[0]

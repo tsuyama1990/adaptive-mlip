@@ -115,9 +115,9 @@ class MDConfig(BaseModel):
 
         @model_validator(mode="after")
         def validate_ramping(self) -> "MDConfig.MDRampingConfig":
-            if self.temp_start is not None and self.temp_end is not None:
-                if self.temp_start > self.temp_end:
-                    raise ValueError('temp_start must be <= temp_end')
+            if self.temp_start is not None and self.temp_end is not None and self.temp_start > self.temp_end:
+                msg = 'temp_start must be <= temp_end'
+                raise ValueError(msg)
             return self
 
     class MCConfig(BaseModel):
@@ -204,7 +204,8 @@ class MDConfig(BaseModel):
     def validate_simulation_physics(self) -> "MDConfig":
         total_time = self.n_steps * self.timestep
         if total_time > MAX_MD_DURATION:
-            raise ValueError(f'Total simulation time {total_time} exceeds maximum allowed duration {MAX_MD_DURATION}')
+            msg = f'Total simulation time {total_time} exceeds maximum allowed duration {MAX_MD_DURATION}'
+            raise ValueError(msg)
         return self
 
     @model_validator(mode="after")

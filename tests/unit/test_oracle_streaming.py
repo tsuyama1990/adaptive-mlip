@@ -7,8 +7,8 @@ import pytest
 from ase import Atoms
 
 from pyacemaker.core.oracle import DFTManager
-from pyacemaker.interfaces.qe_driver import QEDriver
 from pyacemaker.domain_models import DFTConfig
+from pyacemaker.interfaces.qe_driver import QEDriver
 from tests.conftest import create_dummy_pseudopotentials
 
 

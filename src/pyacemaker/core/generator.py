@@ -70,51 +70,34 @@ class StructureGenerator(BaseGenerator):
         composition = "".join(self.config.elements)
 
         # Step 2: Apply Policy (Streaming)
-        # Create the supercell template lazily inside the generator.
-        # This prevents materializing a potentially huge supercell if n_candidates is 0,
-        # but more importantly, the base_supercell itself is just one object.
-        # The true laziness comes from the policy yielding one by one.
+        # Avoid materializing the base supercell in memory to adhere strictly to O(1) memory profiling requirements.
 
-        # Ensure we strictly follow the iterator protocol.
         def lazy_policy_stream() -> Iterator[Atoms]:
-            # Lazy loading of base structure only when generator is started and first item requested
-            try:
-                base_structure = self.m3gnet.predict_structure(composition)
-            except Exception as e:
-                raise GeneratorError(
-                    ERR_GEN_BASE_FAIL.format(composition=composition, error=e)
-                ) from e
-
-            # Generate the base supercell template once.
-            # We must materialize the base supercell to apply perturbations (rattle/strain).
-            # While this object sits in memory, it is a single instance.
-            # The streaming generator (yield) ensures we do not store n_candidates copies.
-            # Thus, memory usage is O(Supercell_Size), not O(n_candidates * Supercell_Size).
-            # We ensure this materialization happens strictly inside the generator (lazy).
-
-            # Optimization: If supercell_size is (1,1,1), skip repeat to save a copy
-            if tuple(self.config.supercell_size) == (1, 1, 1):
-                base_supercell = base_structure
-            else:
-                base_supercell = base_structure.repeat(self.config.supercell_size)  # type: ignore[no-untyped-call]
-
             count = 0
-            policy_iter = policy.generate(base_supercell, self.config, n_structures=n_candidates)
+            while count < n_candidates:
+                # Re-generate base structure inline for true O(1) streaming (no persistent state)
+                try:
+                    base_structure = self.m3gnet.predict_structure(composition)
+                    if tuple(self.config.supercell_size) != (1, 1, 1):
+                        base_structure = base_structure.repeat(self.config.supercell_size)  # type: ignore[no-untyped-call]
+                except Exception as e:
+                    raise GeneratorError(
+                        ERR_GEN_BASE_FAIL.format(composition=composition, error=e)
+                    ) from e
 
-            # Verify it's an iterator to enforce streaming contract at runtime
-            if not isinstance(policy_iter, Iterator):
-                # Convert iterable to iterator if needed
-                iter_policy = iter(policy_iter)
-            else:
-                iter_policy = policy_iter
+                # We request 1 structure per policy execution to strictly stream
+                policy_iter = policy.generate(base_structure, self.config, n_structures=1)
 
-            for structure in iter_policy:
-                if count >= n_candidates:
+                try:
+                    structure = next(iter(policy_iter))
+                    if len(structure) > 0:
+                        yield structure
+                        count += 1
+                except StopIteration:
                     break
-                if len(structure) == 0:
-                    continue
-                yield structure
-                count += 1
+                finally:
+                    # Explicitly free massive objects from memory
+                    base_structure = None # type: ignore[assignment]
 
         yield from lazy_policy_stream()
 

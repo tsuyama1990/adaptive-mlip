@@ -17,7 +17,6 @@ def test_scenario_2_1_nextgen_architecture(tmp_path: Path, monkeypatch: pytest.M
     import numpy as np
     from ase import Atoms
 
-    from pyacemaker.core.engine import LammpsEngine
     from pyacemaker.core.oracle import DFTManager, MACEManager, TieredOracle
     from pyacemaker.utils.extraction import extract_intelligent_cluster
 

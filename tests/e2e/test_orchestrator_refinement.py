@@ -42,6 +42,9 @@ class FakeGenerator(BaseGenerator):
 
 
 class FakeOracle(BaseOracle):
+    def compute_uncertainty(self, structure: Atoms) -> float:
+        return 0.0
+
     def compute(self, structures: Iterator[Atoms], batch_size: int = 10) -> Iterator[Atoms]:
         for atoms in structures:
             atoms.info["energy"] = -5.0
@@ -57,6 +60,14 @@ class FakeTrainer(BaseTrainer):
     ) -> Any:
         self.output_path.touch()
         return self.output_path
+
+    def incremental_train(
+        self, new_data_path: str | Path, replay_buffer_path: str | Path | None = None, replay_buffer_size: int = 500
+    ) -> Path | None:
+        return self.train(new_data_path)
+
+    def get_replay_buffer(self) -> Path | None:
+        return None
 
 
 class FakeActiveSetSelector(ActiveSetSelector):

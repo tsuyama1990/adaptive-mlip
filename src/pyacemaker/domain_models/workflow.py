@@ -25,7 +25,8 @@ class ActiveLearningThresholds(BaseModel):
     @model_validator(mode="after")
     def validate_thresholds(self) -> "ActiveLearningThresholds":
         if self.threshold_add_train > self.threshold_call_dft:
-            raise ValueError('threshold_add_train must be <= threshold_call_dft')
+            msg = 'threshold_add_train must be <= threshold_call_dft'
+            raise ValueError(msg)
         return self
 
 class CutoutConfig(BaseModel):
@@ -41,7 +42,8 @@ class CutoutConfig(BaseModel):
     @model_validator(mode="after")
     def validate_radii(self) -> "CutoutConfig":
         if self.buffer_radius > self.core_radius:
-            raise ValueError('buffer_radius must be <= core_radius')
+            msg = 'buffer_radius must be <= core_radius'
+            raise ValueError(msg)
         return self
 
 class DistillationConfig(BaseModel):

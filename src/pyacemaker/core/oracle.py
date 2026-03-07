@@ -15,7 +15,7 @@ from ase.calculators.calculator import (
 from pyacemaker.core.base import BaseOracle
 from pyacemaker.core.exceptions import OracleError
 from pyacemaker.domain_models import DFTConfig
-from pyacemaker.domain_models.constants import ERR_ORACLE_FAILED, ERR_ORACLE_ITERATOR
+from pyacemaker.domain_models.constants import ERR_ORACLE_FAILED
 from pyacemaker.interfaces.qe_driver import QEDriver
 from pyacemaker.utils.embedding import embed_cluster
 
@@ -29,9 +29,11 @@ class MACEManager(BaseOracle):
     """
     def __init__(self, model_path: str = "mace-mp-0-medium", use_mock: bool = False) -> None:
         if not isinstance(model_path, str):
-            raise TypeError("model_path must be a string")
+            msg = "model_path must be a string"
+            raise TypeError(msg)
         if not isinstance(use_mock, bool):
-            raise TypeError("use_mock must be a boolean")
+            msg = "use_mock must be a boolean"
+            raise TypeError(msg)
 
         from pyacemaker.utils.path import validate_path_safe
         # Usually model_path is a string URL or name, but if it is a local file, validate it.
@@ -45,9 +47,27 @@ class MACEManager(BaseOracle):
         # Real implementation would load mace torch model here
         # self.model = mace.calculators.mace_mp(model=model_path)
 
+    def compute_uncertainty(self, structure: Atoms) -> float:
+        inferred = self._infer(structure)
+        if "c_gamma" in inferred.arrays:
+            return float(np.max(inferred.get_array("c_gamma")))  # type: ignore[no-untyped-call]
+        return 0.0
+
     def compute(self, structures: Iterator[Atoms], batch_size: int = 10) -> Iterator[Atoms]:
-        for atoms in structures:
-            yield self._infer(atoms)
+        for batch in self._batched(structures, batch_size):
+            for atoms in batch:
+                yield self._infer(atoms)
+
+    @staticmethod
+    def _batched(iterable: Iterator[Atoms], n: int) -> Iterator[list[Atoms]]:
+        batch = []
+        for item in iterable:
+            batch.append(item)
+            if len(batch) == n:
+                yield batch
+                batch = []
+        if batch:
+            yield batch
 
     def _infer(self, atoms: Atoms) -> Atoms:
         result = atoms.copy()  # type: ignore[no-untyped-call]
@@ -86,46 +106,34 @@ class TieredOracle(BaseOracle):
             msg = "dft_manager cannot be None"
             raise ValueError(msg)
         if not isinstance(uncertainty_threshold, (float, int)) or uncertainty_threshold < 0:
-            raise ValueError("uncertainty_threshold must be a non-negative number")
+            msg = "uncertainty_threshold must be a non-negative number"
+            raise ValueError(msg)
 
         self.mace_manager = mace_manager
         self.dft_manager = dft_manager
         self.uncertainty_threshold = uncertainty_threshold
 
+    def compute_uncertainty(self, structure: Atoms) -> float:
+        return self.mace_manager.compute_uncertainty(structure)
+
     def compute(self, structures: Iterator[Atoms], batch_size: int = 10) -> Iterator[Atoms]:
-        return self._compute_generator(structures, batch_size)
+        return self._compute_generator(structures)
 
-    def _compute_generator(self, structures: Iterator[Atoms], batch_size: int) -> Iterator[Atoms]:
-        for batch in self._batched(structures, batch_size):
-            # 1. Infer with MACE
-            mace_results = list(self.mace_manager.compute(iter(batch), batch_size))
+    def _compute_generator(self, structures: Iterator[Atoms]) -> Iterator[Atoms]:
+        # Stream one-by-one to avoid materializing large batches per audit requirement
+        for orig_structure in structures:
+            mace_result = next(self.mace_manager.compute(iter([orig_structure]), batch_size=1))
 
-            # 2. Check Uncertainty and conditionally call DFT
-            for i, atoms in enumerate(mace_results):
-                max_gamma = 0.0
-                if "c_gamma" in atoms.arrays:
-                    max_gamma = np.max(atoms.get_array("c_gamma"))  # type: ignore[no-untyped-call]
+            max_gamma = 0.0
+            if "c_gamma" in mace_result.arrays:
+                max_gamma = np.max(mace_result.get_array("c_gamma"))  # type: ignore[no-untyped-call]
 
-                if max_gamma > self.uncertainty_threshold:
-                    logger.info(f"MACE uncertainty {max_gamma:.4f} > {self.uncertainty_threshold}. Falling back to DFT.")
-                    # Pass the original structure (from batch) to DFT to avoid passing MACE properties back in
-                    orig_structure = batch[i]
-                    # We pass a single item iterator to DFTManager
-                    dft_result = next(self.dft_manager.compute(iter([orig_structure]), batch_size=1))
-                    yield dft_result
-                else:
-                    yield atoms
-
-    @staticmethod
-    def _batched(iterable: Iterator[Atoms], n: int) -> Iterator[list[Atoms]]:
-        batch = []
-        for item in iterable:
-            batch.append(item)
-            if len(batch) == n:
-                yield batch
-                batch = []
-        if batch:
-            yield batch
+            if max_gamma > self.uncertainty_threshold:
+                logger.info(f"MACE uncertainty {max_gamma:.4f} > {self.uncertainty_threshold}. Falling back to DFT.")
+                dft_result = next(self.dft_manager.compute(iter([orig_structure]), batch_size=1))
+                yield dft_result
+            else:
+                yield mace_result
 
 
 class DFTManager(BaseOracle):
@@ -164,6 +172,12 @@ class DFTManager(BaseOracle):
             self._strategy_increase_smearing,
             self._strategy_use_cg,
         ]
+
+    def compute_uncertainty(self, structure: Atoms) -> float:
+        """
+        DFT provides ground truth, so uncertainty is 0.0.
+        """
+        return 0.0
 
     def compute(self, structures: Iterator[Atoms], batch_size: int = 10) -> Iterator[Atoms]:
         """

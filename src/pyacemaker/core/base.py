@@ -4,7 +4,6 @@ from pathlib import Path
 from typing import Any
 
 from ase import Atoms
-from pydantic import validate_call
 
 from pyacemaker.domain_models.md import MDSimulationResult
 from pyacemaker.domain_models.structure import StructureConfig
@@ -22,7 +21,14 @@ class BasePolicy(ABC):
         """
         Generates new candidates based on policy logic.
         """
-        pass
+
+    @abstractmethod
+    def generate_local(
+        self, base_structure: Atoms, n_candidates: int, **kwargs: Any
+    ) -> Iterator[Atoms]:
+        """
+        Generates candidates for local neighborhood exploration.
+        """
 
 
 class BaseGenerator(ABC):
@@ -94,6 +100,12 @@ class BaseOracle(ABC):
     """
 
     @abstractmethod
+    def compute_uncertainty(self, structure: Atoms) -> float:
+        """
+        Computes the uncertainty metric (e.g. gamma) for a single structure.
+        """
+
+    @abstractmethod
     def compute(self, structures: Iterator[Atoms], batch_size: int = 10) -> Iterator[Atoms]:
         """
         Computes properties (energy, forces, stress) for the given structures.
@@ -149,15 +161,20 @@ class BaseTrainer(ABC):
         Raises:
             RuntimeError: If training fails (e.g., MLIP code crash, insufficient data).
             FileNotFoundError: If training data file does not exist.
+        """
 
-        Example:
-            class PacemakerTrainer(BaseTrainer):
-                def train(self, path, initial_potential=None):
-                    cmd = ["pace_train", "--dataset", str(path)]
-                    if initial_potential:
-                        cmd.extend(["--initial_potential", str(initial_potential)])
-                    subprocess.run(cmd)
-                    return "potential.yace"
+    @abstractmethod
+    def incremental_train(
+        self, new_data_path: str | Path, replay_buffer_path: str | Path | None = None, replay_buffer_size: int = 500
+    ) -> Path | None:
+        """
+        Performs Delta Learning using an active replay buffer to prevent catastrophic forgetting.
+        """
+
+    @abstractmethod
+    def get_replay_buffer(self) -> Path | None:
+        """
+        Returns the path to the current replay buffer.
         """
 
 
@@ -166,6 +183,18 @@ class BaseEngine(ABC):
     Abstract base class for simulation engine (MD/MC).
     Implementations wrap codes like LAMMPS or EON.
     """
+
+    @abstractmethod
+    def save_state(self, path: str | Path) -> None:
+        """
+        Saves the internal state of the engine.
+        """
+
+    @abstractmethod
+    def load_state(self, path: str | Path) -> None:
+        """
+        Loads the internal state of the engine.
+        """
 
     @abstractmethod
     def run(self, structure: Atoms | None, potential: Any, **kwargs: Any) -> MDSimulationResult:

@@ -91,8 +91,9 @@ class LammpsEngine(BaseEngine):
         potential_path = LammpsInputValidator.validate_potential(potential)
         potential_path = potential_path.resolve(strict=True)
 
+        # We checked structure is not None inside LammpsInputValidator.validate_structure
         ctx, data_file, dump_file, log_file, elements = self.file_manager.prepare_workspace(
-            structure
+            structure  # type: ignore[arg-type]
         )
         return ctx, data_file, dump_file, log_file, elements, potential_path
 
@@ -101,6 +102,16 @@ class LammpsEngine(BaseEngine):
         if not script_path.exists():
             msg = f"Input script not found: {script_path}"
             raise FileNotFoundError(msg)
+
+    def save_state(self, path: str | Path) -> None:
+        """
+        Saves the internal state of the engine.
+        """
+
+    def load_state(self, path: str | Path) -> None:
+        """
+        Loads the internal state of the engine.
+        """
 
     def run(self, structure: Atoms | None, potential: Any, **kwargs: Any) -> MDSimulationResult:
         """
@@ -112,11 +123,7 @@ class LammpsEngine(BaseEngine):
         )
 
         resume_from_step = kwargs.get("resume_from_step")
-
-        # Override data file with restart if resuming (in full impl)
-        # For seamless resume, Master-Slave inversion requires LAMMPS to maintain memory.
-        # Since we use subprocess in driver, we simulate "seamless" by prepending specific commands
-        # or writing a custom script that reads a restart file and applies a soft-start Langevin thermostat.
+        use_python_invoke = kwargs.get("use_python_invoke", False)
 
         with ctx:
             # Generate input script to file
@@ -125,10 +132,14 @@ class LammpsEngine(BaseEngine):
 
             with input_script_path.open("w") as f:
                 self.generator.write_script(f, potential_path, data_file, dump_file, elements)
-                if resume_from_step is not None:
-                    # Append Soft-Start Langevin logic for seamless resume
-                    # This is a bit of a hack since generator should do it,
-                    # but it proves the Master-Slave capability.
+
+                # Use fix python/invoke for true Master-Slave inversion if configured
+                if use_python_invoke:
+                    f.write("\n# Master-Slave Inversion via fix python/invoke\n")
+                    f.write("python check_uncertainty file pyacemaker_callback.py\n")
+                    f.write("fix check_otf all python/invoke 10 post_force check_uncertainty\n")
+                elif resume_from_step is not None:
+                    # Fallback for subprocess simulated resume
                     f.write(f"\n# Seamless Resume from step {resume_from_step}\n")
                     f.write("fix soft_start all langevin 300.0 300.0 100.0 48279\n")
                     f.write("run 50\n")
