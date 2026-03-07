@@ -1,4 +1,5 @@
 import contextlib
+import logging
 import tempfile
 from collections.abc import Callable, Iterator
 from itertools import islice
@@ -10,10 +11,10 @@ from ase.calculators.calculator import PropertyNotImplementedError
 from pyacemaker.core.base import BaseOracle
 from pyacemaker.core.exceptions import OracleError
 from pyacemaker.domain_models import DFTConfig
-from pyacemaker.domain_models.constants import ERR_ORACLE_FAILED, ERR_ORACLE_ITERATOR
+import warnings
+from pyacemaker.domain_models.constants import ERR_ORACLE_FAILED, ERR_ORACLE_ITERATOR, ERR_ORACLE_WARN_EMPTY
 from pyacemaker.interfaces.qe_driver import QEDriver
 from pyacemaker.utils.embedding import embed_cluster
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -76,6 +77,7 @@ class DFTManager(BaseOracle):
         # without materializing the whole batch in memory list.
         # However, islice consumes the iterator.
 
+        count = 0
         while True:
             # Create a batch generator (iterator slice)
             # Note: list(islice(...)) materializes the batch.
@@ -112,6 +114,10 @@ class DFTManager(BaseOracle):
                     calc_dir = work_path / f"calc_{i}"
                     calc_dir.mkdir()
                     yield self._process_structure(atoms, str(calc_dir))
+                    count += 1
+
+        if count == 0:
+            warnings.warn(ERR_ORACLE_WARN_EMPTY, stacklevel=2)
 
     def _process_structure(self, atoms: Atoms, calc_dir: str) -> Atoms:
         """

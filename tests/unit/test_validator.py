@@ -38,7 +38,8 @@ class TestValidator:
 
         potential_path = Path("pot.yace")
         output_path = Path("report.html")
-        structure = MagicMock()
+        from ase import Atoms
+        structure = Atoms("Fe", positions=[[0, 0, 0]], cell=[2, 2, 2])
 
         # Mock _relax_structure to isolate
         with patch.object(validator, "_relax_structure") as mock_relax:
@@ -62,7 +63,8 @@ class TestValidator:
 
         potential_path = Path("pot.yace")
         output_path = Path("report.html")
-        structure = MagicMock()
+        from ase import Atoms
+        structure = Atoms("Fe", positions=[[0, 0, 0]], cell=[2, 2, 2])
 
         with patch.object(validator, "_relax_structure") as mock_relax:
             mock_relax.return_value = structure
