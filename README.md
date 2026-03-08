@@ -97,30 +97,25 @@ graph TD
 *   **MLIP Trainer**: Pacemaker (`pace_train`, `pace_activeset` executables in PATH)
 *   **MD Engine**: LAMMPS Python Interface (`lammps` package, with `USER-PACE` support)
 
-## Installation & Setup
+## Installation
 
-1. Clone the repository and navigate to the project directory:
-   ```bash
-   git clone https://github.com/your-org/pyacemaker.git
-   cd pyacemaker
-   ```
-
-2. Sync dependencies using `uv`:
-   ```bash
-   uv sync
-   ```
-
-3. Setup environment and configuration:
-   ```bash
-   cp .env.example .env
-   # Ensure Quantum Espresso and Pacemaker binaries are accessible via PATH.
-   ```
+```bash
+git clone https://github.com/your-org/pyacemaker.git
+cd pyacemaker
+uv sync
+```
 
 ## Usage
 
-Define your system configurations using `config.yaml` to specify your `LoopStrategyConfig`, `CutoutConfig`, and `ActiveLearningThresholds`.
+PyAceMaker uses a `config.yaml` to dictate execution (LoopStrategy, Cutouts, etc). You can view the full capabilities using the new interactive tutorial.
 
-**Quick Start Example:**
+### Interactive Tutorial
+To view the new UAT tutorial scenarios in a notebook interface:
+```bash
+uv run marimo edit tutorials/UAT_AND_TUTORIAL.py
+```
+
+### Production Execution
 ```bash
 # Validate your configuration in dry-run mode
 uv run pyacemaker --config config.yaml --dry-run
