@@ -1,0 +1,879 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.12, pytest-9.0.2, pluggy-1.6.0
+rootdir: /app
+configfile: pyproject.toml
+testpaths: tests
+plugins: cov-7.0.0, mock-3.15.1
+collected 261 items
+
+tests/e2e/test_engine_integration.py ..                                  [  0%]
+tests/e2e/test_orchestrator.py .......                                   [  3%]
+tests/e2e/test_orchestrator_loop.py ...                                  [  4%]
+tests/e2e/test_orchestrator_refinement.py ..                             [  5%]
+tests/integration/test_pacemaker_integration.py ..                       [  6%]
+tests/integration/test_scenarios.py .                                    [  6%]
+tests/uat/test_cycle01_uat.py ...                                        [  7%]
+tests/uat/test_cycle02_uat.py ..                                         [  8%]
+tests/uat/test_cycle03_uat.py FF                                         [  9%]
+tests/uat/test_cycle04_uat.py ...                                        [ 10%]
+tests/uat/test_cycle06_uat.py ..                                         [ 11%]
+tests/uat/test_cycle07_uat.py ..                                         [ 11%]
+tests/uat/test_cycle08_nextgen_uat.py ...                                [ 13%]
+tests/unit/test_active_set.py .....                                      [ 14%]
+tests/unit/test_active_set_anchor.py ....                                [ 16%]
+tests/unit/test_delta.py ....                                            [ 18%]
+tests/unit/test_domain_models.py ............                            [ 22%]
+tests/unit/test_domain_models_dft.py .............                       [ 27%]
+tests/unit/test_domain_models_eon.py ....                                [ 29%]
+tests/unit/test_domain_models_md.py ...........                          [ 33%]
+tests/unit/test_domain_models_md_new.py ..                               [ 34%]
+tests/unit/test_domain_models_scenario.py ..                             [ 34%]
+tests/unit/test_domain_models_training.py .......                        [ 37%]
+tests/unit/test_domain_models_validation.py ....                         [ 39%]
+tests/unit/test_domain_models_workflow.py .........                      [ 42%]
+tests/unit/test_elastic.py ....                                          [ 44%]
+tests/unit/test_embedding.py .......                                     [ 46%]
+tests/unit/test_engine.py .......                                        [ 49%]
+tests/unit/test_engine_halt_step.py ..                                   [ 50%]
+tests/unit/test_engine_relax.py ...                                      [ 51%]
+tests/unit/test_engine_seamless.py .                                     [ 51%]
+tests/unit/test_eon_driver.py .....                                      [ 53%]
+tests/unit/test_extraction.py ..                                         [ 54%]
+tests/unit/test_factory.py ..                                            [ 55%]
+tests/unit/test_generator.py FFFF.F                                      [ 57%]
+tests/unit/test_generator_local.py FF                                    [ 58%]
+tests/unit/test_io.py ........                                           [ 61%]
+tests/unit/test_io_manager.py ..                                         [ 62%]
+tests/unit/test_lammps_driver.py ...........                             [ 66%]
+tests/unit/test_lammps_driver_security.py ...                            [ 67%]
+tests/unit/test_lammps_generator.py ...                                  [ 68%]
+tests/unit/test_lammps_generator_reorder.py ..                           [ 69%]
+tests/unit/test_lammps_generator_seamless.py ..                          [ 70%]
+tests/unit/test_loop.py .......                                          [ 72%]
+tests/unit/test_main.py ...                                              [ 73%]
+tests/unit/test_oracle.py ........                                       [ 77%]
+tests/unit/test_oracle_streaming.py .                                    [ 77%]
+tests/unit/test_oracle_tiered.py ...                                     [ 78%]
+tests/unit/test_path_validation.py .....                                 [ 80%]
+tests/unit/test_perturbations.py ...                                     [ 81%]
+tests/unit/test_phonons.py ..                                            [ 82%]
+tests/unit/test_policies_new.py FFFF                                     [ 83%]
+tests/unit/test_policy_factory.py .F.                                    [ 85%]
+tests/unit/test_qe_driver.py .......                                     [ 87%]
+tests/unit/test_report.py ..                                             [ 88%]
+tests/unit/test_scenarios_fept_mgo.py ......                             [ 90%]
+tests/unit/test_streaming_io.py ...                                      [ 91%]
+tests/unit/test_trainer_pacemaker.py ......                              [ 94%]
+tests/unit/test_validator.py FF..                                        [ 95%]
+tests/unit/test_validator_security.py ...........                        [100%]
+
+=================================== FAILURES ===================================
+______________________ test_uat_03_01_generate_candidates ______________________
+
+    def test_uat_03_01_generate_candidates() -> None:
+        """
+        Scenario 03-01: Generate Candidates
+        Objective: Verify that the system can generate a set of perturbed structures from a base composition.
+        """
+        # 1. Preparation
+        config = StructureConfig(
+            elements=["Fe", "Pt"],  # Composition FePt
+            supercell_size=[2, 2, 2],
+            policy_name=ExplorationPolicy.RANDOM_RATTLE,
+            rattle_stdev=0.1,
+            num_structures=10,
+        )
+
+        generator = StructureGenerator(config)
+
+        # 2. Action
+        # Use streaming consumption instead of list()
+        stream = generator.generate(n_candidates=10)
+
+        # 3. Expectation
+        # Verify first few items using islice to avoid materializing all if N was large
+>       first_two = list(islice(stream, 2))
+                    ^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/uat/test_cycle03_uat.py:32:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+src/pyacemaker/core/generator.py:117: in generate
+    yield from lazy_policy_stream()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+    def lazy_policy_stream() -> Iterator[Atoms]:
+        # Lazy loading of base structure only when generator is started and first item requested
+        try:
+            base_structure = self.m3gnet.predict_structure(composition)
+        except Exception as e:
+            raise GeneratorError(ERR_GEN_BASE_FAIL.format(composition=composition, error=e)) from e
+
+        # Generate the base supercell template once.
+        # We must materialize the base supercell to apply perturbations (rattle/strain).
+        # While this object sits in memory, it is a single instance.
+        # The streaming generator (yield) ensures we do not store n_candidates copies.
+        # Thus, memory usage is O(Supercell_Size), not O(n_candidates * Supercell_Size).
+        # We ensure this materialization happens strictly inside the generator (lazy).
+
+        # Optimization: If supercell_size is (1,1,1), skip repeat to save a copy
+        if tuple(self.config.supercell_size) == (1, 1, 1):
+            base_supercell = base_structure
+        else:
+            base_supercell = base_structure.repeat(self.config.supercell_size)  # type: ignore[no-untyped-call]
+
+        count = 0
+>       policy_iter = policy.generate(base_supercell, self.config, n_structures=n_candidates)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: RattlePolicy.generate() takes 1 positional argument but 3 were given
+
+src/pyacemaker/core/generator.py:100: TypeError
+_______________________ test_uat_03_02_defect_generation _______________________
+
+    def test_uat_03_02_defect_generation() -> None:
+        """
+        Scenario 03-02: Defect Generation
+        Objective: Verify that the system can introduce vacancies.
+        """
+        # 1. Preparation
+        config = StructureConfig(
+            elements=["Fe"],
+            supercell_size=[4, 4, 4],
+            policy_name=ExplorationPolicy.DEFECTS,
+            vacancy_rate=0.05,
+        )
+        generator = StructureGenerator(config)
+
+        # 2. Action
+        # Stream one
+        stream = generator.generate(n_candidates=1)
+>       defect_atoms = next(stream)
+                       ^^^^^^^^^^^^
+
+tests/uat/test_cycle03_uat.py:70:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+src/pyacemaker/core/generator.py:117: in generate
+    yield from lazy_policy_stream()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+    def lazy_policy_stream() -> Iterator[Atoms]:
+        # Lazy loading of base structure only when generator is started and first item requested
+        try:
+            base_structure = self.m3gnet.predict_structure(composition)
+        except Exception as e:
+            raise GeneratorError(ERR_GEN_BASE_FAIL.format(composition=composition, error=e)) from e
+
+        # Generate the base supercell template once.
+        # We must materialize the base supercell to apply perturbations (rattle/strain).
+        # While this object sits in memory, it is a single instance.
+        # The streaming generator (yield) ensures we do not store n_candidates copies.
+        # Thus, memory usage is O(Supercell_Size), not O(n_candidates * Supercell_Size).
+        # We ensure this materialization happens strictly inside the generator (lazy).
+
+        # Optimization: If supercell_size is (1,1,1), skip repeat to save a copy
+        if tuple(self.config.supercell_size) == (1, 1, 1):
+            base_supercell = base_structure
+        else:
+            base_supercell = base_structure.repeat(self.config.supercell_size)  # type: ignore[no-untyped-call]
+
+        count = 0
+>       policy_iter = policy.generate(base_supercell, self.config, n_structures=n_candidates)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: DefectPolicy.generate() takes 1 positional argument but 3 were given
+
+src/pyacemaker/core/generator.py:100: TypeError
+____________________________ test_cold_start_policy ____________________________
+
+    def test_cold_start_policy() -> None:
+        config = StructureConfig(
+            elements=["Fe"],
+            supercell_size=[2, 2, 2],
+            policy_name=ExplorationPolicy.COLD_START,
+        )
+        generator = StructureGenerator(config)
+>       structures = list(generator.generate(n_candidates=10))
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/unit/test_generator.py:17:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+src/pyacemaker/core/generator.py:117: in generate
+    yield from lazy_policy_stream()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+    def lazy_policy_stream() -> Iterator[Atoms]:
+        # Lazy loading of base structure only when generator is started and first item requested
+        try:
+            base_structure = self.m3gnet.predict_structure(composition)
+        except Exception as e:
+            raise GeneratorError(ERR_GEN_BASE_FAIL.format(composition=composition, error=e)) from e
+
+        # Generate the base supercell template once.
+        # We must materialize the base supercell to apply perturbations (rattle/strain).
+        # While this object sits in memory, it is a single instance.
+        # The streaming generator (yield) ensures we do not store n_candidates copies.
+        # Thus, memory usage is O(Supercell_Size), not O(n_candidates * Supercell_Size).
+        # We ensure this materialization happens strictly inside the generator (lazy).
+
+        # Optimization: If supercell_size is (1,1,1), skip repeat to save a copy
+        if tuple(self.config.supercell_size) == (1, 1, 1):
+            base_supercell = base_structure
+        else:
+            base_supercell = base_structure.repeat(self.config.supercell_size)  # type: ignore[no-untyped-call]
+
+        count = 0
+>       policy_iter = policy.generate(base_supercell, self.config, n_structures=n_candidates)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: ColdStartPolicy.generate() takes 1 positional argument but 3 were given
+
+src/pyacemaker/core/generator.py:100: TypeError
+______________________________ test_rattle_policy ______________________________
+
+    def test_rattle_policy() -> None:
+        config = StructureConfig(
+            elements=["Fe"],
+            supercell_size=[2, 2, 2],
+            policy_name=ExplorationPolicy.RANDOM_RATTLE,
+            rattle_stdev=0.1,
+        )
+        generator = StructureGenerator(config)
+
+        # Check base structure first
+        base_gen = StructureGenerator(config.model_copy(update={"policy_name": ExplorationPolicy.COLD_START, "active_policies": [ExplorationPolicy.COLD_START]}))
+>       base = next(base_gen.generate(1))
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/unit/test_generator.py:36:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+src/pyacemaker/core/generator.py:117: in generate
+    yield from lazy_policy_stream()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+    def lazy_policy_stream() -> Iterator[Atoms]:
+        # Lazy loading of base structure only when generator is started and first item requested
+        try:
+            base_structure = self.m3gnet.predict_structure(composition)
+        except Exception as e:
+            raise GeneratorError(ERR_GEN_BASE_FAIL.format(composition=composition, error=e)) from e
+
+        # Generate the base supercell template once.
+        # We must materialize the base supercell to apply perturbations (rattle/strain).
+        # While this object sits in memory, it is a single instance.
+        # The streaming generator (yield) ensures we do not store n_candidates copies.
+        # Thus, memory usage is O(Supercell_Size), not O(n_candidates * Supercell_Size).
+        # We ensure this materialization happens strictly inside the generator (lazy).
+
+        # Optimization: If supercell_size is (1,1,1), skip repeat to save a copy
+        if tuple(self.config.supercell_size) == (1, 1, 1):
+            base_supercell = base_structure
+        else:
+            base_supercell = base_structure.repeat(self.config.supercell_size)  # type: ignore[no-untyped-call]
+
+        count = 0
+>       policy_iter = policy.generate(base_supercell, self.config, n_structures=n_candidates)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: ColdStartPolicy.generate() takes 1 positional argument but 3 were given
+
+src/pyacemaker/core/generator.py:100: TypeError
+______________________________ test_defect_policy ______________________________
+
+    def test_defect_policy() -> None:
+        config = StructureConfig(
+            elements=["Fe"],
+            supercell_size=[3, 3, 3],
+            policy_name=ExplorationPolicy.DEFECTS,
+            vacancy_rate=0.1,
+        )
+        generator = StructureGenerator(config)
+>       structures = list(generator.generate(n_candidates=5))
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/unit/test_generator.py:64:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+src/pyacemaker/core/generator.py:117: in generate
+    yield from lazy_policy_stream()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+    def lazy_policy_stream() -> Iterator[Atoms]:
+        # Lazy loading of base structure only when generator is started and first item requested
+        try:
+            base_structure = self.m3gnet.predict_structure(composition)
+        except Exception as e:
+            raise GeneratorError(ERR_GEN_BASE_FAIL.format(composition=composition, error=e)) from e
+
+        # Generate the base supercell template once.
+        # We must materialize the base supercell to apply perturbations (rattle/strain).
+        # While this object sits in memory, it is a single instance.
+        # The streaming generator (yield) ensures we do not store n_candidates copies.
+        # Thus, memory usage is O(Supercell_Size), not O(n_candidates * Supercell_Size).
+        # We ensure this materialization happens strictly inside the generator (lazy).
+
+        # Optimization: If supercell_size is (1,1,1), skip repeat to save a copy
+        if tuple(self.config.supercell_size) == (1, 1, 1):
+            base_supercell = base_structure
+        else:
+            base_supercell = base_structure.repeat(self.config.supercell_size)  # type: ignore[no-untyped-call]
+
+        count = 0
+>       policy_iter = policy.generate(base_supercell, self.config, n_structures=n_candidates)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: DefectPolicy.generate() takes 1 positional argument but 3 were given
+
+src/pyacemaker/core/generator.py:100: TypeError
+______________________________ test_strain_policy ______________________________
+
+    def test_strain_policy() -> None:
+        config = StructureConfig(
+            elements=["Fe"],
+            supercell_size=[2, 2, 2],
+            policy_name=ExplorationPolicy.STRAIN,
+            strain_mode="volume",
+        )
+        generator = StructureGenerator(config)
+>       structures = list(generator.generate(n_candidates=5))
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/unit/test_generator.py:83:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+src/pyacemaker/core/generator.py:117: in generate
+    yield from lazy_policy_stream()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+    def lazy_policy_stream() -> Iterator[Atoms]:
+        # Lazy loading of base structure only when generator is started and first item requested
+        try:
+            base_structure = self.m3gnet.predict_structure(composition)
+        except Exception as e:
+            raise GeneratorError(ERR_GEN_BASE_FAIL.format(composition=composition, error=e)) from e
+
+        # Generate the base supercell template once.
+        # We must materialize the base supercell to apply perturbations (rattle/strain).
+        # While this object sits in memory, it is a single instance.
+        # The streaming generator (yield) ensures we do not store n_candidates copies.
+        # Thus, memory usage is O(Supercell_Size), not O(n_candidates * Supercell_Size).
+        # We ensure this materialization happens strictly inside the generator (lazy).
+
+        # Optimization: If supercell_size is (1,1,1), skip repeat to save a copy
+        if tuple(self.config.supercell_size) == (1, 1, 1):
+            base_supercell = base_structure
+        else:
+            base_supercell = base_structure.repeat(self.config.supercell_size)  # type: ignore[no-untyped-call]
+
+        count = 0
+>       policy_iter = policy.generate(base_supercell, self.config, n_structures=n_candidates)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: StrainPolicy.generate() takes 1 positional argument but 3 were given
+
+src/pyacemaker/core/generator.py:100: TypeError
+_____________________________ test_generate_local ______________________________
+
+    def test_generate_local() -> None:
+        config = StructureConfig(
+            elements=["Fe"],
+            supercell_size=[2, 2, 2],
+            policy_name=ExplorationPolicy.COLD_START,
+            rattle_stdev=0.1
+        )
+        generator = StructureGenerator(config)
+
+        # Create dummy base structure
+        base = Atoms("Fe2", positions=[[0.0, 0.0, 0.0], [2.0, 0.0, 0.0]], cell=[4.0, 4.0, 4.0], pbc=True)
+
+>       candidates = list(generator.generate_local(base, n_candidates=5))
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/unit/test_generator.py:127:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <pyacemaker.core.generator.StructureGenerator object at 0x7f7b247e85c0>
+base_structure = Atoms(symbols='Fe2', pbc=True, cell=[4.0, 4.0, 4.0])
+n_candidates = 5, kwargs = {}
+strategy = <LocalGenerationStrategy.RANDOM_DISPLACEMENT: 'random_displacement'>
+policy = <pyacemaker.core.policy.RattlePolicy object at 0x7f7b24c6ce30>
+
+    def generate_local(self, base_structure: Atoms, n_candidates: int, **kwargs: Any) -> Iterator[Atoms]:
+        """
+        Generates candidate structures by perturbing a base structure.
+        Used in OTF loops to explore the local neighborhood of a high-uncertainty configuration.
+        Uses the configured local_generation_strategy.
+
+        Args:
+            base_structure: The reference structure to perturb.
+            n_candidates: Number of structures to generate.
+            **kwargs: Additional arguments (e.g., engine).
+
+        Returns:
+            Iterator yielding ASE Atoms objects.
+        """
+        if n_candidates <= 0:
+            return
+
+        # Use PolicyFactory to get local policy
+        strategy = self.config.local_generation_strategy
+        policy = PolicyFactory.get_local_policy(strategy)
+
+        # Generate using policy
+        # Pass kwargs (e.g. engine) to allow advanced policies like MD Micro Burst
+>       yield from policy.generate(base_structure, self.config, n_structures=n_candidates, **kwargs)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: RattlePolicy.generate() takes 1 positional argument but 3 were given
+
+src/pyacemaker/core/generator.py:142: TypeError
+__________________________ test_generate_local_rattle __________________________
+
+    def test_generate_local_rattle():
+        config = StructureConfig(
+            elements=["H"],
+            supercell_size=[1,1,1],
+            local_generation_strategy=LocalGenerationStrategy.RANDOM_DISPLACEMENT
+        )
+        generator = StructureGenerator(config)
+        base = Atoms("H", positions=[[0,0,0]], cell=[10,10,10])
+
+>       candidates = list(generator.generate_local(base, n_candidates=5))
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/unit/test_generator_local.py:18:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <pyacemaker.core.generator.StructureGenerator object at 0x7f7b24b67410>
+base_structure = Atoms(symbols='H', pbc=False, cell=[10.0, 10.0, 10.0])
+n_candidates = 5, kwargs = {}
+strategy = <LocalGenerationStrategy.RANDOM_DISPLACEMENT: 'random_displacement'>
+policy = <pyacemaker.core.policy.RattlePolicy object at 0x7f7b24b67d10>
+
+    def generate_local(self, base_structure: Atoms, n_candidates: int, **kwargs: Any) -> Iterator[Atoms]:
+        """
+        Generates candidate structures by perturbing a base structure.
+        Used in OTF loops to explore the local neighborhood of a high-uncertainty configuration.
+        Uses the configured local_generation_strategy.
+
+        Args:
+            base_structure: The reference structure to perturb.
+            n_candidates: Number of structures to generate.
+            **kwargs: Additional arguments (e.g., engine).
+
+        Returns:
+            Iterator yielding ASE Atoms objects.
+        """
+        if n_candidates <= 0:
+            return
+
+        # Use PolicyFactory to get local policy
+        strategy = self.config.local_generation_strategy
+        policy = PolicyFactory.get_local_policy(strategy)
+
+        # Generate using policy
+        # Pass kwargs (e.g. engine) to allow advanced policies like MD Micro Burst
+>       yield from policy.generate(base_structure, self.config, n_structures=n_candidates, **kwargs)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: RattlePolicy.generate() takes 1 positional argument but 3 were given
+
+src/pyacemaker/core/generator.py:142: TypeError
+_________________________ test_generate_local_md_burst _________________________
+
+    def test_generate_local_md_burst():
+        # Mock PolicyFactory to return a Mock Policy, so we don't depend on Engine logic here (tested in policy test)
+        # OR mock Engine passed to generator.
+
+        config = StructureConfig(
+            elements=["H"],
+            supercell_size=[1,1,1],
+            local_generation_strategy=LocalGenerationStrategy.MD_MICRO_BURST
+        )
+        generator = StructureGenerator(config)
+        base = Atoms("H", positions=[[0,0,0]], cell=[10,10,10])
+
+        mock_engine = MagicMock()
+
+        # We need to ensure MDMicroBurstPolicy is used and engine is passed.
+        # Since we use real classes, we can check behavior.
+
+        # MDMicroBurstPolicy logic relies on engine.
+        # If we pass mock engine, it should call engine.run/config.model_copy
+
+        # Mock engine.config.model_copy
+        mock_engine.config.model_copy.return_value = MagicMock()
+
+        # Mock engine.run to return result with trajectory
+        from pyacemaker.domain_models.md import MDSimulationResult
+        mock_result = MagicMock(spec=MDSimulationResult)
+        mock_result.trajectory_path = "dummy.traj"
+
+        # Mock type(engine)(config)
+        class MockEngineClass:
+            def __init__(self, config) -> None:
+                self.config = config
+            def run(self, s, p):
+                return mock_result
+
+        real_mock_engine = MockEngineClass(MagicMock())
+        real_mock_engine.config.model_copy.return_value = MagicMock()
+
+>       with patch("pyacemaker.core.policy.read") as mock_read:
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/unit/test_generator_local.py:61:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+/home/jules/.pyenv/versions/3.12.12/lib/python3.12/unittest/mock.py:1467: in __enter__
+    original, local = self.get_original()
+                      ^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <unittest.mock._patch object at 0x7f7b24a55970>
+
+    def get_original(self):
+        target = self.getter()
+        name = self.attribute
+
+        original = DEFAULT
+        local = False
+
+        try:
+            original = target.__dict__[name]
+        except (AttributeError, KeyError):
+            original = getattr(target, name, DEFAULT)
+        else:
+            local = True
+
+        if name in _builtins and isinstance(target, ModuleType):
+            self.create = True
+
+        if not self.create and original is DEFAULT:
+>           raise AttributeError(
+                "%s does not have the attribute %r" % (target, name)
+            )
+E           AttributeError: <module 'pyacemaker.core.policy' from '/app/src/pyacemaker/core/policy.py'> does not have the attribute 'read'
+
+/home/jules/.pyenv/versions/3.12.12/lib/python3.12/unittest/mock.py:1437: AttributeError
+______________________ test_composite_policy_distribution ______________________
+
+    def test_composite_policy_distribution() -> None:
+        p1 = MockPolicy("p1")
+        p2 = MockPolicy("p2")
+>       composite = CompositePolicy([p1, p2])
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: CompositePolicy() takes no arguments
+
+tests/unit/test_policies_new.py:44: TypeError
+__________________________ test_md_micro_burst_policy __________________________
+
+    def test_md_micro_burst_policy() -> None:
+        # Setup Mock Result
+        from pyacemaker.domain_models.md import MDSimulationResult
+
+        mock_result = MagicMock(spec=MDSimulationResult)
+        mock_result.trajectory_path = "dummy.traj"
+
+        MockEngine.result_to_return = mock_result
+
+        # Setup initial engine
+        config_mock = MagicMock()
+        config_mock.model_copy.return_value = config_mock
+        initial_engine = MockEngine(config_mock)
+
+        # Mock trajectory read
+>       with patch("pyacemaker.core.policy.read") as mock_read:
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/unit/test_policies_new.py:85:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+/home/jules/.pyenv/versions/3.12.12/lib/python3.12/unittest/mock.py:1467: in __enter__
+    original, local = self.get_original()
+                      ^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <unittest.mock._patch object at 0x7f7b24a54590>
+
+    def get_original(self):
+        target = self.getter()
+        name = self.attribute
+
+        original = DEFAULT
+        local = False
+
+        try:
+            original = target.__dict__[name]
+        except (AttributeError, KeyError):
+            original = getattr(target, name, DEFAULT)
+        else:
+            local = True
+
+        if name in _builtins and isinstance(target, ModuleType):
+            self.create = True
+
+        if not self.create and original is DEFAULT:
+>           raise AttributeError(
+                "%s does not have the attribute %r" % (target, name)
+            )
+E           AttributeError: <module 'pyacemaker.core.policy' from '/app/src/pyacemaker/core/policy.py'> does not have the attribute 'read'
+
+/home/jules/.pyenv/versions/3.12.12/lib/python3.12/unittest/mock.py:1437: AttributeError
+_________________________ test_md_micro_burst_fallback _________________________
+
+    def test_md_micro_burst_fallback() -> None:
+        # No engine provided -> Fallback to rattle
+        policy = MDMicroBurstPolicy()
+        config = StructureConfig(elements=["H"], supercell_size=[1,1,1])
+        base = Atoms("H")
+
+>       results = list(policy.generate(base, config, n_structures=1)) # No engine kwarg
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: MDMicroBurstPolicy.generate() takes 1 positional argument but 3 were given
+
+tests/unit/test_policies_new.py:106: TypeError
+_______________________ test_normal_mode_policy_fallback _______________________
+
+    def test_normal_mode_policy_fallback() -> None:
+        policy = NormalModePolicy()
+        config = StructureConfig(elements=["H"], supercell_size=[1,1,1])
+        base = Atoms("H", positions=[[0,0,0]], cell=[10,10,10])
+
+>       results = list(policy.generate(base, config, n_structures=1))
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: NormalModePolicy.generate() takes 1 positional argument but 3 were given
+
+tests/unit/test_policies_new.py:119: TypeError
+__________________________ test_get_policy_composite ___________________________
+
+    def test_get_policy_composite():
+        config = StructureConfig(
+            elements=["H"],
+            supercell_size=[1,1,1],
+            active_policies=[ExplorationPolicy.RANDOM_RATTLE, ExplorationPolicy.STRAIN]
+        )
+>       policy = PolicyFactory.get_policy(config)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/unit/test_policy_factory.py:26:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+config = StructureConfig(elements=['H'], supercell_size=[1, 1, 1], active_policies=[<ExplorationPolicy.RANDOM_RATTLE: 'random_r... 'random_displacement'>, local_extraction_radius=6.0, local_buffer_radius=4.0, local_md_steps=50, local_md_temp=2000.0)
+
+    @staticmethod
+    def get_policy(config: StructureConfig) -> BasePolicy:
+        """
+        Selects the appropriate policy based on configuration (active_policies).
+        Returns a CompositePolicy if multiple policies are active.
+
+        Args:
+            config: Structure configuration.
+
+        Returns:
+            Instantiated policy object.
+
+        Raises:
+            ValueError: If any policy name is unknown.
+        """
+        policies_map: dict[ExplorationPolicy, type[BasePolicy]] = {
+            ExplorationPolicy.COLD_START: ColdStartPolicy,
+            ExplorationPolicy.RANDOM_RATTLE: RattlePolicy,
+            ExplorationPolicy.STRAIN: StrainPolicy,
+            ExplorationPolicy.DEFECTS: DefectPolicy,
+        }
+
+        active = config.active_policies
+        if not active:
+            # Fallback to default if empty (should be handled by Pydantic default though)
+            active = [ExplorationPolicy.COLD_START]
+
+        selected_policies = []
+        for p_name in active:
+            policy_cls = policies_map.get(p_name)
+            if not policy_cls:
+                msg = f"Unknown policy: {p_name}"
+                raise ValueError(msg)
+            selected_policies.append(policy_cls())
+
+        if len(selected_policies) == 1:
+            return selected_policies[0]
+
+>       return CompositePolicy(selected_policies)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: CompositePolicy() takes no arguments
+
+src/pyacemaker/core/policy_factory.py:59: TypeError
+_______________________ TestValidator.test_validate_pass _______________________
+
+self = <tests.unit.test_validator.TestValidator object at 0x7f7b24b387d0>
+validator = <pyacemaker.core.validator.Validator object at 0x7f7b249690d0>
+mock_phonon_calc = <MagicMock id='140166871551536'>
+mock_elastic_calc = <MagicMock id='140166869581120'>
+mock_report_gen = <MagicMock id='140166869579536'>
+
+    def test_validate_pass(self, validator, mock_phonon_calc, mock_elastic_calc, mock_report_gen):
+        mock_phonon_calc.check_stability.return_value = (True, "base64_phonon")
+        mock_elastic_calc.calculate_properties.return_value = (True, {"C11": 100.0}, 150.0, "base64_elastic")
+
+        potential_path = Path("pot.yace")
+        output_path = Path("report.html")
+        structure = MagicMock()
+
+        # Mock _relax_structure to isolate
+        with patch.object(validator, "_relax_structure") as mock_relax:
+            mock_relax.return_value = structure
+>           result = validator.validate(potential_path, output_path, structure=structure)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/unit/test_validator.py:46:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+src/pyacemaker/core/validator.py:148: in validate
+    LammpsInputValidator.validate_structure(structure)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+structure = <MagicMock name='_relax_structure()' id='140166869911888'>
+
+    @staticmethod
+    def validate_structure(structure: Any) -> None:
+        """
+        Validates the atomic structure.
+
+        Args:
+            structure: Input structure object.
+
+        Raises:
+            ValueError: If structure is invalid, empty, or contains unknown elements.
+            TypeError: If input is not an ASE Atoms object.
+        """
+        if structure is None:
+            raise ValueError(ERR_VAL_STRUCT_NONE)
+
+        if not isinstance(structure, Atoms):
+>           raise TypeError(ERR_VAL_STRUCT_TYPE.format(type=type(structure)))
+E           TypeError: Invalid structure type: <class 'unittest.mock.MagicMock'>
+
+src/pyacemaker/core/validator.py:50: TypeError
+___________________ TestValidator.test_validate_fail_phonon ____________________
+
+self = <tests.unit.test_validator.TestValidator object at 0x7f7b24b39e50>
+validator = <pyacemaker.core.validator.Validator object at 0x7f7b24581910>
+mock_phonon_calc = <MagicMock id='140166869923840'>
+mock_elastic_calc = <MagicMock id='140166867454480'>
+
+    def test_validate_fail_phonon(self, validator, mock_phonon_calc, mock_elastic_calc):
+        mock_phonon_calc.check_stability.return_value = (False, "base64_phonon_unstable")
+        mock_elastic_calc.calculate_properties.return_value = (True, {"C11": 100.0}, 150.0, "base64_elastic")
+
+        potential_path = Path("pot.yace")
+        output_path = Path("report.html")
+        structure = MagicMock()
+
+        with patch.object(validator, "_relax_structure") as mock_relax:
+            mock_relax.return_value = structure
+>           result = validator.validate(potential_path, output_path, structure=structure)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/unit/test_validator.py:69:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+src/pyacemaker/core/validator.py:148: in validate
+    LammpsInputValidator.validate_structure(structure)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+structure = <MagicMock name='_relax_structure()' id='140166867584304'>
+
+    @staticmethod
+    def validate_structure(structure: Any) -> None:
+        """
+        Validates the atomic structure.
+
+        Args:
+            structure: Input structure object.
+
+        Raises:
+            ValueError: If structure is invalid, empty, or contains unknown elements.
+            TypeError: If input is not an ASE Atoms object.
+        """
+        if structure is None:
+            raise ValueError(ERR_VAL_STRUCT_NONE)
+
+        if not isinstance(structure, Atoms):
+>           raise TypeError(ERR_VAL_STRUCT_TYPE.format(type=type(structure)))
+E           TypeError: Invalid structure type: <class 'unittest.mock.MagicMock'>
+
+src/pyacemaker/core/validator.py:50: TypeError
+=============================== warnings summary ===============================
+tests/unit/test_io.py::test_write_lammps_streaming_basic
+  /app/.venv/lib/python3.12/site-packages/ase/io/lammpsdata.py:72: FutureWarning: "style" is deprecated; please use "atom_style".
+    warnings.warn(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.12-final-0 _______________
+
+Name                                         Stmts   Miss  Cover   Missing
+--------------------------------------------------------------------------
+src/pyacemaker/__init__.py                       4      0   100%
+src/pyacemaker/core/__init__.py                  7      0   100%
+src/pyacemaker/core/active_set.py               71     10    86%   46-47, 60-61, 71, 77-78, 86-88
+src/pyacemaker/core/base.py                     29      0   100%
+src/pyacemaker/core/config_generator.py         36      3    92%   58-60
+src/pyacemaker/core/directory_manager.py        20      0   100%
+src/pyacemaker/core/engine.py                   90     18    80%   50, 62-63, 75, 77, 80-81, 117-122, 128-129, 159-167
+src/pyacemaker/core/exceptions.py                8      0   100%
+src/pyacemaker/core/generator.py                52     18    65%   36-39, 59, 62, 95, 103-115, 134
+src/pyacemaker/core/io_manager.py               60     23    62%   56-68, 77-80, 93-94, 97-103
+src/pyacemaker/core/lammps_generator.py        141     17    88%   105-121, 129, 148-155
+src/pyacemaker/core/loop.py                     69      3    96%   74-77
+src/pyacemaker/core/m3gnet_wrapper.py           16      4    75%   26-28, 45-47
+src/pyacemaker/core/oracle.py                  136     15    89%   45, 55, 60, 70-85, 105, 172, 217
+src/pyacemaker/core/policy.py                   29     11    62%   12-15, 24, 32, 39, 46, 53, 60, 67
+src/pyacemaker/core/policy_factory.py           27      5    81%   46, 52-53, 80-81
+src/pyacemaker/core/report.py                   12      1    92%   85
+src/pyacemaker/core/state_manager.py            34      2    94%   37-38
+src/pyacemaker/core/trainer.py                 105     35    67%   23, 30-41, 109-112, 115-116, 123-124, 127-128, 158-160, 169-170, 181, 186, 192-208
+src/pyacemaker/core/validator.py                65      5    92%   63, 68, 74, 108, 145
+src/pyacemaker/domain_models/__init__.py        11      0   100%
+src/pyacemaker/domain_models/config.py          22      0   100%
+src/pyacemaker/domain_models/constants.py       10      0   100%
+src/pyacemaker/domain_models/defaults.py       127      0   100%
+src/pyacemaker/domain_models/dft.py             69     14    80%   76-77, 80-81, 95-96, 102-103, 119-124
+src/pyacemaker/domain_models/eon.py             33      4    88%   63-66
+src/pyacemaker/domain_models/logging.py         31      9    71%   24-25, 31, 39, 45-47, 50-51
+src/pyacemaker/domain_models/md.py             115     11    90%   39, 104, 109, 111, 115, 117, 213, 219, 227, 234, 236
+src/pyacemaker/domain_models/scenario.py         7      0   100%
+src/pyacemaker/domain_models/structure.py       61      4    93%   88-89, 107-108
+src/pyacemaker/domain_models/training.py        46      0   100%
+src/pyacemaker/domain_models/validation.py      17      0   100%
+src/pyacemaker/domain_models/workflow.py        48      0   100%
+src/pyacemaker/factory.py                       32      3    91%   84-86
+src/pyacemaker/interfaces/__init__.py            5      0   100%
+src/pyacemaker/interfaces/eon_driver.py         74     12    84%   86, 133-142, 158, 162
+src/pyacemaker/interfaces/lammps_driver.py      89      8    91%   82-83, 102, 135, 172, 191-193
+src/pyacemaker/interfaces/process.py            14      5    64%   12, 21-28
+src/pyacemaker/interfaces/qe_driver.py          48      2    96%   111-112
+src/pyacemaker/logger.py                        22      1    95%   42
+src/pyacemaker/main.py                          47      9    81%   21-24, 51-52, 61-62, 76
+src/pyacemaker/orchestrator.py                 244     35    86%   103-106, 157, 183, 187-188, 215, 219-220, 248-249, 254, 266-268, 286, 311, 357, 361, 374-376, 387-388, 396-397, 401, 410, 450-453, 480
+src/pyacemaker/scenarios/__init__.py             3      0   100%
+src/pyacemaker/scenarios/base_scenario.py       12      1    92%   20
+src/pyacemaker/scenarios/fept_mgo.py           148     28    81%   80, 162-165, 170-172, 181-182, 195-196, 203, 216, 221-222, 225-226, 233, 237, 245-258, 266-268
+src/pyacemaker/utils/delta.py                   17      2    88%   34-35
+src/pyacemaker/utils/elastic.py                 80     52    35%   34-35, 46-137, 146, 154
+src/pyacemaker/utils/embedding.py               36      6    83%   41-42, 49-50, 61-62
+src/pyacemaker/utils/extraction.py              83     25    70%   30, 42, 46, 57-83, 91, 97
+src/pyacemaker/utils/io.py                      70      0   100%
+src/pyacemaker/utils/path.py                    40      6    85%   53-57, 77-78
+src/pyacemaker/utils/perturbations.py           43      1    98%   77
+src/pyacemaker/utils/phonons.py                 51      2    96%   51, 69
+src/pyacemaker/utils/process.py                 25     21    16%   34-74
+src/pyacemaker/utils/structure.py                6      2    67%   19-20
+--------------------------------------------------------------------------
+TOTAL                                         2797    433    85%
+=========================== short test summary info ============================
+FAILED tests/uat/test_cycle03_uat.py::test_uat_03_01_generate_candidates - Ty...
+FAILED tests/uat/test_cycle03_uat.py::test_uat_03_02_defect_generation - Type...
+FAILED tests/unit/test_generator.py::test_cold_start_policy - TypeError: Cold...
+FAILED tests/unit/test_generator.py::test_rattle_policy - TypeError: ColdStar...
+FAILED tests/unit/test_generator.py::test_defect_policy - TypeError: DefectPo...
+FAILED tests/unit/test_generator.py::test_strain_policy - TypeError: StrainPo...
+FAILED tests/unit/test_generator.py::test_generate_local - TypeError: RattleP...
+FAILED tests/unit/test_generator_local.py::test_generate_local_rattle - TypeE...
+FAILED tests/unit/test_generator_local.py::test_generate_local_md_burst - Att...
+FAILED tests/unit/test_policies_new.py::test_composite_policy_distribution - ...
+FAILED tests/unit/test_policies_new.py::test_md_micro_burst_policy - Attribut...
+FAILED tests/unit/test_policies_new.py::test_md_micro_burst_fallback - TypeEr...
+FAILED tests/unit/test_policies_new.py::test_normal_mode_policy_fallback - Ty...
+FAILED tests/unit/test_policy_factory.py::test_get_policy_composite - TypeErr...
+FAILED tests/unit/test_validator.py::TestValidator::test_validate_pass - Type...
+FAILED tests/unit/test_validator.py::TestValidator::test_validate_fail_phonon
+================== 16 failed, 245 passed, 1 warning in 3.65s ===================
+/app/.venv/lib/python3.12/site-packages/coverage/inorout.py:561: CoverageWarning: Module dev_src was never imported. (module-not-imported); see https://coverage.readthedocs.io/en/7.13.4/messages.html#warning-module-not-imported
+  self.warn(f"Module {pkg} was never imported.", slug="module-not-imported")

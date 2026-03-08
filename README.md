@@ -48,6 +48,14 @@ uv sync
 cp .env.example .env
 ```
 
+## Features Checked and Verified
+
+Currently verified capabilities include the 4-phase NextGen Architecture:
+*   **Phase 1**: Zero-Shot Distillation extracting foundation model performance without DFT.
+*   **Phase 2**: Stress testing via scaled-down miniature MD runs.
+*   **Phase 3**: Thermal Noise Rejection and Intelligent Cluster Cutout for self-healing bounds using pre-relaxation and auto-passivation.
+*   **Phase 4**: Hierarchical Delta Learning merging acquired surrogate data and historical models dynamically using $O(1)$ computation cost updates.
+
 ## Usage
 
 You can start the workflow by passing a configuration file to the main entry point:

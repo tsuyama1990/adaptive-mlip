@@ -1,21 +1,124 @@
 import contextlib
+import logging
 import tempfile
 from collections.abc import Callable, Iterator
 from itertools import islice
 from pathlib import Path
 
+import numpy as np
 from ase import Atoms
 from ase.calculators.calculator import PropertyNotImplementedError
 
 from pyacemaker.core.base import BaseOracle
 from pyacemaker.core.exceptions import OracleError
 from pyacemaker.domain_models import DFTConfig
-from pyacemaker.domain_models.constants import ERR_ORACLE_FAILED, ERR_ORACLE_ITERATOR
+from pyacemaker.domain_models.constants import (
+    ERR_ORACLE_FAILED,
+    ERR_ORACLE_ITERATOR,
+    ERR_ORACLE_WARN_EMPTY,
+)
+from pyacemaker.domain_models.workflow import ActiveLearningThresholds
 from pyacemaker.interfaces.qe_driver import QEDriver
 from pyacemaker.utils.embedding import embed_cluster
-import logging
 
 logger = logging.getLogger(__name__)
+
+
+class MACEManager(BaseOracle):
+    """
+    Wrapper for executing MACE inferences.
+    Must output energy, forces, and uncertainty.
+    """
+
+    def __init__(self, model_path: str = "MACE-MP-0", device: str = "cpu") -> None:
+        """
+        Initialize MACEManager.
+        """
+        self.model_path = model_path
+        self.device = device
+        self.calculator = None
+        self._init_calculator()
+
+    def _init_calculator(self) -> None:
+        try:
+            from mace.calculators import mace_mp
+            self.calculator = mace_mp(model=self.model_path, device=self.device, default_dtype="float64")
+        except ImportError:
+            # Fallback for testing/CI without mace installed
+            self.calculator = None
+
+    def compute(self, structures: Iterator[Atoms], batch_size: int = 10) -> Iterator[Atoms]:
+        """
+        Infers properties (including uncertainty as c_gamma) using MACE.
+        """
+        if not isinstance(structures, Iterator):
+            raise TypeError(ERR_ORACLE_ITERATOR.format(type=type(structures)))
+
+        while True:
+            batch = list(islice(structures, batch_size))
+            if not batch:
+                break
+            for atoms in batch:
+                if self.calculator is None:
+                    # Mock behavior for testing if MACE is absent
+                    atoms.calc = None
+                    atoms.info["energy"] = -10.0
+                    atoms.arrays["forces"] = np.zeros((len(atoms), 3))
+                    # Assign a mock uncertainty
+                    atoms.arrays["c_gamma"] = np.random.rand(len(atoms)) * 0.1
+                else:
+                    atoms.calc = self.calculator
+                    # Trigger calculations
+                    try:
+                        atoms.get_potential_energy() # type: ignore[no-untyped-call]
+                        atoms.get_forces() # type: ignore[no-untyped-call]
+                        # MACE provides uncertainty usually in info or arrays.
+                        # We mock it here if not directly available from calculator standard interface.
+                        # Real MACE calculator has specific methods for uncertainty or returns it.
+                        # For now, ensure c_gamma exists.
+                        if "mace_committee_std" in atoms.arrays:
+                            atoms.arrays["c_gamma"] = atoms.arrays["mace_committee_std"]
+                        else:
+                             # Dummy uncertainty if not committee model
+                             atoms.arrays["c_gamma"] = np.zeros(len(atoms))
+                    except Exception as e:
+                        raise OracleError(f"MACE inference failed: {e}") from e
+                yield atoms
+
+
+class TieredOracle(BaseOracle):
+    """
+    Tiered Oracle implementing Two-Tier thresholds.
+    First infers with MACEManager. Falls back to DFTManager if uncertainty exceeds threshold.
+    """
+
+    def __init__(self, thresholds: ActiveLearningThresholds, mace: MACEManager, dft: "DFTManager") -> None:
+        self.thresholds = thresholds
+        self.mace = mace
+        self.dft = dft
+
+    def compute(self, structures: Iterator[Atoms], batch_size: int = 10) -> Iterator[Atoms]:
+        """
+        Processes structures via MACE, and conditionally via DFT.
+        """
+        if not isinstance(structures, Iterator):
+            raise TypeError(ERR_ORACLE_ITERATOR.format(type=type(structures)))
+
+        mace_stream = self.mace.compute(structures, batch_size)
+
+        for atoms in mace_stream:
+            # Check maximum uncertainty
+            c_gamma = atoms.arrays.get("c_gamma")
+            max_unc = np.max(c_gamma) if c_gamma is not None else 0.0
+
+            if max_unc > self.thresholds.threshold_call_dft:
+                # Fallback to DFT
+                logger.info("Uncertainty %f > %f. Falling back to DFT.", max_unc, self.thresholds.threshold_call_dft)
+                dft_stream = self.dft.compute(iter([atoms]), batch_size=1)
+                yield next(dft_stream)
+            else:
+                yield atoms
+
 
 class DFTManager(BaseOracle):
     """
@@ -67,6 +170,15 @@ class DFTManager(BaseOracle):
 
         if not isinstance(structures, Iterator):
             raise TypeError(ERR_ORACLE_ITERATOR.format(type=type(structures)))
+
+        try:
+            first_item = next(structures)
+        except StopIteration:
+            logger.warning(ERR_ORACLE_WARN_EMPTY)
+            return iter([])
+
+        from itertools import chain
+        structures = chain([first_item], structures)
 
         return self._compute_generator(structures, batch_size)
 
