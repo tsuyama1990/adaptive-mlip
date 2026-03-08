@@ -1,7 +1,7 @@
 from pathlib import Path
+from typing import Any
 
 import pytest
-from typing import Any
 from ase import Atoms
 from ase.io import write
 

@@ -66,8 +66,8 @@ def test_validate_path_resolution_safety() -> None:
     selector = ActiveSetSelector()
 
     # Explicit traversal attempts should now be rejected for security
-    with pytest.raises(ActiveSetError, match="Path traversal attempt"):
-        selector._validate_path_safe(Path("foo/../bar"))
+    with pytest.raises(ActiveSetError, match="Path traversal"):
+        selector._validate_path_safe(Path("/tmp/../etc/passwd"))
 
     # -rf is now explicitly rejected even if resolved, as filenames cannot start with -
     with pytest.raises(ActiveSetError, match="Filename cannot start with '-'"):

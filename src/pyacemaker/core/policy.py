@@ -1,12 +1,14 @@
-from pathlib import Path
-from collections.abc import Iterator
-from typing import Any
-import numpy as np
 import secrets
+from collections.abc import Iterator
+from pathlib import Path
+from typing import Any
 
+import numpy as np
 from ase import Atoms
+
 from pyacemaker.core.base import BasePolicy
 from pyacemaker.domain_models.structure import StructureConfig
+
 
 class SafeBasePolicy(BasePolicy):
     def generate(

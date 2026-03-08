@@ -1,7 +1,7 @@
-import pytest
+from typing import Any
+
 import numpy as np
 from ase import Atoms
-from typing import Any
 
 from pyacemaker.core.oracle import MACEManager, TieredOracle
 from pyacemaker.domain_models.workflow import ActiveLearningThresholds

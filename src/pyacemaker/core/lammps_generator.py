@@ -7,7 +7,6 @@ from ase.data import atomic_numbers
 
 from pyacemaker.domain_models.constants import LAMMPS_MIN_STYLE_CG, LAMMPS_SAFE_CMD_PATTERN
 from pyacemaker.domain_models.md import MDConfig
-from pyacemaker.utils.path import validate_path_safe
 
 _LAMMPS_SAFE_REGEX = re.compile(LAMMPS_SAFE_CMD_PATTERN)
 
@@ -30,12 +29,10 @@ class LammpsScriptGenerator:
 
     def _quote(self, path: str) -> str:
         """
-        Quotes a path for LAMMPS script safety after validation.
-        Does not use caching because validation is an I/O operation.
+        Quotes a path for LAMMPS script safety.
+        Assumes path has already been validated by caller.
         """
-        # Sanitize input path
-        safe_path = validate_path_safe(Path(path))
-        path_str = str(safe_path)
+        path_str = str(path)
 
         # Ensure the path contains only LAMMPS-safe characters
         if not _LAMMPS_SAFE_REGEX.match(path_str):

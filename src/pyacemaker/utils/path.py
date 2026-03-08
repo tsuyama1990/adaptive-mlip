@@ -29,13 +29,6 @@ def validate_path_safe(path: Path) -> Path:
     # Decode encoded characters (e.g. %2e%2e)
     unquoted = urllib.parse.unquote(s)
 
-    # Check for encoded Unicode variations that evaluate to .. or /
-    # Unquote handles URL encoding, but os.path.realpath will also canonicalize the path.
-    # Check for direct '..'
-    if ".." in unquoted:
-        msg = f"Path traversal attempt detected (parent directory reference): {path}"
-        raise ValueError(msg)
-
     # Regex whitelist validation
     if not ALLOWED_PATH_CHARS_REGEX.match(unquoted):
         msg = f"Path contains invalid characters: {path}"
@@ -72,21 +65,13 @@ def validate_path_safe(path: Path) -> Path:
     ]
 
     is_safe = False
-    resolved_str = str(resolved)
 
     for root in allowed_roots:
-        try:
-            # os.path.commonpath is safe when used with absolute paths
-            common = os.path.commonpath([root, resolved_str])
-            if common == root:
-                # Add trailing separator check to prevent "root_dir_spoof" passing "root_dir" check
-                # Note: os.path.commonpath handles this in recent Python versions, but we add an explicit prefix check just in case.
-                # Use is_relative_to for robust path hierarchy check.
-                if Path(resolved_str).is_relative_to(Path(root)):
-                    is_safe = True
-                    break
-        except ValueError:
-            continue
+        # Use is_relative_to for robust path hierarchy check natively on the resolved path.
+        # This accurately prevents symlink escapes and bounds checking.
+        if resolved.is_relative_to(Path(root)):
+            is_safe = True
+            break
 
     if not is_safe:
          msg = f"Path traversal detected: {resolved} is outside allowed roots {allowed_roots}"

@@ -83,7 +83,10 @@ def _pre_relax_buffer(cluster: Atoms) -> Atoms:
     return cluster
 
 def _passivate_surface(cluster: Atoms) -> Atoms:
-    """Passivates unbonded hands based on valid distance checks and collision detection."""
+    """
+    Passivates unbonded hands based on physical distance checks and collision detection.
+    Calculates proper positions based on standard bonding requirements away from the center of mass.
+    """
     force_weights = cluster.arrays.get("force_weight")
     if force_weights is None:
         return cluster

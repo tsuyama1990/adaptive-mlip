@@ -41,6 +41,8 @@ def test_scenario_08_02_phase3_cutout(tmp_path: Path) -> None:
     assert "force_weight" in cluster.arrays
 
 from typing import Any
+
+
 def test_scenario_08_03_phase4_hierarchical_finetuning(tmp_path: Path, mocker: "Any") -> None:
     """
     Scenario UAT-PHASE4-001: Hierarchical Finetuning & Seamless Resume

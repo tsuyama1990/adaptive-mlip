@@ -2,7 +2,6 @@ import contextlib
 import logging
 import tempfile
 from collections.abc import Callable, Iterator
-from itertools import islice
 from pathlib import Path
 
 import numpy as np
@@ -107,16 +106,9 @@ class MACEManager(BaseOracle):
         from itertools import chain
         structure_stream = chain([first_item], structures)
 
-        while True:
-            # Materializing the batch is unavoidable here if we truly need batched inference
-            # (which MACE eventually supports via lists of atoms)
-            batch = list(islice(structure_stream, batch_size))
-            if not batch:
-                break
-
-            # Process batch (currently sequentially, but prepared for real batching in the future)
-            for atoms in batch:
-                yield self._process_single(atoms)
+        # Process structure stream sequentially without batch materialization.
+        for atoms in structure_stream:
+            yield self._process_single(atoms)
 
 
 class TieredOracle(BaseOracle):
@@ -221,42 +213,28 @@ class DFTManager(BaseOracle):
         # without materializing the whole batch in memory list.
         # However, islice consumes the iterator.
 
-        while True:
-            # Create a batch generator (iterator slice)
-            # Note: list(islice(...)) materializes the batch.
-            # To avoid materializing even the batch if batch_size is huge, we should process one by one
-            # BUT reuse the context.
-            # The audit requirement was: "DFTManager.compute method accepts batch_size parameter but ignores it... Implement proper batching logic"
-            # Batching usually implies grouping. If we process 1 by 1 inside a loop of batch_size, we achieve the goal.
+        # Process structure stream sequentially while maintaining batch processing grouping
+        # over the context manager to not leak memory via `list(islice)`.
+        batch_count = 0
+        work_dir_ctx = None
+        work_path = None
 
-            # We can use a single temp dir for 'batch_size' items.
-            # But since we want to yield as soon as one is done, we iterate `batch_size` times.
+        try:
+            for i, atoms in enumerate(structures):
+                if batch_count % batch_size == 0:
+                    if work_dir_ctx is not None:
+                        work_dir_ctx.cleanup()
+                    work_dir_ctx = tempfile.TemporaryDirectory()
+                    work_path = Path(work_dir_ctx.name)
 
-            # Since we can't easily peek existence of next item without consuming,
-            # we iterate until exhaustion.
+                calc_dir = work_path / f"calc_{i}" # type: ignore[operator]
+                calc_dir.mkdir()
+                yield self._process_structure(atoms, str(calc_dir))
 
-            # Efficient pattern:
-            # Create temp dir. Process N items. Close temp dir. Repeat.
-
-            # Check if there are items left?
-            # We can just try to take `batch_size` items.
-            # list(islice) is standard but creates a list of `batch_size`.
-            # If batch_size is small (e.g. 10-100), this is fine.
-            # If batch_size is huge (unlikely default), it might be an issue.
-            # Let's assume batch_size is reasonable (10-1000).
-
-            batch = list(islice(structures, batch_size))
-            if not batch:
-                break
-
-            with tempfile.TemporaryDirectory() as work_dir:
-                work_path = Path(work_dir)
-                for i, atoms in enumerate(batch):
-                    # Use unique subdirs or filenames to avoid collision if artifacts persist
-                    # though we process sequentially here.
-                    calc_dir = work_path / f"calc_{i}"
-                    calc_dir.mkdir()
-                    yield self._process_structure(atoms, str(calc_dir))
+                batch_count += 1
+        finally:
+            if work_dir_ctx is not None:
+                work_dir_ctx.cleanup()
 
     def _process_structure(self, atoms: Atoms, calc_dir: str) -> Atoms:
         """

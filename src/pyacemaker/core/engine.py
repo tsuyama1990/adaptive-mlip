@@ -1,3 +1,4 @@
+import contextlib
 from pathlib import Path
 from typing import Any
 
@@ -68,7 +69,7 @@ class LammpsEngine(BaseEngine):
 
     def _prepare_simulation_env(
         self, structure: Atoms | None, potential: Any
-    ) -> tuple[Any, Path, Path, Path, list[str], Path]:
+    ) -> tuple[contextlib.AbstractContextManager[Any], Path, Path, Path, list[str], Path]:
         """
         Prepares the simulation environment: validation, paths, and files.
         Returns: (ctx, data_file, dump_file, log_file, elements, potential_path)

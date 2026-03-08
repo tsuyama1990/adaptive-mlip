@@ -184,7 +184,12 @@ def write_lammps_streaming(
         # 4. Atoms
         fileobj.write("Atoms # atomic\n\n")
 
-        pos = atoms.get_positions() # type: ignore[no-untyped-call]
+        # Secure: Use a direct reference to avoid making expensive deep copies.
+        pos = atoms.arrays.get('positions')
+
+        if pos is None:
+            # Fallback if somehow not present in arrays directly
+            pos = atoms.get_positions() # type: ignore[no-untyped-call]
 
         def line_generator() -> Iterable[str]:
             for i in range(natoms):
