@@ -5,7 +5,7 @@ from pyacemaker.core.lammps_generator import LammpsScriptGenerator
 from pyacemaker.domain_models.md import MDConfig
 
 
-def test_script_generator_resume():
+def test_script_generator_resume() -> None:
     config = MDConfig(temperature=300.0, pressure=0.0, timestep=0.001, n_steps=1000)
     gen = LammpsScriptGenerator(config)
 
@@ -20,7 +20,7 @@ def test_script_generator_resume():
     assert "run 500" in script # Remaining steps (1000 - 500)
     assert "fix python_invoke" in script
 
-def test_script_generator_no_resume():
+def test_script_generator_no_resume() -> None:
     config = MDConfig(temperature=300.0, pressure=0.0, timestep=0.001, n_steps=1000)
     gen = LammpsScriptGenerator(config)
 

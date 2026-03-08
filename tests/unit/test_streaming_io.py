@@ -60,17 +60,18 @@ def test_write_lammps_streaming_invalid_elements() -> None:
     # Missing Li in elements list
     elements = ["H"]
 
-    with pytest.raises(KeyError, match="not in provided species list"):
+    with pytest.raises(ValueError, match="not in provided species list"):
         write_lammps_streaming(buffer, structure, elements)
 
 
 def test_write_lammps_streaming_non_orthogonal() -> None:
-    """Test validation of non-orthogonal cells (not supported by simple streaming yet)."""
+    """Test streaming of non-orthogonal cells."""
     buffer = StringIO()
     # Non-orthogonal cell
     cell = [[10, 0, 0], [5, 8.66, 0], [0, 0, 10]]
     structure = Atoms("H", positions=[[0, 0, 0]], cell=cell, pbc=True)
     elements = ["H"]
 
-    with pytest.raises(ValueError, match="Streaming write currently only supports orthogonal cells"):
-        write_lammps_streaming(buffer, structure, elements)
+    write_lammps_streaming(buffer, structure, elements)
+    content = buffer.getvalue()
+    assert "xy xz yz" in content

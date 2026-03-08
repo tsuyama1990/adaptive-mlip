@@ -1,11 +1,13 @@
+import pytest
 import numpy as np
 from ase import Atoms
+from typing import Any
 
 from pyacemaker.core.oracle import MACEManager, TieredOracle
 from pyacemaker.domain_models.workflow import ActiveLearningThresholds
 
 
-def test_macemanager_compute_fallback():
+def test_macemanager_compute_fallback() -> None:
     # If mace is not installed, it should fallback and set mock c_gamma
     manager = MACEManager()
 
@@ -17,7 +19,7 @@ def test_macemanager_compute_fallback():
     assert "c_gamma" in result.arrays
     assert result.arrays["c_gamma"].shape == (2,)
 
-def test_tiered_oracle_no_dft(mocker):
+def test_tiered_oracle_no_dft(mocker: Any) -> None:
     # Mock MACEManager to return low uncertainty
     mace = MACEManager()
     mace.compute = mocker.MagicMock()
@@ -37,7 +39,7 @@ def test_tiered_oracle_no_dft(mocker):
     assert result == atoms
     dft.compute.assert_not_called()
 
-def test_tiered_oracle_call_dft(mocker):
+def test_tiered_oracle_call_dft(mocker: Any) -> None:
     # Mock MACEManager to return high uncertainty
     mace = MACEManager()
     mace.compute = mocker.MagicMock()

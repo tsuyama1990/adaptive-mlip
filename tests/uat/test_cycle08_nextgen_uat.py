@@ -5,7 +5,7 @@ from ase import Atoms
 from pyacemaker.domain_models.workflow import CutoutConfig
 
 
-def test_scenario_08_01_phase1_distillation(tmp_path: Path):
+def test_scenario_08_01_phase1_distillation(tmp_path: Path) -> None:
     """
     Scenario UAT-PHASE1-001: Phase 1 - Zero-Shot Distillation
     """
@@ -22,7 +22,7 @@ def test_scenario_08_01_phase1_distillation(tmp_path: Path):
     assert config.enable is True
     assert config.sampling_count == 100
 
-def test_scenario_08_02_phase3_cutout(tmp_path: Path):
+def test_scenario_08_02_phase3_cutout(tmp_path: Path) -> None:
     """
     Scenario UAT-PHASE3-001: Intelligent Cutout and Passivation
     """
@@ -40,7 +40,8 @@ def test_scenario_08_02_phase3_cutout(tmp_path: Path):
     # Must have force_weights
     assert "force_weight" in cluster.arrays
 
-def test_scenario_08_03_phase4_hierarchical_finetuning(tmp_path: Path, mocker):
+from typing import Any
+def test_scenario_08_03_phase4_hierarchical_finetuning(tmp_path: Path, mocker: "Any") -> None:
     """
     Scenario UAT-PHASE4-001: Hierarchical Finetuning & Seamless Resume
     """

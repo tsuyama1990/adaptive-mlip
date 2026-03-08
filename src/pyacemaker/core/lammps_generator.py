@@ -1,13 +1,15 @@
-import shlex
+import re
 from functools import lru_cache
 from pathlib import Path
 from typing import TextIO
 
 from ase.data import atomic_numbers
 
-from pyacemaker.domain_models.constants import LAMMPS_MIN_STYLE_CG
+from pyacemaker.domain_models.constants import LAMMPS_MIN_STYLE_CG, LAMMPS_SAFE_CMD_PATTERN
 from pyacemaker.domain_models.md import MDConfig
 from pyacemaker.utils.path import validate_path_safe
+
+_LAMMPS_SAFE_REGEX = re.compile(LAMMPS_SAFE_CMD_PATTERN)
 
 
 class LammpsScriptGenerator:
@@ -19,25 +21,30 @@ class LammpsScriptGenerator:
 
     def __init__(self, config: MDConfig) -> None:
         self.config = config
-        # Use lru_cache for methods instead of manual dict
-        self._atomic_numbers_cache = {}
+        self._atomic_numbers_cache: dict[str, int] = {}
 
     @lru_cache(maxsize=128)
     def _get_atomic_number(self, symbol: str) -> int:
         """Cached atomic number lookup."""
         return atomic_numbers[symbol]
 
-    @lru_cache(maxsize=128)
     def _quote(self, path: str) -> str:
         """
         Quotes a path for LAMMPS script safety after validation.
-        Uses caching to avoid redundant validation calls.
+        Does not use caching because validation is an I/O operation.
         """
         # Sanitize input path
-        # Note: path must be string for lru_cache
         safe_path = validate_path_safe(Path(path))
-        # Use shlex.quote for shell safety
-        return shlex.quote(str(safe_path))
+        path_str = str(safe_path)
+
+        # Ensure the path contains only LAMMPS-safe characters
+        if not _LAMMPS_SAFE_REGEX.match(path_str):
+            raise ValueError(f"Path contains characters unsafe for LAMMPS: {path_str}")
+
+        # Proper LAMMPS quoting: escape backslashes, then double quotes.
+        # For Windows paths, backslashes must be escaped.
+        escaped = path_str.replace("\\", "\\\\").replace('"', '\\"')
+        return f'"{escaped}"'
 
     def _gen_potential_pure(self, buffer: TextIO, potential_path: Path, elements: list[str]) -> None:
         """Generates pure PACE potential commands."""

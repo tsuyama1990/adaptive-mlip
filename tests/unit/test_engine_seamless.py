@@ -1,12 +1,13 @@
 from pathlib import Path
 
+from typing import Any
 from ase import Atoms
 
 from pyacemaker.core.engine import LammpsEngine
 from pyacemaker.domain_models.md import MDConfig
 
 
-def test_engine_resume(tmp_path: Path, mocker):
+def test_engine_resume(tmp_path: Path, mocker: Any) -> None:
     config = MDConfig(temperature=300.0, pressure=0.0, timestep=0.001, n_steps=1000)
     engine = LammpsEngine(config)
 

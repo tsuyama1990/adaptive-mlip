@@ -47,43 +47,76 @@ class MACEManager(BaseOracle):
             # Fallback for testing/CI without mace installed
             self.calculator = None
 
+    @contextlib.contextmanager
+    def _calculator_context(self, atoms: Atoms) -> Iterator[None]:
+        """Context manager to attach and detach the calculator."""
+        original_calc = atoms.calc
+        atoms.calc = self.calculator
+        try:
+            yield
+        finally:
+            atoms.calc = original_calc
+
+    def _process_single(self, atoms: Atoms) -> Atoms:
+        """Processes a single structure statelessly."""
+        # Create a copy to prevent mutating the input object
+        atoms_copy = atoms.copy() # type: ignore[no-untyped-call]
+
+        if self.calculator is None:
+            # Mock behavior for testing if MACE is absent
+            atoms_copy.calc = None
+            atoms_copy.info["energy"] = -10.0
+            atoms_copy.arrays["forces"] = np.zeros((len(atoms_copy), 3))
+            atoms_copy.arrays["c_gamma"] = np.random.rand(len(atoms_copy)) * 0.1
+            return atoms_copy # type: ignore[no-any-return]
+
+        with self._calculator_context(atoms_copy):
+            try:
+                atoms_copy.get_potential_energy()
+                atoms_copy.get_forces()
+
+                if "mace_committee_std" in atoms_copy.arrays:
+                    atoms_copy.arrays["c_gamma"] = atoms_copy.arrays["mace_committee_std"]
+                else:
+                    atoms_copy.arrays["c_gamma"] = np.zeros(len(atoms_copy))
+            except RuntimeError as e:
+                # Catch specific exceptions like RuntimeError from calculator
+                msg = f"MACE calculator runtime error: {e}"
+                raise OracleError(msg) from e
+            except Exception as e:
+                msg = f"Unexpected error during MACE inference: {e}"
+                raise OracleError(msg) from e
+
+        return atoms_copy
+
     def compute(self, structures: Iterator[Atoms], batch_size: int = 10) -> Iterator[Atoms]:
         """
-        Infers properties (including uncertainty as c_gamma) using MACE.
+        Infers properties (including uncertainty as c_gamma) using MACE statelessly.
+        Processes in batches but preserves streaming iterator behavior.
         """
         if not isinstance(structures, Iterator):
             raise TypeError(ERR_ORACLE_ITERATOR.format(type=type(structures)))
 
+        # Handle empty stream check as in DFTManager to maintain O(1) properties
+        try:
+            first_item = next(structures)
+        except StopIteration:
+            logger.warning(ERR_ORACLE_WARN_EMPTY)
+            return iter([]) # type: ignore[return-value]
+
+        from itertools import chain
+        structure_stream = chain([first_item], structures)
+
         while True:
-            batch = list(islice(structures, batch_size))
+            # Materializing the batch is unavoidable here if we truly need batched inference
+            # (which MACE eventually supports via lists of atoms)
+            batch = list(islice(structure_stream, batch_size))
             if not batch:
                 break
+
+            # Process batch (currently sequentially, but prepared for real batching in the future)
             for atoms in batch:
-                if self.calculator is None:
-                    # Mock behavior for testing if MACE is absent
-                    atoms.calc = None
-                    atoms.info["energy"] = -10.0
-                    atoms.arrays["forces"] = np.zeros((len(atoms), 3))
-                    # Assign a mock uncertainty
-                    atoms.arrays["c_gamma"] = np.random.rand(len(atoms)) * 0.1
-                else:
-                    atoms.calc = self.calculator
-                    # Trigger calculations
-                    try:
-                        atoms.get_potential_energy() # type: ignore[no-untyped-call]
-                        atoms.get_forces() # type: ignore[no-untyped-call]
-                        # MACE provides uncertainty usually in info or arrays.
-                        # We mock it here if not directly available from calculator standard interface.
-                        # Real MACE calculator has specific methods for uncertainty or returns it.
-                        # For now, ensure c_gamma exists.
-                        if "mace_committee_std" in atoms.arrays:
-                            atoms.arrays["c_gamma"] = atoms.arrays["mace_committee_std"]
-                        else:
-                             # Dummy uncertainty if not committee model
-                             atoms.arrays["c_gamma"] = np.zeros(len(atoms))
-                    except Exception as e:
-                        raise OracleError(f"MACE inference failed: {e}") from e
-                yield atoms
+                yield self._process_single(atoms)
 
 
 class TieredOracle(BaseOracle):

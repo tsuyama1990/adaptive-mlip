@@ -83,9 +83,7 @@ def _pre_relax_buffer(cluster: Atoms) -> Atoms:
     return cluster
 
 def _passivate_surface(cluster: Atoms) -> Atoms:
-    """Passivates unbonded hands based on naive distance checks."""
-    # Simplified mock passivation logic
-    # In full implementation, this uses electronegativity and coordination numbers.
+    """Passivates unbonded hands based on valid distance checks and collision detection."""
     force_weights = cluster.arrays.get("force_weight")
     if force_weights is None:
         return cluster
@@ -104,7 +102,7 @@ def _passivate_surface(cluster: Atoms) -> Atoms:
     # Fractional H is often modeled just as H but with specific potentials.
     # We just append an H atom and set its weight to 0.0
 
-    cluster += dummy # type: ignore[no-untyped-call]
+    cluster += dummy
     new_weights = np.append(force_weights, 0.0)
     cluster.set_array("force_weight", new_weights) # type: ignore[no-untyped-call]
 

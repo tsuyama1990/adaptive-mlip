@@ -3,8 +3,6 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-from ase.io import read, write
-
 from pyacemaker.core.base import BaseTrainer
 from pyacemaker.core.config_generator import PacemakerConfigGenerator
 from pyacemaker.core.exceptions import TrainerError
@@ -140,69 +138,86 @@ class PacemakerTrainer(BaseTrainer):
         strategy_config: LoopStrategyConfig
     ) -> Any:
         """
-        Performs incremental training (Delta Learning) using a replay buffer.
+        Performs incremental training (Delta Learning) using a streaming replay buffer approach.
+        Instead of loading the entire dataset into memory, it uses the ase format reader as an iterator
+        to process the dataset in a stream.
         """
+
+        import ase.io
+
         new_path = Path(new_data_path).resolve()
         hist_path = Path(historical_data_path).resolve()
 
         # Validate data
         self._validate_training_data(new_path)
 
-        # Create replay buffer
-        buffer_data = self.get_replay_buffer(hist_path, strategy_config.replay_buffer_size)
+        # We blend data iteratively to a new stream
+        blended_path = new_path.parent / "blended_training_data.xyz"
 
-        # Read new data
         try:
-            new_data = read(new_path, index=":")
+            # Replay buffer sampling via reservoir sampling (O(N) time, O(K) space)
+            buffer_data = self.get_replay_buffer(hist_path, strategy_config.replay_buffer_size)
+
+            # Read new data fully as it's typically small
+            new_data = ase.io.read(new_path, index=":")
             if not isinstance(new_data, list):
                 new_data = [new_data]
-        except Exception as e:
-            raise TrainerError(f"Failed to read new data: {e}") from e
 
-        # Blend data
-        blended_data = buffer_data + new_data
+            # Stream the writing process to keep memory constrained
+            # Note: For write(), ase supports streaming via generators if written carefully,
+            # or we can simply write sequentially in append mode.
+            if blended_path.exists():
+                blended_path.unlink()
 
-        # Save blended data to a temporary file for training
-        blended_path = new_path.parent / "blended_training_data.xyz"
-        try:
-            write(blended_path, blended_data) # type: ignore[no-untyped-call]
-        except Exception as e:
-            raise TrainerError(f"Failed to write blended data: {e}") from e
+            # Write buffer
+            for atoms in buffer_data:
+                ase.io.write(blended_path, atoms, append=True) # type: ignore[no-untyped-call]
 
-        # Train on blended data using existing potential as initial weights
+            # Write new data
+            for atoms in new_data:
+                ase.io.write(blended_path, atoms, append=True) # type: ignore[no-untyped-call]
+
+        except FileNotFoundError as e:
+            raise TrainerError(f"Failed to access data file: {e}") from e
+        except RuntimeError as e:
+            raise TrainerError(f"Error during incremental data blending: {e}") from e
+
         return self.train(blended_path, initial_potential=initial_potential)
 
     def get_replay_buffer(self, historical_data_path: Path, buffer_size: int) -> list[Any]:
         """
         Samples a fixed-size replay buffer from historical training data
-        to prevent catastrophic forgetting.
+        using Reservoir Sampling to maintain O(n) streaming performance.
+        Uses cryptographically secure RNG.
         """
+        import logging
+        import secrets
+
+        import ase.io
+
         if not historical_data_path.exists() or historical_data_path.stat().st_size == 0:
             return []
 
+        if buffer_size <= 0:
+            return []
+
         try:
-            hist_data = read(historical_data_path, index=":")
-            if not isinstance(hist_data, list):
-                hist_data = [hist_data]
+            # ase.io.iread is an iterator over the file
+            reservoir = []
+            for i, atoms in enumerate(ase.io.iread(historical_data_path)):
+                if i < buffer_size:
+                    reservoir.append(atoms)
+                else:
+                    j = secrets.randbelow(i + 1)
+                    if j < buffer_size:
+                        reservoir[j] = atoms
 
-            if len(hist_data) <= buffer_size:
-                return hist_data
-
-            # Randomly sample the replay buffer
-            import secrets
-            # Using cryptographically secure random generation instead of random.sample
-            # if we wanted to be strictly compliant, but random.sample is typical.
-            # We'll use random for shuffling/sampling for now unless strict security requires secrets.
-            # Security directive: "must use cryptographically secure random generation"
-            sampled = []
-            pool = hist_data.copy()
-            for _ in range(buffer_size):
-                idx = secrets.randbelow(len(pool))
-                sampled.append(pool.pop(idx))
-            return sampled
-
+            return reservoir
+        except OSError as e:
+            logger = logging.getLogger(__name__)
+            logger.warning("Failed to access historical data file: %s", e)
+            return []
         except Exception as e:
-            import logging
             logger = logging.getLogger(__name__)
             logger.warning("Failed to sample replay buffer: %s", e)
             return []
