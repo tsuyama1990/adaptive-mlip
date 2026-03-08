@@ -1,11 +1,12 @@
+from pyacemaker.core.base import BasePolicy
 from pyacemaker.core.policy import (
-    BasePolicy,
     ColdStartPolicy,
     CompositePolicy,
     DefectPolicy,
     MDMicroBurstPolicy,
     NormalModePolicy,
     RattlePolicy,
+    SafeBasePolicy,
     StrainPolicy,
 )
 from pyacemaker.domain_models.structure import (
@@ -33,7 +34,7 @@ class PolicyFactory:
         Raises:
             ValueError: If any policy name is unknown.
         """
-        policies_map: dict[ExplorationPolicy, type[BasePolicy]] = {
+        policies_map: dict[ExplorationPolicy, type[SafeBasePolicy]] = {
             ExplorationPolicy.COLD_START: ColdStartPolicy,
             ExplorationPolicy.RANDOM_RATTLE: RattlePolicy,
             ExplorationPolicy.STRAIN: StrainPolicy,

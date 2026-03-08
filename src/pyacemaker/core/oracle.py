@@ -52,19 +52,7 @@ class DFTManager(BaseOracle):
     def compute(self, structures: Iterator[Atoms], batch_size: int = 10) -> Iterator[Atoms]:
         """
         Computes DFT properties for stream of structures.
-
-        Args:
-            structures: Iterator of Atoms objects.
-            batch_size: Batch size for processing (used to manage temporary directories).
-
-        Yields:
-            Atoms objects with computed properties.
-
-        Raises:
-            OracleError: If a calculation fails fatally.
-            TypeError: If structures is not an iterator (to prevent memory leaks from huge lists).
         """
-        # Validate that structures is an iterator to enforce O(1) memory usage contract
         if isinstance(structures, (list, tuple)):
             raise TypeError(ERR_ORACLE_ITERATOR.format(type=type(structures)))
 
@@ -75,34 +63,8 @@ class DFTManager(BaseOracle):
 
     def _compute_generator(self, structures: Iterator[Atoms], batch_size: int) -> Iterator[Atoms]:
         """Internal generator for streaming computations with batching."""
-        # Use batched processing (chunking) to reuse temporary directories
-        # without materializing the whole batch in memory list.
-        # However, islice consumes the iterator.
-
         while True:
-            # Create a batch generator (iterator slice)
-            # Note: list(islice(...)) materializes the batch.
-            # To avoid materializing even the batch if batch_size is huge, we should process one by one
-            # BUT reuse the context.
-            # The audit requirement was: "DFTManager.compute method accepts batch_size parameter but ignores it... Implement proper batching logic"
-            # Batching usually implies grouping. If we process 1 by 1 inside a loop of batch_size, we achieve the goal.
-
-            # We can use a single temp dir for 'batch_size' items.
-            # But since we want to yield as soon as one is done, we iterate `batch_size` times.
-
-            # Since we can't easily peek existence of next item without consuming,
-            # we iterate until exhaustion.
-
-            # Efficient pattern:
-            # Create temp dir. Process N items. Close temp dir. Repeat.
-
-            # Check if there are items left?
-            # We can just try to take `batch_size` items.
-            # list(islice) is standard but creates a list of `batch_size`.
-            # If batch_size is small (e.g. 10-100), this is fine.
-            # If batch_size is huge (unlikely default), it might be an issue.
-            # Let's assume batch_size is reasonable (10-1000).
-
+            # Process in batches, yielding immediately, but reusing context
             batch = list(islice(structures, batch_size))
             if not batch:
                 break
@@ -110,8 +72,6 @@ class DFTManager(BaseOracle):
             with tempfile.TemporaryDirectory() as work_dir:
                 work_path = Path(work_dir)
                 for i, atoms in enumerate(batch):
-                    # Use unique subdirs or filenames to avoid collision if artifacts persist
-                    # though we process sequentially here.
                     calc_dir = work_path / f"calc_{i}"
                     calc_dir.mkdir()
                     yield self._process_structure(atoms, str(calc_dir))
@@ -177,7 +137,20 @@ class DFTManager(BaseOracle):
                 strategy_name = "Initial"
 
             try:
-                self._run_calculator(atoms, current_config, calc_dir)
+                # Architecture: Add explicit execution timeout for DFT manager to prevent hangs
+                import concurrent.futures
+
+                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                    future = executor.submit(self._run_calculator, atoms, current_config, calc_dir)
+                    # Set a hard limit of 3600 seconds per self-healing attempt
+                    future.result(timeout=3600)
+            except concurrent.futures.TimeoutError as e:
+                last_error = e
+                atoms.calc = None
+                logger.exception(
+                    f"DFT calculation attempt {i + 1} ({strategy_name}) timed out after 3600s. Retrying..."
+                )
+                continue
             except Exception as e:
                 # Catch all exceptions (RuntimeError, CalculatorSetupError, JobFailedException etc)
                 # to ensure self-healing strategies are attempted.
@@ -226,27 +199,31 @@ class MACEManager(BaseOracle):
         if not isinstance(structures, Iterator):
             raise TypeError(ERR_ORACLE_ITERATOR.format(type=type(structures)))
 
-        return self._compute_generator(structures)
+        return self._compute_generator(structures, batch_size)
 
-    def _compute_generator(self, structures: Iterator[Atoms]) -> Iterator[Atoms]:
-        for atoms in structures:
-            atoms_copy = atoms.copy()  # type: ignore[no-untyped-call]
+    def _compute_generator(self, structures: Iterator[Atoms], batch_size: int) -> Iterator[Atoms]:
+        while True:
+            batch = list(islice(structures, batch_size))
+            if not batch:
+                break
+            for atoms in batch:
+                atoms_copy = atoms.copy()  # type: ignore[no-untyped-call]
 
-            # Mock MACE predictions
-            energy = -10.0 * len(atoms_copy)
-            forces = np.zeros((len(atoms_copy), 3))
+                # Mock MACE predictions
+                energy = -10.0 * len(atoms_copy)
+                forces = np.zeros((len(atoms_copy), 3))
 
-            # Mock uncertainty in c_gamma array
-            c_gamma = np.random.uniform(0.01, 0.1, size=len(atoms_copy))
+                # Mock uncertainty in c_gamma array
+                c_gamma = np.random.uniform(0.01, 0.1, size=len(atoms_copy))
 
-            # In a real implementation we would attach a calculator
-            # Here we just mock setting the arrays and attributes
-            atoms_copy.calc = None
-            atoms_copy.info["energy"] = energy
-            atoms_copy.new_array("forces", forces)
-            atoms_copy.new_array("c_gamma", c_gamma)
+                # In a real implementation we would attach a calculator
+                # Here we just mock setting the arrays and attributes
+                atoms_copy.calc = None
+                atoms_copy.info["energy"] = energy
+                atoms_copy.new_array("forces", forces)
+                atoms_copy.new_array("c_gamma", c_gamma)
 
-            yield atoms_copy
+                yield atoms_copy
 
 
 class TieredOracle(BaseOracle):
@@ -269,29 +246,33 @@ class TieredOracle(BaseOracle):
         if not isinstance(structures, Iterator):
             raise TypeError(ERR_ORACLE_ITERATOR.format(type=type(structures)))
 
-        return self._compute_generator(structures)
+        return self._compute_generator(structures, batch_size)
 
-    def _compute_generator(self, structures: Iterator[Atoms]) -> Iterator[Atoms]:
-        for atoms in structures:
-            # First query MACE
-            mace_result = next(self.mace.compute(iter([atoms])))
+    def _compute_generator(self, structures: Iterator[Atoms], batch_size: int) -> Iterator[Atoms]:
+        while True:
+            batch = list(islice(structures, batch_size))
+            if not batch:
+                break
+            for atoms in batch:
+                # First query MACE
+                mace_result = next(self.mace.compute(iter([atoms])))
 
-            # Evaluate uncertainty
-            c_gamma = mace_result.get_array("c_gamma")
-            max_uncertainty = np.max(c_gamma)
+                # Evaluate uncertainty
+                c_gamma = mace_result.get_array("c_gamma") # type: ignore[no-untyped-call]
+                max_uncertainty = np.max(c_gamma)
 
-            if max_uncertainty > self.thresholds.threshold_call_dft:
-                # Fallback to DFT
-                logger.info(
-                    f"Uncertainty {max_uncertainty:.4f} > {self.thresholds.threshold_call_dft}. Falling back to DFT."
-                )
+                if max_uncertainty > self.thresholds.threshold_call_dft:
+                    # Fallback to DFT
+                    logger.info(
+                        f"Uncertainty {max_uncertainty:.4f} > {self.thresholds.threshold_call_dft}. Falling back to DFT."
+                    )
 
-                # Only pass the atoms exceeding the add_train threshold to DFT?
-                # For now, evaluate the whole structure as per fallback logic.
-                dft_result = next(self.dft.compute(iter([atoms])))
+                    # Only pass the atoms exceeding the add_train threshold to DFT?
+                    # For now, evaluate the whole structure as per fallback logic.
+                    dft_result = next(self.dft.compute(iter([atoms])))
 
-                # We should retain the c_gamma array for active learning tracking
-                dft_result.set_array("c_gamma", c_gamma)
-                yield dft_result
-            else:
-                yield mace_result
+                    # We should retain the c_gamma array for active learning tracking
+                    dft_result.set_array("c_gamma", c_gamma) # type: ignore[no-untyped-call]
+                    yield dft_result
+                else:
+                    yield mace_result

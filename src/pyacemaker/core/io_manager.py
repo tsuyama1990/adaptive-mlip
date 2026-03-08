@@ -85,14 +85,22 @@ class LammpsFileManager:
     def _write_structure_memory(
         self, structure: Atoms, output_path: Path, elements: list[str]
     ) -> None:
-        """Writes structure to disk using streaming writer if possible."""
+        """Writes structure to disk using streaming writer if possible with atomic transactions."""
+        import os
+
+        # Create a temporary file path next to the target output path
+        temp_path = output_path.with_name(f".{output_path.name}.tmp")
+
         try:
             # Memory Safety Fix: Always attempt streaming first if atom_style allows
             streaming_success = False
             if self.config.atom_style == "atomic":
                 try:
-                    with output_path.open("w") as f:
+                    with temp_path.open("w") as f:
                         write_lammps_streaming(f, structure, elements)
+
+                        f.flush()
+                        os.fsync(f.fileno())
                     streaming_success = True
                     logger.debug("Successfully wrote LAMMPS data file using streaming.")
                 except ValueError as e:
@@ -105,13 +113,22 @@ class LammpsFileManager:
                         len(structure),
                     )
                 write(
-                    str(output_path),
+                    str(temp_path),
                     structure,
                     format="lammps-data",
                     specorder=elements,
                     atom_style=self.config.atom_style.value,
                 )
 
+            # Atomic rename
+            temp_path.replace(output_path)
+
         except Exception as e:
+            # Rollback
+            import contextlib
+
+            if temp_path.exists():
+                with contextlib.suppress(OSError):
+                    temp_path.unlink()
             msg = f"Failed to write LAMMPS data file: {e}"
             raise RuntimeError(msg) from e

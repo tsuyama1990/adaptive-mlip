@@ -7,6 +7,8 @@ from typing import Self
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from pyacemaker.utils.path import validate_path_safe
+
 
 class LoopStatus(StrEnum):
     RUNNING = "RUNNING"
@@ -26,29 +28,14 @@ class LoopState(BaseModel):
     def validate_potential_path(cls, v: Path | None) -> Path | None:
         """Ensures that if a potential path is set, it exists, is a file, and is safe."""
         if v is not None:
-            # Resolve to absolute path to prevent traversal/ambiguity
-            try:
-                path = Path(v).resolve(strict=True)
-            except (FileNotFoundError, RuntimeError) as e:
-                # strict=True raises FileNotFoundError if it doesn't exist
+            path = validate_path_safe(v)
+            if not path.exists():
                 msg = f"Potential path does not exist or is invalid: {v}"
-                raise ValueError(msg) from e
+                raise ValueError(msg)
 
             if not path.is_file():
                 msg = f"Potential path is not a file: {path}"
                 raise ValueError(msg)
-
-            # Security: Ensure path is within safe boundaries
-            try:
-                cwd = Path.cwd().resolve()
-                if not path.is_relative_to(cwd):
-                    # Exception: Allow /tmp or temp directories for testing/runtime
-                    temp_dir = Path(tempfile.gettempdir()).resolve()
-                    if not path.is_relative_to(temp_dir):
-                        _raise_traversal_error(path, cwd)
-            except ValueError as e:
-                # is_relative_to raises ValueError if not relative
-                _raise_traversal_error(path, cwd, e)
 
             return path
         return v

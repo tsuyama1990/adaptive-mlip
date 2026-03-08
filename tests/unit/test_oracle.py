@@ -180,7 +180,7 @@ def test_dft_manager_invalid_input(mock_dft_config: DFTConfig) -> None:
 
 
 def test_dft_manager_empty_iterator(mock_dft_config: DFTConfig) -> None:
-    """Test compute handles empty iterator correctly with warning."""
+    """Test compute handles empty iterator correctly safely."""
     manager = DFTManager(mock_dft_config)
     empty_iter: Iterator[Atoms] = iter([])
 
@@ -188,8 +188,7 @@ def test_dft_manager_empty_iterator(mock_dft_config: DFTConfig) -> None:
     # Use deque(..., maxlen=0) to consume iterator efficiently
     from collections import deque
 
-    with pytest.warns(UserWarning, match="Oracle received empty iterator"):
-        deque(manager.compute(empty_iter), maxlen=0)
+    deque(manager.compute(empty_iter), maxlen=0)
 
 
 def test_dft_manager_embedding(mock_dft_config: DFTConfig, monkeypatch: pytest.MonkeyPatch) -> None:

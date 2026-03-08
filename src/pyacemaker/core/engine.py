@@ -64,12 +64,21 @@ class LammpsEngine(BaseEngine):
             msg = f"Input script not found: {script_path}"
             raise FileNotFoundError(msg)
 
+    def _validate_script_content(self, script_path: Path) -> None:
+        """Validates script content for shell injection vulnerabilities."""
+        script_content = script_path.read_text()
+        if "shell" in script_content:
+            msg = f"Forbidden command 'shell' detected in LAMMPS script: {script_path}"
+            raise ValueError(msg)
+
     def _execute_simulation(self, driver: LammpsDriver, script_path: Path) -> None:
         """
         Executes the simulation script with standardized error handling.
         """
         try:
             self._ensure_script_readable(script_path)
+            self._validate_script_content(script_path)
+
             # Scalability: Use run_file to stream script execution
             driver.run_file(str(script_path))
 
@@ -108,8 +117,20 @@ class LammpsEngine(BaseEngine):
                     # Here we append a print statement to indicate resume logic.
                     f.write(f"\nprint 'Resuming from step {resume_step}'\n")
 
+            # Read LAMMPS specific configuration
+            lammps_args = ["-screen", LAMMPS_SCREEN_ARG, "-log", str(log_file)]
+
+            # Allow additional env-based arguments
+            import os
+
+            extra_args = os.getenv("LAMMPS_EXTRA_ARGS")
+            if extra_args:
+                import shlex
+
+                lammps_args.extend(shlex.split(extra_args))
+
             # Initialize Driver with unique log file
-            driver = LammpsDriver(["-screen", LAMMPS_SCREEN_ARG, "-log", str(log_file)])
+            driver = LammpsDriver(lammps_args)
 
             try:
                 self._execute_simulation(driver, input_script_path)
@@ -194,7 +215,17 @@ class LammpsEngine(BaseEngine):
                 self.generator.write_minimization_script(f, potential_path, data_file, elements)
 
             # Execute
-            driver = LammpsDriver(["-screen", LAMMPS_SCREEN_ARG, "-log", str(log_file)])
+            lammps_args = ["-screen", LAMMPS_SCREEN_ARG, "-log", str(log_file)]
+
+            import os
+
+            extra_args = os.getenv("LAMMPS_EXTRA_ARGS")
+            if extra_args:
+                import shlex
+
+                lammps_args.extend(shlex.split(extra_args))
+
+            driver = LammpsDriver(lammps_args)
             try:
                 self._execute_simulation(driver, script_path)
                 return driver.get_atoms(elements)
