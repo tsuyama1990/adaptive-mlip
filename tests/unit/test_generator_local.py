@@ -67,4 +67,5 @@ def test_generate_local_md_burst():
 
     assert len(candidates) == 1
     import numpy as np
+
     assert not np.allclose(candidates[0].positions, base.positions)

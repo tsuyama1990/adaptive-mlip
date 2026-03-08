@@ -55,10 +55,6 @@ def test_generator_hybrid_potential(tmp_path: Path) -> None:
     assert f"pair_coeff * * pace {expected_pot} H He" in script
 
     # ZBL check
-    # H (Z=1), He (Z=2)
-    # pair_coeff 1 1 zbl 1 1
-    # pair_coeff 1 2 zbl 1 2
-    # pair_coeff 2 2 zbl 2 2
     assert "pair_coeff 1 1 zbl 1 1" in script
     assert "pair_coeff 1 2 zbl 1 2" in script
     assert "pair_coeff 2 2 zbl 2 2" in script

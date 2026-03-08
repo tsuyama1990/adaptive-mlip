@@ -88,7 +88,9 @@ def test_lammps_driver_run_shell(mock_lammps: Any) -> None:
     """Tests rejection of shell command."""
     driver = LammpsDriver()
     script = "shell ls"
-    with pytest.raises(ValueError, match="Script contains forbidden or unrecognized command: 'shell'"):
+    with pytest.raises(
+        ValueError, match="Script contains forbidden or unrecognized command: 'shell'"
+    ):
         driver.run(script)
 
 

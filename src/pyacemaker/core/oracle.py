@@ -251,7 +251,7 @@ class TieredOracle(BaseOracle):
             mace_result = next(self.mace.compute(iter([atoms])))
 
             # Evaluate uncertainty
-            c_gamma = mace_result.get_array("c_gamma") # type: ignore[no-untyped-call]
+            c_gamma = mace_result.get_array("c_gamma")  # type: ignore[no-untyped-call]
             max_uncertainty = np.max(c_gamma)
 
             if max_uncertainty > self.thresholds.threshold_call_dft:
@@ -265,7 +265,7 @@ class TieredOracle(BaseOracle):
                 dft_result = next(self.dft.compute(iter([atoms])))
 
                 # We should retain the c_gamma array for active learning tracking
-                dft_result.set_array("c_gamma", c_gamma) # type: ignore[no-untyped-call]
+                dft_result.set_array("c_gamma", c_gamma)  # type: ignore[no-untyped-call]
                 yield dft_result
             else:
                 yield mace_result

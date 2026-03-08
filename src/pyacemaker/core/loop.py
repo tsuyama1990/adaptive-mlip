@@ -50,6 +50,7 @@ class LoopState(BaseModel):
         lock_path = path.with_suffix(".lock")
 
         import sys
+
         is_windows = sys.platform == "win32"
         if is_windows:
             import msvcrt
@@ -59,7 +60,7 @@ class LoopState(BaseModel):
         with lock_path.open("w") as lock_file:
             try:
                 if is_windows:
-                    msvcrt.locking(lock_file.fileno(), msvcrt.LK_LOCK, 1) # type: ignore[attr-defined]
+                    msvcrt.locking(lock_file.fileno(), msvcrt.LK_LOCK, 1)  # type: ignore[attr-defined]
                 else:
                     fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
 
@@ -81,7 +82,7 @@ class LoopState(BaseModel):
                     raise
             finally:
                 if is_windows:
-                    msvcrt.locking(lock_file.fileno(), msvcrt.LK_UNLCK, 1) # type: ignore[attr-defined]
+                    msvcrt.locking(lock_file.fileno(), msvcrt.LK_UNLCK, 1)  # type: ignore[attr-defined]
                 else:
                     fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
 
@@ -99,5 +100,3 @@ class LoopState(BaseModel):
         except (json.JSONDecodeError, ValueError) as e:
             msg = f"Failed to load loop state from {path}: {e}"
             raise ValueError(msg) from e
-
-

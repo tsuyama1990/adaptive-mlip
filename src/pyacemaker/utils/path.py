@@ -4,7 +4,7 @@ from pathlib import Path
 from pyacemaker.domain_models.constants import DANGEROUS_PATH_CHARS, DEFAULT_RAM_DISK_PATH
 
 
-def validate_path_safe(path: Path) -> Path: # noqa: C901
+def validate_path_safe(path: Path) -> Path:  # noqa: C901
     """
     Ensures path is safe using strict resolution and character allowlisting.
     Centralized utility for path validation.

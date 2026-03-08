@@ -75,12 +75,12 @@ class LammpsFileManager:
                 elements = get_species_order(structure)
                 self._write_structure_memory(structure, data_file, elements)
 
-            return temp_dir_ctx, data_file, dump_file, log_file, elements
-
         except Exception:
             # Clean up if setup fails
             temp_dir_ctx.cleanup()
             raise
+        else:
+            return temp_dir_ctx, data_file, dump_file, log_file, elements
 
     def _write_structure_memory(
         self, structure: Atoms, output_path: Path, elements: list[str]
@@ -120,10 +120,13 @@ class LammpsFileManager:
                     atom_style=self.config.atom_style.value,
                 )
 
+            def _raise_error() -> None:
+                msg = f"Temporary file {temp_path} is missing or empty before finalizing."
+                raise ValueError(msg)  # noqa: TRY301
+
             # Atomic rename validation
             if not temp_path.exists() or temp_path.stat().st_size == 0:
-                msg = f"Temporary file {temp_path} is missing or empty before finalizing."
-                raise ValueError(msg)
+                _raise_error()
 
             temp_path.replace(output_path)
 

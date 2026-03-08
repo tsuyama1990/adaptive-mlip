@@ -36,7 +36,9 @@ def test_validate_command_unsafe_chars(driver):
         "print 'hello' | grep x",  # | forbidden
     ]
     for cmd in unsafe_cmds:
-        with pytest.raises(ValueError, match="contains forbidden characters|forbidden command|unrecognized command"):
+        with pytest.raises(
+            ValueError, match="contains forbidden characters|forbidden command|unrecognized command"
+        ):
             driver._validate_command(cmd)
 
 

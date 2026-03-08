@@ -51,7 +51,7 @@ class PolicyFactory:
             # Configuration explicitly mapping against our strict exploration enums
             if not isinstance(p_name, ExplorationPolicy):
                 msg = f"Invalid policy configuration mapping: {p_name}"
-                raise ValueError(msg)
+                raise TypeError(msg)
 
             policy_cls = policies_map.get(p_name)
             if not policy_cls:

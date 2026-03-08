@@ -43,7 +43,7 @@ class TestValidator:
 
         potential_path = Path("pot.yace")
         output_path = Path("report.html")
-        structure = Atoms("H", cell=[10,10,10], pbc=True)
+        structure = Atoms("H", cell=[10, 10, 10], pbc=True)
 
         # Mock _relax_structure to isolate
         with patch.object(validator, "_relax_structure") as mock_relax:
@@ -72,7 +72,7 @@ class TestValidator:
 
         potential_path = Path("pot.yace")
         output_path = Path("report.html")
-        structure = Atoms("H", cell=[10,10,10], pbc=True)
+        structure = Atoms("H", cell=[10, 10, 10], pbc=True)
 
         with patch.object(validator, "_relax_structure") as mock_relax:
             mock_relax.return_value = structure
