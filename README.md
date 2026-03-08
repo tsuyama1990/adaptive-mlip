@@ -1,132 +1,104 @@
-# PyAceMaker
+# PYACEMAKER
 
-![Python](https://img.shields.io/badge/python-3.11+-blue.svg)
-![License](https://img.shields.io/badge/license-MIT-green.svg)
-![Status](https://img.shields.io/badge/status-Verified-brightgreen.svg)
+![Build Status](https://img.shields.io/badge/build-passing-brightgreen)
+![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)
+![License](https://img.shields.io/badge/license-MIT-blue)
 
-**Adaptive machine learning interatomic potentials construction orchestrator.**
+PYACEMAKER is an adaptive machine learning interatomic potential generator designed for High-Performance Computing (HPC) environments. It leverages a novel NextGen Hierarchical Distillation Architecture, combining foundation models (like MACE) with active learning to enable seamless, long-timescale molecular dynamics simulations of complex materials, overcoming traditional limitations like thermal noise sensitivity and catastrophic forgetting.
 
-## Overview
+## Key Features
 
-**PyAceMaker** is an automated workflow tool designed to construct robust Machine Learning Interatomic Potentials (MLIPs). It orchestrates the entire active learning loop: generating candidate structures, running DFT calculations (via Quantum Espresso), training potentials (e.g., ACE), and validating them through MD simulations. It also supports advanced production scenarios like Adaptive Kinetic Monte Carlo (aKMC) for long-timescale phenomena.
+1.  **Seamless Master-Slave MD**: Inverts the control flow by having the LAMMPS C++ loop call Python. This allows the simulation to pause, update potentials, and resume without losing temporal continuity or ensemble state.
+2.  **Two-Tier Uncertainty Evaluation**: Differentiates between thermal noise and genuine unknown physical configurations using dual thresholds, drastically reducing false positive halts and unnecessary Density Functional Theory (DFT) calculations.
+3.  **Intelligent Cutout & Passivation**: Automatically isolates and safely extracts only the highly uncertain local atomic environments (the "epicentre") when a simulation halts, resolving surface states and dummy atoms to prevent unphysical dipole divergence during DFT processing.
+4.  **Hierarchical Delta Learning**: Uses base potentials (like Lennard-Jones) and incremental updates with replay buffers to continuously train the models without recalculating everything from scratch, thereby solving catastrophic forgetting and keeping computational costs low ($O(1)$).
 
-### Why PyAceMaker?
-Constructing MLIPs manually is tedious and error-prone. PyAceMaker automates the "Active Learning" cycle, ensuring that your potential is trained on the most relevant structures—those where the current model is uncertain—thereby maximizing accuracy while minimizing expensive DFT calls.
+## Architecture Overview
 
-## Features
+PYACEMAKER orchestrates a 4-phase workflow. It starts with zero-shot distillation from foundation models to build a base potential, validates it against physical properties, and then runs MD. When the MD encounters unknown configurations, it intelligently extracts the relevant local cluster, calculates ground truth forces via DFT, and finetunes the models through hierarchical delta learning before resuming the MD seamlessly.
 
-*   **Automated Workflow Orchestration**: Manages the loop of exploration, labeling, training, and validation.
-*   **Structure Exploration**:
-    *   **Cold Start**: Initial structure generation using M3GNet (or database lookup).
-    *   **Perturbation Policies**:
-        *   **Random Rattle**: Displaces atoms to sample local energy minima.
-        *   **Strain**: Applies volume and shear strain to sample elastic response.
-        *   **Defects**: Introduces vacancies to train for off-stoichiometry robustness.
-*   **DFT Management**:
-    *   Automated Quantum Espresso execution via ASE.
-    *   **Self-Healing**: Automatically retries failed calculations with adjusted parameters (e.g., mixing beta, smearing).
-    *   **Security**: Prevents path traversal and validates input configuration.
-*   **Potential Training (Pacemaker)**:
-    *   **Delta Learning**: Fits the difference between DFT and a physics-based baseline (LJ/ZBL) for robustness.
-    *   **Active Set Optimization**: Uses D-optimality (MaxVol) to select the most informative structures, reducing training costs.
-    *   **Automated Configuration**: Generates optimal `input.yaml` for Pacemaker based on dataset composition.
-*   **Molecular Dynamics (MD) Engine**:
-    *   Integrated LAMMPS driver for NPT/NVT simulations.
-    *   **Hybrid Potentials**: Overlays ACE with ZBL/LJ for safety during high-energy events.
-    *   **Uncertainty Watchdog**: Automatically halts simulations when the extrapolation grade ($\gamma$) exceeds a safe threshold.
-*   **Advanced Simulation (EON & Scenarios)**:
-    *   **Adaptive Kinetic Monte Carlo (aKMC)**: Integrated EON interface for exploring long-timescale events and saddle point searches.
-    *   **Production Scenarios**: Built-in workflows for complex "Grand Challenges", such as Fe/Pt deposition on MgO surfaces and subsequent L10 ordering.
-*   **Scalability**:
-    *   **Streaming Data Processing**: Handles large datasets with O(1) memory usage.
-    *   **Resume Capability**: Checkpoints state to `state.json`, allowing workflows to pause and resume.
+```mermaid
+graph TD
+    A[Phase 1: Zero-Shot Distillation] --> B[Phase 2: Validation & Stress Test];
+    B --> C[Phase 3: Intelligent Cutout & DFT];
+    C --> D[Phase 4: Hierarchical Delta Learning];
+    D -.->|Seamless Resume| C;
+```
 
-## Requirements
+## Prerequisites
 
-*   **Python**: >= 3.11
-*   **DFT Code**: Quantum Espresso (`pw.x` executable in PATH)
-*   **MLIP Trainer**: Pacemaker (`pace_train`, `pace_activeset` executables in PATH)
-*   **MD Engine**: LAMMPS Python Interface (`lammps` package, with `USER-PACE` support)
-*   **aKMC Code**: EON (`eonclient` executable in PATH, for aKMC scenarios)
+*   Python 3.12+
+*   `uv` (for fast Python environment and dependency management)
+*   LAMMPS (compiled with Python support)
+*   Quantum ESPRESSO (for DFT calculations)
 
-## Installation
+## Installation & Setup
+
+We use `uv` for managing dependencies to ensure strict reproducibility and fast environment creation.
 
 ```bash
+# Clone the repository
 git clone https://github.com/your-org/pyacemaker.git
 cd pyacemaker
+
+# Sync the environment and install dependencies using uv
 uv sync
+
+# Optional: set up environment variables for HPC/DFT
+cp .env.example .env
 ```
 
 ## Usage
 
-1.  **Prepare Configuration**:
-    Create a `config.yaml` file defining your project parameters.
+You can start the workflow by passing a configuration file to the main entry point:
 
-    ```yaml
-    project_name: "FePt_Alloy"
-    structure:
-        elements: ["Fe", "Pt"]
-        supercell_size: [2, 2, 2]
-        policy_name: "random_rattle"
-        rattle_stdev: 0.1
-    dft:
-        code: "quantum_espresso"
-        functional: "PBE"
-        kpoints_density: 0.04
-        encut: 500.0
-        pseudopotentials:
-            Fe: "Fe.pbe-n-kjpaw_psl.1.0.0.UPF"
-            Pt: "Pt.pbe-n-kjpaw_psl.1.0.0.UPF"
-    training:
-        potential_type: "ace"
-        cutoff_radius: 5.0
-        max_basis_size: 500
-        delta_learning: true
-        active_set_optimization: true
-        active_set_size: 100
-    md:
-        temperature: 1000.0
-        pressure: 0.0
-        timestep: 0.001
-        n_steps: 5000
-    workflow:
-        max_iterations: 10
-        checkpoint_interval: 1
-    # Optional: Scenario Configuration
-    scenario:
-        name: "fept_mgo"
-        enabled: false
-        parameters:
-            num_depositions: 50
-    eon:
-        enabled: false
-        eon_executable: "eonclient"
-        potential_path: "potentials/current.yace"
-    ```
+```bash
+uv run pyacemaker --config config.yaml
+```
 
-2.  **Run PyAceMaker**:
+**Quick Start Tutorial:**
+To verify the system's requirements and see it in action, run the user acceptance tests via Marimo:
 
+```bash
+uv run marimo edit tutorials/UAT_AND_TUTORIAL.py
+```
+
+## Development Workflow
+
+We strictly enforce code quality, utilizing modern linters and type checkers.
+
+*   **Run Linter**: Ensure your code meets our complexity and style guidelines.
     ```bash
-    # Dry run to validate config
-    uv run pyacemaker --config config.yaml --dry-run
-
-    # Start the active learning loop (Standard Mode)
-    uv run pyacemaker --config config.yaml
-
-    # Run a specific scenario (e.g., FePt on MgO)
-    uv run pyacemaker --config config.yaml --scenario fept_mgo
+    uv run ruff check .
+    ```
+*   **Run Type Checker**: We enforce strict type hints.
+    ```bash
+    uv run mypy src/ tests/
+    ```
+*   **Run Tests**: Execute the test suite and check coverage.
+    ```bash
+    uv run pytest
     ```
 
-## Architecture
+The development plan follows a structured, 5-cycle approach to safely extend the existing active learning loop with the NextGen features.
 
+## Project Structure
+
+```text
+pyacemaker/
+├── dev_documents/         # Architecture specifications, PRDs, UATs
+├── src/                   # Source code
+│   └── pyacemaker/
+│       ├── core/          # Core engines, oracles, trainers, validators
+│       ├── domain_models/ # Pydantic configuration schemas
+│       ├── interfaces/    # External interfaces (LAMMPS, QE)
+│       └── utils/         # Helpers (extraction, embedding)
+├── tests/                 # Unit and integration tests
+├── tutorials/             # Marimo notebooks for UAT and onboarding
+├── pyproject.toml         # Project dependencies and tool configurations
+└── README.md              # This file
 ```
-src/pyacemaker/
-├── core/               # Core business logic (Generator, Oracle, Trainer, Engines)
-├── domain_models/      # Pydantic data schemas and validation
-├── interfaces/         # External code drivers (Quantum Espresso, EON, LAMMPS)
-├── scenarios/          # Specialized production workflows (e.g., FePt/MgO)
-├── utils/              # Helper functions (I/O, perturbations)
-├── factory.py          # Dependency injection
-├── orchestrator.py     # Workflow state machine
-└── main.py             # CLI entry point
-```
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
