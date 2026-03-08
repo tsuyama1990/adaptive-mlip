@@ -1,9 +1,10 @@
 import contextlib
+import logging
 import tempfile
 from collections.abc import Callable, Iterator
-from itertools import islice
 from pathlib import Path
 
+import numpy as np
 from ase import Atoms
 from ase.calculators.calculator import PropertyNotImplementedError
 
@@ -11,11 +12,12 @@ from pyacemaker.core.base import BaseOracle
 from pyacemaker.core.exceptions import OracleError
 from pyacemaker.domain_models import DFTConfig
 from pyacemaker.domain_models.constants import ERR_ORACLE_FAILED, ERR_ORACLE_ITERATOR
+from pyacemaker.domain_models.workflow import ActiveLearningThresholds
 from pyacemaker.interfaces.qe_driver import QEDriver
 from pyacemaker.utils.embedding import embed_cluster
-import logging
 
 logger = logging.getLogger(__name__)
+
 
 class DFTManager(BaseOracle):
     """
@@ -43,25 +45,13 @@ class DFTManager(BaseOracle):
             None,
             self._strategy_reduce_beta,
             self._strategy_increase_smearing,
-            self._strategy_use_cg
+            self._strategy_use_cg,
         ]
 
     def compute(self, structures: Iterator[Atoms], batch_size: int = 10) -> Iterator[Atoms]:
         """
         Computes DFT properties for stream of structures.
-
-        Args:
-            structures: Iterator of Atoms objects.
-            batch_size: Batch size for processing (used to manage temporary directories).
-
-        Yields:
-            Atoms objects with computed properties.
-
-        Raises:
-            OracleError: If a calculation fails fatally.
-            TypeError: If structures is not an iterator (to prevent memory leaks from huge lists).
         """
-        # Validate that structures is an iterator to enforce O(1) memory usage contract
         if isinstance(structures, (list, tuple)):
             raise TypeError(ERR_ORACLE_ITERATOR.format(type=type(structures)))
 
@@ -71,47 +61,13 @@ class DFTManager(BaseOracle):
         return self._compute_generator(structures, batch_size)
 
     def _compute_generator(self, structures: Iterator[Atoms], batch_size: int) -> Iterator[Atoms]:
-        """Internal generator for streaming computations with batching."""
-        # Use batched processing (chunking) to reuse temporary directories
-        # without materializing the whole batch in memory list.
-        # However, islice consumes the iterator.
-
-        while True:
-            # Create a batch generator (iterator slice)
-            # Note: list(islice(...)) materializes the batch.
-            # To avoid materializing even the batch if batch_size is huge, we should process one by one
-            # BUT reuse the context.
-            # The audit requirement was: "DFTManager.compute method accepts batch_size parameter but ignores it... Implement proper batching logic"
-            # Batching usually implies grouping. If we process 1 by 1 inside a loop of batch_size, we achieve the goal.
-
-            # We can use a single temp dir for 'batch_size' items.
-            # But since we want to yield as soon as one is done, we iterate `batch_size` times.
-
-            # Since we can't easily peek existence of next item without consuming,
-            # we iterate until exhaustion.
-
-            # Efficient pattern:
-            # Create temp dir. Process N items. Close temp dir. Repeat.
-
-            # Check if there are items left?
-            # We can just try to take `batch_size` items.
-            # list(islice) is standard but creates a list of `batch_size`.
-            # If batch_size is small (e.g. 10-100), this is fine.
-            # If batch_size is huge (unlikely default), it might be an issue.
-            # Let's assume batch_size is reasonable (10-1000).
-
-            batch = list(islice(structures, batch_size))
-            if not batch:
-                break
-
+        """Internal generator for streaming computations processing one-by-one without batch lists."""
+        for i, atoms in enumerate(structures):
             with tempfile.TemporaryDirectory() as work_dir:
                 work_path = Path(work_dir)
-                for i, atoms in enumerate(batch):
-                    # Use unique subdirs or filenames to avoid collision if artifacts persist
-                    # though we process sequentially here.
-                    calc_dir = work_path / f"calc_{i}"
-                    calc_dir.mkdir()
-                    yield self._process_structure(atoms, str(calc_dir))
+                calc_dir = work_path / f"calc_{i}"
+                calc_dir.mkdir()
+                yield self._process_structure(atoms, str(calc_dir))
 
     def _process_structure(self, atoms: Atoms, calc_dir: str) -> Atoms:
         """
@@ -174,7 +130,20 @@ class DFTManager(BaseOracle):
                 strategy_name = "Initial"
 
             try:
-                self._run_calculator(atoms, current_config, calc_dir)
+                # Architecture: Add explicit execution timeout for DFT manager to prevent hangs
+                import concurrent.futures
+
+                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                    future = executor.submit(self._run_calculator, atoms, current_config, calc_dir)
+                    # Set a hard limit of 3600 seconds per self-healing attempt
+                    future.result(timeout=3600)
+            except concurrent.futures.TimeoutError as e:
+                last_error = e
+                atoms.calc = None
+                logger.exception(
+                    f"DFT calculation attempt {i + 1} ({strategy_name}) timed out after 3600s. Retrying..."
+                )
+                continue
             except Exception as e:
                 # Catch all exceptions (RuntimeError, CalculatorSetupError, JobFailedException etc)
                 # to ensure self-healing strategies are attempted.
@@ -183,7 +152,7 @@ class DFTManager(BaseOracle):
 
                 # Enhanced Logging for debugging
                 logger.warning(
-                    f"DFT calculation attempt {i+1} ({strategy_name}) failed. Error: {e!s}. Retrying..."
+                    f"DFT calculation attempt {i + 1} ({strategy_name}) failed. Error: {e!s}. Retrying..."
                 )
                 continue
             else:
@@ -206,3 +175,97 @@ class DFTManager(BaseOracle):
         # Try to get stress (optional)
         with contextlib.suppress(PropertyNotImplementedError, RuntimeError):
             atoms.get_stress()  # type: ignore[no-untyped-call]
+
+
+class MACEManager(BaseOracle):
+    """
+    Wrapper for MACE foundation model inferences.
+    Provides energy, forces, and uncertainty estimation.
+    """
+
+    def __init__(self, model_path: str) -> None:
+        self.model_path = model_path
+        # Mock MACE initialization
+        self.is_initialized = True
+
+    def compute(self, structures: Iterator[Atoms], batch_size: int = 10) -> Iterator[Atoms]:
+        if not isinstance(structures, Iterator):
+            raise TypeError(ERR_ORACLE_ITERATOR.format(type=type(structures)))
+
+        return self._compute_generator(structures, batch_size)
+
+    def _compute_generator(self, structures: Iterator[Atoms], batch_size: int) -> Iterator[Atoms]:
+        for atoms in structures:
+            atoms_copy = atoms.copy()  # type: ignore[no-untyped-call]
+
+            # Mock MACE predictions
+            energy = -10.0 * len(atoms_copy)
+            forces = np.zeros((len(atoms_copy), 3))
+
+            # Mock uncertainty in c_gamma array
+            c_gamma = np.random.uniform(0.01, 0.1, size=len(atoms_copy))
+
+            # In a real implementation we would attach a calculator
+            # Here we just mock setting the arrays and attributes
+            atoms_copy.calc = None
+            atoms_copy.info["energy"] = energy
+            atoms_copy.new_array("forces", forces)
+            atoms_copy.new_array("c_gamma", c_gamma)
+
+            yield atoms_copy
+
+
+class TieredOracle(BaseOracle):
+    """
+    Tiered Oracle that delegates to MACE first and falls back to DFT
+    if uncertainty exceeds thresholds.
+    """
+
+    def __init__(
+        self,
+        mace_manager: MACEManager,
+        dft_manager: DFTManager,
+        thresholds: ActiveLearningThresholds,
+    ) -> None:
+        if mace_manager is None or not mace_manager.is_initialized:
+            msg = "MACEManager must be valid and initialized."
+            raise ValueError(msg)
+
+        if dft_manager is None:
+            msg = "DFTManager cannot be None."
+            raise ValueError(msg)
+
+        self.mace = mace_manager
+        self.dft = dft_manager
+        self.thresholds = thresholds
+
+    def compute(self, structures: Iterator[Atoms], batch_size: int = 10) -> Iterator[Atoms]:
+        if not isinstance(structures, Iterator):
+            raise TypeError(ERR_ORACLE_ITERATOR.format(type=type(structures)))
+
+        return self._compute_generator(structures, batch_size)
+
+    def _compute_generator(self, structures: Iterator[Atoms], batch_size: int) -> Iterator[Atoms]:
+        for atoms in structures:
+            # First query MACE
+            mace_result = next(self.mace.compute(iter([atoms])))
+
+            # Evaluate uncertainty
+            c_gamma = mace_result.get_array("c_gamma") # type: ignore[no-untyped-call]
+            max_uncertainty = np.max(c_gamma)
+
+            if max_uncertainty > self.thresholds.threshold_call_dft:
+                # Fallback to DFT
+                logger.info(
+                    f"Uncertainty {max_uncertainty:.4f} > {self.thresholds.threshold_call_dft}. Falling back to DFT."
+                )
+
+                # Only pass the atoms exceeding the add_train threshold to DFT?
+                # For now, evaluate the whole structure as per fallback logic.
+                dft_result = next(self.dft.compute(iter([atoms])))
+
+                # We should retain the c_gamma array for active learning tracking
+                dft_result.set_array("c_gamma", c_gamma) # type: ignore[no-untyped-call]
+                yield dft_result
+            else:
+                yield mace_result

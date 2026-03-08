@@ -52,9 +52,7 @@ class PacemakerConfigGenerator:
             return sorted(self.config.elements)
 
         try:
-            return detect_elements(
-                Path(data_path), max_frames=DEFAULT_MAX_FRAMES_ELEMENT_DETECTION
-            )
+            return detect_elements(Path(data_path), max_frames=DEFAULT_MAX_FRAMES_ELEMENT_DETECTION)
         except ValueError as e:
             msg = f"Could not detect elements from {data_path}. Please provide 'elements' in config or ensure data is valid: {e}"
             raise TrainerError(msg) from e

@@ -1,7 +1,6 @@
-from functools import lru_cache
+import shlex
 from pathlib import Path
 from typing import TextIO
-import shlex
 
 from ase.data import atomic_numbers
 
@@ -22,12 +21,12 @@ class LammpsScriptGenerator:
         # Use lru_cache for methods instead of manual dict
         self._atomic_numbers_cache = {}
 
-    @lru_cache(maxsize=128)
     def _get_atomic_number(self, symbol: str) -> int:
         """Cached atomic number lookup."""
-        return atomic_numbers[symbol]
+        if symbol not in self._atomic_numbers_cache:
+            self._atomic_numbers_cache[symbol] = atomic_numbers[symbol]
+        return self._atomic_numbers_cache[symbol]
 
-    @lru_cache(maxsize=128)
     def _quote(self, path: str) -> str:
         """
         Quotes a path for LAMMPS script safety after validation.
@@ -36,23 +35,33 @@ class LammpsScriptGenerator:
         # Sanitize input path
         # Note: path must be string for lru_cache
         safe_path = validate_path_safe(Path(path))
+        if not safe_path.exists() and not safe_path.parent.exists():
+            msg = f"Path {safe_path} is invalid or has an invalid parent directory."
+            raise ValueError(msg)
+
         # Use shlex.quote for shell safety
         return shlex.quote(str(safe_path))
 
-    def _gen_potential_pure(self, buffer: TextIO, potential_path: Path, elements: list[str]) -> None:
+    def _gen_potential_pure(
+        self, buffer: TextIO, potential_path: Path, elements: list[str]
+    ) -> None:
         """Generates pure PACE potential commands."""
         species_str = " ".join(elements)
         quoted_pot = self._quote(str(potential_path))
         buffer.write("pair_style pace\n")
         buffer.write(f"pair_coeff * * pace {quoted_pot} {species_str}\n")
 
-    def _gen_potential_hybrid(self, buffer: TextIO, potential_path: Path, elements: list[str]) -> None:
+    def _gen_potential_hybrid(
+        self, buffer: TextIO, potential_path: Path, elements: list[str]
+    ) -> None:
         """Generates hybrid PACE + ZBL potential commands."""
         species_str = " ".join(elements)
         quoted_pot = self._quote(str(potential_path))
         params = self.config.hybrid_params
 
-        buffer.write(f"pair_style hybrid/overlay pace zbl {params.zbl_cut_inner} {params.zbl_cut_outer}\n")
+        buffer.write(
+            f"pair_style hybrid/overlay pace zbl {params.zbl_cut_inner} {params.zbl_cut_outer}\n"
+        )
         buffer.write(f"pair_coeff * * pace {quoted_pot} {species_str}\n")
 
         n_types = len(elements)
@@ -66,7 +75,7 @@ class LammpsScriptGenerator:
             for j in range(i, n_types):
                 el_j = elements[j]
                 z_j = self._get_atomic_number(el_j)
-                zbl_lines.append(f"pair_coeff {i+1} {j+1} zbl {z_i} {z_j}\n")
+                zbl_lines.append(f"pair_coeff {i + 1} {j + 1} zbl {z_i} {z_j}\n")
 
         buffer.writelines(zbl_lines)
 
@@ -116,7 +125,7 @@ class LammpsScriptGenerator:
 
         temp = self.config.temperature
         if self.config.ramping and self.config.ramping.temp_start is not None:
-             temp = self.config.ramping.temp_start
+            temp = self.config.ramping.temp_start
 
         buffer.write(
             f"fix mc_swap all atom/swap {self.config.mc.swap_freq} 1 {self.config.mc.seed} "

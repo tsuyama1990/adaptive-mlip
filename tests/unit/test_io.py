@@ -35,17 +35,20 @@ def test_detect_elements(tmp_path):
 
     # Use ASE to write standard xyz
     from ase.io import write
+
     write(xyz_file, [atoms1, atoms2])
 
     elements = detect_elements(xyz_file)
     assert set(elements) == {"H", "O", "C"}
-    assert elements == ["C", "H", "O"] # sorted
+    assert elements == ["C", "H", "O"]  # sorted
+
 
 def test_detect_elements_empty(tmp_path):
     empty_file = tmp_path / "empty.xyz"
     empty_file.touch()
     elements = detect_elements(empty_file)
     assert elements == []
+
 
 def test_write_lammps_streaming_basic():
     atoms = Atoms("H2", positions=[[0, 0, 0], [0.74, 0, 0]], cell=[5, 5, 5])
@@ -73,8 +76,9 @@ def test_write_lammps_streaming_basic():
 
     path.unlink()
 
+
 def test_write_lammps_streaming_multiple_species():
-    atoms = Atoms("H2O", positions=[[0,0,0], [1,0,0], [0,1,0]], cell=[10, 10, 10])
+    atoms = Atoms("H2O", positions=[[0, 0, 0], [1, 0, 0], [0, 1, 0]], cell=[10, 10, 10])
     species = ["H", "O"]
 
     with tempfile.NamedTemporaryFile(mode="w+", delete=False) as f:
@@ -88,9 +92,10 @@ def test_write_lammps_streaming_multiple_species():
 
     path.unlink()
 
+
 def test_write_lammps_streaming_missing_species():
-    atoms = Atoms("He", positions=[[0,0,0]], cell=[10,10,10])
-    species = ["H"] # He is missing
+    atoms = Atoms("He", positions=[[0, 0, 0]], cell=[10, 10, 10])
+    species = ["H"]  # He is missing
 
     with tempfile.NamedTemporaryFile(mode="w+", delete=False) as f:
         with pytest.raises(KeyError):

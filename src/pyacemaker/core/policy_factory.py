@@ -1,11 +1,12 @@
+from pyacemaker.core.base import BasePolicy
 from pyacemaker.core.policy import (
-    BasePolicy,
     ColdStartPolicy,
     CompositePolicy,
     DefectPolicy,
     MDMicroBurstPolicy,
     NormalModePolicy,
     RattlePolicy,
+    SafeBasePolicy,
     StrainPolicy,
 )
 from pyacemaker.domain_models.structure import (
@@ -33,7 +34,7 @@ class PolicyFactory:
         Raises:
             ValueError: If any policy name is unknown.
         """
-        policies_map: dict[ExplorationPolicy, type[BasePolicy]] = {
+        policies_map: dict[ExplorationPolicy, type[SafeBasePolicy]] = {
             ExplorationPolicy.COLD_START: ColdStartPolicy,
             ExplorationPolicy.RANDOM_RATTLE: RattlePolicy,
             ExplorationPolicy.STRAIN: StrainPolicy,
@@ -45,8 +46,13 @@ class PolicyFactory:
             # Fallback to default if empty (should be handled by Pydantic default though)
             active = [ExplorationPolicy.COLD_START]
 
-        selected_policies = []
+        selected_policies: list[SafeBasePolicy] = []
         for p_name in active:
+            # Configuration explicitly mapping against our strict exploration enums
+            if not isinstance(p_name, ExplorationPolicy):
+                msg = f"Invalid policy configuration mapping: {p_name}"
+                raise ValueError(msg)
+
             policy_cls = policies_map.get(p_name)
             if not policy_cls:
                 msg = f"Unknown policy: {p_name}"

@@ -63,9 +63,10 @@ def test_scenario_06_01_active_learning_campaign(uat_config: PyAceConfig, tmp_pa
     """
     Scenario 06-01: Verify that the system can run a complete active learning loop from start to finish (mocked).
     """
-    with patch("pyacemaker.orchestrator.setup_logger"), \
-         patch("pyacemaker.factory.ModuleFactory.create_modules") as mock_factory:
-
+    with (
+        patch("pyacemaker.orchestrator.setup_logger"),
+        patch("pyacemaker.factory.ModuleFactory.create_modules") as mock_factory,
+    ):
         # Mock modules
         mock_gen = MagicMock()
         mock_oracle = MagicMock()
@@ -74,7 +75,14 @@ def test_scenario_06_01_active_learning_campaign(uat_config: PyAceConfig, tmp_pa
         mock_selector = MagicMock()
         mock_validator = MagicMock()
 
-        mock_factory.return_value = (mock_gen, mock_oracle, mock_trainer, mock_engine, mock_selector, mock_validator)
+        mock_factory.return_value = (
+            mock_gen,
+            mock_oracle,
+            mock_trainer,
+            mock_engine,
+            mock_selector,
+            mock_validator,
+        )
 
         # Pre-create potential files
         pot1 = tmp_path / "pot_v1.yace"
@@ -95,14 +103,24 @@ def test_scenario_06_01_active_learning_campaign(uat_config: PyAceConfig, tmp_pa
         write(halt_path, Atoms("Fe"))
 
         res1 = MDSimulationResult(
-            energy=-10.0, temperature=300, forces=[[0.0, 0.0, 0.0]], n_steps=50, max_gamma=10.0, halted=True,
-            halt_structure_path=str(halt_path)
+            energy=-10.0,
+            temperature=300,
+            forces=[[0.0, 0.0, 0.0]],
+            n_steps=50,
+            max_gamma=10.0,
+            halted=True,
+            halt_structure_path=str(halt_path),
         )
 
         # Iteration 2: Converged (not halted)
         res2 = MDSimulationResult(
-            energy=-10.0, temperature=300, forces=[[0.0, 0.0, 0.0]], n_steps=1000, max_gamma=2.0, halted=False,
-            halt_structure_path=None
+            energy=-10.0,
+            temperature=300,
+            forces=[[0.0, 0.0, 0.0]],
+            n_steps=1000,
+            max_gamma=2.0,
+            halted=False,
+            halt_structure_path=None,
         )
 
         mock_engine.run.side_effect = [res1, res2]
@@ -137,9 +155,10 @@ def test_scenario_06_02_resume_capability(uat_config: PyAceConfig, tmp_path: Pat
     state = LoopState(iteration=1, status=LoopStatus.RUNNING, current_potential=current_pot)
     state.save(state_file)
 
-    with patch("pyacemaker.orchestrator.setup_logger"), \
-         patch("pyacemaker.factory.ModuleFactory.create_modules") as mock_factory:
-
+    with (
+        patch("pyacemaker.orchestrator.setup_logger"),
+        patch("pyacemaker.factory.ModuleFactory.create_modules") as mock_factory,
+    ):
         mock_gen = MagicMock()
         mock_oracle = MagicMock()
         mock_trainer = MagicMock()
@@ -147,12 +166,24 @@ def test_scenario_06_02_resume_capability(uat_config: PyAceConfig, tmp_path: Pat
         mock_selector = MagicMock()
         mock_validator = MagicMock()
         mock_validator = MagicMock()
-        mock_factory.return_value = (mock_gen, mock_oracle, mock_trainer, mock_engine, mock_selector, mock_validator)
+        mock_factory.return_value = (
+            mock_gen,
+            mock_oracle,
+            mock_trainer,
+            mock_engine,
+            mock_selector,
+            mock_validator,
+        )
 
         # Iteration 2: Run MD
         res2 = MDSimulationResult(
-            energy=-10.0, temperature=300, forces=[[0.0, 0.0, 0.0]], n_steps=1000, max_gamma=2.0, halted=False,
-            halt_structure_path=None
+            energy=-10.0,
+            temperature=300,
+            forces=[[0.0, 0.0, 0.0]],
+            n_steps=1000,
+            max_gamma=2.0,
+            halted=False,
+            halt_structure_path=None,
         )
         mock_engine.run.return_value = res2
 
@@ -162,4 +193,4 @@ def test_scenario_06_02_resume_capability(uat_config: PyAceConfig, tmp_path: Pat
 
         # Expectations
         assert orch.loop_state.iteration == 2
-        mock_engine.run.assert_called_once() # Only 1 run
+        mock_engine.run.assert_called_once()  # Only 1 run

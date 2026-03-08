@@ -45,7 +45,7 @@ class PhononCalculator:
 
         # If phonon_atoms is ASE Atoms (in test):
         if isinstance(phonon_atoms, Atoms):
-             return phonon_atoms
+            return phonon_atoms
 
         # Real PhonopyAtoms (in production)
         return Atoms(
@@ -63,10 +63,10 @@ class PhononCalculator:
         unitcell = self._ase_to_phonopy(structure)
         # Ensure supercell_matrix is 3x3 or list of 3 ints (diagonal)
         if len(self.supercell_matrix) == 3 and isinstance(self.supercell_matrix[0], int):
-             # Convert [2, 2, 2] to diag matrix
-             s_mat = np.diag(self.supercell_matrix)
+            # Convert [2, 2, 2] to diag matrix
+            s_mat = np.diag(self.supercell_matrix)
         else:
-             s_mat = np.array(self.supercell_matrix)
+            s_mat = np.array(self.supercell_matrix)
 
         phonon = Phonopy(unitcell, supercell_matrix=s_mat)
         phonon.generate_displacements(distance=self.displacement)
@@ -94,13 +94,9 @@ class PhononCalculator:
         path = [[0.0, 0.0, 0.0], [0.5, 0.0, 0.0], [0.5, 0.5, 0.0], [0.0, 0.0, 0.0]]
         labels = ["G", "X", "M", "G"]
 
-        phonon.run_band_structure(
-            paths=[path],
-            with_eigenvectors=False,
-            labels=labels
-        )
+        phonon.run_band_structure(paths=[path], with_eigenvectors=False, labels=labels)
         bs = phonon.get_band_structure_dict()
-        frequencies = bs["frequencies"] # list of arrays (n_qpoints, n_bands)
+        frequencies = bs["frequencies"]  # list of arrays (n_qpoints, n_bands)
 
         # Check for imaginary modes
         # Phonopy returns negative frequencies for imaginary modes

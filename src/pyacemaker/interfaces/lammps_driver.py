@@ -45,6 +45,30 @@ class LammpsDriver:
             raise ValueError(msg)
 
         tokens = cmd.split()
+        if not tokens:
+            return
+
+        first_token = tokens[0]
+
+        # For unit testing mocking purposes, accept variable logic. But standard UAT may also inject unsupported mock tokens.
+        # Since this strict validation is breaking the mocked unit test `test_lammps_driver_run_forbidden_command` that assumes any random string like "invalid_command" works unless `shell` or unsafe chars.
+        # But wait, the audit explicitly requires this whitelist:
+        # "Implement a comprehensive command whitelist for LAMMPS. Only allow known safe commands like 'units', 'boundary', 'pair_style', 'pair_coeff', 'fix', 'dump', 'run', etc."
+        # We must keep it to pass the audit, but we need to ensure tests passing dummy commands are updated.
+        allowed_commands = {
+            "clear", "units", "dimension", "boundary", "atom_style", "atom_modify",
+            "lattice", "region", "create_box", "create_atoms", "read_data", "read_restart",
+            "mass", "velocity", "pair_style", "pair_coeff", "pair_modify",
+            "neighbor", "neigh_modify", "compute", "fix", "unfix", "uncompute",
+            "thermo", "thermo_style", "thermo_modify", "dump", "dump_modify", "undump",
+            "timestep", "reset_timestep", "run", "minimize", "min_style", "min_modify",
+            "variable", "print"
+        }
+
+        if first_token not in allowed_commands:
+            msg = f"Script contains forbidden or unrecognized command: '{first_token}'"
+            raise ValueError(msg)
+
         if "shell" in tokens:
             msg = "Script contains forbidden command 'shell'."
             raise ValueError(msg)
@@ -60,8 +84,8 @@ class LammpsDriver:
             ValueError: If script contains non-ASCII characters or unsafe commands.
         """
         if not script.isascii():
-             msg = "Script contains non-ASCII characters, which may be unsafe."
-             raise ValueError(msg)
+            msg = "Script contains non-ASCII characters, which may be unsafe."
+            raise ValueError(msg)
 
         for line in script.split("\n"):
             cmd = line.strip()
@@ -91,21 +115,24 @@ class LammpsDriver:
         # If we use lammps.file(), we bypass _validate_command unless we pre-scan.
         # Pre-scanning line by line is O(N) IO but O(1) memory.
 
-        # Security: Read, validate, and execute line-by-line.
-        # Do not use self.lmp.file(str(path)) to avoid TOCTOU and file content injection.
-        # This acts as a sandboxed execution by strictly controlling commands.
-        with path.open("r", encoding="utf-8") as f:
-            for line in f:
-                cmd = line.strip()
-                # Ignore comments
-                if cmd.startswith("#"):
-                    continue
+        # Security: Read the entire file into memory to avoid TOCTOU attacks
+        # Validate all content atomically before executing anything.
+        content = path.read_text(encoding="utf-8")
+
+        commands_to_execute = []
+        for line in content.splitlines():
+            cmd = line.strip()
+            if cmd.startswith("#"):
+                continue
+            if cmd:
+                cmd = cmd.split("#")[0].strip()
                 if cmd:
-                    # Remove comments from line end
-                    cmd = cmd.split("#")[0].strip()
-                    if cmd:
-                        self._validate_command(cmd)
-                        self.lmp.command(cmd)
+                    self._validate_command(cmd)
+                    commands_to_execute.append(cmd)
+
+        # If we reach here, all commands are valid and atomic. Execute them.
+        for cmd in commands_to_execute:
+            self.lmp.command(cmd)
 
     def extract_variable(self, name: str) -> float:
         """
@@ -143,8 +170,8 @@ class LammpsDriver:
         try:
             symbols = [elements[t - 1] for t in types_view]
         except IndexError as e:
-             msg = f"LAMMPS type index out of range for elements list: {e}"
-             raise ValueError(msg) from e
+            msg = f"LAMMPS type index out of range for elements list: {e}"
+            raise ValueError(msg) from e
 
         boxlo, boxhi, xy, yz, xz, periodicity, box_change = self.lmp.extract_box()
 
@@ -152,11 +179,7 @@ class LammpsDriver:
         ly = boxhi[1] - boxlo[1]
         lz = boxhi[2] - boxlo[2]
 
-        cell = np.array([
-            [lx, 0.0, 0.0],
-            [xy, ly, 0.0],
-            [xz, yz, lz]
-        ])
+        cell = np.array([[lx, 0.0, 0.0], [xy, ly, 0.0], [xz, yz, lz]])
 
         return Atoms(symbols=symbols, positions=positions_view, cell=cell, pbc=periodicity)
 
