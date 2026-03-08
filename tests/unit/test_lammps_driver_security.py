@@ -36,7 +36,7 @@ def test_validate_command_unsafe_chars(driver):
         "print 'hello' | grep x",  # | forbidden
     ]
     for cmd in unsafe_cmds:
-        with pytest.raises(ValueError, match="contains forbidden characters|forbidden command"):
+        with pytest.raises(ValueError, match="contains forbidden characters|forbidden command|unrecognized command"):
             driver._validate_command(cmd)
 
 
@@ -44,5 +44,5 @@ def test_validate_command_shell_token(driver):
     """Test explicit shell token rejection."""
     # shell command is valid LAMMPS command but dangerous
     cmd = "shell cd /tmp"
-    with pytest.raises(ValueError, match="Script contains forbidden command 'shell'"):
+    with pytest.raises(ValueError, match="unrecognized command"):
         driver._validate_command(cmd)

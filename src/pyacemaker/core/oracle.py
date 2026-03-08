@@ -2,7 +2,6 @@ import contextlib
 import logging
 import tempfile
 from collections.abc import Callable, Iterator
-from itertools import islice
 from pathlib import Path
 
 import numpy as np
@@ -62,19 +61,13 @@ class DFTManager(BaseOracle):
         return self._compute_generator(structures, batch_size)
 
     def _compute_generator(self, structures: Iterator[Atoms], batch_size: int) -> Iterator[Atoms]:
-        """Internal generator for streaming computations with batching."""
-        while True:
-            # Process in batches, yielding immediately, but reusing context
-            batch = list(islice(structures, batch_size))
-            if not batch:
-                break
-
+        """Internal generator for streaming computations processing one-by-one without batch lists."""
+        for i, atoms in enumerate(structures):
             with tempfile.TemporaryDirectory() as work_dir:
                 work_path = Path(work_dir)
-                for i, atoms in enumerate(batch):
-                    calc_dir = work_path / f"calc_{i}"
-                    calc_dir.mkdir()
-                    yield self._process_structure(atoms, str(calc_dir))
+                calc_dir = work_path / f"calc_{i}"
+                calc_dir.mkdir()
+                yield self._process_structure(atoms, str(calc_dir))
 
     def _process_structure(self, atoms: Atoms, calc_dir: str) -> Atoms:
         """
@@ -202,28 +195,24 @@ class MACEManager(BaseOracle):
         return self._compute_generator(structures, batch_size)
 
     def _compute_generator(self, structures: Iterator[Atoms], batch_size: int) -> Iterator[Atoms]:
-        while True:
-            batch = list(islice(structures, batch_size))
-            if not batch:
-                break
-            for atoms in batch:
-                atoms_copy = atoms.copy()  # type: ignore[no-untyped-call]
+        for atoms in structures:
+            atoms_copy = atoms.copy()  # type: ignore[no-untyped-call]
 
-                # Mock MACE predictions
-                energy = -10.0 * len(atoms_copy)
-                forces = np.zeros((len(atoms_copy), 3))
+            # Mock MACE predictions
+            energy = -10.0 * len(atoms_copy)
+            forces = np.zeros((len(atoms_copy), 3))
 
-                # Mock uncertainty in c_gamma array
-                c_gamma = np.random.uniform(0.01, 0.1, size=len(atoms_copy))
+            # Mock uncertainty in c_gamma array
+            c_gamma = np.random.uniform(0.01, 0.1, size=len(atoms_copy))
 
-                # In a real implementation we would attach a calculator
-                # Here we just mock setting the arrays and attributes
-                atoms_copy.calc = None
-                atoms_copy.info["energy"] = energy
-                atoms_copy.new_array("forces", forces)
-                atoms_copy.new_array("c_gamma", c_gamma)
+            # In a real implementation we would attach a calculator
+            # Here we just mock setting the arrays and attributes
+            atoms_copy.calc = None
+            atoms_copy.info["energy"] = energy
+            atoms_copy.new_array("forces", forces)
+            atoms_copy.new_array("c_gamma", c_gamma)
 
-                yield atoms_copy
+            yield atoms_copy
 
 
 class TieredOracle(BaseOracle):
@@ -249,30 +238,26 @@ class TieredOracle(BaseOracle):
         return self._compute_generator(structures, batch_size)
 
     def _compute_generator(self, structures: Iterator[Atoms], batch_size: int) -> Iterator[Atoms]:
-        while True:
-            batch = list(islice(structures, batch_size))
-            if not batch:
-                break
-            for atoms in batch:
-                # First query MACE
-                mace_result = next(self.mace.compute(iter([atoms])))
+        for atoms in structures:
+            # First query MACE
+            mace_result = next(self.mace.compute(iter([atoms])))
 
-                # Evaluate uncertainty
-                c_gamma = mace_result.get_array("c_gamma") # type: ignore[no-untyped-call]
-                max_uncertainty = np.max(c_gamma)
+            # Evaluate uncertainty
+            c_gamma = mace_result.get_array("c_gamma") # type: ignore[no-untyped-call]
+            max_uncertainty = np.max(c_gamma)
 
-                if max_uncertainty > self.thresholds.threshold_call_dft:
-                    # Fallback to DFT
-                    logger.info(
-                        f"Uncertainty {max_uncertainty:.4f} > {self.thresholds.threshold_call_dft}. Falling back to DFT."
-                    )
+            if max_uncertainty > self.thresholds.threshold_call_dft:
+                # Fallback to DFT
+                logger.info(
+                    f"Uncertainty {max_uncertainty:.4f} > {self.thresholds.threshold_call_dft}. Falling back to DFT."
+                )
 
-                    # Only pass the atoms exceeding the add_train threshold to DFT?
-                    # For now, evaluate the whole structure as per fallback logic.
-                    dft_result = next(self.dft.compute(iter([atoms])))
+                # Only pass the atoms exceeding the add_train threshold to DFT?
+                # For now, evaluate the whole structure as per fallback logic.
+                dft_result = next(self.dft.compute(iter([atoms])))
 
-                    # We should retain the c_gamma array for active learning tracking
-                    dft_result.set_array("c_gamma", c_gamma) # type: ignore[no-untyped-call]
-                    yield dft_result
-                else:
-                    yield mace_result
+                # We should retain the c_gamma array for active learning tracking
+                dft_result.set_array("c_gamma", c_gamma) # type: ignore[no-untyped-call]
+                yield dft_result
+            else:
+                yield mace_result

@@ -91,13 +91,27 @@ class LammpsEngine(BaseEngine):
         except Exception as e:
             raise RuntimeError(ERR_SIM_UNEXPECTED.format(error=e)) from e
 
-    def run(self, structure: Atoms | None, potential: Any, **kwargs: Any) -> MDSimulationResult:
+    def run(self, structure: Atoms | None, potential: Any, **kwargs: Any) -> MDSimulationResult: # noqa: C901, PLR0912, PLR0915
         """
         Runs the MD simulation.
         Kwargs:
             resume_from_step (int): Step to resume MD from.
             override_n_steps (int): Override number of steps to run.
         """
+        resume_step = kwargs.get("resume_from_step")
+        if resume_step is not None:
+            if not isinstance(resume_step, int) or resume_step < 0:
+                msg = "resume_from_step must be a non-negative integer"
+                raise ValueError(msg)
+            if resume_step > self.config.n_steps:
+                msg = "resume_from_step cannot exceed configured n_steps"
+                raise ValueError(msg)
+
+        override_n_steps = kwargs.get("override_n_steps")
+        if override_n_steps is not None and (not isinstance(override_n_steps, int) or override_n_steps < 0):
+            msg = "override_n_steps must be a non-negative integer"
+            raise ValueError(msg)
+
         ctx, data_file, dump_file, log_file, elements, potential_path = (
             self._prepare_simulation_env(structure, potential)
         )
@@ -120,14 +134,8 @@ class LammpsEngine(BaseEngine):
             # Read LAMMPS specific configuration
             lammps_args = ["-screen", LAMMPS_SCREEN_ARG, "-log", str(log_file)]
 
-            # Allow additional env-based arguments
-            import os
-
-            extra_args = os.getenv("LAMMPS_EXTRA_ARGS")
-            if extra_args:
-                import shlex
-
-                lammps_args.extend(shlex.split(extra_args))
+            if hasattr(self.config, "lammps_args") and self.config.lammps_args:
+                lammps_args.extend(self.config.lammps_args)
 
             # Initialize Driver with unique log file
             driver = LammpsDriver(lammps_args)
@@ -217,13 +225,8 @@ class LammpsEngine(BaseEngine):
             # Execute
             lammps_args = ["-screen", LAMMPS_SCREEN_ARG, "-log", str(log_file)]
 
-            import os
-
-            extra_args = os.getenv("LAMMPS_EXTRA_ARGS")
-            if extra_args:
-                import shlex
-
-                lammps_args.extend(shlex.split(extra_args))
+            if hasattr(self.config, "lammps_args") and self.config.lammps_args:
+                lammps_args.extend(self.config.lammps_args)
 
             driver = LammpsDriver(lammps_args)
             try:

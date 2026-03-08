@@ -1,11 +1,10 @@
-import os
 import tempfile
 from pathlib import Path
 
 from pyacemaker.domain_models.constants import DANGEROUS_PATH_CHARS, DEFAULT_RAM_DISK_PATH
 
 
-def validate_path_safe(path: Path) -> Path:
+def validate_path_safe(path: Path) -> Path: # noqa: C901
     """
     Ensures path is safe using strict resolution and character allowlisting.
     Centralized utility for path validation.
@@ -34,6 +33,11 @@ def validate_path_safe(path: Path) -> Path:
     # Ensure filename doesn't start with dash (flag injection)
     if path.name.startswith("-"):
         msg = f"Filename cannot start with '-': {path.name}"
+        raise ValueError(msg)
+
+    # Prevent symlink traversal attacks BEFORE resolution
+    if path.is_symlink():
+        msg = f"Symlink path traversal attacks detected: {path}"
         raise ValueError(msg)
 
     try:
@@ -67,15 +71,9 @@ def validate_path_safe(path: Path) -> Path:
 
     is_safe = False
     for root in allowed_roots:
-        # Robust check using os.path.commonpath to ensure resolved path is under root
-        try:
-            # commonpath resolves mixed relative/absolute issues, but we used absolute resolved paths
-            common = Path(os.path.commonpath([root, resolved]))
-            if common == root:
-                is_safe = True
-                break
-        except ValueError:
-            continue
+        if resolved.is_relative_to(root):
+            is_safe = True
+            break
 
     if not is_safe:
         msg = f"Path traversal detected: {resolved} is outside allowed roots {allowed_roots}"

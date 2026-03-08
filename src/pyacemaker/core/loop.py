@@ -41,27 +41,36 @@ class LoopState(BaseModel):
         return v
 
     def save(self, path: Path) -> None:
-        """Saves the state to a JSON file using atomic write and streaming."""
+        """Saves the state to a JSON file using atomic write, streaming, and file locking."""
         path = path.resolve()
         directory = path.parent
         directory.mkdir(parents=True, exist_ok=True)
 
-        # Use a temporary file in the same directory to ensure atomic move
-        with tempfile.NamedTemporaryFile("w", dir=directory, delete=False) as tmp_file:
-            json.dump(self.model_dump(mode="json"), tmp_file, indent=2)
+        import fcntl
 
-            # Ensure data is flushed to disk
-            tmp_file.flush()
-            os.fsync(tmp_file.fileno())
-            tmp_path_str = tmp_file.name
+        lock_path = path.with_suffix(".lock")
+        # Ensure we have exclusive access to the state file
+        with lock_path.open("w") as lock_file:
+            try:
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+                # Use a temporary file in the same directory to ensure atomic move
+                with tempfile.NamedTemporaryFile("w", dir=directory, delete=False) as tmp_file:
+                    json.dump(self.model_dump(mode="json"), tmp_file, indent=2)
 
-        tmp_path = Path(tmp_path_str)
-        try:
-            tmp_path.replace(path)
-        except OSError:
-            # Clean up temp file if replace fails
-            tmp_path.unlink(missing_ok=True)
-            raise
+                    # Ensure data is flushed to disk
+                    tmp_file.flush()
+                    os.fsync(tmp_file.fileno())
+                    tmp_path_str = tmp_file.name
+
+                tmp_path = Path(tmp_path_str)
+                try:
+                    tmp_path.replace(path)
+                except OSError:
+                    # Clean up temp file if replace fails
+                    tmp_path.unlink(missing_ok=True)
+                    raise
+            finally:
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
 
     @classmethod
     def load(cls, path: Path) -> Self:

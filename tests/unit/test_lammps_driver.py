@@ -59,11 +59,11 @@ def test_lammps_driver_run_forbidden_chars(mock_lammps: Any) -> None:
 
 
 def test_lammps_driver_run_forbidden_command(mock_lammps: Any) -> None:
-    """Tests rejection of scripts with forbidden commands."""
+    """Tests rejection of scripts with forbidden commands not in whitelist."""
     driver = LammpsDriver()
-    # shell command is forbidden
-    script = "shell rm -rf /"
-    with pytest.raises(ValueError, match="forbidden command 'shell'"):
+    # command not in whitelist
+    script = "unknown_command arg1"
+    with pytest.raises(ValueError, match="unrecognized command"):
         driver.run(script)
 
 
