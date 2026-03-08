@@ -11,6 +11,7 @@ from pyacemaker.core.base import BaseGenerator
 from pyacemaker.core.loop import LoopState
 from pyacemaker.domain_models import PyAceConfig
 from pyacemaker.domain_models.md import MDSimulationResult
+from pyacemaker.domain_models.structure import StructureConfig
 from pyacemaker.orchestrator import Orchestrator
 
 
@@ -18,7 +19,7 @@ class FakeGenerator(BaseGenerator):
     def __init__(self, elements: list[str] | None = None) -> None:
         self.elements = elements or ["H"]
 
-    def update_config(self, config: Any) -> None:
+    def update_config(self, config: StructureConfig) -> None:
         pass
 
     def generate(self, n_candidates: int) -> Iterator[Atoms]:
@@ -104,7 +105,8 @@ def orchestrator(mock_config: PyAceConfig, tmp_path: Path) -> Orchestrator:
 def test_cold_start(orchestrator: Orchestrator, tmp_path: Path) -> None:
     # Inject loop_state
     if not hasattr(orchestrator, "loop_state"):
-        orchestrator.loop_state = LoopState()
+        # We can't set read-only loop_state property directly, set it via state_manager
+        orchestrator.state_manager.state = LoopState()
 
     # Setup mocks
     assert orchestrator.oracle is not None
@@ -156,10 +158,10 @@ def test_resume_capability(mock_config: PyAceConfig, tmp_path: Path) -> None:
 def test_run_loop_iteration_halt(orchestrator: Orchestrator, tmp_path: Path) -> None:
     # Inject loop_state
     if not hasattr(orchestrator, "loop_state"):
-        orchestrator.loop_state = LoopState()
+        orchestrator.state_manager.state = LoopState()
 
-    orchestrator.loop_state.current_potential = tmp_path / "current.yace"
-    orchestrator.loop_state.current_potential.touch()
+    orchestrator.state_manager.state.current_potential = tmp_path / "current.yace"
+    orchestrator.state_manager.state.current_potential.touch()
 
     # Mock MD halt
     halt_path = tmp_path / "halt.xyz"
@@ -199,7 +201,7 @@ def test_run_loop_iteration_halt(orchestrator: Orchestrator, tmp_path: Path) -> 
     orchestrator._run_loop_iteration()
 
     # Verify
-    assert orchestrator.loop_state.iteration == 1
-    assert orchestrator.loop_state.current_potential == refined_pot
+    assert orchestrator.state_manager.state.iteration == 1
+    assert orchestrator.state_manager.state.current_potential == refined_pot
     orchestrator.engine.run.assert_called()
     orchestrator.trainer.train.assert_called()
