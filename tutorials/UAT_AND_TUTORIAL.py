@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any as _Any
 
 import marimo
 
@@ -70,8 +70,9 @@ def setup_environment() -> tuple[Any, ...]:
 def run_setup(
     DistillationConfig: type[Any], WorkflowConfig: type[Any], mo: object
 ) -> tuple[Any, ...]:
+    from typing import Any as _Any
 
-    config: "Any" = WorkflowConfig(
+    config: _Any = WorkflowConfig(
         max_iterations=1, distillation=DistillationConfig(enable=True, uncertainty_threshold=0.05)
     )
 
@@ -84,21 +85,22 @@ def run_setup(
 def run_distillation(
     Atoms: type[Any], DistillationConfig: type[Any], MACEManager: type[Any], WorkflowConfig: type[Any], mo: object
 ) -> tuple[Any, ...]:
+    from typing import Any as _Any
 
-    _config2: "Any" = WorkflowConfig(
+    _config2: _Any = WorkflowConfig(
         max_iterations=1, distillation=DistillationConfig(enable=True, uncertainty_threshold=0.05)
     )
     # 1. MACE evaluates structures
-    mace_manager: "Any" = MACEManager(_config2.distillation.mace_model_path)
+    mace_manager: Any = MACEManager(_config2.distillation.mace_model_path)
 
-    atoms1: "Any" = Atoms("Fe", cell=[2, 2, 2], pbc=True)
-    atoms2: "Any" = Atoms("Pt", cell=[2, 2, 2], pbc=True)
+    atoms1: Any = Atoms("Fe", cell=[2, 2, 2], pbc=True)
+    atoms2: Any = Atoms("Pt", cell=[2, 2, 2], pbc=True)
 
     results: list[Any] = list(mace_manager.compute(iter([atoms1, atoms2])))
 
     # 2. Only structures below threshold are extracted
     for d_atoms in results:
-        c_gamma: "Any" = d_atoms.get_array("c_gamma")
+        c_gamma: Any = d_atoms.get_array("c_gamma")
         if not (c_gamma <= 0.1).all():
             _msg1 = "MACE mock produced unexpected output."
             raise ValueError(_msg1)
@@ -123,38 +125,39 @@ def run_active_learning_event(
     WorkflowConfig: type[Any],
     extract_intelligent_cluster: type[Any],
     mo: object,
-    np: "Any",
-    patch: "Any",
+    np: Any,
+    patch: Any,
 ) -> tuple[Any, ...]:
+    from typing import Any as _Any
 
-    _config3: "Any" = WorkflowConfig(
+    _config3: Any = WorkflowConfig(
         max_iterations=1, distillation=DistillationConfig(enable=True, uncertainty_threshold=0.05)
     )
-    thresholds: "Any" = ActiveLearningThresholds(threshold_call_dft=0.05, threshold_add_train=0.02)
-    cutout_config: "Any" = CutoutConfig(core_radius=3.0, buffer_radius=2.0)
+    thresholds: Any = ActiveLearningThresholds(threshold_call_dft=0.05, threshold_add_train=0.02)
+    cutout_config: _Any = CutoutConfig(core_radius=3.0, buffer_radius=2.0)
 
-    mace_manager_tiered: "Any" = MACEManager(_config3.distillation.mace_model_path)
-    dft_manager: "Any" = MagicMock(spec=DFTManager)
+    mace_manager_tiered: Any = MACEManager(_config3.distillation.mace_model_path)
+    dft_manager: Any = MagicMock(spec=DFTManager)
 
-    oracle: "Any" = TieredOracle(mace_manager_tiered, dft_manager, thresholds)
+    oracle: Any = TieredOracle(mace_manager_tiered, dft_manager, thresholds)
 
-    defect_atoms: "Any" = Atoms("FePt", positions=[[0, 0, 0], [1, 1, 1]], cell=[10, 10, 10])
+    defect_atoms: Any = Atoms("FePt", positions=[[0, 0, 0], [1, 1, 1]], cell=[10, 10, 10])
 
     with patch("pyacemaker.core.oracle.np.random.uniform", return_value=np.array([0.1, 0.1])):
-        gen: "Any" = oracle.compute(iter([defect_atoms]))
-        _result: "Any" = next(gen)
+        gen: Any = oracle.compute(iter([defect_atoms]))
+        _result: Any = next(gen)
 
     dft_manager.compute.assert_called()
 
     target_atoms: list[int] = [0]
-    cluster: "Any" = extract_intelligent_cluster(defect_atoms, target_atoms, cutout_config)
+    cluster: Any = extract_intelligent_cluster(defect_atoms, target_atoms, cutout_config)
 
-    weights: "Any" = cluster.get_array("force_weight")
+    weights: Any = cluster.get_array("force_weight")
     if 1.0 not in weights:
         _msg2 = "Core atoms missing in intelligent cluster."
         raise ValueError(_msg2)
 
-    symbols: "Any" = cluster.get_chemical_symbols()
+    symbols: Any = cluster.get_chemical_symbols()
     if len(symbols) <= 0:
         _msg3 = "Passivation failed."
         raise ValueError(_msg3)
@@ -174,23 +177,24 @@ def run_incremental_update_and_resume(
     LoopStrategyConfig: type[Any],
     MDConfig: type[Any],
     PacemakerTrainer: type[Any],
-    Path: "Any",
+    Path: Any,
     TrainingConfig: type[Any],
     mo: object,
-    np: "Any",
-    patch: "Any",
-    tempfile: "Any",
+    np: Any,
+    patch: Any,
+    tempfile: Any,
 ) -> tuple[Any, ...]:
+    from typing import Any as _Any
 
     with tempfile.TemporaryDirectory() as tmp_dir_name:
-        tmp_path: "Any" = Path(tmp_dir_name)
-        dataset_path: "Any" = tmp_path / "dataset.xyz"
+        tmp_path: Any = Path(tmp_dir_name)
+        dataset_path: Any = tmp_path / "dataset.xyz"
         dataset_path.touch()
 
-        finetune_mgr: "Any" = FinetuneManager()
+        finetune_mgr: Any = FinetuneManager()
         awakened_model: str = finetune_mgr.finetune(dataset_path)
 
-        t_config: "Any" = TrainingConfig(
+        t_config: _Any = TrainingConfig(
             potential_type="ace",
             cutoff_radius=5.0,
             max_basis_size=2,
@@ -201,21 +205,21 @@ def run_incremental_update_and_resume(
             max_iterations=500,
             batch_size=20,
         )
-        trainer: "Any" = PacemakerTrainer(t_config)
-        strategy: "Any" = LoopStrategyConfig(replay_buffer_size=100)
+        trainer: Any = PacemakerTrainer(t_config)
+        strategy: Any = LoopStrategyConfig(replay_buffer_size=100)
 
         with patch.object(trainer, "train") as mock_train:
             mock_train.return_value = tmp_path / t_config.output_filename
-            _new_pot: "Any" = trainer.incremental_train(
+            _new_pot: Any = trainer.incremental_train(
                 dataset_path, strategy, initial_potential="init.yace"
             )
 
-        md_config: "Any" = MDConfig(
+        md_config: _Any = MDConfig(
             temperature=300.0, pressure=1.0, timestep=0.001, n_steps=5000, fix_halt=True
         )
 
         with patch("pyacemaker.core.engine.LammpsDriver") as mock_driver_class:
-            driver_instance: "Any" = mock_driver_class.return_value
+            driver_instance: Any = mock_driver_class.return_value
             driver_instance.extract_variable.side_effect = lambda name: {
                 "pe": -100.0,
                 "step": 2000,
@@ -234,9 +238,9 @@ def run_incremental_update_and_resume(
 
             driver_instance.run_file.side_effect = local_capture_run
 
-            engine: "Any" = LammpsEngine(md_config)
-            md_atoms: "Any" = Atoms("Fe", cell=[10, 10, 10], pbc=True)
-            pot_path: "Any" = tmp_path / t_config.output_filename
+            engine: Any = LammpsEngine(md_config)
+            md_atoms: Any = Atoms("Fe", cell=[10, 10, 10], pbc=True)
+            pot_path: Any = tmp_path / t_config.output_filename
             pot_path.touch()
 
             engine.run(md_atoms, pot_path, resume_from_step=1500)
@@ -251,25 +255,26 @@ def run_incremental_update_and_resume(
 
 
 @app.cell
-def run_state_resilience(Path: "Any", mo: object, tempfile: "Any") -> tuple[Any, ...]:
+def run_state_resilience(Path: Any, mo: object, tempfile: Any) -> tuple[Any, ...]:
+    from typing import Any as _Any
     from pyacemaker.core.loop import LoopStatus
     from pyacemaker.core.state_manager import StateManager
     from pyacemaker.domain_models.logging import LoggingConfig
     from pyacemaker.logger import setup_logger
 
     with tempfile.TemporaryDirectory() as tmp_dir2_name:
-        state_file: "Any" = Path(tmp_dir2_name) / "state.json"
+        state_file: Any = Path(tmp_dir2_name) / "state.json"
 
-        logger: "Any" = setup_logger(LoggingConfig(level="INFO"), "tutorial")
-        sm: "Any" = StateManager(state_file, logger)
+        logger: Any = setup_logger(LoggingConfig(level="INFO"), "tutorial")
+        sm: Any = StateManager(state_file, logger)
 
         sm.state.iteration = 5
         sm.state.status = LoopStatus.HALTED
         sm.save()
 
-        sm_recovered: "Any" = StateManager(state_file, logger)
+        sm_recovered: Any = StateManager(state_file, logger)
         sm_recovered.load()
-        state: "Any" = sm_recovered.state
+        state: Any = sm_recovered.state
 
     if hasattr(mo, "md"):
         mo.md(f"Recovered state: Iteration {state.iteration}, Status: {state.status}")
