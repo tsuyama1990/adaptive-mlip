@@ -44,7 +44,9 @@ def test_prepare_workspace_large_structure_warning(mock_md_config: MDConfig, cap
     with (
         patch("pyacemaker.core.io_manager.write_lammps_streaming") as mock_stream,
         patch("pyacemaker.core.io_manager.get_species_order", return_value=["H"]),
+        patch("pathlib.Path.stat") as mock_stat
     ):
+        mock_stat.return_value.st_size = 100
         ctx, _, _, _, _ = manager.prepare_workspace(atoms)
         with ctx:
             pass

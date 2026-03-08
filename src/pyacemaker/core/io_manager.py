@@ -120,10 +120,14 @@ class LammpsFileManager:
                     atom_style=self.config.atom_style.value,
                 )
 
-            # Atomic rename
+            # Atomic rename validation
+            if not temp_path.exists() or temp_path.stat().st_size == 0:
+                msg = f"Temporary file {temp_path} is missing or empty before finalizing."
+                raise ValueError(msg)
+
             temp_path.replace(output_path)
 
-        except Exception as e:
+        except (ValueError, OSError, RuntimeError) as e:
             # Rollback
             import contextlib
 

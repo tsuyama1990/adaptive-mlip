@@ -1,5 +1,4 @@
 import shlex
-from functools import lru_cache
 from pathlib import Path
 from typing import TextIO
 
@@ -22,12 +21,12 @@ class LammpsScriptGenerator:
         # Use lru_cache for methods instead of manual dict
         self._atomic_numbers_cache = {}
 
-    @lru_cache(maxsize=128)
     def _get_atomic_number(self, symbol: str) -> int:
         """Cached atomic number lookup."""
-        return atomic_numbers[symbol]
+        if symbol not in self._atomic_numbers_cache:
+            self._atomic_numbers_cache[symbol] = atomic_numbers[symbol]
+        return self._atomic_numbers_cache[symbol]
 
-    @lru_cache(maxsize=128)
     def _quote(self, path: str) -> str:
         """
         Quotes a path for LAMMPS script safety after validation.
@@ -36,6 +35,10 @@ class LammpsScriptGenerator:
         # Sanitize input path
         # Note: path must be string for lru_cache
         safe_path = validate_path_safe(Path(path))
+        if not safe_path.exists() and not safe_path.parent.exists():
+            msg = f"Path {safe_path} is invalid or has an invalid parent directory."
+            raise ValueError(msg)
+
         # Use shlex.quote for shell safety
         return shlex.quote(str(safe_path))
 

@@ -2,7 +2,6 @@
 platform linux -- Python 3.12.12, pytest-9.0.2, pluggy-1.6.0
 rootdir: /app
 configfile: pyproject.toml
-testpaths: tests
 plugins: cov-7.0.0
 collected 246 items
 
@@ -18,7 +17,7 @@ tests/uat/test_cycle03_uat.py ..                                         [  9%]
 tests/uat/test_cycle04_uat.py ...                                        [ 10%]
 tests/uat/test_cycle06_uat.py ..                                         [ 11%]
 tests/uat/test_cycle07_uat.py ..                                         [ 12%]
-tests/uat/test_cycle08_uat.py ...                                        [ 13%]
+tests/uat/test_cycle08_uat.py .F.                                        [ 13%]
 tests/unit/test_active_set.py .....                                      [ 15%]
 tests/unit/test_active_set_anchor.py ....                                [ 17%]
 tests/unit/test_delta.py ....                                            [ 19%]
@@ -63,6 +62,46 @@ tests/unit/test_trainer_pacemaker.py ......                              [ 93%]
 tests/unit/test_validator.py ....                                        [ 95%]
 tests/unit/test_validator_security.py ...........                        [100%]
 
+=================================== FAILURES ===================================
+_________________________ test_scenario_phase3_cutout __________________________
+
+    def test_scenario_phase3_cutout() -> None:
+        """
+        Scenario 3: Exclusion of Thermal Noise and Intelligent Cluster Extraction
+        """
+        thresholds = ActiveLearningThresholds(threshold_call_dft=0.05, threshold_add_train=0.02)
+        config = CutoutConfig(core_radius=3.0, buffer_radius=2.0)
+
+        mace_manager = MACEManager("model")
+        dft_manager = MagicMock(spec=DFTManager)
+
+        oracle = TieredOracle(mace_manager, dft_manager, thresholds)
+
+        # 1. Thermal Noise Spike (handled by engine mock logic previously, here we test Oracle fallback)
+        # The oracle evaluates a structure. MACE mock yields max_g around 0.1
+        atoms = Atoms("FePt", positions=[[0, 0, 0], [1, 1, 1]], cell=[10, 10, 10])
+
+        gen = oracle.compute(iter([atoms]))
+        _result = next(gen)
+
+        # max_g = 0.1 > 0.05, so it falls back to DFT
+>       dft_manager.compute.assert_called()
+
+tests/uat/test_cycle08_uat.py:69:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <MagicMock name='mock.compute' id='139690455751024'>
+
+    def assert_called(self):
+        """assert that the mock was called at least once
+        """
+        if self.call_count == 0:
+            msg = ("Expected '%s' to have been called." %
+                   (self._mock_name or 'mock'))
+>           raise AssertionError(msg)
+E           AssertionError: Expected 'compute' to have been called.
+
+/home/jules/.pyenv/versions/3.12.12/lib/python3.12/unittest/mock.py:918: AssertionError
 =============================== warnings summary ===============================
 tests/unit/test_io.py::test_write_lammps_streaming_basic
   /app/.venv/lib/python3.12/site-packages/ase/io/lammpsdata.py:72: FutureWarning: "style" is deprecated; please use "atom_style".
@@ -80,20 +119,20 @@ src/pyacemaker/core/active_set.py               71     10    86%   46-47, 60-61,
 src/pyacemaker/core/base.py                     29      0   100%
 src/pyacemaker/core/config_generator.py         36      3    92%   56-58
 src/pyacemaker/core/directory_manager.py        20      0   100%
-src/pyacemaker/core/engine.py                  114     25    78%   50, 64-65, 71-72, 86, 88, 91-92, 128-130, 145-150, 156-157, 169, 194-199, 224-226
+src/pyacemaker/core/engine.py                  120     29    76%   50, 64-65, 71-72, 86, 88, 91-92, 104-105, 107-108, 112-113, 138, 153-158, 164-165, 177, 202-207, 229
 src/pyacemaker/core/exceptions.py                8      0   100%
 src/pyacemaker/core/generator.py                52     11    79%   36-39, 59, 62, 95, 105, 111, 113, 134
-src/pyacemaker/core/io_manager.py               69     27    61%   58-71, 80-83, 106-107, 110-115, 126-134
-src/pyacemaker/core/lammps_generator.py        130     17    87%   111-127, 135, 154-161
-src/pyacemaker/core/loop.py                     61      7    89%   61-64, 83-86
-src/pyacemaker/core/m3gnet_wrapper.py           16      4    75%   26-28, 45-47
-src/pyacemaker/core/oracle.py                  132      9    93%   60, 148-153, 200, 247, 255, 278
+src/pyacemaker/core/io_manager.py               72     29    60%   58-71, 80-83, 106-107, 110-115, 125-126, 130-138
+src/pyacemaker/core/lammps_generator.py        132     19    86%   39-40, 114-130, 138, 157-164
+src/pyacemaker/core/loop.py                     70      6    91%   55, 62, 78-81, 84
+src/pyacemaker/core/m3gnet_wrapper.py           19      5    74%   25, 31-33, 50-52
+src/pyacemaker/core/oracle.py                  125     15    88%   59, 141-146, 193, 231-232, 235-236, 244, 259-269
 src/pyacemaker/core/policy.py                   69      4    94%   23-24, 115, 122
-src/pyacemaker/core/policy_factory.py           28      5    82%   47, 53-54, 81-82
+src/pyacemaker/core/policy_factory.py           31      7    77%   47, 53-54, 58-59, 86-87
 src/pyacemaker/core/report.py                   12      1    92%   85
 src/pyacemaker/core/state_manager.py            34      2    94%   37-38
-src/pyacemaker/core/trainer.py                  63      9    86%   99-102, 105-106, 113-114, 117-118
-src/pyacemaker/core/validator.py                65      5    92%   63, 68, 74, 108, 145
+src/pyacemaker/core/trainer.py                  70     12    83%   84, 89-90, 110-113, 116-117, 124-125, 128-129
+src/pyacemaker/core/validator.py                68      7    90%   63, 68, 75-76, 79, 113, 150
 src/pyacemaker/domain_models/__init__.py        11      0   100%
 src/pyacemaker/domain_models/config.py          22      0   100%
 src/pyacemaker/domain_models/constants.py       10      0   100%
@@ -110,7 +149,7 @@ src/pyacemaker/domain_models/workflow.py        58      4    93%   75-76, 78-79
 src/pyacemaker/factory.py                       32      3    91%   82-84
 src/pyacemaker/interfaces/__init__.py            5      0   100%
 src/pyacemaker/interfaces/eon_driver.py         74     12    84%   86, 133-142, 158, 162
-src/pyacemaker/interfaces/lammps_driver.py      89      8    91%   82-83, 102, 135, 168, 187-189
+src/pyacemaker/interfaces/lammps_driver.py      99     11    89%   49, 73-74, 106-107, 126, 162, 195, 214-216
 src/pyacemaker/interfaces/process.py            14      5    64%   12, 22-29
 src/pyacemaker/interfaces/qe_driver.py          48      2    96%   113-114
 src/pyacemaker/logger.py                        22      1    95%   42
@@ -122,15 +161,17 @@ src/pyacemaker/scenarios/fept_mgo.py           148     28    81%   80, 162-165, 
 src/pyacemaker/utils/delta.py                   17      2    88%   34-35
 src/pyacemaker/utils/elastic.py                 80     52    35%   34-35, 46-137, 146, 154
 src/pyacemaker/utils/embedding.py               36      6    83%   41-42, 49-50, 61-62
-src/pyacemaker/utils/extraction.py             103     12    88%   60-70, 73-78, 91
+src/pyacemaker/utils/extraction.py             103     66    36%   16-40, 47-80, 90-154
 src/pyacemaker/utils/io.py                      73      0   100%
-src/pyacemaker/utils/path.py                    40      6    85%   53-57, 77-78
+src/pyacemaker/utils/path.py                    38      4    89%   57-61
 src/pyacemaker/utils/perturbations.py           43      1    98%   77
 src/pyacemaker/utils/phonons.py                 51      2    96%   51, 69
 src/pyacemaker/utils/process.py                 25     21    16%   35-77
 src/pyacemaker/utils/structure.py                6      2    67%   19-20
 --------------------------------------------------------------------------
-TOTAL                                         2848    402    86%
-======================== 246 passed, 1 warning in 3.07s ========================
+TOTAL                                         2885    478    83%
+=========================== short test summary info ============================
+FAILED tests/uat/test_cycle08_uat.py::test_scenario_phase3_cutout - Assertion...
+=================== 1 failed, 245 passed, 1 warning in 2.82s ===================
 /app/.venv/lib/python3.12/site-packages/coverage/inorout.py:561: CoverageWarning: Module dev_src was never imported. (module-not-imported); see https://coverage.readthedocs.io/en/7.13.4/messages.html#warning-module-not-imported
   self.warn(f"Module {pkg} was never imported.", slug="module-not-imported")

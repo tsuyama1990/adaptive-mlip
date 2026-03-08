@@ -78,6 +78,17 @@ class PacemakerTrainer(BaseTrainer):
 
         # Generate configuration
         pacemaker_config = self.config_generator.generate(str(data_path), str(potential_path))
+
+        # Security: Schema validation and content sanitization for YAML
+        if not isinstance(pacemaker_config, dict):
+            raise TrainerError("Generated Pacemaker config is not a valid dictionary.")
+
+        import re
+        for key, val in pacemaker_config.items():
+            if isinstance(val, str):
+                if re.search(r"(\bexec\b|\bsystem\b|\bos\.|;|\||>|<|&)", val):
+                    raise TrainerError(f"Malicious content detected in configuration value for key '{key}'")
+
         dump_yaml(pacemaker_config, input_yaml_path)
 
         # Run pace_train

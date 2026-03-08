@@ -183,7 +183,7 @@ class MACEManager(BaseOracle):
     Provides energy, forces, and uncertainty estimation.
     """
 
-    def __init__(self, model_path: str = "mace-mp-0-medium") -> None:
+    def __init__(self, model_path: str) -> None:
         self.model_path = model_path
         # Mock MACE initialization
         self.is_initialized = True
@@ -227,6 +227,14 @@ class TieredOracle(BaseOracle):
         dft_manager: DFTManager,
         thresholds: ActiveLearningThresholds,
     ) -> None:
+        if mace_manager is None or not mace_manager.is_initialized:
+            msg = "MACEManager must be valid and initialized."
+            raise ValueError(msg)
+
+        if dft_manager is None:
+            msg = "DFTManager cannot be None."
+            raise ValueError(msg)
+
         self.mace = mace_manager
         self.dft = dft_manager
         self.thresholds = thresholds

@@ -184,8 +184,19 @@ def test_run_large_structure_warning(
     with (
         patch("pyacemaker.core.io_manager.write_lammps_streaming") as mock_stream,
         patch("pyacemaker.core.io_manager.get_species_order", return_value=["H"]),
+        patch("pyacemaker.utils.path.Path.lstat") as mock_lstat,
+        patch("pyacemaker.utils.path.Path.stat") as mock_stat
     ):
-        engine.run(atoms, pot_path)
+        mock_stat.return_value.st_size = 100
+        mock_stat.return_value.st_mode = 33188
+        mock_lstat.return_value.st_mode = 33188
+
+        # We just want to pass the validation check safely
+        with patch("pyacemaker.core.validator.validate_path_safe", return_value=pot_path):
+            with patch("pyacemaker.core.validator.Path.is_file", return_value=True):
+                with patch("pyacemaker.core.lammps_generator.validate_path_safe", return_value=pot_path):
+                    with patch("pyacemaker.utils.path.validate_path_safe", return_value=pot_path):
+                        engine.run(atoms, pot_path)
 
     # We allow this test to pass if mock_stream is called, as log capture can be flaky depending on pytest config.
     mock_stream.assert_called()

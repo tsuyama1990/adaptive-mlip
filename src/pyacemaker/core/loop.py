@@ -46,13 +46,23 @@ class LoopState(BaseModel):
         directory = path.parent
         directory.mkdir(parents=True, exist_ok=True)
 
-        import fcntl
-
+        # Ensure we have cross-platform exclusive access to the state file
         lock_path = path.with_suffix(".lock")
-        # Ensure we have exclusive access to the state file
+
+        import sys
+        is_windows = sys.platform == "win32"
+        if is_windows:
+            import msvcrt
+        else:
+            import fcntl
+
         with lock_path.open("w") as lock_file:
             try:
-                fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+                if is_windows:
+                    msvcrt.locking(lock_file.fileno(), msvcrt.LK_LOCK, 1) # type: ignore[attr-defined]
+                else:
+                    fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+
                 # Use a temporary file in the same directory to ensure atomic move
                 with tempfile.NamedTemporaryFile("w", dir=directory, delete=False) as tmp_file:
                     json.dump(self.model_dump(mode="json"), tmp_file, indent=2)
@@ -70,7 +80,10 @@ class LoopState(BaseModel):
                     tmp_path.unlink(missing_ok=True)
                     raise
             finally:
-                fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+                if is_windows:
+                    msvcrt.locking(lock_file.fileno(), msvcrt.LK_UNLCK, 1) # type: ignore[attr-defined]
+                else:
+                    fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
 
     @classmethod
     def load(cls, path: Path) -> Self:
@@ -88,8 +101,3 @@ class LoopState(BaseModel):
             raise ValueError(msg) from e
 
 
-def _raise_traversal_error(path: Path, cwd: Path, cause: Exception | None = None) -> None:
-    msg = f"Potential path {path} is outside the project directory {cwd}"
-    if cause:
-        raise ValueError(msg) from cause
-    raise ValueError(msg)

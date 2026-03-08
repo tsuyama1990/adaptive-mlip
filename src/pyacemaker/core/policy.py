@@ -98,7 +98,7 @@ class CompositePolicy(SafeBasePolicy):
     """
     Composite Policy that can combine multiple exploration strategies.
     """
-    def __init__(self, policies: list[BasePolicy]) -> None:
+    def __init__(self, policies: list[SafeBasePolicy]) -> None:
         self.policies = policies
 
     def generate(
@@ -172,7 +172,7 @@ class RattlePolicy(SafeBasePolicy):
     ) -> Iterator[Atoms]:
         for _ in range(n_structures):
             mod_struct = base_structure.copy() # type: ignore[no-untyped-call]
-            mod_struct.rattle(stdev=0.1) # type: ignore[no-untyped-call]
+            mod_struct.rattle(stdev=0.1)
             yield mod_struct
 
 

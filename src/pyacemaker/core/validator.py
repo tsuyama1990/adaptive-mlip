@@ -70,6 +70,11 @@ class LammpsInputValidator:
         # Validate elements against atomic_numbers
         symbols = set(structure.get_chemical_symbols())  # type: ignore[no-untyped-call]
         for s in symbols:
+            # Script injection and sanitization check:
+            if not isinstance(s, str) or not s.isalpha() or len(s) > 2:
+                msg = f"Chemical symbol contains invalid characters or types: {s}"
+                raise ValueError(msg)
+
             if s not in atomic_numbers:
                 raise ValueError(ERR_VAL_STRUCT_UNKNOWN_SYM.format(symbol=s))
             if atomic_numbers[s] == 0:
