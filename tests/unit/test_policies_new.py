@@ -28,7 +28,7 @@ class MockPolicy(SafeBasePolicy):
         potential: str | Path | None = None,
     ) -> Iterator[Atoms]:
         for _ in range(n_structures):
-            a = base_structure.copy() # type: ignore[no-untyped-call]
+            a = base_structure.copy()  # type: ignore[no-untyped-call]
             a.info["policy"] = self.name
             yield a
 
@@ -119,7 +119,7 @@ def test_md_micro_burst_fallback() -> None:
     assert len(results) == 1
     # Check if rattled (positions changed) or fallback logic executed
     # Rattle changes positions.
-    assert results[0].get_chemical_symbols() == ["H"] # type: ignore[no-untyped-call]
+    assert results[0].get_chemical_symbols() == ["H"]  # type: ignore[no-untyped-call]
 
 
 def test_normal_mode_policy_fallback() -> None:

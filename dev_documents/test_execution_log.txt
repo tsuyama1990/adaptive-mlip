@@ -32,7 +32,7 @@ src/pyacemaker/core/lammps_generator.py        132     50    62%   26-28, 39-40,
 src/pyacemaker/core/loop.py                     70     14    80%   33-34, 37-38, 41, 56, 63, 79-82, 85, 100-102
 src/pyacemaker/core/m3gnet_wrapper.py           20      6    70%   26-27, 33-35, 52-54
 src/pyacemaker/core/oracle.py                  125     17    86%   56, 59, 86, 102, 105, 141-146, 162, 193, 231-232, 235-236, 244, 271
-src/pyacemaker/core/policy.py                   98     58    41%   32-33, 67-111, 127-137, 146, 157-176, 232-236
+src/pyacemaker/core/policy.py                   98     58    41%   32-33, 67-109, 125-135, 144, 155-174, 230-234
 src/pyacemaker/core/policy_factory.py           31     12    61%   47, 53-54, 58-59, 65, 78-89
 src/pyacemaker/core/report.py                   12      4    67%   76-77, 81, 85
 src/pyacemaker/core/state_manager.py            34      5    85%   28-30, 37-38
@@ -74,6 +74,6 @@ src/pyacemaker/utils/process.py                 25     21    16%   35-77
 src/pyacemaker/utils/structure.py                6      2    67%   19-20
 --------------------------------------------------------------------------
 TOTAL                                         2916    995    66%
-============================== 17 passed in 0.98s ==============================
+============================== 17 passed in 0.87s ==============================
 /app/.venv/lib/python3.12/site-packages/coverage/inorout.py:561: CoverageWarning: Module dev_src was never imported. (module-not-imported); see https://coverage.readthedocs.io/en/7.13.4/messages.html#warning-module-not-imported
   self.warn(f"Module {pkg} was never imported.", slug="module-not-imported")

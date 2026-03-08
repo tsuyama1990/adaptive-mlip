@@ -438,7 +438,7 @@ class Orchestrator:
                 if hasattr(self.generator.config, "rattle_stdev"):
                     self.generator.config.rattle_stdev = min(
                         STRATEGY_RATTLE_STDEV_MAX,
-                        self.generator.config.rattle_stdev * STRATEGY_RATTLE_STDEV_INCREASE_FACTOR
+                        self.generator.config.rattle_stdev * STRATEGY_RATTLE_STDEV_INCREASE_FACTOR,
                     )
                     self.logger.info(
                         f"Adaptive Strategy: Increased rattle_stdev to {self.generator.config.rattle_stdev:.2f}"
@@ -453,7 +453,7 @@ class Orchestrator:
                 if hasattr(self.generator.config, "rattle_stdev"):
                     self.generator.config.rattle_stdev = max(
                         STRATEGY_RATTLE_STDEV_MIN,
-                        self.generator.config.rattle_stdev * STRATEGY_RATTLE_STDEV_DECREASE_FACTOR
+                        self.generator.config.rattle_stdev * STRATEGY_RATTLE_STDEV_DECREASE_FACTOR,
                     )
             except Exception as e:
                 self.logger.debug(f"Adaptive Strategy: Failed to adjust config: {e}")

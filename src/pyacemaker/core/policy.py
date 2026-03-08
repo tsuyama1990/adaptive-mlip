@@ -83,9 +83,7 @@ class MDMicroBurstPolicy(SafeBasePolicy):
                     burst_config.n_steps = POLICY_MICROBURST_N_STEPS  # Micro burst short steps
 
             if isinstance(engine, BaseEngine):
-                result = engine.run(
-                    structure=base_structure, potential=potential
-                )
+                result = engine.run(structure=base_structure, potential=potential)
 
                 # In a real implementation we would load result.trajectory_path
                 # But for architecture completeness, yield rattled structure or loaded structure
