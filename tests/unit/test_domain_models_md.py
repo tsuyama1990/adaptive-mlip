@@ -143,7 +143,7 @@ def test_mc_config() -> None:
 def test_md_config_with_ramping_and_mc() -> None:
     """Tests MDConfig integration with Ramping and MC."""
     ramping = MDRampingConfig(temp_start=100.0, temp_end=500.0)
-    mc = MCConfig(swap_freq=50, swap_prob=0.1)
+    mc = MCConfig(swap_freq=50, swap_prob=0.1, seed=123)
 
     config = MDConfig(
         temperature=300.0,
@@ -154,5 +154,7 @@ def test_md_config_with_ramping_and_mc() -> None:
         mc=mc,
     )
 
+    assert config.ramping is not None
     assert config.ramping.temp_start == 100.0
+    assert config.mc is not None
     assert config.mc.swap_freq == 50

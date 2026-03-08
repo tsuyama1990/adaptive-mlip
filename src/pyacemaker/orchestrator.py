@@ -415,12 +415,48 @@ class Orchestrator:
 
     def _adapt_strategy(self, result: MDSimulationResult) -> None:
         """
-        Placeholder for adaptive policy logic.
-        Future implementation: Update self.generator.config based on result metrics.
-
-        Note: This method is intended to implement the "Adaptive Exploration Policy" described in the Spec.
-        Currently, it is a no-op as the complex adaptation logic requires further requirements analysis.
+        Adapts the generation strategy based on simulation results.
+        If MD halts frequently, we might increase temperature or add defects to push exploration boundaries.
         """
+        if not self.generator or not hasattr(self.generator, "config"):
+            return
+
+        from pyacemaker.domain_models.constants import (
+            STRATEGY_RATTLE_STDEV_DECREASE_FACTOR,
+            STRATEGY_RATTLE_STDEV_INCREASE_FACTOR,
+            STRATEGY_RATTLE_STDEV_MAX,
+            STRATEGY_RATTLE_STDEV_MIN,
+        )
+
+        if result.halted:
+            self.logger.info(
+                "Adaptive Strategy: MD halted. Adjusting generator config for wider exploration."
+            )
+            # Basic adaptation: Increase scaling factors or switch policies if supported by the generator
+            try:
+                # Assuming the config has a way to increase perturbation scaling
+                if hasattr(self.generator.config, "rattle_stdev"):
+                    self.generator.config.rattle_stdev = min(
+                        STRATEGY_RATTLE_STDEV_MAX,
+                        self.generator.config.rattle_stdev * STRATEGY_RATTLE_STDEV_INCREASE_FACTOR
+                    )
+                    self.logger.info(
+                        f"Adaptive Strategy: Increased rattle_stdev to {self.generator.config.rattle_stdev:.2f}"
+                    )
+            except Exception as e:
+                self.logger.debug(f"Adaptive Strategy: Failed to adjust config: {e}")
+        else:
+            self.logger.info(
+                "Adaptive Strategy: MD completed successfully. Stabilizing generator config."
+            )
+            try:
+                if hasattr(self.generator.config, "rattle_stdev"):
+                    self.generator.config.rattle_stdev = max(
+                        STRATEGY_RATTLE_STDEV_MIN,
+                        self.generator.config.rattle_stdev * STRATEGY_RATTLE_STDEV_DECREASE_FACTOR
+                    )
+            except Exception as e:
+                self.logger.debug(f"Adaptive Strategy: Failed to adjust config: {e}")
 
     def _execute_iteration_logic(self, iteration: int, paths: dict[str, Path]) -> None:
         """

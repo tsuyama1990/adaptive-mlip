@@ -1,4 +1,4 @@
-from typing import Any as _Any
+from typing import Any
 
 import marimo
 
@@ -70,24 +70,28 @@ def setup_environment() -> tuple[Any, ...]:
 def run_setup(
     DistillationConfig: type[Any], WorkflowConfig: type[Any], mo: object
 ) -> tuple[Any, ...]:
-    from typing import Any as _Any
 
-    config: _Any = WorkflowConfig(
+    config: Any = WorkflowConfig(
         max_iterations=1, distillation=DistillationConfig(enable=True, uncertainty_threshold=0.05)
     )
 
     if hasattr(mo, "md"):
-        mo.md(f"Initialized configuration: Distillation enabled is **{config.distillation.enable}**")
+        mo.md(
+            f"Initialized configuration: Distillation enabled is **{config.distillation.enable}**"
+        )
     return (config,)
 
 
 @app.cell
 def run_distillation(
-    Atoms: type[Any], DistillationConfig: type[Any], MACEManager: type[Any], WorkflowConfig: type[Any], mo: object
+    Atoms: type[Any],
+    DistillationConfig: type[Any],
+    MACEManager: type[Any],
+    WorkflowConfig: type[Any],
+    mo: object,
 ) -> tuple[Any, ...]:
-    from typing import Any as _Any
 
-    _config2: _Any = WorkflowConfig(
+    _config2: Any = WorkflowConfig(
         max_iterations=1, distillation=DistillationConfig(enable=True, uncertainty_threshold=0.05)
     )
     # 1. MACE evaluates structures
@@ -128,13 +132,12 @@ def run_active_learning_event(
     np: Any,
     patch: Any,
 ) -> tuple[Any, ...]:
-    from typing import Any as _Any
 
     _config3: Any = WorkflowConfig(
         max_iterations=1, distillation=DistillationConfig(enable=True, uncertainty_threshold=0.05)
     )
     thresholds: Any = ActiveLearningThresholds(threshold_call_dft=0.05, threshold_add_train=0.02)
-    cutout_config: _Any = CutoutConfig(core_radius=3.0, buffer_radius=2.0)
+    cutout_config: Any = CutoutConfig(core_radius=3.0, buffer_radius=2.0)
 
     mace_manager_tiered: Any = MACEManager(_config3.distillation.mace_model_path)
     dft_manager: Any = MagicMock(spec=DFTManager)
@@ -184,7 +187,6 @@ def run_incremental_update_and_resume(
     patch: Any,
     tempfile: Any,
 ) -> tuple[Any, ...]:
-    from typing import Any as _Any
 
     with tempfile.TemporaryDirectory() as tmp_dir_name:
         tmp_path: Any = Path(tmp_dir_name)
@@ -194,7 +196,7 @@ def run_incremental_update_and_resume(
         finetune_mgr: Any = FinetuneManager()
         awakened_model: str = finetune_mgr.finetune(dataset_path)
 
-        t_config: _Any = TrainingConfig(
+        t_config: Any = TrainingConfig(
             potential_type="ace",
             cutoff_radius=5.0,
             max_basis_size=2,
@@ -214,7 +216,7 @@ def run_incremental_update_and_resume(
                 dataset_path, strategy, initial_potential="init.yace"
             )
 
-        md_config: _Any = MDConfig(
+        md_config: Any = MDConfig(
             temperature=300.0, pressure=1.0, timestep=0.001, n_steps=5000, fix_halt=True
         )
 
@@ -245,7 +247,9 @@ def run_incremental_update_and_resume(
 
             engine.run(md_atoms, pot_path, resume_from_step=1500)
 
-        resume_success: bool = len(script_content) == 1 and "Resuming from step 1500" in script_content[0]
+        resume_success: bool = (
+            len(script_content) == 1 and "Resuming from step 1500" in script_content[0]
+        )
 
     if hasattr(mo, "md"):
         mo.md(
@@ -256,7 +260,6 @@ def run_incremental_update_and_resume(
 
 @app.cell
 def run_state_resilience(Path: Any, mo: object, tempfile: Any) -> tuple[Any, ...]:
-    from typing import Any as _Any
     from pyacemaker.core.loop import LoopStatus
     from pyacemaker.core.state_manager import StateManager
     from pyacemaker.domain_models.logging import LoggingConfig

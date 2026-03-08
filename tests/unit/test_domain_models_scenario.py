@@ -15,6 +15,6 @@ def test_scenario_config_valid():
     assert config.enabled is True
 
 
-def test_scenario_config_extra_forbid():
+def test_scenario_config_extra_forbid() -> None:
     with pytest.raises(ValidationError):
-        ScenarioConfig(name="test", extra_field="forbidden")
+        ScenarioConfig(name="test", extra_field="forbidden")  # type: ignore[call-arg]

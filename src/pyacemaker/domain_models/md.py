@@ -55,6 +55,13 @@ class HybridParams(BaseModel):
         DEFAULT_MD_HYBRID_ZBL_OUTER, description="Outer cutoff radius for ZBL potential (Angstrom)"
     )
 
+    @model_validator(mode="after")
+    def validate_zbl_cutoffs(self) -> "HybridParams":
+        if self.zbl_cut_inner >= self.zbl_cut_outer:
+            msg = "zbl_cut_inner must be strictly less than zbl_cut_outer"
+            raise ValueError(msg)
+        return self
+
 
 class MDRampingConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -66,6 +73,13 @@ class MDRampingConfig(BaseModel):
 
     @model_validator(mode="after")
     def validate_ramping(self) -> "MDRampingConfig":
+        if (
+            self.temp_start is not None
+            and self.temp_end is not None
+            and self.temp_start > self.temp_end
+        ):
+            msg = "temp_start must be less than or equal to temp_end"
+            raise ValueError(msg)
         return self
 
 

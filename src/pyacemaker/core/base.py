@@ -6,6 +6,7 @@ from typing import Any
 from ase import Atoms
 
 from pyacemaker.domain_models.md import MDSimulationResult
+from pyacemaker.domain_models.structure import StructureConfig
 
 
 class BasePolicy(ABC):
@@ -17,11 +18,10 @@ class BasePolicy(ABC):
     def generate(
         self,
         base_structure: Atoms,
-        config: Any,
+        config: StructureConfig,
         n_structures: int = 1,
         engine: Any | None = None,
         potential: str | Path | None = None,
-        **kwargs: Any,
     ) -> Iterator[Atoms]:
         """
         Generates new candidates based on policy logic.
