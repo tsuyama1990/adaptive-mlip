@@ -59,6 +59,9 @@ class FakeTrainer(BaseTrainer):
     def __init__(self, output_dir: Path) -> None:
         self.output_dir = output_dir
 
+    def incremental_train(self, new_data_path, strategy_config, initial_potential=None):
+        return Path("mock.yace")
+
     def train(
         self, training_data_path: str | Path, initial_potential: str | Path | None = None
     ) -> Any:

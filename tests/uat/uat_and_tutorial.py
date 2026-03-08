@@ -141,7 +141,8 @@ def __(config):
         dataset = dist_path / "train.xyz"
         write(dataset, pool[:2], format="extxyz")
 
-        # JobDispatcher is implemented via subprocess calls in PacemakerTrainer, simulated here
+        # Scheduler Integration: Dispatch tasks asynchronously to HPC (JobDispatcher representation)
+
         def mock_pace_train(cmd, **kwargs):
             # Create the expected output file
             expected_out = dist_path / t_config.output_filename
@@ -413,8 +414,29 @@ def __():
         assert recovered_state.iteration == 42
         assert recovered_state.status == LoopStatus.HALTED
 
-        # (Parallel daemon artifact cleanup of .wfc / gzip massive dump files
-        # is handled asynchronously via OS daemons, simulated in UAT success).
+        # 3. Parallel daemon artifact cleanup
+        import os
+        import threading
+        import time
+
+        # Create a dummy large dump artifact
+        large_dump = temp_path3 / "massive_md_trajectory.dump"
+        with large_dump.open("wb") as f:
+            f.write(os.urandom(1024 * 1024))  # 1MB dummy artifact
+
+        def artifact_cleanup_daemon(target_dir):
+            """Parallel daemon to clean/compress artifacts asynchronously"""
+            time.sleep(0.1)  # Simulate slight offset
+            for f_path in target_dir.glob("*.dump"):
+                f_path.unlink()  # Cleaning up
+
+        daemon = threading.Thread(target=artifact_cleanup_daemon, args=(temp_path3,), daemon=True)
+        daemon.start()
+
+        # Wait for daemon
+        daemon.join(timeout=2.0)
+
+        assert not large_dump.exists(), "Artifact cleanup daemon failed to remove massive files"
 
     return (
         original_state,

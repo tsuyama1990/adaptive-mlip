@@ -195,7 +195,7 @@ def test_run_loop_iteration_halt(orchestrator: Orchestrator, tmp_path: Path) -> 
     orchestrator.oracle.compute.return_value = iter([Atoms("Fe")])
     refined_pot = tmp_path / "refined.yace"
     refined_pot.touch()
-    orchestrator.trainer.train.return_value = refined_pot
+    orchestrator.trainer.incremental_train.return_value = refined_pot
 
     # Execute
     orchestrator._run_loop_iteration()
@@ -204,4 +204,4 @@ def test_run_loop_iteration_halt(orchestrator: Orchestrator, tmp_path: Path) -> 
     assert orchestrator.state_manager.state.iteration == 1
     assert orchestrator.state_manager.state.current_potential == refined_pot
     orchestrator.engine.run.assert_called()
-    orchestrator.trainer.train.assert_called()
+    orchestrator.trainer.incremental_train.assert_called()

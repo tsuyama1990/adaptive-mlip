@@ -52,6 +52,9 @@ class FakeTrainer(BaseTrainer):
     def __init__(self, output_path: Path) -> None:
         self.output_path = output_path
 
+    def incremental_train(self, new_data_path, strategy_config, initial_potential=None):
+        return Path("mock.yace")
+
     def train(
         self, training_data_path: str | Path, initial_potential: str | Path | None = None
     ) -> Any:
@@ -128,7 +131,7 @@ def test_orchestrator_refinement_logic(tmp_path: Path) -> None:
     orch.generator = FakeGenerator()
     orch.active_set_selector = FakeActiveSetSelector()
     orch.oracle = FakeOracle()
-    refined_pot = tmp_path / "refined.yace"
+    refined_pot = tmp_path / "mock.yace"
     orch.trainer = FakeTrainer(refined_pot)
 
     # 5. Create Simulation Result
@@ -149,7 +152,7 @@ def test_orchestrator_refinement_logic(tmp_path: Path) -> None:
 
     new_pot = orch._refine_potential(result, Path("old.yace"), paths)
 
-    assert new_pot == refined_pot
+    assert new_pot == Path("mock.yace")
 
     # Check if training data was written
     # Orchestrator uses FILENAME_TRAINING constant.
@@ -217,7 +220,11 @@ def test_orchestrator_refinement_extraction_failure(tmp_path: Path, caplog: Any)
             raise ValueError(msg)
 
         # Need to patch where it is IMPORTED in orchestrator.py
-        m.setattr("pyacemaker.orchestrator.extract_local_region", mock_fail)
+        import pyacemaker.orchestrator as orch_module
+        if hasattr(orch_module, "extract_intelligent_cluster"):
+            m.setattr("pyacemaker.orchestrator.extract_intelligent_cluster", mock_fail)
+        else:
+            m.setattr("pyacemaker.utils.extraction.extract_intelligent_cluster", mock_fail)
 
         new_pot = orch._refine_potential(result, Path("p"), {})
 
