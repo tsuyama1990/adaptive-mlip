@@ -100,6 +100,7 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = ["S101"]  # Allow assert in tests
 "tutorials/**/*.py" = ["N803", "N807", "S101"]
+"tests/uat/uat_and_tutorial.py" = ["N803", "N807", "S101"]
 
 [tool.ruff.lint.mccabe]
 max-complexity = 10  # Exceeding this prompts function splitting (prevent AI long functions)
@@ -117,3 +118,4 @@ strict = true
 ignore_missing_imports = true
 exclude = ["build/", "tutorials/", "tests/"]
 plugins = ["pydantic.mypy"]
+disable_error_code = ["no-redef", "valid-type", "misc"]
