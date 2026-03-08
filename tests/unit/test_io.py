@@ -93,7 +93,7 @@ def test_write_lammps_streaming_missing_species():
     species = ["H"] # He is missing
 
     with tempfile.NamedTemporaryFile(mode="w+", delete=False) as f:
-        with pytest.raises(KeyError):
+        with pytest.raises(ValueError, match="not in provided species list"):
             write_lammps_streaming(f, atoms, species)
         path = Path(f.name)
 

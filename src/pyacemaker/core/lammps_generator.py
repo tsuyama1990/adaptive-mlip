@@ -1,13 +1,14 @@
+import re
 from functools import lru_cache
 from pathlib import Path
 from typing import TextIO
-import shlex
 
 from ase.data import atomic_numbers
 
-from pyacemaker.domain_models.constants import LAMMPS_MIN_STYLE_CG
+from pyacemaker.domain_models.constants import LAMMPS_MIN_STYLE_CG, LAMMPS_SAFE_CMD_PATTERN
 from pyacemaker.domain_models.md import MDConfig
-from pyacemaker.utils.path import validate_path_safe
+
+_LAMMPS_SAFE_REGEX = re.compile(LAMMPS_SAFE_CMD_PATTERN)
 
 
 class LammpsScriptGenerator:
@@ -19,25 +20,28 @@ class LammpsScriptGenerator:
 
     def __init__(self, config: MDConfig) -> None:
         self.config = config
-        # Use lru_cache for methods instead of manual dict
-        self._atomic_numbers_cache = {}
+        self._atomic_numbers_cache: dict[str, int] = {}
 
     @lru_cache(maxsize=128)
     def _get_atomic_number(self, symbol: str) -> int:
         """Cached atomic number lookup."""
         return atomic_numbers[symbol]
 
-    @lru_cache(maxsize=128)
     def _quote(self, path: str) -> str:
         """
-        Quotes a path for LAMMPS script safety after validation.
-        Uses caching to avoid redundant validation calls.
+        Quotes a path for LAMMPS script safety.
+        Assumes path has already been validated by caller.
         """
-        # Sanitize input path
-        # Note: path must be string for lru_cache
-        safe_path = validate_path_safe(Path(path))
-        # Use shlex.quote for shell safety
-        return shlex.quote(str(safe_path))
+        path_str = str(path)
+
+        # Ensure the path contains only LAMMPS-safe characters
+        if not _LAMMPS_SAFE_REGEX.match(path_str):
+            raise ValueError(f"Path contains characters unsafe for LAMMPS: {path_str}")
+
+        # Proper LAMMPS quoting: escape backslashes, then double quotes.
+        # For Windows paths, backslashes must be escaped.
+        escaped = path_str.replace("\\", "\\\\").replace('"', '\\"')
+        return f'"{escaped}"'
 
     def _gen_potential_pure(self, buffer: TextIO, potential_path: Path, elements: list[str]) -> None:
         """Generates pure PACE potential commands."""
@@ -123,9 +127,9 @@ class LammpsScriptGenerator:
             f"{temp} ke no types {types_str}\n"
         )
 
-    def _gen_execution(self, buffer: TextIO, elements: list[str]) -> None:
+    def _gen_execution(self, buffer: TextIO, elements: list[str], resume_from_step: int | None = None) -> None:
         """Generates minimization and MD run commands."""
-        if self.config.minimize:
+        if self.config.minimize and resume_from_step is None:
             buffer.write(
                 f"minimize {self.config.minimize_tol} {self.config.minimize_ftol} "
                 f"{self.config.minimize_steps} {self.config.minimize_max_iter}\n"
@@ -154,13 +158,36 @@ class LammpsScriptGenerator:
             if self.config.ramping.press_end is not None:
                 press_end = self.config.ramping.press_end
 
-        # Use configurable velocity seed
-        buffer.write(f"velocity all create {temp_start} {self.config.velocity_seed}\n")
-        buffer.write(
-            f"fix npt all npt temp {temp_start} {temp_end} {tdamp} "
-            f"iso {press_start} {press_end} {pdamp}\n"
-        )
-        buffer.write(f"run {self.config.n_steps}\n")
+        if resume_from_step is None:
+            # First start: init velocities
+            buffer.write(f"velocity all create {temp_start} {self.config.velocity_seed}\n")
+            buffer.write(
+                f"fix npt all npt temp {temp_start} {temp_end} {tdamp} "
+                f"iso {press_start} {press_end} {pdamp}\n"
+            )
+            # Add python invoke for watchdog callback
+            buffer.write("fix python_invoke all python/invoke 10 post_force update_python\n")
+            buffer.write(f"run {self.config.n_steps}\n")
+        else:
+            # Resuming: soft start using Langevin heat bath
+            buffer.write(
+                f"fix langevin all langevin {temp_start} {temp_end} {tdamp} {self.config.velocity_seed}\n"
+            )
+            buffer.write("fix nve all nve\n")
+            # Run a few steps of soft start
+            buffer.write("run 100\n")
+            # Unfix langevin and nve
+            buffer.write("unfix langevin\n")
+            buffer.write("unfix nve\n")
+            # Continue NPT
+            buffer.write(
+                f"fix npt all npt temp {temp_start} {temp_end} {tdamp} "
+                f"iso {press_start} {press_end} {pdamp}\n"
+            )
+            # Add python invoke for watchdog callback
+            buffer.write("fix python_invoke all python/invoke 10 post_force update_python\n")
+            remaining_steps = self.config.n_steps - resume_from_step
+            buffer.write(f"run {remaining_steps}\n")
 
     def _gen_output_setup(self, buffer: TextIO, dump_file: Path) -> None:
         """Generates output settings (thermo and dump)."""
@@ -195,6 +222,7 @@ class LammpsScriptGenerator:
         data_file: Path,
         dump_file: Path,
         elements: list[str],
+        resume_from_step: int | None = None,
     ) -> None:
         """
         Writes the LAMMPS input script to the provided buffer.
@@ -215,7 +243,7 @@ class LammpsScriptGenerator:
         # Output setup MUST come before run
         self._gen_output_setup(buffer, dump_file)
 
-        self._gen_execution(buffer, elements)
+        self._gen_execution(buffer, elements, resume_from_step=resume_from_step)
 
         self._gen_post_run_diagnostics(buffer)
 

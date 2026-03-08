@@ -1,9 +1,13 @@
-import tempfile
 import os
+import re
+import tempfile
+import urllib.parse
 from pathlib import Path
 
-from pyacemaker.domain_models.constants import DANGEROUS_PATH_CHARS, DEFAULT_RAM_DISK_PATH
+from pyacemaker.domain_models.constants import DEFAULT_RAM_DISK_PATH
 
+# Whitelist of allowed characters in paths: alphanumeric, space, dot, dash, underscore, and path separators.
+ALLOWED_PATH_CHARS_REGEX = re.compile(r"^[\w\s.\-_/\\\:]+$")
 
 def validate_path_safe(path: Path) -> Path:
     """
@@ -22,12 +26,11 @@ def validate_path_safe(path: Path) -> Path:
     """
     s = str(path)
 
-    # Check for dangerous patterns in string representation BEFORE resolve
-    if ".." in s:
-         msg = f"Path traversal attempt detected (parent directory reference): {path}"
-         raise ValueError(msg)
+    # Decode encoded characters (e.g. %2e%2e)
+    unquoted = urllib.parse.unquote(s)
 
-    if any(c in s for c in DANGEROUS_PATH_CHARS):
+    # Regex whitelist validation
+    if not ALLOWED_PATH_CHARS_REGEX.match(unquoted):
         msg = f"Path contains invalid characters: {path}"
         raise ValueError(msg)
 
@@ -37,46 +40,38 @@ def validate_path_safe(path: Path) -> Path:
         raise ValueError(msg)
 
     try:
-        # Canonicalize path.
-        # Enforce strict=True if the path exists to catch symlink attacks immediately.
-        # If it doesn't exist (e.g. output file), we must resolve based on parent.
-        if path.exists():
-            resolved = path.resolve(strict=True)
-        else:
-            # For non-existent files, check parent
-            if path.parent.exists():
-                resolved_parent = path.parent.resolve(strict=True)
-                # Combine resolved parent with filename
-                resolved = resolved_parent / path.name
-            else:
-                # If even parent doesn't exist, this is likely unsafe or too deep
-                # Fallback to loose resolve but we will check containment
-                resolved = path.resolve(strict=False)
+        # Canonicalize path using os.path.realpath to fully unfold symlinks safely.
+        abs_path = os.path.abspath(unquoted)
+        real_path_str = os.path.realpath(abs_path)
+        resolved = Path(real_path_str)
+
+        # If the file doesn't exist, we must check if its parent is valid.
+        if not resolved.exists():
+            # If the path parent doesn't exist, we must still enforce path restrictions on the string.
+            pass
 
     except Exception as e:
          msg = f"Invalid path resolution: {path}"
          raise ValueError(msg) from e
 
     base_dir = Path.cwd().resolve()
+    temp_dir = Path(tempfile.gettempdir()).resolve()
+    ram_dir = Path(DEFAULT_RAM_DISK_PATH).resolve()
 
-    # Allowed roots: CWD, System Temp, RAM Disk
     allowed_roots = [
-        base_dir,
-        Path(tempfile.gettempdir()).resolve(),
-        Path(DEFAULT_RAM_DISK_PATH).resolve()
+        str(os.path.realpath(str(base_dir))),
+        str(os.path.realpath(str(temp_dir))),
+        str(os.path.realpath(str(ram_dir)))
     ]
 
     is_safe = False
+
     for root in allowed_roots:
-        # Robust check using os.path.commonpath to ensure resolved path is under root
-        try:
-            # commonpath resolves mixed relative/absolute issues, but we used absolute resolved paths
-            common = Path(os.path.commonpath([root, resolved]))
-            if common == root:
-                is_safe = True
-                break
-        except ValueError:
-            continue
+        # Use is_relative_to for robust path hierarchy check natively on the resolved path.
+        # This accurately prevents symlink escapes and bounds checking.
+        if resolved.is_relative_to(Path(root)):
+            is_safe = True
+            break
 
     if not is_safe:
          msg = f"Path traversal detected: {resolved} is outside allowed roots {allowed_roots}"

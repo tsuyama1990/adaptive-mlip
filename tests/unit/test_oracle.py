@@ -176,16 +176,17 @@ def test_dft_manager_invalid_input(mock_dft_config: DFTConfig) -> None:
     with pytest.raises(TypeError, match="Oracle failed to create iterator"):
         manager.compute(atoms_list) # type: ignore[arg-type]
 
-def test_dft_manager_empty_iterator(mock_dft_config: DFTConfig) -> None:
+def test_dft_manager_empty_iterator(mock_dft_config: DFTConfig, caplog: pytest.LogCaptureFixture) -> None:
     """Test compute handles empty iterator correctly with warning."""
+    import logging
     manager = DFTManager(mock_dft_config)
     empty_iter: Iterator[Atoms] = iter([])
 
-    # Explicit loop without list() materialization for safety
-    # Use deque(..., maxlen=0) to consume iterator efficiently
     from collections import deque
-    with pytest.warns(UserWarning, match="Oracle received empty iterator"):
+    with caplog.at_level(logging.WARNING):
         deque(manager.compute(empty_iter), maxlen=0)
+
+    assert "Oracle received empty iterator" in caplog.text
 
 def test_dft_manager_embedding(mock_dft_config: DFTConfig, monkeypatch: pytest.MonkeyPatch) -> None:
     """Test that embedding is applied when configured."""

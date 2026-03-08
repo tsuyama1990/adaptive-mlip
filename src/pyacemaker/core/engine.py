@@ -1,3 +1,4 @@
+import contextlib
 from pathlib import Path
 from typing import Any
 
@@ -17,6 +18,33 @@ from pyacemaker.domain_models.constants import (
 )
 from pyacemaker.domain_models.md import MDConfig, MDSimulationResult
 from pyacemaker.interfaces.lammps_driver import LammpsDriver
+
+
+class PathValidator:
+    """Handles script path validation for the engine."""
+    @staticmethod
+    def validate_script_path(script_path: Path) -> None:
+        if not script_path.exists():
+            msg = f"Input script not found: {script_path}"
+            raise FileNotFoundError(msg)
+
+class ScriptExecutor:
+    """Handles actual execution of scripts via the driver."""
+    @staticmethod
+    def execute(driver: LammpsDriver, script_path: Path) -> None:
+        driver.run_file(str(script_path))
+
+class SimulationErrorHandler:
+    """Maps exceptions to standard Simulation error codes."""
+    @staticmethod
+    def handle(e: Exception) -> RuntimeError:
+        if isinstance(e, FileNotFoundError):
+            return RuntimeError(ERR_SIM_SETUP_FAIL.format(error=e))
+        if isinstance(e, ValueError):
+            return RuntimeError(ERR_SIM_SECURITY_FAIL.format(error=e))
+        if isinstance(e, RuntimeError):
+            return RuntimeError(ERR_SIM_EXEC_FAIL.format(error=e))
+        return RuntimeError(ERR_SIM_UNEXPECTED.format(error=e))
 
 
 class LammpsEngine(BaseEngine):
@@ -41,7 +69,7 @@ class LammpsEngine(BaseEngine):
 
     def _prepare_simulation_env(
         self, structure: Atoms | None, potential: Any
-    ) -> tuple[Any, Path, Path, Path, list[str], Path]:
+    ) -> tuple[contextlib.AbstractContextManager[Any], Path, Path, Path, list[str], Path]:
         """
         Prepares the simulation environment: validation, paths, and files.
         Returns: (ctx, data_file, dump_file, log_file, elements, potential_path)
@@ -56,31 +84,7 @@ class LammpsEngine(BaseEngine):
         ctx, data_file, dump_file, log_file, elements = self.file_manager.prepare_workspace(structure)
         return ctx, data_file, dump_file, log_file, elements, potential_path
 
-    def _ensure_script_readable(self, script_path: Path) -> None:
-        """Helper to ensure script path exists."""
-        if not script_path.exists():
-            msg = f"Input script not found: {script_path}"
-            raise FileNotFoundError(msg)
-
-    def _execute_simulation(self, driver: LammpsDriver, script_path: Path) -> None:
-        """
-        Executes the simulation script with standardized error handling.
-        """
-        try:
-            self._ensure_script_readable(script_path)
-            # Scalability: Use run_file to stream script execution
-            driver.run_file(str(script_path))
-
-        except FileNotFoundError as e:
-            raise RuntimeError(ERR_SIM_SETUP_FAIL.format(error=e)) from e
-        except ValueError as e:
-            raise RuntimeError(ERR_SIM_SECURITY_FAIL.format(error=e)) from e
-        except RuntimeError as e:
-            raise RuntimeError(ERR_SIM_EXEC_FAIL.format(error=e)) from e
-        except Exception as e:
-            raise RuntimeError(ERR_SIM_UNEXPECTED.format(error=e)) from e
-
-    def run(self, structure: Atoms | None, potential: Any) -> MDSimulationResult:
+    def run(self, structure: Atoms | None, potential: Any, resume_from_step: int | None = None) -> MDSimulationResult:
         """
         Runs the MD simulation.
         """
@@ -97,14 +101,16 @@ class LammpsEngine(BaseEngine):
                     potential_path,
                     data_file,
                     dump_file,
-                    elements
+                    elements,
+                    resume_from_step=resume_from_step
                 )
 
             # Initialize Driver with unique log file
             driver = LammpsDriver(["-screen", LAMMPS_SCREEN_ARG, "-log", str(log_file)])
 
             try:
-                self._execute_simulation(driver, input_script_path)
+                PathValidator.validate_script_path(input_script_path)
+                ScriptExecutor.execute(driver, input_script_path)
 
                 # Extract Results
                 try:
@@ -113,18 +119,16 @@ class LammpsEngine(BaseEngine):
                     step = int(driver.extract_variable("step"))
                     forces = driver.get_forces().tolist()
                     stress = driver.get_stress().tolist()
-                except Exception:
-                    energy = 0.0
-                    temperature = 0.0
-                    step = 0
-                    forces = [[0.0, 0.0, 0.0]]
-                    stress = [0.0] * 6
+                except (ValueError, KeyError, RuntimeError) as e:
+                    raise RuntimeError(f"Failed to extract standard simulation results: {e}") from e
 
                 max_gamma = 0.0
                 if self.config.fix_halt:
                     try:
                         max_gamma = driver.extract_variable("max_g")
-                    except Exception:
+                    except (ValueError, KeyError, RuntimeError) as e:
+                        import logging
+                        logging.getLogger(__name__).warning("Failed to extract max_g variable, assuming 0.0: %s", e)
                         max_gamma = 0.0
 
                 halted = False
@@ -134,18 +138,20 @@ class LammpsEngine(BaseEngine):
 
                 # Result
                 return MDSimulationResult(
-                    energy=energy,
+                    energy=float(energy),
                     forces=forces,
                     stress=stress,
                     halted=halted,
-                    max_gamma=max_gamma,
+                    max_gamma=float(max_gamma),
                     n_steps=step,
-                    temperature=temperature,
+                    temperature=float(temperature),
                     trajectory_path=str(dump_file),
                     log_path=str(log_file),
                     halt_structure_path=str(dump_file) if halted else None,
                     halt_step=step if halted else None
                 )
+            except Exception as e:
+                raise SimulationErrorHandler.handle(e) from e
             finally:
                 if hasattr(driver, "close"):
                     driver.close()
@@ -187,8 +193,11 @@ class LammpsEngine(BaseEngine):
             # Execute
             driver = LammpsDriver(["-screen", LAMMPS_SCREEN_ARG, "-log", str(log_file)])
             try:
-                self._execute_simulation(driver, script_path)
+                PathValidator.validate_script_path(script_path)
+                ScriptExecutor.execute(driver, script_path)
                 return driver.get_atoms(elements)
+            except Exception as e:
+                raise SimulationErrorHandler.handle(e) from e
             finally:
                  if hasattr(driver, "close"):
                      driver.close()
