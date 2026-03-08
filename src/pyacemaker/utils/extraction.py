@@ -144,6 +144,11 @@ def extract_intelligent_cluster(
 
     cluster.new_array("force_weight", weights)  # type: ignore[no-untyped-call]
 
+    if structure.has("c_gamma"):  # type: ignore[no-untyped-call]
+        original_c_gamma = structure.get_array("c_gamma")  # type: ignore[no-untyped-call]
+        cluster_c_gamma = original_c_gamma[cluster_indices]
+        cluster.new_array("c_gamma", cluster_c_gamma)  # type: ignore[no-untyped-call]
+
     if config.enable_pre_relaxation:
         cluster = _pre_relax_buffer(cluster)
 

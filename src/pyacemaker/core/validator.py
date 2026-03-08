@@ -32,7 +32,7 @@ class LammpsInputValidator:
     """
 
     @staticmethod
-    def validate_structure(structure: Any) -> None:
+    def validate_structure(structure: Any) -> None:  # noqa: C901
         """
         Validates the atomic structure.
 

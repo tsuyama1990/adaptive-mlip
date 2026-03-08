@@ -21,8 +21,10 @@ class M3GNetWrapper:
         """
         # Validate composition string ensuring no injected shells or unsafe characters exist
         import re
+
         if not re.match(r"^[A-Za-z0-9]+$", composition):
-            raise ValueError(f"Invalid composition string format: {composition}")
+            msg = f"Invalid composition string format: {composition}"
+            raise ValueError(msg)
 
         # Simulated retry logic with exponential backoff could go here
         # For now, we mock the call.

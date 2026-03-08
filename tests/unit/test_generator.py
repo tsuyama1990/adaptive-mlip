@@ -45,6 +45,7 @@ def test_rattle_policy() -> None:
 
     # In tests, rattle sets fixed random seed, meaning pos0 and pos1 will often be equivalent unless we explicitly inject seeds or iterate random state. We should assert they differ from the base structure.
     import numpy as np
+
     np.random.seed(42)
     structures = list(generator.generate(n_candidates=5))
 

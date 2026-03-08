@@ -62,8 +62,11 @@ def test_scenario_phase3_cutout() -> None:
     # The oracle evaluates a structure. MACE mock yields max_g around 0.1
     atoms = Atoms("FePt", positions=[[0, 0, 0], [1, 1, 1]], cell=[10, 10, 10])
 
-    gen = oracle.compute(iter([atoms]))
-    _result = next(gen)
+    import numpy as np
+
+    with patch("pyacemaker.core.oracle.np.random.uniform", return_value=np.array([0.1, 0.1])):
+        gen = oracle.compute(iter([atoms]))
+        _result = next(gen)
 
     # max_g = 0.1 > 0.05, so it falls back to DFT
     dft_manager.compute.assert_called()

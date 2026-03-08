@@ -91,7 +91,7 @@ class LammpsEngine(BaseEngine):
         except Exception as e:
             raise RuntimeError(ERR_SIM_UNEXPECTED.format(error=e)) from e
 
-    def run(self, structure: Atoms | None, potential: Any, **kwargs: Any) -> MDSimulationResult: # noqa: C901, PLR0912, PLR0915
+    def run(self, structure: Atoms | None, potential: Any, **kwargs: Any) -> MDSimulationResult:  # noqa: C901, PLR0912, PLR0915
         """
         Runs the MD simulation.
         Kwargs:
@@ -108,7 +108,9 @@ class LammpsEngine(BaseEngine):
                 raise ValueError(msg)
 
         override_n_steps = kwargs.get("override_n_steps")
-        if override_n_steps is not None and (not isinstance(override_n_steps, int) or override_n_steps < 0):
+        if override_n_steps is not None and (
+            not isinstance(override_n_steps, int) or override_n_steps < 0
+        ):
             msg = "override_n_steps must be a non-negative integer"
             raise ValueError(msg)
 

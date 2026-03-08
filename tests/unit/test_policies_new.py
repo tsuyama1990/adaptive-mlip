@@ -18,7 +18,13 @@ class MockPolicy(BasePolicy):
         self.name = name
 
     def generate(
-        self, base_structure: Atoms, config: StructureConfig, n_structures: int = 1, engine: Any | None = None, potential: Any | None = None, **kwargs: Any
+        self,
+        base_structure: Atoms,
+        config: StructureConfig,
+        n_structures: int = 1,
+        engine: Any | None = None,
+        potential: Any | None = None,
+        **kwargs: Any,
     ):
         for _ in range(n_structures):
             a = base_structure.copy()
@@ -89,7 +95,7 @@ def test_md_micro_burst_policy() -> None:
     # Just asserting it generates the structures appropriately for the updated mock behaviors
     policy = MDMicroBurstPolicy()
     config = StructureConfig(elements=["H"], supercell_size=[1, 1, 1])
-    base = Atoms("H", positions=[[0,0,0]])
+    base = Atoms("H", positions=[[0, 0, 0]])
 
     results = list(
         policy.generate(base, config, n_structures=1, engine=initial_engine, potential="pot")
@@ -97,6 +103,7 @@ def test_md_micro_burst_policy() -> None:
 
     assert len(results) == 1
     import numpy as np
+
     assert not np.allclose(results[0].positions, base.positions)
 
 
