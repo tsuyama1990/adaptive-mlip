@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict, Field, PositiveInt
+from pydantic import BaseModel, ConfigDict, Field, PositiveInt, model_validator
 
 from pyacemaker.domain_models.defaults import (
     DEFAULT_ACTIVE_LEARNING_DIR,
@@ -17,25 +17,79 @@ from pyacemaker.domain_models.defaults import (
 
 class OTFConfig(BaseModel):
     """Configuration for On-The-Fly (OTF) Active Learning loop."""
+
     model_config = ConfigDict(extra="forbid")
 
     uncertainty_threshold: float = Field(
         default=DEFAULT_OTF_UNCERTAINTY_THRESHOLD,
         gt=0,
-        description="Gamma threshold to trigger halt and retraining."
+        description="Gamma threshold to trigger halt and retraining.",
     )
     local_n_candidates: PositiveInt = Field(
         default=DEFAULT_OTF_LOCAL_N_CANDIDATES,
-        description="Number of local candidates to generate around halt structure."
+        description="Number of local candidates to generate around halt structure.",
     )
     local_n_select: PositiveInt = Field(
         default=DEFAULT_OTF_LOCAL_N_SELECT,
-        description="Number of candidates to select via active set optimization."
+        description="Number of candidates to select via active set optimization.",
     )
     max_retries: PositiveInt = Field(
         default=DEFAULT_OTF_MAX_RETRIES,
-        description="Maximum number of retraining attempts per iteration."
+        description="Maximum number of retraining attempts per iteration.",
     )
+
+
+class DistillationConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    enable: bool = True
+    mace_model_path: str = "mace-mp-0-medium"
+    uncertainty_threshold: float = Field(0.05, description="Threshold where MACE is confident")
+    sampling_structures_per_system: int = 1000
+
+
+class ActiveLearningThresholds(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    threshold_call_dft: float = Field(0.05, description="Criterion to halt MD and call DFT")
+    threshold_add_train: float = Field(
+        0.02, description="Criterion to select atoms to add to training set"
+    )
+    smooth_steps: int = Field(
+        3, description="Consecutive steps required to exceed threshold to exclude thermal noise"
+    )
+
+
+class CutoutConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    core_radius: float = Field(4.0, description="Radius for Force Weight 1.0")
+    buffer_radius: float = Field(3.0, description="Thickness of additional relaxation buffer layer")
+    enable_pre_relaxation: bool = True
+    enable_passivation: bool = True
+    passivation_element: str = "H"
+
+    @model_validator(mode="after")
+    def validate_radii(self) -> "CutoutConfig":
+        if self.core_radius <= 0:
+            msg = "core_radius must be positive"
+            raise ValueError(msg)
+        if self.buffer_radius < 0:
+            msg = "buffer_radius must be non-negative"
+            raise ValueError(msg)
+        return self
+
+
+class LoopStrategyConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    use_tiered_oracle: bool = True
+    incremental_update: bool = True
+    replay_buffer_size: int = Field(
+        500, description="Number of past data points to retain to prevent catastrophic forgetting"
+    )
+    baseline_potential_type: str = Field("LJ", description="Baseline physical potential (e.g., LJ)")
+    thresholds: ActiveLearningThresholds = Field(default_factory=ActiveLearningThresholds)
 
 
 class WorkflowConfig(BaseModel):
@@ -73,7 +127,17 @@ class WorkflowConfig(BaseModel):
         default=DEFAULT_POTENTIALS_DIR, description="Directory for storing trained potentials"
     )
 
-    otf: OTFConfig = Field(
-        default_factory=OTFConfig,
-        description="Configuration for OTF loop."
+    otf: OTFConfig = Field(default_factory=OTFConfig, description="Configuration for OTF loop.")
+
+    distillation: DistillationConfig = Field(
+        default_factory=DistillationConfig, description="Configuration for Zero-Shot Distillation."
+    )
+
+    cutout: CutoutConfig = Field(
+        default_factory=CutoutConfig, description="Configuration for intelligent cluster cutout."
+    )
+
+    loop_strategy: LoopStrategyConfig = Field(
+        default_factory=LoopStrategyConfig,
+        description="Configuration for next generation learning strategy.",
     )

@@ -1,9 +1,11 @@
 import contextlib
+import logging
 import tempfile
 from collections.abc import Callable, Iterator
 from itertools import islice
 from pathlib import Path
 
+import numpy as np
 from ase import Atoms
 from ase.calculators.calculator import PropertyNotImplementedError
 
@@ -11,11 +13,12 @@ from pyacemaker.core.base import BaseOracle
 from pyacemaker.core.exceptions import OracleError
 from pyacemaker.domain_models import DFTConfig
 from pyacemaker.domain_models.constants import ERR_ORACLE_FAILED, ERR_ORACLE_ITERATOR
+from pyacemaker.domain_models.workflow import ActiveLearningThresholds
 from pyacemaker.interfaces.qe_driver import QEDriver
 from pyacemaker.utils.embedding import embed_cluster
-import logging
 
 logger = logging.getLogger(__name__)
+
 
 class DFTManager(BaseOracle):
     """
@@ -43,7 +46,7 @@ class DFTManager(BaseOracle):
             None,
             self._strategy_reduce_beta,
             self._strategy_increase_smearing,
-            self._strategy_use_cg
+            self._strategy_use_cg,
         ]
 
     def compute(self, structures: Iterator[Atoms], batch_size: int = 10) -> Iterator[Atoms]:
@@ -183,7 +186,7 @@ class DFTManager(BaseOracle):
 
                 # Enhanced Logging for debugging
                 logger.warning(
-                    f"DFT calculation attempt {i+1} ({strategy_name}) failed. Error: {e!s}. Retrying..."
+                    f"DFT calculation attempt {i + 1} ({strategy_name}) failed. Error: {e!s}. Retrying..."
                 )
                 continue
             else:
@@ -206,3 +209,89 @@ class DFTManager(BaseOracle):
         # Try to get stress (optional)
         with contextlib.suppress(PropertyNotImplementedError, RuntimeError):
             atoms.get_stress()  # type: ignore[no-untyped-call]
+
+
+class MACEManager(BaseOracle):
+    """
+    Wrapper for MACE foundation model inferences.
+    Provides energy, forces, and uncertainty estimation.
+    """
+
+    def __init__(self, model_path: str = "mace-mp-0-medium") -> None:
+        self.model_path = model_path
+        # Mock MACE initialization
+        self.is_initialized = True
+
+    def compute(self, structures: Iterator[Atoms], batch_size: int = 10) -> Iterator[Atoms]:
+        if not isinstance(structures, Iterator):
+            raise TypeError(ERR_ORACLE_ITERATOR.format(type=type(structures)))
+
+        return self._compute_generator(structures)
+
+    def _compute_generator(self, structures: Iterator[Atoms]) -> Iterator[Atoms]:
+        for atoms in structures:
+            atoms_copy = atoms.copy()  # type: ignore[no-untyped-call]
+
+            # Mock MACE predictions
+            energy = -10.0 * len(atoms_copy)
+            forces = np.zeros((len(atoms_copy), 3))
+
+            # Mock uncertainty in c_gamma array
+            c_gamma = np.random.uniform(0.01, 0.1, size=len(atoms_copy))
+
+            # In a real implementation we would attach a calculator
+            # Here we just mock setting the arrays and attributes
+            atoms_copy.calc = None
+            atoms_copy.info["energy"] = energy
+            atoms_copy.new_array("forces", forces)
+            atoms_copy.new_array("c_gamma", c_gamma)
+
+            yield atoms_copy
+
+
+class TieredOracle(BaseOracle):
+    """
+    Tiered Oracle that delegates to MACE first and falls back to DFT
+    if uncertainty exceeds thresholds.
+    """
+
+    def __init__(
+        self,
+        mace_manager: MACEManager,
+        dft_manager: DFTManager,
+        thresholds: ActiveLearningThresholds,
+    ) -> None:
+        self.mace = mace_manager
+        self.dft = dft_manager
+        self.thresholds = thresholds
+
+    def compute(self, structures: Iterator[Atoms], batch_size: int = 10) -> Iterator[Atoms]:
+        if not isinstance(structures, Iterator):
+            raise TypeError(ERR_ORACLE_ITERATOR.format(type=type(structures)))
+
+        return self._compute_generator(structures)
+
+    def _compute_generator(self, structures: Iterator[Atoms]) -> Iterator[Atoms]:
+        for atoms in structures:
+            # First query MACE
+            mace_result = next(self.mace.compute(iter([atoms])))
+
+            # Evaluate uncertainty
+            c_gamma = mace_result.get_array("c_gamma")
+            max_uncertainty = np.max(c_gamma)
+
+            if max_uncertainty > self.thresholds.threshold_call_dft:
+                # Fallback to DFT
+                logger.info(
+                    f"Uncertainty {max_uncertainty:.4f} > {self.thresholds.threshold_call_dft}. Falling back to DFT."
+                )
+
+                # Only pass the atoms exceeding the add_train threshold to DFT?
+                # For now, evaluate the whole structure as per fallback logic.
+                dft_result = next(self.dft.compute(iter([atoms])))
+
+                # We should retain the c_gamma array for active learning tracking
+                dft_result.set_array("c_gamma", c_gamma)
+                yield dft_result
+            else:
+                yield mace_result
