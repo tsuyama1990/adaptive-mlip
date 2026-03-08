@@ -141,17 +141,25 @@ def __(
         # 2. Information Maximization via DIRECT Sampling (Active Set Selection)
         selector = ActiveSetSelector()
 
-        # Mocking active set selection to prevent needing actual `pace_activeset` bin
-        class MockSelector(ActiveSetSelector):
-            def select(self, candidates, potential_path, n_select):
-                return iter(list(candidates)[:n_select])
+        # We patch `run_command` and `shutil.which` to let ActiveSetSelector run completely
+        # testing its true logic (argument assembly, file generation, parsing outputs)
+        from ase.io import write
 
-        mock_selector = MockSelector()
-        selected_structures = list(mock_selector.select(pool, dist_path / "mock.yace", n_select=2))
+        def mock_pace_activeset(cmd, **kwargs):
+            out_idx = cmd.index("--output")
+            out_path = Path(cmd[out_idx + 1])
+            write(out_path, pool[:2], format="extxyz")
+            from unittest.mock import MagicMock
+            return MagicMock()
+
+        from unittest.mock import patch as _patch
+        with _patch("pyacemaker.core.active_set.run_command", side_effect=mock_pace_activeset), _patch("shutil.which", return_value="/usr/bin/pace_activeset"):
+            (dist_path / "mock.yace").touch()
+            selected_structures = list(selector.select(pool, dist_path / "mock.yace", n_select=2))
 
         # 3. Confidence Filtering
         # Using concurrent.futures to simulate asynchronous Oracle dispatch (Scheduler Integration)
-        mace_manager = MACEManager("mace-mp-0-medium")
+        mace_manager = MACEManager(config.distillation.mace_model_path)
 
         import concurrent.futures as _concurrent_futures
         confident_structures = []
@@ -177,25 +185,27 @@ def __(
             elements=["Fe", "O"],
         )
 
-        class MockPacemaker(PacemakerTrainer):
-            def train(self, path, init=None):
-                out = Path(path).parent / self.config.output_filename
-                out.touch()
-                return out
-
-        trainer = MockPacemaker(t_config)
+        trainer = PacemakerTrainer(t_config)
         dataset = dist_path / "train.xyz"
-        dataset.touch()
+        write(dataset, pool[:2], format="extxyz")
 
         # JobDispatcher is implemented via subprocess calls in PacemakerTrainer, simulated here
-        base_pot = trainer.train(dataset)
+        def mock_pace_train(cmd, **kwargs):
+            # Create the expected output file
+            expected_out = dist_path / t_config.output_filename
+            expected_out.touch()
+            from unittest.mock import MagicMock
+            return MagicMock()
+
+        from unittest.mock import patch as _patch2
+        with _patch2("pyacemaker.core.trainer.run_command", side_effect=mock_pace_train), _patch2("shutil.which", return_value="/usr/bin/pace_train"):
+            base_pot = trainer.train(dataset)
 
     return (
         struct_cfg,
         generator,
         pool,
         selector,
-        mock_selector,
         selected_structures,
         mace_manager,
         confident_structures,
@@ -307,7 +317,8 @@ def __(
 
         # 1. Finetune MACE
         dataset_path2 = temp_path2 / "dataset.xyz"
-        dataset_path2.touch()
+        from ase.io import write as _write
+        _write(dataset_path2, Atoms("Fe"), format="extxyz")
 
         finetune_mgr = FinetuneManager()
         awakened_model = finetune_mgr.finetune(dataset_path2)
@@ -322,35 +333,39 @@ def __(
             output_filename="test_pot.yace",
             delta_learning=True,
             elements=["Fe"],
-            seed=123,
-            max_iterations=5,
-            batch_size=20,
         )
 
-        class MockPacemakerTrainer2(PacemakerTrainer):
-            def train(self, data_path, init_pot=None):
-                output_path = temp_path2 / self.config.output_filename
-                output_path.touch()
-                return output_path
-
-        trainer2 = MockPacemakerTrainer2(training_config)
+        trainer2 = PacemakerTrainer(training_config)
         _strategy_config = LoopStrategyConfig()
 
         # Incremental learning mixing Replay Buffer preventing catastrophic forgetting
-        new_pot = trainer2.incremental_train(dataset_path2, strategy_config=_strategy_config)
+        def mock_pace_train2(cmd, **kwargs):
+            # Create the expected output file
+            expected_out = temp_path2 / training_config.output_filename
+            expected_out.touch()
+            from unittest.mock import MagicMock
+            return MagicMock()
+
+        from unittest.mock import patch as _patch3
+        with _patch3("pyacemaker.core.trainer.run_command", side_effect=mock_pace_train2), _patch3("shutil.which", return_value="/usr/bin/pace_train"):
+            new_pot = trainer2.incremental_train(dataset_path2, strategy_config=_strategy_config)
 
         # 4. Master-Slave Inversion & Seamless Resume
         # Simulating LAMMPS fix python/invoke via LammpsEngine
         md_config = MDConfig(
-            temperature=300.0, pressure=1.0, timestep=0.001, n_steps=5000, fix_halt=True
+            temperature=300.0,
+            pressure=1.0,
+            timestep=0.001,
+            n_steps=5000,
+            fix_halt=True
         )
         engine = LammpsEngine(md_config)
 
         mock_driver = MagicMock()
         mock_driver.extract_variable.return_value = 0.0
-        import numpy as np
-        mock_driver.get_forces.return_value = np.zeros((1, 3))
-        mock_driver.get_stress.return_value = np.zeros(6)
+        import numpy as _np  # noqa: ICN001
+        mock_driver.get_forces.return_value = _np.zeros((1, 3))
+        mock_driver.get_stress.return_value = _np.zeros(6)
 
         # Resume seamlessly from step 1500 after potential update, preserving velocity/coordinates
         with patch("pyacemaker.core.engine.LammpsDriver", return_value=mock_driver):
