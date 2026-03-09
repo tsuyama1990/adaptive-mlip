@@ -64,6 +64,16 @@ tests/unit/test_validator.py ....                                        [ 95%]
 tests/unit/test_validator_security.py ...........                        [100%]
 
 =============================== warnings summary ===============================
+tests/uat/test_cycle01_uat.py::test_scenario_01_02_guardrails_check_temp
+  /app/.venv/lib/python3.12/site-packages/pydantic/main.py:464: UserWarning: Pydantic serializer warnings:
+    PydanticSerializationUnexpectedValue(Expected `MDConfig` - serialized value may not be as expected [field_name='md', input_value={'temperature': -50.0}, input_type=dict])
+    return self.__pydantic_serializer__.to_python(
+
+tests/uat/test_cycle01_uat.py::test_scenario_01_02_guardrails_check_cutoff
+  /app/.venv/lib/python3.12/site-packages/pydantic/main.py:464: UserWarning: Pydantic serializer warnings:
+    PydanticSerializationUnexpectedValue(Expected `TrainingConfig` - serialized value may not be as expected [field_name='training', input_value={'cutoff_radius': -1.0}, input_type=dict])
+    return self.__pydantic_serializer__.to_python(
+
 tests/unit/test_io.py::test_write_lammps_streaming_basic
   /app/.venv/lib/python3.12/site-packages/ase/io/lammpsdata.py:72: FutureWarning: "style" is deprecated; please use "atom_style".
     warnings.warn(
@@ -131,6 +141,6 @@ src/pyacemaker/utils/process.py                 25     21    16%   35-77
 src/pyacemaker/utils/structure.py                6      2    67%   19-20
 --------------------------------------------------------------------------
 TOTAL                                         3035    475    84%
-======================== 250 passed, 1 warning in 3.18s ========================
+======================= 250 passed, 3 warnings in 2.72s ========================
 /app/.venv/lib/python3.12/site-packages/coverage/inorout.py:561: CoverageWarning: Module dev_src was never imported. (module-not-imported); see https://coverage.readthedocs.io/en/7.13.4/messages.html#warning-module-not-imported
   self.warn(f"Module {pkg} was never imported.", slug="module-not-imported")

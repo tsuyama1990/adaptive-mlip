@@ -15,21 +15,55 @@ from pyacemaker.domain_models import (
     StructureConfig,
     TrainingConfig,
 )
+from pyacemaker.domain_models.config import PyAceConfig
+from pyacemaker.domain_models.defaults import (
+    DEFAULT_ACTIVE_LEARNING_DIR,
+    DEFAULT_BATCH_SIZE,
+    DEFAULT_CHECKPOINT_INTERVAL,
+    DEFAULT_N_CANDIDATES,
+    DEFAULT_OTF_LOCAL_N_CANDIDATES,
+    DEFAULT_OTF_LOCAL_N_SELECT,
+    DEFAULT_OTF_MAX_RETRIES,
+    DEFAULT_OTF_UNCERTAINTY_THRESHOLD,
+    DEFAULT_POTENTIALS_DIR,
+    DEFAULT_STATE_FILE,
+)
 from pyacemaker.domain_models.structure import ExplorationPolicy
 from tests.constants import TEST_ENERGY_GENERIC
 
 
 @pytest.fixture(autouse=True)
 def _mock_lammps_module(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Mock the lammps module globally before any tests run.
+
+    This is necessary because the LAMMPS python package (`lammps`) might attempt
+    to load native C++ libraries or start an MPI environment upon import or
+    instantiation, which can crash the test suite. By overriding the `lammps`
+    key in `sys.modules`, any downstream file importing `lammps` will receive
+    the mocked object instead.
+    """
     monkeypatch.setitem(sys.modules, "lammps", MagicMock())
 
 
 def create_dummy_pseudopotentials(path: Path | str, elements: list[str]) -> None:
-    """Helper to create dummy pseudopotential files."""
-    base_path = Path(path)
-    for el in elements:
-        file_path = base_path / f"{el}.UPF"
-        file_path.touch()
+    """Helper to safely create dummy pseudopotential files for testing.
+
+    Args:
+        path: Directory path where the UPF files should be created.
+        elements: List of chemical element symbols (e.g., ['Fe', 'Pt']).
+
+    Raises:
+        OSError: If there are permission issues or the directory doesn't exist.
+    """
+    try:
+        base_path = Path(path)
+        base_path.mkdir(parents=True, exist_ok=True)
+        for el in elements:
+            file_path = base_path / f"{el}.UPF"
+            file_path.touch()
+    except OSError as e:
+        msg = f"Failed to create dummy pseudopotential files at {path}"
+        raise OSError(msg) from e
 
 
 @pytest.fixture
@@ -86,11 +120,34 @@ class MockCalculator(Calculator):
     """
     Mock ASE calculator for testing purposes.
     Can simulate failures and setup errors.
+
+    Attributes:
+        implemented_properties (list[str]): The properties this calculator can calculate.
+        fail_count (int): The number of times to simulate calculation failure.
+        setup_error (bool): Whether to throw an error on setup.
+        attempts (int): Counter for the number of calculate calls.
+        test_energy (float): The energy to return on successful calculation.
+        results (dict[str, Any]): Internal storage for calculated values.
     """
+
+    implemented_properties: list[str]
+    fail_count: int
+    setup_error: bool
+    attempts: int
+    test_energy: float
+    results: dict[str, Any]
 
     def __init__(
         self, fail_count: int = 0, setup_error: bool = False, test_energy: float | None = None
     ) -> None:
+        """
+        Initializes the mock calculator.
+
+        Args:
+            fail_count: How many iterations should simulate a calculation failure.
+            setup_error: Whether the calculator should fail during setup (`calculate()`).
+            test_energy: The energy value returned upon successful calculation.
+        """
         super().__init__()  # type: ignore[no-untyped-call]
         self.implemented_properties = ["energy", "forces", "stress"]
         self.fail_count = fail_count
@@ -104,6 +161,18 @@ class MockCalculator(Calculator):
         properties: list[str] | None = None,
         system_changes: list[str] | None = None,
     ) -> None:
+        """
+        Execute the mock calculation.
+
+        Args:
+            atoms: The Atoms object representing the structure to calculate.
+            properties: The list of properties requested for this calculation.
+            system_changes: List of strings detailing changes since last call.
+
+        Raises:
+            CalculatorSetupError: If `self.setup_error` is True.
+            RuntimeError: If `self.attempts` is less than or equal to `self.fail_count`.
+        """
         self.attempts += 1
 
         if self.setup_error:
@@ -123,12 +192,14 @@ class MockCalculator(Calculator):
 
 
 class StructureDict(TypedDict, total=False):
+    """Represents configuration specifically for structural generation and policies."""
     elements: list[str]
     supercell_size: list[int]
     policy_name: str
 
 
 class DFTDict(TypedDict, total=False):
+    """Configuration associated with the First Principles engine (Quantum Espresso)."""
     code: str
     functional: str
     kpoints_density: float
@@ -141,6 +212,7 @@ class DFTDict(TypedDict, total=False):
 
 
 class TrainingDict(TypedDict, total=False):
+    """Settings dictating how the MACE/ACE potentials are trained."""
     potential_type: str
     cutoff_radius: float
     max_basis_size: int
@@ -149,6 +221,7 @@ class TrainingDict(TypedDict, total=False):
 
 
 class MDDict(TypedDict, total=False):
+    """Molecular Dynamics loop configuration parameters."""
     temperature: float
     pressure: float
     timestep: float
@@ -158,6 +231,7 @@ class MDDict(TypedDict, total=False):
 
 
 class OTFDict(TypedDict, total=False):
+    """On-The-Fly settings controlling uncertainty tolerances during MD."""
     uncertainty_threshold: float
     local_n_candidates: int
     local_n_select: int
@@ -165,6 +239,7 @@ class OTFDict(TypedDict, total=False):
 
 
 class WorkflowDict(TypedDict, total=False):
+    """Top-level execution and operational settings, logging directories."""
     max_iterations: int
     state_file_path: str
     active_learning_dir: str
@@ -175,6 +250,7 @@ class WorkflowDict(TypedDict, total=False):
 
 
 class ConfigDictType(TypedDict, total=False):
+    """Complete root configuration dictionary representation for testing."""
     project_name: str
     structure: StructureDict
     dft: DFTDict
@@ -189,13 +265,19 @@ def create_test_config_dict(**overrides: Any) -> ConfigDictType:
     """
     Helper to create a valid config dictionary using Pydantic defaults.
     Constructs dictionary first to allow overrides before validation.
-    """
-    # 1. Create default dictionary structure (NOT Pydantic objects yet)
-    # Use dummy value for validation that might fail if file doesn't exist,
-    # but we rely on overrides to fix it or loose validation context where applicable.
-    # Actually, we should use safe defaults for Pydantic construction if possible,
-    # but validation is strict.
 
+    Args:
+        **overrides: Key-value pairs matching PyAceConfig structure. Values
+        can be dictionaries containing nested structures to override default
+        values safely without disrupting validation.
+
+    Returns:
+        ConfigDictType: A structurally typed dictionary representation of
+        the configuration, properly validated using Pydantic.
+
+    Raises:
+        ValueError: If validation fails when assembling the config.
+    """
     defaults: dict[str, Any] = {
         "project_name": "TestProject",
         "structure": {
@@ -208,7 +290,7 @@ def create_test_config_dict(**overrides: Any) -> ConfigDictType:
             "functional": "PBE",
             "kpoints_density": 0.04,
             "encut": 500.0,
-            "pseudopotentials": {"Fe": "Fe.UPF"},  # Expects file to exist
+            "pseudopotentials": {"Fe": "Fe.UPF"},
             "mixing_beta": 0.7,
             "smearing_type": "mv",
             "smearing_width": 0.1,
@@ -223,35 +305,41 @@ def create_test_config_dict(**overrides: Any) -> ConfigDictType:
         },
         "md": {
             "temperature": 300.0,
-            "pressure": 0.0,
+            "pressure": 1.0,
             "timestep": 0.001,
             "n_steps": 1000,
-            "uncertainty_threshold": 5.0,
-            "check_interval": 10,
+            "uncertainty_threshold": DEFAULT_OTF_UNCERTAINTY_THRESHOLD,
+            "check_interval": DEFAULT_CHECKPOINT_INTERVAL,
         },
-        "validation": {},  # Use defaults
+        "validation": {},
         "workflow": {
             "max_iterations": 10,
-            "state_file_path": "state.json",
-            "active_learning_dir": "active_learning",
-            "potentials_dir": "potentials",
-            "n_candidates": 10,
-            "batch_size": 5,
+            "state_file_path": DEFAULT_STATE_FILE,
+            "active_learning_dir": DEFAULT_ACTIVE_LEARNING_DIR,
+            "potentials_dir": DEFAULT_POTENTIALS_DIR,
+            "n_candidates": DEFAULT_N_CANDIDATES,
+            "batch_size": DEFAULT_BATCH_SIZE,
             "otf": {
-                "uncertainty_threshold": 5.0,
-                "local_n_candidates": 20,
-                "local_n_select": 5,
-                "max_retries": 3,
+                "uncertainty_threshold": DEFAULT_OTF_UNCERTAINTY_THRESHOLD,
+                "local_n_candidates": DEFAULT_OTF_LOCAL_N_CANDIDATES,
+                "local_n_select": DEFAULT_OTF_LOCAL_N_SELECT,
+                "max_retries": DEFAULT_OTF_MAX_RETRIES,
             },
         },
         "logging": {},
     }
 
-    # 2. Apply overrides (Deep merge)
-    for key, value in overrides.items():
-        if key in defaults and isinstance(defaults[key], dict) and isinstance(value, dict):
-            defaults[key].update(value)
-        else:
-            defaults[key] = value
+    try:
+        from pydantic import ValidationError
+        # Merge dict properly utilizing Pydantic config
+        model = PyAceConfig.model_validate(defaults)
 
-    return defaults  # type: ignore[return-value]
+        # Pydantic will perform standard merging and validation
+        if overrides:
+            model = model.model_copy(update=overrides, deep=True)
+
+    except ValidationError as e:
+        msg = f"Failed to merge test overrides due to validation constraints: {e}"
+        raise ValueError(msg) from e
+    else:
+        return model.model_dump()  # type: ignore[no-any-return]
