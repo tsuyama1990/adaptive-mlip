@@ -12,9 +12,9 @@ from tests.conftest import create_dummy_pseudopotentials
 
 
 @pytest.fixture
-def mock_dft_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> DFTConfig:
-    monkeypatch.chdir(tmp_path)
-    create_dummy_pseudopotentials(tmp_path, ["H"])
+def mock_dft_config(dummy_pseudopotentials_dir: Path, monkeypatch: pytest.MonkeyPatch) -> DFTConfig:
+    monkeypatch.chdir(dummy_pseudopotentials_dir)
+    create_dummy_pseudopotentials(dummy_pseudopotentials_dir, ["H"])
 
     return DFTConfig(
         code="pw.x",
@@ -104,6 +104,21 @@ def test_qe_driver_invalid_input(mock_dft_config: DFTConfig) -> None:
     with pytest.raises(ValueError, match="Invalid chemical symbol"):
         driver.get_calculator(atoms, mock_dft_config)
 
+    from pydantic import ValidationError
+
+    # Empty pseudopotential dict - should fail validation at DFTConfig level
+    with pytest.raises(ValidationError):
+        driver.get_calculator(
+            atoms,
+            DFTConfig(
+                pseudopotentials={},
+                code="pw.x",
+                encut=100.0,
+                kpoints_density=0.04,
+                functional="PBE",
+            ),
+        )
+
 
 def test_qe_driver_parameters(mock_dft_config: DFTConfig) -> None:
     """Test that parameters from config are passed to Espresso."""
@@ -139,11 +154,13 @@ def test_qe_driver_parameters(mock_dft_config: DFTConfig) -> None:
         assert pseudos == {"H": "H.UPF"}
 
 
-def test_qe_driver_directory_argument(mock_dft_config: DFTConfig, tmp_path: Path) -> None:
+def test_qe_driver_directory_argument(
+    mock_dft_config: DFTConfig, dummy_pseudopotentials_dir: Path
+) -> None:
     """Test that directory argument is passed to Espresso."""
     atoms = Atoms("H", cell=[10, 10, 10], pbc=True)
     driver = QEDriver()
-    test_dir = str(tmp_path / "test_dir")
+    test_dir = str(dummy_pseudopotentials_dir / "test_dir")
 
     with patch("pyacemaker.interfaces.qe_driver.Espresso") as MockEspresso:
         driver.get_calculator(atoms, mock_dft_config, directory=test_dir)

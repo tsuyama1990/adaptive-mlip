@@ -19,12 +19,12 @@ def mock_config(
     mock_dft_config: Any,
     mock_training_config: Any,
     mock_md_config: Any,
-    tmp_path: Path,
+    dummy_pseudopotentials_dir: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> PyAceConfig:
-    monkeypatch.chdir(tmp_path)
+    monkeypatch.chdir(dummy_pseudopotentials_dir)
     # Create required pseudo file used in shared fixture
-    create_dummy_pseudopotentials(tmp_path, ["Fe"])
+    create_dummy_pseudopotentials(dummy_pseudopotentials_dir, ["Fe"])
 
     # Update DFT config to use the created file and match element
     mock_dft_config.pseudopotentials = {"Fe": "Fe.UPF"}

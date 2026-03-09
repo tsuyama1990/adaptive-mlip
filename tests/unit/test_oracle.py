@@ -13,9 +13,9 @@ from tests.constants import TEST_ENERGY_GENERIC
 
 
 @pytest.fixture
-def mock_dft_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> DFTConfig:
-    monkeypatch.chdir(tmp_path)
-    create_dummy_pseudopotentials(tmp_path, ["H"])
+def mock_dft_config(dummy_pseudopotentials_dir: Path, monkeypatch: pytest.MonkeyPatch) -> DFTConfig:
+    monkeypatch.chdir(dummy_pseudopotentials_dir)
+    create_dummy_pseudopotentials(dummy_pseudopotentials_dir, ["H"])
 
     return DFTConfig(
         code="pw.x",
@@ -177,6 +177,10 @@ def test_dft_manager_invalid_input(mock_dft_config: DFTConfig) -> None:
     # Check that it raises TypeError immediately upon calling compute (before next)
     with pytest.raises(TypeError, match="Oracle failed to create iterator"):
         manager.compute(atoms_list)  # type: ignore[arg-type]
+
+    # Explicitly check None
+    with pytest.raises(TypeError, match="Oracle failed to create iterator"):
+        manager.compute(None)  # type: ignore[arg-type]
 
 
 def test_dft_manager_empty_iterator(mock_dft_config: DFTConfig) -> None:
