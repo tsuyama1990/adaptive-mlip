@@ -89,9 +89,9 @@ graph TD
     DELTA --> STATE
 ```
 
-## Prerequisites
+## Requirements
 
-*   **Python**: >= 3.11
+*   **Python**: 3.11+
 *   **Package Manager**: `uv`
 *   **DFT Code**: Quantum Espresso (`pw.x` executable in PATH)
 *   **MLIP Trainer**: Pacemaker (`pace_train`, `pace_activeset` executables in PATH)
@@ -107,10 +107,10 @@ uv sync
 
 ## Usage
 
-PyAceMaker uses a `config.yaml` to dictate execution (LoopStrategy, Cutouts, etc). You can view the full capabilities using the new interactive tutorial.
+PyAceMaker uses a `config.yaml` to dictate execution (LoopStrategy, Cutouts, etc). You can explore the full capabilities through our interactive tutorial.
 
-### Interactive Tutorial
-To view the new UAT tutorial scenarios in a notebook interface:
+### Run Interactive Tutorial
+View and execute the user scenarios in a notebook interface:
 ```bash
 uv run marimo edit tutorials/UAT_AND_TUTORIAL.py
 ```
@@ -126,7 +126,7 @@ uv run pyacemaker --config config.yaml
 
 ## Development Workflow
 
-The project is structured through sequential Implementation Cycles. Active development emphasizes robust testing and code quality:
+Active development emphasizes robust testing and code quality:
 
 *   **Run Linter/Formatter:**
     ```bash

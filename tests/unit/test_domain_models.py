@@ -115,9 +115,7 @@ def test_workflow_config_default() -> None:
 def test_eon_config_max_temp(tmp_path: Path) -> None:
     potential = tmp_path / "dummy.yace"
     potential.touch()
-    config = EONConfig(
-        enabled=True, potential_path=potential, temperature=MAX_EON_TEMPERATURE
-    )
+    config = EONConfig(enabled=True, potential_path=potential, temperature=MAX_EON_TEMPERATURE)
     assert config.temperature == MAX_EON_TEMPERATURE
 
 
@@ -125,9 +123,7 @@ def test_eon_config_exceed_max_temp(tmp_path: Path) -> None:
     potential = tmp_path / "dummy.yace"
     potential.touch()
     with pytest.raises(ValidationError):
-        EONConfig(
-            enabled=True, potential_path=potential, temperature=MAX_EON_TEMPERATURE + 1.0
-        )
+        EONConfig(enabled=True, potential_path=potential, temperature=MAX_EON_TEMPERATURE + 1.0)
 
 
 def test_logging_config_valid() -> None:
