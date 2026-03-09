@@ -8,6 +8,7 @@ from ase import Atoms
 from pyacemaker.core.exceptions import OracleError
 from pyacemaker.core.oracle import DFTManager
 from pyacemaker.domain_models import DFTConfig
+from pyacemaker.interfaces.qe_driver import QEDriver
 from tests.conftest import MockCalculator, create_dummy_pseudopotentials
 from tests.constants import TEST_ENERGY_GENERIC
 
@@ -30,7 +31,7 @@ def mock_dft_config(dummy_pseudopotentials_dir: Path, monkeypatch: pytest.Monkey
     )
 
 
-class FakeDriver:
+class FakeDriver(QEDriver):
     """Fake driver to be picklable for ProcessPoolExecutor"""
 
     def __init__(self, calcs: list[MockCalculator] | MockCalculator | None = None) -> None:
@@ -59,7 +60,7 @@ def test_dft_manager_compute_success(mock_dft_config: DFTConfig) -> None:
     fake_driver = FakeDriver()
 
     # Inject fake driver
-    manager = DFTManager(mock_dft_config, driver=fake_driver)  # type: ignore[arg-type]
+    manager = DFTManager(mock_dft_config, driver=fake_driver)
 
     # Verify generator behavior with next() instead of list()
     generator = manager.compute(iter([atoms]))
@@ -72,39 +73,38 @@ def test_dft_manager_compute_success(mock_dft_config: DFTConfig) -> None:
     assert result.get_potential_energy() == TEST_ENERGY_GENERIC
 
 
-def test_dft_manager_self_healing(
-    mock_dft_config: DFTConfig, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_dft_manager_self_healing(mock_dft_config: DFTConfig) -> None:
     """Test self-healing mechanism."""
     atoms = Atoms("H", cell=[10, 10, 10], pbc=True)
 
-    # Because ProcessPoolExecutor executes in a separate process, mocking stateful objects like `FakeDriver`
-    # is difficult. We will mock `ProcessPoolExecutor` itself to test the loop logic.
-    from concurrent.futures import Future
+    fake_driver = FakeDriver()
+    manager = DFTManager(mock_dft_config, driver=fake_driver)
 
-    class DummyFuture(Future):  # type: ignore[type-arg]
-        def __init__(self, result_value: Any, exception: Any = None) -> None:
-            super().__init__()
-            self._result_value = result_value
-            self._exception = exception
+    import unittest.mock
 
-        def result(self, timeout: float | None = None) -> Any:
-            return self._result_value, self._exception
+    class FailingThenSucceedingExecutor:
+        call_count = 0
 
-    class DummyExecutor:
         def __init__(self, max_workers: int) -> None:
-            # We track the call count at the class level because DummyExecutor is instantiated fresh each loop
             pass
 
-        def __enter__(self) -> "DummyExecutor":
+        def __enter__(self) -> "FailingThenSucceedingExecutor":
             return self
 
-        def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+        def __exit__(self, *args: Any) -> None:
             pass
 
-        def submit(self, fn: Any, *args: Any, **kwargs: Any) -> DummyFuture:
-            DummyExecutor.call_count += 1
-            if DummyExecutor.call_count == 1:
+        def submit(self, fn: Any, *args: Any, **kwargs: Any) -> Any:
+            class DummyFuture:
+                def __init__(self, res: Any, exc: Any) -> None:
+                    self.res = res
+                    self.exc = exc
+
+                def result(self, timeout: float | None = None) -> Any:
+                    return self.res, self.exc
+
+            FailingThenSucceedingExecutor.call_count += 1
+            if FailingThenSucceedingExecutor.call_count == 1:
                 return DummyFuture(None, RuntimeError("Setup failed"))
 
             calc = MockCalculator(fail_count=0)
@@ -113,58 +113,47 @@ def test_dft_manager_self_healing(
             atoms.get_potential_energy()  # type: ignore[no-untyped-call]
             return DummyFuture(calc, None)
 
-    DummyExecutor.call_count = 0
+    FailingThenSucceedingExecutor.call_count = 0
 
-    monkeypatch.setattr("concurrent.futures.ProcessPoolExecutor", DummyExecutor)
-
-    fake_driver = FakeDriver()
-    manager = DFTManager(mock_dft_config, driver=fake_driver)  # type: ignore[arg-type]
-
-    gen = manager.compute(iter([atoms]))
-    result = next(gen)
+    with unittest.mock.patch(
+        "concurrent.futures.ProcessPoolExecutor", FailingThenSucceedingExecutor
+    ):
+        gen = manager.compute(iter([atoms]))
+        result = next(gen)
 
     assert result.get_potential_energy() == TEST_ENERGY_GENERIC  # type: ignore[no-untyped-call]
 
 
-def test_dft_manager_fatal_error(mock_dft_config: DFTConfig, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_dft_manager_fatal_error(mock_dft_config: DFTConfig) -> None:
     """Test fatal error after exhausting retries."""
     atoms = Atoms("H", cell=[10, 10, 10], pbc=True)
 
-    from concurrent.futures import Future
+    fake_driver = FakeDriver(calcs=MockCalculator(fail_count=100))
+    manager = DFTManager(mock_dft_config, driver=fake_driver)
 
-    class DummyFuture(Future):  # type: ignore[type-arg]
-        def __init__(self, result_value: Any, exception: Any = None) -> None:
-            super().__init__()
-            self._result_value = result_value
-            self._exception = exception
+    import unittest.mock
 
-        def result(self, timeout: float | None = None) -> Any:
-            return self._result_value, self._exception
-
-    class DummyExecutor:
+    class AlwaysFailingExecutor:
         def __init__(self, max_workers: int) -> None:
             pass
 
-        def __enter__(self) -> "DummyExecutor":
+        def __enter__(self) -> "AlwaysFailingExecutor":
             return self
 
-        def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+        def __exit__(self, *args: Any) -> None:
             pass
 
-        def submit(self, fn: Any, *args: Any, **kwargs: Any) -> DummyFuture:
-            return DummyFuture(None, RuntimeError("Always fails"))
+        def submit(self, fn: Any, *args: Any, **kwargs: Any) -> Any:
+            class DummyFuture:
+                def result(self, timeout: float | None = None) -> Any:
+                    return None, RuntimeError("Always fails")
 
-    monkeypatch.setattr("concurrent.futures.ProcessPoolExecutor", DummyExecutor)
+            return DummyFuture()
 
-    fake_driver = FakeDriver(calcs=MockCalculator(fail_count=100))
-
-    manager = DFTManager(mock_dft_config, driver=fake_driver)  # type: ignore[arg-type]
-
-    # Now raises OracleError
-    # Use next() to trigger execution
-    gen = manager.compute(iter([atoms]))
-    with pytest.raises(OracleError, match="Oracle calculation failed"):
-        next(gen)
+    with unittest.mock.patch("concurrent.futures.ProcessPoolExecutor", AlwaysFailingExecutor):
+        gen = manager.compute(iter([atoms]))
+        with pytest.raises(OracleError, match="Oracle calculation failed"):
+            next(gen)
 
     # In tests, if ProcessPoolExecutor is used, state updates inside _run_calculator
     # (like mock call counts on self.driver) are not reflected back in the main process
@@ -173,43 +162,36 @@ def test_dft_manager_fatal_error(mock_dft_config: DFTConfig, monkeypatch: pytest
     # We will just assert that the code raises the correct exception.
 
 
-def test_dft_manager_setup_error(mock_dft_config: DFTConfig, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_dft_manager_setup_error(mock_dft_config: DFTConfig) -> None:
     """Test handling of CalculatorSetupError."""
     atoms = Atoms("H", cell=[10, 10, 10], pbc=True)
 
-    from concurrent.futures import Future
+    fake_driver = FakeDriver(calcs=MockCalculator(setup_error=True))
+    manager = DFTManager(mock_dft_config, driver=fake_driver)
 
-    class DummyFuture(Future):  # type: ignore[type-arg]
-        def __init__(self, result_value: Any, exception: Any = None) -> None:
-            super().__init__()
-            self._result_value = result_value
-            self._exception = exception
+    import unittest.mock
 
-        def result(self, timeout: float | None = None) -> Any:
-            return self._result_value, self._exception
-
-    class DummyExecutor:
+    class SetupFailingExecutor:
         def __init__(self, max_workers: int) -> None:
             pass
 
-        def __enter__(self) -> "DummyExecutor":
+        def __enter__(self) -> "SetupFailingExecutor":
             return self
 
-        def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+        def __exit__(self, *args: Any) -> None:
             pass
 
-        def submit(self, fn: Any, *args: Any, **kwargs: Any) -> DummyFuture:
-            return DummyFuture(None, RuntimeError("CalculatorSetupError"))
+        def submit(self, fn: Any, *args: Any, **kwargs: Any) -> Any:
+            class DummyFuture:
+                def result(self, timeout: float | None = None) -> Any:
+                    return None, RuntimeError("CalculatorSetupError")
 
-    monkeypatch.setattr("concurrent.futures.ProcessPoolExecutor", DummyExecutor)
+            return DummyFuture()
 
-    fake_driver = FakeDriver(calcs=MockCalculator(setup_error=True))
-
-    manager = DFTManager(mock_dft_config, driver=fake_driver)  # type: ignore[arg-type]
-
-    gen = manager.compute(iter([atoms]))
-    with pytest.raises(OracleError, match="Oracle calculation failed"):
-        next(gen)
+    with unittest.mock.patch("concurrent.futures.ProcessPoolExecutor", SetupFailingExecutor):
+        gen = manager.compute(iter([atoms]))
+        with pytest.raises(OracleError, match="Oracle calculation failed"):
+            next(gen)
 
     # Should retry even on setup error if it's considered transient or parameter based?
     # Spec says "JobFailedException" (RuntimeError). Implementation catches (RuntimeError, CalculatorSetupError).
@@ -294,7 +276,7 @@ def test_dft_manager_embedding(mock_dft_config: DFTConfig, monkeypatch: pytest.M
     # Mock Driver
     fake_driver = FakeDriver(calcs=MockCalculator(fail_count=0))
 
-    manager = DFTManager(mock_dft_config, driver=fake_driver)  # type: ignore[arg-type]
+    manager = DFTManager(mock_dft_config, driver=fake_driver)
 
     atoms = Atoms("H", positions=[[0, 0, 0]])
     # Must be iterator

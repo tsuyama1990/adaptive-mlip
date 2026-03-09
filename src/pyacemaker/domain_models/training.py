@@ -105,6 +105,13 @@ class TrainingConfig(BaseModel):
             raise ValueError(msg)
         return v
 
+    # Security: Executable path configurations
+    pace_train_cmd: str = Field("pace_train", description="Command to execute Pacemaker training")
+    mace_train_cmd: str = Field("mace_run_train", description="Command to execute MACE fine-tuning")
+    mace_foundation_model: str = Field(
+        "mace-mp-0-medium", description="Path or name of the MACE foundation model"
+    )
+
     # Spec Section 3.3
     delta_learning: bool = Field(False, description="Use LJ baseline for delta learning")
     active_set_optimization: bool = Field(False, description="Use MaxVol selection for active set")
