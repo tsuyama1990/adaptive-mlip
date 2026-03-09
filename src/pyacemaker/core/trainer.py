@@ -22,10 +22,11 @@ class PacemakerTrainer(BaseTrainer):
         self.config = config
         self.config_generator = PacemakerConfigGenerator(config)
 
-    def get_replay_buffer(self, size: int) -> list[Any]:
+    def get_replay_buffer(self, size: int) -> Any:
         """
         Fetches up to `size` past data points to retain for training.
         This prevents catastrophic forgetting.
+        Returns an iterator of atoms instead of loading all into memory.
         """
         from itertools import islice
 
@@ -35,15 +36,13 @@ class PacemakerTrainer(BaseTrainer):
 
         history_path = Path(DEFAULT_DATA_DIR) / FILENAME_TRAINING
         if not history_path.exists():
-            return []
+            return iter([])
 
         try:
             # Read up to 'size' atoms from the history file
-            # Ideally we'd sample randomly, but for now we read the most recent ones or just the first N
-            # Since size can be large, we just grab up to size.
-            return list(islice(iread(history_path, format="extxyz"), size))
+            return islice(iread(history_path, format="extxyz"), size)
         except Exception:
-            return []
+            return iter([])
 
     def incremental_train(
         self,
@@ -54,12 +53,39 @@ class PacemakerTrainer(BaseTrainer):
         """
         Mixes a replay buffer with the new active learning data and runs incremental delta learning.
         """
-        # In a real implementation this would merge replay buffer with the new dataset
-        # Here we just delegate to train
-        _replay_buffer = self.get_replay_buffer(strategy_config.replay_buffer_size)
-        return self.train(new_data_path, initial_potential)
+        import itertools
+        import tempfile
 
-    def train(
+        from ase.io import iread, write
+
+        replay_buffer = self.get_replay_buffer(strategy_config.replay_buffer_size)
+
+        # Merge replay buffer and new data into a temporary file
+        # To avoid loading everything into memory, we use generators and write iteratively
+        try:
+            new_data_iter = iread(new_data_path, format="extxyz")
+        except Exception:
+            new_data_iter = iter([])
+
+        combined_iter = itertools.chain(replay_buffer, new_data_iter)
+
+        with tempfile.NamedTemporaryFile(suffix=".extxyz", delete=False) as temp_file:
+            temp_path = temp_file.name
+
+        try:
+            # We must use chunked writing for memory safety
+            chunk_size = 100
+            while True:
+                chunk = list(itertools.islice(combined_iter, chunk_size))
+                if not chunk:
+                    break
+                write(temp_path, chunk, format="extxyz", append=True)
+
+            return self.train(temp_path, initial_potential)
+        finally:
+            Path(temp_path).unlink(missing_ok=True)
+
+    def train(  # noqa: C901
         self, training_data_path: str | Path, initial_potential: str | Path | None = None
     ) -> Any:
         """
@@ -79,10 +105,14 @@ class PacemakerTrainer(BaseTrainer):
         Raises:
             TrainerError: If the training data file does not exist or format is invalid.
         """
-        # Get path from environment or default
+        # Get path from environment without default
         import os
 
-        pace_train_cmd = os.environ.get("PACE_TRAIN_CMD", "pace_train")
+        try:
+            pace_train_cmd = os.environ["PACE_TRAIN_CMD"]
+        except KeyError:
+            msg = "Environment variable 'PACE_TRAIN_CMD' is required."
+            raise TrainerError(msg) from None
 
         # Ensure pace_train is installed
         if not shutil.which(pace_train_cmd):
@@ -175,11 +205,16 @@ class FinetuneManager:
 
         output_model = "awakened_mace_model.model"
 
-        # Get paths and options from environment or default
+        # Get paths and options from environment without default
         import os
 
-        mace_train_cmd = os.environ.get("MACE_TRAIN_CMD", "mace_run_train")
-        foundation_model = os.environ.get("MACE_FOUNDATION_MODEL", "mace-mp-0-medium")
+        try:
+            mace_train_cmd = os.environ["MACE_TRAIN_CMD"]
+            foundation_model = os.environ["MACE_FOUNDATION_MODEL"]
+        except KeyError as e:
+            msg = f"Environment variable {e} is required for MACE finetuning."
+            from pyacemaker.core.exceptions import TrainerError
+            raise TrainerError(msg) from None
 
         # Real logic: execute mace_run_train command to finetune.
         # We specify the training file and an output model path.

@@ -12,7 +12,9 @@ from pyacemaker.core.trainer import PacemakerTrainer
 from pyacemaker.domain_models.training import TrainingConfig
 
 
-def test_pacemaker_integration_full_flow(tmp_path: Path) -> None:
+import pytest
+
+def test_pacemaker_integration_full_flow(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """
     Integration test for PacemakerTrainer.
     Verifies:
@@ -21,6 +23,10 @@ def test_pacemaker_integration_full_flow(tmp_path: Path) -> None:
     3. Command execution (mocked).
     4. Output file handling.
     """
+    monkeypatch.setenv("PACE_TRAIN_CMD", "pace_train")
+    monkeypatch.setenv("MACE_TRAIN_CMD", "mace_run_train")
+    monkeypatch.setenv("MACE_FOUNDATION_MODEL", "mace-mp-0-medium")
+
     # 1. Setup Data
     data_path = tmp_path / "training_data.xyz"
     # Write a few frames to test element detection
@@ -75,8 +81,12 @@ def test_pacemaker_integration_full_flow(tmp_path: Path) -> None:
         mock_run.assert_called_once()
 
 
-def test_pacemaker_integration_failure_handling(tmp_path: Path) -> None:
+def test_pacemaker_integration_failure_handling(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Test trainer failure handling."""
+    monkeypatch.setenv("PACE_TRAIN_CMD", "pace_train")
+    monkeypatch.setenv("MACE_TRAIN_CMD", "mace_run_train")
+    monkeypatch.setenv("MACE_FOUNDATION_MODEL", "mace-mp-0-medium")
+
     data_path = tmp_path / "data.xyz"
     write(data_path, Atoms("He"))
 

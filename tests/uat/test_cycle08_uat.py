@@ -1,5 +1,6 @@
 from pathlib import Path
 from unittest.mock import MagicMock, patch
+import pytest
 
 from ase import Atoms
 
@@ -34,30 +35,43 @@ def test_scenario_phase1_distillation() -> None:
     atoms1 = Atoms("Fe", cell=[2, 2, 2], pbc=True)
     atoms2 = Atoms("Pt", cell=[2, 2, 2], pbc=True)
 
-    def mock_compute(self_obj, structures, batch_size=10):
-        for atoms in structures:
-            atoms_copy = atoms.copy()
-            atoms_copy.info["energy"] = -10.0
-            atoms_copy.new_array("forces", np.zeros((len(atoms_copy), 3)))
-            atoms_copy.new_array("c_gamma", np.random.uniform(0.01, 0.1, size=len(atoms_copy)))
-            yield atoms_copy
+    # To properly mock MACEManager without breaking __init__, we create a dummy file
+    # to bypass the Path.exists() check inside the actual constructor.
+    import tempfile
 
-    with (
-        patch.object(MACEManager, "__init__", return_value=None),
-        patch.object(MACEManager, "compute", mock_compute),
-    ):
-        mace_manager = MACEManager("dummy_model")
+    with tempfile.TemporaryDirectory() as temp_dir:
+        pot_dir = Path(temp_dir)
+        model_file = pot_dir / "model.model"
+        model_file.touch()
 
-        results = list(mace_manager.compute(iter([atoms1, atoms2])))
+        import pyacemaker.domain_models.defaults
 
-        assert len(results) == 2
-        assert "energy" in results[0].info
-        assert "forces" in results[0].arrays
+        with patch.object(
+            pyacemaker.domain_models.defaults, "DEFAULT_POTENTIALS_DIR", str(pot_dir.resolve())
+        ):
+            mace_manager = MACEManager(str(model_file))
 
-        # 2. Only structures below threshold are extracted
-        for atoms in results:
-            c_gamma = atoms.get_array("c_gamma")
-            assert (c_gamma <= 0.1).all()  # MACE mock produces up to 0.1
+            def mock_compute(structures, batch_size=10):
+                for atoms in structures:
+                    atoms_copy = atoms.copy()
+                    atoms_copy.info["energy"] = -10.0
+                    atoms_copy.new_array("forces", np.zeros((len(atoms_copy), 3)))
+                    atoms_copy.new_array(
+                        "c_gamma", np.random.uniform(0.01, 0.1, size=len(atoms_copy))
+                    )
+                    yield atoms_copy
+
+            with patch.object(mace_manager, "compute", mock_compute):
+                results = list(mace_manager.compute(iter([atoms1, atoms2])))
+
+                assert len(results) == 2
+                assert "energy" in results[0].info
+                assert "forces" in results[0].arrays
+
+                # 2. Only structures below threshold are extracted
+                for atoms in results:
+                    c_gamma = atoms.get_array("c_gamma")
+                    assert (c_gamma <= 0.1).all()  # MACE mock produces up to 0.1
 
 
 def test_scenario_phase3_cutout() -> None:
@@ -67,63 +81,79 @@ def test_scenario_phase3_cutout() -> None:
     thresholds = ActiveLearningThresholds(threshold_call_dft=0.05, threshold_add_train=0.02)
     config = CutoutConfig(core_radius=3.0, buffer_radius=2.0)
 
-    with patch.object(MACEManager, "__init__", return_value=None):
-        mace_manager = MACEManager("dummy_model")
+    import tempfile
 
-    # We mock MACEManager's compute locally since TieredOracle calls it
-    import numpy as np
+    with tempfile.TemporaryDirectory() as temp_dir:
+        pot_dir = Path(temp_dir)
+        model_file = pot_dir / "model.model"
+        model_file.touch()
 
-    def mock_mace_compute(self_obj, structures, batch_size=10):
-        for atoms in structures:
-            atoms_copy = atoms.copy()
-            atoms_copy.new_array(
-                "c_gamma", np.array([0.1, 0.1])
-            )  # Fake high uncertainty to trigger DFT
-            yield atoms_copy
+        import pyacemaker.domain_models.defaults
 
-    mace_manager.compute = mock_mace_compute.__get__(mace_manager)
-    dft_manager = MagicMock(spec=DFTManager)
+        with patch.object(
+            pyacemaker.domain_models.defaults, "DEFAULT_POTENTIALS_DIR", str(pot_dir.resolve())
+        ):
+            mace_manager = MACEManager(str(model_file))
 
-    # Need to mock DFTManager.compute generator to yield back atoms so next() works
-    def mock_dft_compute(structures, batch_size=10):
-        yield from structures
+            # We mock MACEManager's compute locally since TieredOracle calls it
+            import numpy as np
 
-    dft_manager.compute.side_effect = mock_dft_compute
+            def mock_mace_compute(structures, batch_size=10):
+                for atoms in structures:
+                    atoms_copy = atoms.copy()
+                    atoms_copy.new_array(
+                        "c_gamma", np.array([0.1, 0.1])
+                    )  # Fake high uncertainty to trigger DFT
+                    yield atoms_copy
 
-    oracle = TieredOracle(mace_manager, dft_manager, thresholds)
+            # Apply mock
+            with patch.object(mace_manager, "compute", mock_mace_compute):
+                dft_manager = MagicMock(spec=DFTManager)
 
-    # 1. Thermal Noise Spike (handled by engine mock logic previously, here we test Oracle fallback)
-    # The oracle evaluates a structure. MACE mock yields max_g around 0.1
-    atoms = Atoms("FePt", positions=[[0, 0, 0], [1, 1, 1]], cell=[10, 10, 10])
+                # Need to mock DFTManager.compute generator to yield back atoms so next() works
+                def mock_dft_compute(structures, batch_size=10):
+                    yield from structures
 
-    gen = oracle.compute(iter([atoms]))
-    _result = next(gen)
+                dft_manager.compute.side_effect = mock_dft_compute
 
-    # max_g = 0.1 > 0.05, so it falls back to DFT
-    dft_manager.compute.assert_called()
+                oracle = TieredOracle(mace_manager, dft_manager, thresholds)
 
-    # 2. Extraction of Epicenter
-    # target atoms are those exceeding threshold_add_train (0.02)
-    # MACE mock is between 0.01 and 0.1, so likely some > 0.02. Let's just pass target_atoms = [0]
-    target_atoms = [0]
+                # 1. Thermal Noise Spike (handled by engine mock logic previously, here we test Oracle fallback)
+                # The oracle evaluates a structure. MACE mock yields max_g around 0.1
+                atoms = Atoms("FePt", positions=[[0, 0, 0], [1, 1, 1]], cell=[10, 10, 10])
 
-    cluster = extract_intelligent_cluster(atoms, target_atoms, config)
+                gen = oracle.compute(iter([atoms]))
+                _result = next(gen)
 
-    # Check physical repair
-    weights = cluster.get_array("force_weight")
-    assert 1.0 in weights
+                # max_g = 0.1 > 0.05, so it falls back to DFT
+                dft_manager.compute.assert_called()
 
-    # Depending on neighbor cutoff distance and atom setup, H may or may not be added
-    # We test that the functionality executes successfully.
-    symbols = cluster.get_chemical_symbols()
-    assert len(symbols) > 0
+                # 2. Extraction of Epicenter
+                # target atoms are those exceeding threshold_add_train (0.02)
+                # MACE mock is between 0.01 and 0.1, so likely some > 0.02. Let's just pass target_atoms = [0]
+                target_atoms = [0]
+
+                cluster = extract_intelligent_cluster(atoms, target_atoms, config)
+
+                # Check physical repair
+                weights = cluster.get_array("force_weight")
+                assert 1.0 in weights
+
+                # Depending on neighbor cutoff distance and atom setup, H may or may not be added
+                # We test that the functionality executes successfully.
+                symbols = cluster.get_chemical_symbols()
+                assert len(symbols) > 0
 
 
 @patch("pyacemaker.core.engine.LammpsDriver")
-def test_scenario_phase4_resume(mock_driver: MagicMock, tmp_path: Path) -> None:
+def test_scenario_phase4_resume(mock_driver: MagicMock, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """
     Scenario 4: Hierarchical Fine-Tuning and Seamless Resume
     """
+    monkeypatch.setenv("PACE_TRAIN_CMD", "pace_train")
+    monkeypatch.setenv("MACE_TRAIN_CMD", "mace_run_train")
+    monkeypatch.setenv("MACE_FOUNDATION_MODEL", "mace-mp-0-medium")
+
     # 1. Finetune MACE
     finetune_mgr = FinetuneManager()
     dataset_path = tmp_path / "dataset.xyz"
@@ -131,9 +161,19 @@ def test_scenario_phase4_resume(mock_driver: MagicMock, tmp_path: Path) -> None:
     # Mock subprocess.run for tests to prevent real execution and isolate logic
     with patch("pyacemaker.utils.process.subprocess.run") as mock_run:
         mock_run.return_value.returncode = 0
+
+        # For FinetuneManager.finetune, we don't use iread, so just call it directly.
         awakened_model = finetune_mgr.finetune(dataset_path)
         assert awakened_model == "awakened_mace_model.model"
         mock_run.assert_called_once()
+
+        # Verify correct arguments were passed
+        args, kwargs = mock_run.call_args
+        cmd = args[0]
+        assert "mace_run_train" in cmd[0]
+        assert "--train_file" in cmd
+        assert str(dataset_path) in cmd
+        assert "--foundation_model" in cmd
 
     # 2. ACE Incremental Update
     t_config = TrainingConfig(
@@ -152,7 +192,11 @@ def test_scenario_phase4_resume(mock_driver: MagicMock, tmp_path: Path) -> None:
 
     with patch.object(trainer, "train") as mock_train:
         mock_train.return_value = tmp_path / "test_pot.yace"
-        new_pot = trainer.incremental_train(dataset_path, strategy, initial_potential="init.yace")
+
+        # Mock ase.io.iread correctly using patch
+        with patch("ase.io.iread", return_value=iter([])):
+            new_pot = trainer.incremental_train(dataset_path, strategy, initial_potential="init.yace")
+
         assert new_pot == tmp_path / "test_pot.yace"
         mock_train.assert_called_once()
 
