@@ -112,7 +112,7 @@ PyAceMaker uses a `config.yaml` to dictate execution (LoopStrategy, Cutouts, etc
 ### Interactive Tutorial
 To view the new UAT tutorial scenarios in a notebook interface:
 ```bash
-uv run marimo edit tutorials/UAT_AND_TUTORIAL.py
+uv run marimo edit tests/uat/uat_and_tutorial.py
 ```
 
 ### Production Execution

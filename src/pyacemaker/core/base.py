@@ -134,6 +134,17 @@ class BaseTrainer(ABC):
     ) -> Any:
         """
         Trains a potential using the provided training data file.
+        """
+
+    @abstractmethod
+    def incremental_train(
+        self,
+        new_data_path: str | Path,
+        strategy_config: Any,
+        initial_potential: str | Path | None = None,
+    ) -> Any:
+        """
+        Performs incremental delta learning.
 
         To ensure scalability, training data should be passed as a file path
         rather than an in-memory list.
@@ -167,7 +178,7 @@ class BaseEngine(ABC):
     """
 
     @abstractmethod
-    def run(self, structure: Atoms | None, potential: Any) -> MDSimulationResult:
+    def run(self, structure: Atoms | None, potential: Any, **kwargs: Any) -> MDSimulationResult:
         """
         Runs a simulation using the given structure and potential.
 
