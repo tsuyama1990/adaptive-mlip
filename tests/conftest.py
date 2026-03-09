@@ -8,7 +8,7 @@ from unittest.mock import MagicMock
 import numpy as np
 import pytest
 from ase import Atoms
-from ase.calculators.calculator import Calculator, CalculatorSetupError
+from ase.calculators.calculator import CalculatorSetupError
 
 from pyacemaker.domain_models import (
     DFTConfig,
@@ -47,6 +47,19 @@ def _mock_lammps_module(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setitem(sys.modules, "lammps", MagicMock())
 
 
+@pytest.fixture(autouse=True)
+def patch_process_pool() -> Generator[None, None, None]:
+    """
+    Replaces ProcessPoolExecutor with ThreadPoolExecutor globally during testing.
+    This prevents PicklingErrors when passing MagicMock objects into the executor
+    during Pytest execution.
+    """
+    import concurrent.futures
+    from unittest.mock import patch
+    with patch('concurrent.futures.ProcessPoolExecutor', new=concurrent.futures.ThreadPoolExecutor):
+        yield
+
+
 @pytest.fixture
 def dummy_pseudopotentials_dir() -> Generator[Path, None, None]:
     """Provides a temporary directory with dummy pseudopotential files that cleans itself up."""
@@ -70,7 +83,15 @@ def create_dummy_pseudopotentials(path: Path | str, elements: list[str]) -> None
         base_path.mkdir(parents=True, exist_ok=True)
         for el in elements:
             file_path = base_path / f"{el}.UPF"
-            file_path.touch()
+            # Write a minimal valid UPF header instead of an empty file
+            # This ensures that architectural validation layers evaluating UPF format
+            # during setup/parsing don't fail unexpectedly.
+            upf_content = f"""<UPF version="2.0.1">
+  <PP_INFO>
+    Dummy pseudopotential for {el}
+  </PP_INFO>
+</UPF>"""
+            file_path.write_text(upf_content)
     except OSError as e:
         msg = f"Failed to create dummy pseudopotential files at {path}"
         raise OSError(msg) from e
@@ -82,7 +103,7 @@ def mock_dft_config(dummy_pseudopotentials_dir: Path, monkeypatch: Any) -> DFTCo
     create_dummy_pseudopotentials(dummy_pseudopotentials_dir, ["H", "O", "Fe"])
 
     return DFTConfig(
-        code="pw.x",
+        code="qe",
         functional="PBE",
         kpoints_density=0.04,
         encut=500.0,
@@ -126,7 +147,7 @@ def mock_md_config() -> MDConfig:
     )
 
 
-class MockCalculator(Calculator):
+class MockCalculator:
     """
     Mock ASE calculator for testing purposes.
     Can simulate failures and setup errors.
@@ -146,6 +167,7 @@ class MockCalculator(Calculator):
     attempts: int
     test_energy: float
     results: dict[Any, Any]
+    parameters: dict[Any, Any]
 
     def __init__(
         self, fail_count: int = 0, setup_error: bool = False, test_energy: float | None = None
@@ -158,13 +180,32 @@ class MockCalculator(Calculator):
             setup_error: Whether the calculator should fail during setup (`calculate()`).
             test_energy: The energy value returned upon successful calculation.
         """
-        super().__init__()  # type: ignore[no-untyped-call]
         self.implemented_properties = ["energy", "forces", "stress"]
         self.fail_count = fail_count
         self.setup_error = setup_error
         self.attempts = 0
         self.test_energy = test_energy if test_energy is not None else TEST_ENERGY_GENERIC
         self.results = {}
+        self.parameters = {}
+        self.name = "mock"
+
+    def get_potential_energy(self, atoms: Atoms | None = None) -> float:
+        """Mock method for getting potential energy."""
+        if not hasattr(self, "results") or "energy" not in self.results:
+            self.calculate(atoms)
+        return self.results.get("energy", 0.0)
+
+    def get_forces(self, atoms: Atoms | None = None) -> np.ndarray:
+        """Mock method for getting forces."""
+        if not hasattr(self, "results") or "forces" not in self.results:
+            self.calculate(atoms)
+        return self.results.get("forces", np.zeros((1, 3)))
+
+    def get_stress(self, atoms: Atoms | None = None) -> np.ndarray:
+        """Mock method for getting stress."""
+        if not hasattr(self, "results") or "stress" not in self.results:
+            self.calculate(atoms)
+        return self.results.get("stress", np.zeros(6))
 
     def calculate(
         self,
@@ -194,6 +235,8 @@ class MockCalculator(Calculator):
             # Simulate SCF failure
             msg = "Convergence not achieved"
             raise RuntimeError(msg)
+
+        import numpy as np
 
         self.results = {
             "energy": self.test_energy,

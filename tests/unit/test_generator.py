@@ -41,7 +41,7 @@ def test_rattle_policy() -> None:
             }
         )
     )
-    base = next(base_gen.generate(1))
+    base = next(base_gen.generate(n_candidates=1))
 
     # In tests, rattle sets fixed random seed, meaning pos0 and pos1 will often be equivalent unless we explicitly inject seeds or iterate random state. We should assert they differ from the base structure.
     import numpy as np
@@ -80,7 +80,7 @@ def test_defect_policy() -> None:
         }
     )
     base_gen = StructureGenerator(base_config)
-    base_atoms = next(base_gen.generate(1))
+    base_atoms = next(base_gen.generate(n_candidates=1))
 
     assert len(structures[0]) < len(base_atoms)
 
@@ -104,7 +104,7 @@ def test_strain_policy() -> None:
         }
     )
     base_gen = StructureGenerator(base_config)
-    base_atoms = next(base_gen.generate(1))
+    base_atoms = next(base_gen.generate(n_candidates=1))
 
     vol0 = structures[0].get_volume()  # type: ignore[no-untyped-call]
     base_vol = base_atoms.get_volume()  # type: ignore[no-untyped-call]
@@ -127,7 +127,7 @@ def test_generator_invalid_composition() -> None:
 
     # Updated error message expectation
     with pytest.raises(GeneratorError, match="Base generator failed"):
-        next(generator.generate(1))
+        next(generator.generate(n_candidates=1))
 
 
 def test_generate_local() -> None:
@@ -143,7 +143,6 @@ def test_generate_local() -> None:
     base = Atoms(
         "Fe2", positions=[[0.0, 0.0, 0.0], [2.0, 0.0, 0.0]], cell=[4.0, 4.0, 4.0], pbc=True
     )
-
     candidates = list(generator.generate_local(base, n_candidates=5))
 
     assert len(candidates) == 5

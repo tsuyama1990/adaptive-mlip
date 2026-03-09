@@ -1,5 +1,4 @@
 from collections.abc import Iterator
-from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
 
@@ -12,6 +11,7 @@ from pyacemaker.core.policy import (
     SafeBasePolicy,
 )
 from pyacemaker.domain_models.structure import StructureConfig
+from pyacemaker.domain_models.workflow import PolicyContext
 
 
 class MockPolicy(SafeBasePolicy):
@@ -19,19 +19,9 @@ class MockPolicy(SafeBasePolicy):
         super().__init__()
         self.name = name
 
-    def generate(
-        self,
-        base_structure: Atoms,
-        config: StructureConfig,
-        n_structures: int = 1,
-        engine: Any | None = None,
-        potential: str | Path | None = None,
-        thresholds: Any | None = None,
-        cutout_config: Any | None = None,
-        loop_strategy: Any | None = None,
-    ) -> Iterator[Atoms]:
-        for _ in range(n_structures):
-            a = base_structure.copy()  # type: ignore[no-untyped-call]
+    def generate(self, context: PolicyContext) -> Iterator[Atoms]:
+        for _ in range(context.n_structures):
+            a = context.base_structure.copy()  # type: ignore[no-untyped-call]
             a.info["policy"] = self.name
             yield a
 
@@ -57,9 +47,10 @@ def test_composite_policy_distribution() -> None:
 
     config = StructureConfig(elements=["H"], supercell_size=[1, 1, 1])
     base = Atoms("H")
+    ctx = PolicyContext(base_structure=base, config=config, n_structures=10)
 
     # n=10, 2 policies -> 5 each
-    results = list(composite.generate(base, config, n_structures=10))
+    results = list(composite.generate(ctx))
     assert len(results) == 10
     counts = {"p1": 0, "p2": 0}
     for r in results:
@@ -71,7 +62,8 @@ def test_composite_policy_distribution() -> None:
     # n=3, 2 policies -> max(1, 3//2) -> 1 for each, and the loop is structured to evenly distribute up to max possible evenly
     # our simple logic limits n_target = min(n_per_policy, n_structures - generated)
     # meaning each gets 1, total generated is 2. The loop breaks when exhausted. Let's adjust test expectation.
-    results = list(composite.generate(base, config, n_structures=3))
+    ctx.n_structures = 3
+    results = list(composite.generate(ctx))
     assert len(results) == 2
     counts = {"p1": 0, "p2": 0}
     for r in results:
@@ -100,10 +92,9 @@ def test_md_micro_burst_policy() -> None:
     policy = MDMicroBurstPolicy()
     config = StructureConfig(elements=["H"], supercell_size=[1, 1, 1])
     base = Atoms("H", positions=[[0, 0, 0]])
+    ctx = PolicyContext(base_structure=base, config=config, n_structures=1, engine=initial_engine, potential="pot")
 
-    results = list(
-        policy.generate(base, config, n_structures=1, engine=initial_engine, potential="pot")
-    )
+    results = list(policy.generate(ctx))
 
     assert len(results) == 1
     import numpy as np
@@ -116,8 +107,9 @@ def test_md_micro_burst_fallback() -> None:
     policy = MDMicroBurstPolicy()
     config = StructureConfig(elements=["H"], supercell_size=[1, 1, 1])
     base = Atoms("H")
+    ctx = PolicyContext(base_structure=base, config=config, n_structures=1)
 
-    results = list(policy.generate(base, config, n_structures=1))  # No engine kwarg
+    results = list(policy.generate(ctx))
 
     assert len(results) == 1
     # Check if rattled (positions changed) or fallback logic executed
@@ -129,8 +121,9 @@ def test_normal_mode_policy_fallback() -> None:
     policy = NormalModePolicy()
     config = StructureConfig(elements=["H"], supercell_size=[1, 1, 1])
     base = Atoms("H", positions=[[0, 0, 0]], cell=[10, 10, 10])
+    ctx = PolicyContext(base_structure=base, config=config, n_structures=1)
 
-    results = list(policy.generate(base, config, n_structures=1))
+    results = list(policy.generate(ctx))
 
     assert len(results) == 1
     import numpy as np

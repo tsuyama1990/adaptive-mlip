@@ -2,7 +2,6 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
 
-import numpy as np
 import pytest
 from ase import Atoms
 
@@ -17,7 +16,7 @@ def mock_dft_config(dummy_pseudopotentials_dir: Path, monkeypatch: pytest.Monkey
     create_dummy_pseudopotentials(dummy_pseudopotentials_dir, ["H"])
 
     return DFTConfig(
-        code="pw.x",
+        code="qe",
         functional="PBE",
         kpoints_density=0.04,
         encut=500.0,
@@ -42,8 +41,8 @@ def test_dft_manager_streaming_behavior(mock_dft_config: DFTConfig) -> None:
     # 2. Mock driver
     mock_driver = MagicMock()
     # Mock calculator methods to return valid data (get_stress expects array)
-    calc = MagicMock()
-    calc.get_stress.return_value = np.zeros(6)
+    from tests.conftest import MockCalculator
+    calc = MockCalculator(fail_count=0)
     mock_driver.get_calculator.return_value = calc
 
     manager = DFTManager(mock_dft_config, driver=mock_driver)

@@ -19,6 +19,7 @@ from pyacemaker.domain_models import (
     TrainingConfig,
     WorkflowConfig,
 )
+from pyacemaker.domain_models.workflow import CutoutConfig
 from pyacemaker.orchestrator import Orchestrator
 
 
@@ -28,7 +29,8 @@ class FakeGenerator(BaseGenerator):
         pass
 
     def generate(self, n_candidates: int) -> Iterator[Atoms]:
-        yield from []
+        for _ in range(n_candidates):
+            yield Atoms("H", positions=[[0, 0, 0]])
 
     def generate_local(
         self, base_structure: Atoms, n_candidates: int, **kwargs: Any
@@ -51,10 +53,18 @@ class FakeOracle(BaseOracle):
 class FakeTrainer(BaseTrainer):
     def __init__(self, output_path: Path) -> None:
         self.output_path = output_path
+        self.incremental_train_called_with = None
 
     def train(
         self, training_data_path: str | Path, initial_potential: str | Path | None = None
     ) -> Any:
+        self.output_path.touch()
+        return self.output_path
+
+    def incremental_train(
+        self, new_data_path: str | Path, strategy_config: Any, initial_potential: str | Path | None = None
+    ) -> Any:
+        self.incremental_train_called_with = (new_data_path, strategy_config, initial_potential)
         self.output_path.touch()
         return self.output_path
 
@@ -84,7 +94,7 @@ def test_orchestrator_refinement_logic(tmp_path: Path) -> None:
         dft=DFTConfig(
             code="qe",
             functional="PBE",
-                pseudopotentials={"H": "H.UPF"},
+            pseudopotentials={"H": "H.UPF"},
             kpoints_density=0.04,
             encut=400.0,
         ),
@@ -101,10 +111,16 @@ def test_orchestrator_refinement_logic(tmp_path: Path) -> None:
     )
 
     # Add dummy cutout config that tests fail because of missing config
-    from pyacemaker.domain_models.workflow import CutoutConfig
-
-    config.workflow.cutout = CutoutConfig(
-        core_radius=4.0, buffer_radius=3.0, enable_pre_relaxation=False, enable_passivation=False
+    config = config.model_copy(
+        update={
+            "workflow": config.workflow.model_copy(
+                update={
+                    "cutout": CutoutConfig(
+                        core_radius=4.0, buffer_radius=3.0, enable_pre_relaxation=False, enable_passivation=False
+                    )
+                }
+            )
+        }
     )
 
     # 2. Setup Orchestrator
@@ -137,10 +153,6 @@ def test_orchestrator_refinement_logic(tmp_path: Path) -> None:
     orch.oracle = FakeOracle()
     refined_pot = tmp_path / "refined.yace"
     orch.trainer = FakeTrainer(refined_pot)
-    # mock incremental_train with a mock that returns the path instead of failing
-    from unittest.mock import MagicMock
-
-    orch.trainer.incremental_train = MagicMock(return_value=refined_pot)
 
     # 5. Create Simulation Result
     result = MDSimulationResult(
@@ -162,6 +174,14 @@ def test_orchestrator_refinement_logic(tmp_path: Path) -> None:
 
     assert new_pot == refined_pot
 
+    # Verify incremental_train was called with expected arguments
+    assert orch.trainer.incremental_train_called_with is not None  # type: ignore[attr-defined]
+    called_dataset, called_strategy, called_initial = orch.trainer.incremental_train_called_with  # type: ignore[attr-defined]
+    assert called_initial == "old.yace"
+    # Note: Depending on ASE's extxyz write, the orchestrator might use .xyz or .extxyz internally
+    assert called_dataset.endswith((".xyz", ".extxyz"))
+    assert "training_data" in called_dataset
+
     # Check if training data was written
     # Orchestrator uses FILENAME_TRAINING constant.
     # We can check if *any* file exists in training dir.
@@ -181,7 +201,7 @@ def test_orchestrator_refinement_extraction_failure(tmp_path: Path, caplog: Any)
         dft=DFTConfig(
             code="qe",
             functional="PBE",
-                pseudopotentials={"H": "H.UPF"},
+            pseudopotentials={"H": "H.UPF"},
             kpoints_density=0.04,
             encut=400.0,
         ),
@@ -197,10 +217,16 @@ def test_orchestrator_refinement_extraction_failure(tmp_path: Path, caplog: Any)
         logging=LoggingConfig(level="DEBUG"),
     )
 
-    from pyacemaker.domain_models.workflow import CutoutConfig
-
-    config.workflow.cutout = CutoutConfig(
-        core_radius=4.0, buffer_radius=3.0, enable_pre_relaxation=False, enable_passivation=False
+    config = config.model_copy(
+        update={
+            "workflow": config.workflow.model_copy(
+                update={
+                    "cutout": CutoutConfig(
+                        core_radius=4.0, buffer_radius=3.0, enable_pre_relaxation=False, enable_passivation=False
+                    )
+                }
+            )
+        }
     )
     orch = Orchestrator(config)
 

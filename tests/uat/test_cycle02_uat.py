@@ -1,11 +1,13 @@
 from pathlib import Path
-from unittest.mock import patch
+from typing import Any
+from unittest.mock import MagicMock
 
 import pytest
 from ase import Atoms
 
 from pyacemaker.core.oracle import DFTManager
 from pyacemaker.domain_models import DFTConfig
+from pyacemaker.interfaces.qe_driver import QEDriver
 from tests.conftest import MockCalculator
 from tests.constants import TEST_ENERGY_H2O
 
@@ -17,7 +19,7 @@ def uat_dft_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> DFTConfig
     (tmp_path / "O.UPF").touch()
 
     return DFTConfig(
-        code="pw.x",
+        code="qe",
         functional="PBE",
         kpoints_density=0.04,
         encut=500.0,
@@ -45,26 +47,25 @@ def test_uat_02_01_single_point_calculation(
     # We patch QEDriver but we also need to ensure the driver instance returned
     # has a get_calculator method that returns our calculator
 
-    # We patch at the source where DFTManager imports it or uses it
-    # DFTManager imports QEDriver from interfaces.qe_driver
+    # Use dependency injection instead of monkeypatching
+    mock_driver_instance = MagicMock(spec=QEDriver)
 
-    with patch("pyacemaker.core.oracle.QEDriver") as MockDriverClass:
-        mock_driver_instance = MockDriverClass.return_value
-        # Mock get_calculator to return a MockCalculator instance with H2O energy
-        # Accept **kwargs to handle 'directory' argument
-        mock_driver_instance.get_calculator.side_effect = lambda atoms, config, **kwargs: (
-            MockCalculator(fail_count=0, test_energy=TEST_ENERGY_H2O)
-        )
+    def mock_get_calc(atoms: Atoms, config: DFTConfig, **kwargs: Any) -> MockCalculator:
+        calc = MockCalculator(fail_count=0, test_energy=TEST_ENERGY_H2O)
+        calc.directory = kwargs.get("directory", ".")
+        return calc
 
-        manager = DFTManager(uat_dft_config)
+    mock_driver_instance.get_calculator.side_effect = mock_get_calc
 
-        # Use explicit iteration
-        gen = manager.compute(iter([h2o]))
-        result = next(gen)
+    manager = DFTManager(uat_dft_config, driver=mock_driver_instance)
 
-        # 3. Expectation
-        assert result.get_potential_energy() == TEST_ENERGY_H2O  # type: ignore[no-untyped-call]
-        assert result.get_forces().shape == (3, 3)  # type: ignore[no-untyped-call]
+    # Use explicit iteration
+    gen = manager.compute(iter([h2o]))
+    result = next(gen)
+
+    # 3. Expectation
+    assert result.get_potential_energy() == TEST_ENERGY_H2O  # type: ignore[no-untyped-call]
+    assert result.get_forces().shape == (3, 3)  # type: ignore[no-untyped-call]
 
 
 def test_uat_02_02_self_healing(
@@ -80,34 +81,38 @@ def test_uat_02_02_self_healing(
     )
 
     # 2. Action: Run DFTManager with failure
-    with patch("pyacemaker.core.oracle.QEDriver") as MockDriverClass:
-        mock_driver_instance = MockDriverClass.return_value
+    mock_driver_instance = MagicMock(spec=QEDriver)
 
-        # Mock failure on first attempt, success on second
-        # We need side_effect to return distinct calculator instances or handle state
-        # But here get_calculator is called with (atoms, config)
-        # We can use side_effect on the mock method
+    # Mock failure on first attempt, success on second
+    calc_fail = MockCalculator(fail_count=1, test_energy=TEST_ENERGY_H2O)
+    calc_success = MockCalculator(fail_count=0, test_energy=TEST_ENERGY_H2O)
 
-        calc_fail = MockCalculator(fail_count=1, test_energy=TEST_ENERGY_H2O)
-        calc_success = MockCalculator(fail_count=0, test_energy=TEST_ENERGY_H2O)
+    def mock_get_calc(atoms: Atoms, config: DFTConfig, **kwargs: Any) -> MockCalculator:
+        # Use a list attribute to track calls and return different calculators
+        if not hasattr(mock_get_calc, "calls"):
+            mock_get_calc.calls = 0  # type: ignore[attr-defined]
+        calc = [calc_fail, calc_success][mock_get_calc.calls]  # type: ignore[attr-defined]
+        calc.directory = kwargs.get("directory", ".")
+        mock_get_calc.calls += 1  # type: ignore[attr-defined]
+        return calc
 
-        mock_driver_instance.get_calculator.side_effect = [calc_fail, calc_success]
+    mock_driver_instance.get_calculator.side_effect = mock_get_calc
 
-        manager = DFTManager(uat_dft_config)
+    manager = DFTManager(uat_dft_config, driver=mock_driver_instance)
 
-        gen = manager.compute(iter([h2o]))
-        result = next(gen)
+    gen = manager.compute(iter([h2o]))
+    result = next(gen)
 
-        # 3. Expectation
-        assert result.get_potential_energy() == TEST_ENERGY_H2O  # type: ignore[no-untyped-call]
+    # 3. Expectation
+    assert result.get_potential_energy() == TEST_ENERGY_H2O  # type: ignore[no-untyped-call]
 
-        # Verify that get_calculator was called twice (original + retry)
-        assert mock_driver_instance.get_calculator.call_count == 2
+    # Verify that get_calculator was called twice (original + retry)
+    assert mock_driver_instance.get_calculator.call_count == 2
 
-        # Verify second call had reduced mixing_beta
-        # First call: original (0.7)
-        # Second call: reduced (0.35)
-        args, _ = mock_driver_instance.get_calculator.call_args  # Last call
-        final_config = args[1]
-        assert final_config.mixing_beta < 0.7
-        assert final_config.mixing_beta == 0.35
+    # Verify second call had reduced mixing_beta
+    # First call: original (0.7)
+    # Second call: reduced (0.35)
+    args, _ = mock_driver_instance.get_calculator.call_args  # Last call
+    final_config = args[1]
+    assert final_config.mixing_beta < 0.7
+    assert final_config.mixing_beta == 0.35

@@ -1,3 +1,4 @@
+import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -29,7 +30,10 @@ def test_scenario_phase1_distillation() -> None:
     assert config.distillation.enable is True
 
     # 1. MACE evaluates structures
-    mace_manager = MACEManager("model")
+    with tempfile.TemporaryDirectory() as tmpdir:
+        dummy_model = Path(tmpdir) / "model.model"
+        dummy_model.touch()
+        mace_manager = MACEManager(str(dummy_model))
 
     atoms1 = Atoms("Fe", cell=[2, 2, 2], pbc=True)
     atoms2 = Atoms("Pt", cell=[2, 2, 2], pbc=True)
@@ -53,7 +57,10 @@ def test_scenario_phase3_cutout() -> None:
     thresholds = ActiveLearningThresholds(threshold_call_dft=0.05, threshold_add_train=0.02)
     config = CutoutConfig(core_radius=3.0, buffer_radius=2.0)
 
-    mace_manager = MACEManager("model")
+    with tempfile.TemporaryDirectory() as tmpdir:
+        dummy_model = Path(tmpdir) / "model.model"
+        dummy_model.touch()
+        mace_manager = MACEManager(str(dummy_model))
     dft_manager = MagicMock(spec=DFTManager)
 
     oracle = TieredOracle(mace_manager, dft_manager, thresholds)
