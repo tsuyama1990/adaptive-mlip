@@ -84,7 +84,7 @@ def test_orchestrator_refinement_logic(tmp_path: Path) -> None:
         dft=DFTConfig(
             code="qe",
             functional="PBE",
-                pseudopotentials={"H": "H.UPF"},
+            pseudopotentials={"H": "H.UPF"},
             kpoints_density=0.04,
             encut=400.0,
         ),
@@ -181,7 +181,7 @@ def test_orchestrator_refinement_extraction_failure(tmp_path: Path, caplog: Any)
         dft=DFTConfig(
             code="qe",
             functional="PBE",
-                pseudopotentials={"H": "H.UPF"},
+            pseudopotentials={"H": "H.UPF"},
             kpoints_density=0.04,
             encut=400.0,
         ),
