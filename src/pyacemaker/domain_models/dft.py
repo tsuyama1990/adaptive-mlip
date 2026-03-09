@@ -1,4 +1,3 @@
-
 from pydantic import BaseModel, ConfigDict, Field, PositiveFloat, field_validator
 
 from pyacemaker.domain_models.defaults import (

@@ -93,14 +93,13 @@ def test_md_micro_burst_policy() -> None:
     # MDMicroBurst implementation currently uses randomized perturbation.
     # Just asserting it generates the structures appropriately for the updated mock behaviors
     from pyacemaker.domain_models.structure import PolicyContext
+
     policy = MDMicroBurstPolicy()
     config = StructureConfig(elements=["H"], supercell_size=[1, 1, 1])
     base = Atoms("H", positions=[[0, 0, 0]])
     context = PolicyContext(engine=initial_engine, potential="pot")
 
-    results = list(
-        policy.generate(base, config, n_structures=1, context=context)
-    )
+    results = list(policy.generate(base, config, n_structures=1, context=context))
 
     assert len(results) == 1
     import numpy as np

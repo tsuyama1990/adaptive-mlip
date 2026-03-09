@@ -29,21 +29,31 @@ def test_scenario_phase1_distillation() -> None:
     assert config.distillation.enable is True
 
     # 1. MACE evaluates structures
-    mace_manager = MACEManager("model")
+    import tempfile
 
-    atoms1 = Atoms("Fe", cell=[2, 2, 2], pbc=True)
-    atoms2 = Atoms("Pt", cell=[2, 2, 2], pbc=True)
+    with tempfile.TemporaryDirectory() as temp_dir:
+        pot_dir = Path(temp_dir)
+        model_file = pot_dir / "model"
+        with model_file.open("w") as f:
+            f.write("dummy")
 
-    results = list(mace_manager.compute(iter([atoms1, atoms2])))
+        import pyacemaker.domain_models.defaults
+        with patch.object(pyacemaker.domain_models.defaults, "DEFAULT_POTENTIALS_DIR", str(pot_dir.resolve())):
+            mace_manager = MACEManager(str(model_file))
 
-    assert len(results) == 2
-    assert "energy" in results[0].info
-    assert "forces" in results[0].arrays
+        atoms1 = Atoms("Fe", cell=[2, 2, 2], pbc=True)
+        atoms2 = Atoms("Pt", cell=[2, 2, 2], pbc=True)
 
-    # 2. Only structures below threshold are extracted
-    for atoms in results:
-        c_gamma = atoms.get_array("c_gamma")
-        assert (c_gamma <= 0.1).all()  # MACE mock produces up to 0.1
+        results = list(mace_manager.compute(iter([atoms1, atoms2])))
+
+        assert len(results) == 2
+        assert "energy" in results[0].info
+        assert "forces" in results[0].arrays
+
+        # 2. Only structures below threshold are extracted
+        for atoms in results:
+            c_gamma = atoms.get_array("c_gamma")
+            assert (c_gamma <= 0.1).all()  # MACE mock produces up to 0.1
 
 
 def test_scenario_phase3_cutout() -> None:
@@ -53,7 +63,17 @@ def test_scenario_phase3_cutout() -> None:
     thresholds = ActiveLearningThresholds(threshold_call_dft=0.05, threshold_add_train=0.02)
     config = CutoutConfig(core_radius=3.0, buffer_radius=2.0)
 
-    mace_manager = MACEManager("model")
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        pot_dir = Path(temp_dir)
+        model_file = pot_dir / "model"
+        with model_file.open("w") as f:
+            f.write("dummy")
+
+        import pyacemaker.domain_models.defaults
+        with patch.object(pyacemaker.domain_models.defaults, "DEFAULT_POTENTIALS_DIR", str(pot_dir.resolve())):
+            mace_manager = MACEManager(str(model_file))
     dft_manager = MagicMock(spec=DFTManager)
 
     oracle = TieredOracle(mace_manager, dft_manager, thresholds)

@@ -85,7 +85,9 @@ class MDMicroBurstPolicy(SafeBasePolicy):
                 if hasattr(base_structure, "info") and "halt_step" in base_structure.info:
                     run_kwargs["resume_from_step"] = base_structure.info["halt_step"]
 
-                result = context.engine.run(structure=base_structure, potential=context.potential, **run_kwargs)
+                result = context.engine.run(
+                    structure=base_structure, potential=context.potential, **run_kwargs
+                )
 
                 # In a real implementation we would load result.trajectory_path
                 # But for architecture completeness, yield rattled structure or loaded structure
@@ -137,8 +139,15 @@ class NormalModePolicy(SafeBasePolicy):
         epicenter_indices: list[int] = []
         # We assume smooth_steps tracking is done at the orchestrator/engine level
         # Here we just use the threshold_add_train to identify epicenters if max_gamma > threshold_call_dft
-        if context and context.thresholds and c_gamma is not None and max_gamma > context.thresholds.threshold_call_dft:
-            epicenter_indices = np.where(c_gamma > context.thresholds.threshold_add_train)[0].tolist()
+        if (
+            context
+            and context.thresholds
+            and c_gamma is not None
+            and max_gamma > context.thresholds.threshold_call_dft
+        ):
+            epicenter_indices = np.where(c_gamma > context.thresholds.threshold_add_train)[
+                0
+            ].tolist()
 
         for _ in range(n_structures):
             mod_struct = base_structure.copy()  # type: ignore[no-untyped-call]
