@@ -96,7 +96,7 @@ src/pyacemaker/core/trainer.py                  71     13    82%   84-85, 91-92,
 src/pyacemaker/core/validator.py                68      7    90%   63, 68, 75-76, 79, 113, 150
 src/pyacemaker/domain_models/__init__.py        11      0   100%
 src/pyacemaker/domain_models/config.py          22      0   100%
-src/pyacemaker/domain_models/constants.py       17      0   100%
+src/pyacemaker/domain_models/constants.py       18      0   100%
 src/pyacemaker/domain_models/defaults.py       131      0   100%
 src/pyacemaker/domain_models/dft.py             69     14    80%   76-77, 80-81, 95-96, 102-103, 119-124
 src/pyacemaker/domain_models/eon.py             34      4    88%   66-69
@@ -130,7 +130,7 @@ src/pyacemaker/utils/phonons.py                 51      2    96%   51, 69
 src/pyacemaker/utils/process.py                 25     21    16%   35-77
 src/pyacemaker/utils/structure.py                6      2    67%   19-20
 --------------------------------------------------------------------------
-TOTAL                                         3033    475    84%
-======================== 250 passed, 1 warning in 2.55s ========================
+TOTAL                                         3034    475    84%
+======================== 250 passed, 1 warning in 3.95s ========================
 /app/.venv/lib/python3.12/site-packages/coverage/inorout.py:561: CoverageWarning: Module dev_src was never imported. (module-not-imported); see https://coverage.readthedocs.io/en/7.13.4/messages.html#warning-module-not-imported
   self.warn(f"Module {pkg} was never imported.", slug="module-not-imported")

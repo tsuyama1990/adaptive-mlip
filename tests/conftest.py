@@ -24,7 +24,8 @@ from tests.constants import TEST_ENERGY_GENERIC  # noqa: E402
 def create_dummy_pseudopotentials(path: Any, elements: list[str]) -> None:
     """Helper to create dummy pseudopotential files."""
     for el in elements:
-        (path / f"{el}.UPF").touch()
+        file_path = path / f"{el}.UPF"
+        file_path.touch()
 
 
 @pytest.fixture
