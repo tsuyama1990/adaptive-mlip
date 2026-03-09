@@ -42,8 +42,8 @@ def run_command(
         raise FileNotFoundError(msg)
 
     # Check for dangerous shell injection characters as a defense-in-depth measure
-    # This strictly prevents arguments with shell operators (&&, ||, ;, |, `, $).
-    dangerous_chars = re.compile(r"[;&|`$]")
+    # This strictly prevents arguments with shell operators (&&, ||, ;, |, `, $, (, )).
+    dangerous_chars = re.compile(r"[;&|`$()]")
     for arg in cmd:
         if dangerous_chars.search(arg):
             msg = f"Argument contains potentially dangerous characters: {arg}"

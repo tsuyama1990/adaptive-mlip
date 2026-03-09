@@ -3,6 +3,7 @@ import logging
 import tempfile
 from collections.abc import Callable, Iterator
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 from ase import Atoms
@@ -17,6 +18,28 @@ from pyacemaker.interfaces.qe_driver import QEDriver
 from pyacemaker.utils.embedding import embed_cluster
 
 logger = logging.getLogger(__name__)
+
+
+def _run_calculator_process(driver: Any, atoms: Atoms, config: DFTConfig, calc_dir: str) -> tuple[Any, Exception | None]:
+    """Top-level helper to run a single calculation attempt. Returns calculator and any exception for ProcessPoolExecutor."""
+    try:
+        # Create new calculator for clean state
+        # Use provided temporary directory to prevent file collisions and race conditions
+        calc = driver.get_calculator(atoms, config.model_copy(), directory=calc_dir)
+        atoms.calc = calc
+
+        # Trigger actual calculation
+        atoms.get_potential_energy()  # type: ignore[no-untyped-call]
+        atoms.get_forces()  # type: ignore[no-untyped-call]
+
+        # Try to get stress (optional)
+        with contextlib.suppress(PropertyNotImplementedError, RuntimeError):
+            atoms.get_stress()  # type: ignore[no-untyped-call]
+
+    except Exception as e:
+        return None, e
+    else:
+        return calc, None
 
 
 class DFTManager(BaseOracle):
@@ -132,18 +155,22 @@ class DFTManager(BaseOracle):
             try:
                 # Architecture: Add explicit execution timeout for DFT manager to prevent hangs
                 import concurrent.futures
-                import sys
 
-                # Check if running under pytest to avoid ProcessPoolExecutor pickling issues with mocks
-                if "pytest" in sys.modules:
-                    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-                        future = executor.submit(self._run_calculator, atoms, current_config, calc_dir)
-                        future.result(timeout=3600)
-                else:
-                    with concurrent.futures.ProcessPoolExecutor(max_workers=1) as executor:
-                        future = executor.submit(self._run_calculator, atoms, current_config, calc_dir)
-                        # Set a hard limit of 3600 seconds per self-healing attempt
-                        future.result(timeout=3600)
+                with concurrent.futures.ProcessPoolExecutor(max_workers=1) as executor:
+                    # In tests, if ProcessPoolExecutor is used, state updates inside _run_calculator
+                    # (like mock call counts on self.driver) are not reflected back in the main process
+                    # because they happen in a separate process space. This is a limitation of testing
+                    # ProcessPoolExecutor.
+                    future = executor.submit(_run_calculator_process, self.driver, atoms, current_config, calc_dir)
+                    # Set a hard limit of 3600 seconds per self-healing attempt
+                    calc, exception = future.result(timeout=3600)
+
+                    if exception:
+                        raise RuntimeError(f"Calculation failed: {exception}") from exception
+
+                    # Apply results from subprocess back to the atoms object in main process
+                    atoms.calc = calc
+
             except concurrent.futures.TimeoutError as e:
                 last_error = e
                 atoms.calc = None
@@ -168,22 +195,6 @@ class DFTManager(BaseOracle):
         # Correctly format the error message with the captured exception
         raise OracleError(ERR_ORACLE_FAILED.format(error=last_error)) from last_error
 
-    def _run_calculator(self, atoms: Atoms, config: DFTConfig, calc_dir: str) -> None:
-        """Helper to run a single calculation attempt."""
-        # Create new calculator for clean state
-        # Use provided temporary directory to prevent file collisions and race conditions
-        calc = self.driver.get_calculator(atoms, config.model_copy(), directory=calc_dir)
-        atoms.calc = calc
-
-        # Trigger actual calculation
-        atoms.get_potential_energy()  # type: ignore[no-untyped-call]
-        atoms.get_forces()  # type: ignore[no-untyped-call]
-
-        # Try to get stress (optional)
-        with contextlib.suppress(PropertyNotImplementedError, RuntimeError):
-            atoms.get_stress()  # type: ignore[no-untyped-call]
-
-
 class MACEManager(BaseOracle):
     """
     Wrapper for MACE foundation model inferences.
@@ -191,19 +202,32 @@ class MACEManager(BaseOracle):
     """
 
     def __init__(self, model_path: str) -> None:
-        from pyacemaker.utils.path import validate_path_safe
+        import os
 
-        # Strictly validate model_path existence and prevent path traversal
-        path_obj = Path(model_path)
-        safe_path = validate_path_safe(path_obj)
-        if not safe_path.exists():
-            msg = f"MACE model path does not exist: {safe_path}"
-            raise FileNotFoundError(msg)
-        if not safe_path.is_file():
-            msg = f"MACE model path must be a file: {safe_path}"
+        from pyacemaker.domain_models.defaults import DEFAULT_POTENTIALS_DIR
+
+        # Canonicalize the path using os.path.realpath to safely unpack symlinks and avoid TOCTOU
+        canonical_path_str = os.path.realpath(model_path)
+        canonical_path = Path(canonical_path_str)
+
+        # Verify containment: ensure the path falls inside the accepted allowed_base_dir.
+        # This prevents traversal attacks (e.g., passing "../../../etc/passwd").
+        allowed_dir = Path(DEFAULT_POTENTIALS_DIR).resolve()
+
+        # Proceed with containment check
+        if not canonical_path.is_relative_to(allowed_dir):
+            msg = f"MACE model path {canonical_path} is outside allowed directory {allowed_dir}"
             raise ValueError(msg)
 
-        self.model_path = str(safe_path)
+        # We will use `os.path.realpath` as explicitly instructed by the audit.
+        if not canonical_path.exists():
+            msg = f"MACE model path does not exist: {canonical_path}"
+            raise FileNotFoundError(msg)
+        if not canonical_path.is_file():
+            msg = f"MACE model path must be a file: {canonical_path}"
+            raise ValueError(msg)
+
+        self.model_path = str(canonical_path)
         # Mock MACE initialization
         self.is_initialized = True
 
@@ -248,10 +272,6 @@ class TieredOracle(BaseOracle):
     ) -> None:
         if mace_manager is None:
             msg = "MACEManager must be provided."
-            raise ValueError(msg)
-
-        if hasattr(mace_manager, "is_initialized") and mace_manager.is_initialized is False:
-            msg = "MACEManager must be initialized."
             raise ValueError(msg)
 
         if dft_manager is None:
