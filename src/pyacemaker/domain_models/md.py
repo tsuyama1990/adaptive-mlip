@@ -28,6 +28,7 @@ from pyacemaker.domain_models.defaults import (
     DEFAULT_MD_TDAMP_FACTOR,
     DEFAULT_MD_THERMO_FREQ,
     DEFAULT_OTF_UNCERTAINTY_THRESHOLD,
+    MAX_MD_STEPS,
 )
 
 
@@ -151,7 +152,7 @@ class MDConfig(BaseModel):
         ..., ge=0.0, le=MAX_MD_PRESSURE, description="Simulation pressure in Bar"
     )
     timestep: PositiveFloat = Field(..., gt=0.0, le=10.0, description="Timestep in ps")
-    n_steps: int = Field(..., gt=0, le=1000000000, description="Number of MD steps")
+    n_steps: int = Field(..., gt=0, le=MAX_MD_STEPS, description="Number of MD steps")
 
     # Output Control
     thermo_freq: PositiveInt = Field(

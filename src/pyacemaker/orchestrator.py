@@ -17,6 +17,7 @@ from pyacemaker.core.validator import Validator
 from pyacemaker.domain_models import PyAceConfig
 from pyacemaker.domain_models.defaults import (
     DEFAULT_PRODUCTION_DIR,
+    DEFAULT_RESUME_N_STEPS,
     FILENAME_CANDIDATES,
     FILENAME_POTENTIAL,
     FILENAME_TRAINING,
@@ -129,6 +130,7 @@ class Orchestrator:
             Total number of atoms written.
         """
         from itertools import islice
+
         count = 0
 
         # Ensure parent dir exists
@@ -154,7 +156,9 @@ class Orchestrator:
 
                 # Optional backpressure / memory tracking
                 if count % (batch_size * 10) == 0:
-                    self.logger.debug(f"Streaming write progress: {count} atoms written to {filepath.name}...")
+                    self.logger.debug(
+                        f"Streaming write progress: {count} atoms written to {filepath.name}..."
+                    )
 
         return count
 
@@ -303,7 +307,7 @@ class Orchestrator:
             return extract_intelligent_cluster(
                 structure=halt_structure,
                 target_atoms=target_atoms,
-                config=self.config.workflow.cutout
+                config=self.config.workflow.cutout,
             )
         except Exception:
             self.logger.exception("Failed to extract local cluster.")
@@ -380,13 +384,17 @@ class Orchestrator:
 
             # 2. Explosive Generation of Surrogate Data
             count = self._select_and_label(s0_cluster, potential_path, paths)
-            self.logger.info(f"Refinement: Added {count} new structures (surrogate data generation).")
+            self.logger.info(
+                f"Refinement: Added {count} new structures (surrogate data generation)."
+            )
 
             # 3. ACE Incremental Update
             training_file = paths["training"] / FILENAME_TRAINING
 
             # Try to use incremental_train if it exists and is callable, ignoring mocks that might throw
-            if hasattr(self.trainer, "incremental_train") and callable(self.trainer.incremental_train):
+            if hasattr(self.trainer, "incremental_train") and callable(
+                self.trainer.incremental_train
+            ):
                 try:
                     res = self.trainer.incremental_train(
                         new_data_path=str(training_file),
@@ -398,7 +406,7 @@ class Orchestrator:
                         if isinstance(res, (str, Path)):
                             return Path(res)
                         # if it's a mock or other object just return it
-                        return res # type: ignore
+                        return res  # type: ignore
                 except TypeError:
                     # In tests where trainer is a MagicMock, TypeError might be thrown if signature doesn't match
                     pass
@@ -445,17 +453,17 @@ class Orchestrator:
                 run_kwargs["resume_from_step"] = initial_structure.info["halt_step"]
 
                 # Soft start logic for resume: run fewer steps initially to thermalize
-                default_n_steps = 1000
+                default_n_steps = DEFAULT_RESUME_N_STEPS
                 if hasattr(self.engine, "config") and hasattr(self.engine.config, "n_steps"):
                     default_n_steps = self.engine.config.n_steps
-                run_kwargs["override_n_steps"] = min(self.config.workflow.batch_size, default_n_steps)
+                run_kwargs["override_n_steps"] = min(
+                    self.config.workflow.batch_size, default_n_steps
+                )
 
             try:
                 # Execution with process isolation / robust fallbacks happens inside engine.run
                 return self.engine.run(
-                    structure=initial_structure,
-                    potential=deployed_potential,
-                    **run_kwargs
+                    structure=initial_structure, potential=deployed_potential, **run_kwargs
                 )
             except Exception:
                 msg = "MD Simulation crashed. Orchestrator process survived."
@@ -477,6 +485,7 @@ class Orchestrator:
                 # but we should handle it more robustly
                 exists = True
                 import contextlib
+
                 with contextlib.suppress(Exception):
                     exists = new_potential.exists()
 
@@ -515,7 +524,11 @@ class Orchestrator:
             # Policy Switching Logic
             try:
                 # Add a more aggressive policy like DEFECTS to active_policies if currently on RANDOM_RATTLE
-                if hasattr(self.generator.config, "active_policies") and ExplorationPolicy.RANDOM_RATTLE in self.generator.config.active_policies and ExplorationPolicy.DEFECTS not in self.generator.config.active_policies:
+                if (
+                    hasattr(self.generator.config, "active_policies")
+                    and ExplorationPolicy.RANDOM_RATTLE in self.generator.config.active_policies
+                    and ExplorationPolicy.DEFECTS not in self.generator.config.active_policies
+                ):
                     self.generator.config.active_policies.append(ExplorationPolicy.DEFECTS)
                     self.logger.info("Adaptive Strategy: Added DEFECTS policy.")
             except Exception as e:
@@ -526,7 +539,7 @@ class Orchestrator:
                 if hasattr(self.generator.config, "rattle_stdev"):
                     self.generator.config.rattle_stdev = min(
                         STRATEGY_RATTLE_STDEV_MAX,
-                        self.generator.config.rattle_stdev * STRATEGY_RATTLE_STDEV_INCREASE_FACTOR
+                        self.generator.config.rattle_stdev * STRATEGY_RATTLE_STDEV_INCREASE_FACTOR,
                     )
                     self.logger.info(
                         f"Adaptive Strategy: Increased rattle_stdev to {self.generator.config.rattle_stdev:.2f}"
@@ -535,12 +548,17 @@ class Orchestrator:
                 self.logger.debug(f"Adaptive Strategy: Failed to adjust config: {e}")
 
             # Replay buffer adjustments (Catastrophic Forgetting Prevention)
-            if hasattr(self.config.workflow, "loop_strategy") and self.config.workflow.loop_strategy:
+            if (
+                hasattr(self.config.workflow, "loop_strategy")
+                and self.config.workflow.loop_strategy
+            ):
                 # Increase replay buffer size slightly to retain more stable states when halts are frequent
                 self.config.workflow.loop_strategy.replay_buffer_size = int(
                     self.config.workflow.loop_strategy.replay_buffer_size * 1.1
                 )
-                self.logger.info(f"Adaptive Strategy: Increased replay_buffer_size to {self.config.workflow.loop_strategy.replay_buffer_size}")
+                self.logger.info(
+                    f"Adaptive Strategy: Increased replay_buffer_size to {self.config.workflow.loop_strategy.replay_buffer_size}"
+                )
 
         else:
             self.logger.info(
@@ -549,9 +567,14 @@ class Orchestrator:
 
             # Revert back to milder exploration policy if MD is completely stable
             try:
-                if hasattr(self.generator.config, "active_policies") and ExplorationPolicy.DEFECTS in self.generator.config.active_policies:
+                if (
+                    hasattr(self.generator.config, "active_policies")
+                    and ExplorationPolicy.DEFECTS in self.generator.config.active_policies
+                ):
                     self.generator.config.active_policies.remove(ExplorationPolicy.DEFECTS)
-                    self.logger.info("Adaptive Strategy: Removed DEFECTS policy, relying on milder policies.")
+                    self.logger.info(
+                        "Adaptive Strategy: Removed DEFECTS policy, relying on milder policies."
+                    )
             except Exception as e:
                 self.logger.debug(f"Adaptive Strategy: Failed to switch policy: {e}")
 
@@ -559,7 +582,7 @@ class Orchestrator:
                 if hasattr(self.generator.config, "rattle_stdev"):
                     self.generator.config.rattle_stdev = max(
                         STRATEGY_RATTLE_STDEV_MIN,
-                        self.generator.config.rattle_stdev * STRATEGY_RATTLE_STDEV_DECREASE_FACTOR
+                        self.generator.config.rattle_stdev * STRATEGY_RATTLE_STDEV_DECREASE_FACTOR,
                     )
             except Exception as e:
                 self.logger.debug(f"Adaptive Strategy: Failed to adjust config: {e}")
@@ -617,7 +640,9 @@ class Orchestrator:
                 structure = self._get_initial_structure(self.state_manager.iteration)
 
                 if structure:
-                    self.logger.info("Running comprehensive final validation (Elastic, Phonon, EOS)...")
+                    self.logger.info(
+                        "Running comprehensive final validation (Elastic, Phonon, EOS)..."
+                    )
                     # Note: Validator coordinates ElasticCalculator and PhononCalculator internally.
                     # We ensure validator is fully integrated for these physical property checks.
                     # The EOS logic is naturally integrated into advanced validation metrics if defined in the Validator.

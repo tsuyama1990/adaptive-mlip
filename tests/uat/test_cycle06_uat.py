@@ -133,8 +133,12 @@ def test_scenario_06_01_active_learning_campaign(uat_config: PyAceConfig, tmp_pa
 
         # Add dummy cutout config that tests fail because of missing config
         from pyacemaker.domain_models.workflow import CutoutConfig
+
         uat_config.workflow.cutout = CutoutConfig(
-            core_radius=4.0, buffer_radius=3.0, enable_pre_relaxation=False, enable_passivation=False
+            core_radius=4.0,
+            buffer_radius=3.0,
+            enable_pre_relaxation=False,
+            enable_passivation=False,
         )
 
         # Run Orchestrator
@@ -146,8 +150,8 @@ def test_scenario_06_01_active_learning_campaign(uat_config: PyAceConfig, tmp_pa
         assert orch.loop_state.iteration == 2
         # Check calls
         assert mock_engine.run.call_count == 2
-        assert mock_trainer.train.call_count >= 1 # at least cold start train
-        assert mock_trainer.incremental_train.call_count >= 1 # refine train
+        assert mock_trainer.train.call_count >= 1  # at least cold start train
+        assert mock_trainer.incremental_train.call_count >= 1  # refine train
 
 
 def test_scenario_06_02_resume_capability(uat_config: PyAceConfig, tmp_path: Path) -> None:

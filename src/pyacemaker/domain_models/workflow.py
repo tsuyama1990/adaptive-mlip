@@ -5,6 +5,7 @@ from pyacemaker.domain_models.defaults import (
     DEFAULT_BATCH_SIZE,
     DEFAULT_CHECKPOINT_INTERVAL,
     DEFAULT_DATA_DIR,
+    DEFAULT_DISTILLATION_SAMPLING_STRUCTURES,
     DEFAULT_N_CANDIDATES,
     DEFAULT_OTF_LOCAL_N_CANDIDATES,
     DEFAULT_OTF_LOCAL_N_SELECT,
@@ -45,7 +46,7 @@ class DistillationConfig(BaseModel):
     enable: bool = True
     mace_model_path: str = "mace-mp-0-medium"
     uncertainty_threshold: float = Field(0.05, description="Threshold where MACE is confident")
-    sampling_structures_per_system: int = 1000
+    sampling_structures_per_system: int = DEFAULT_DISTILLATION_SAMPLING_STRUCTURES
 
 
 class ActiveLearningThresholds(BaseModel):

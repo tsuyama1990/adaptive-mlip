@@ -12,6 +12,12 @@ from pyacemaker.domain_models import (
     TrainingConfig,
     WorkflowConfig,
 )
+from pyacemaker.domain_models.defaults import (
+    DEFAULT_DISTILLATION_SAMPLING_STRUCTURES,
+    MAX_EON_TEMPERATURE,
+    MAX_MD_STEPS,
+)
+from pyacemaker.domain_models.eon import EONConfig
 from pyacemaker.domain_models.structure import ExplorationPolicy
 from tests.conftest import create_dummy_pseudopotentials
 
@@ -71,6 +77,16 @@ def test_md_config_valid() -> None:
     assert config.temperature == 1000.0
 
 
+def test_md_config_max_steps() -> None:
+    config = MDConfig(temperature=1000.0, pressure=0.0, timestep=0.001, n_steps=MAX_MD_STEPS)
+    assert config.n_steps == MAX_MD_STEPS
+
+
+def test_md_config_exceed_max_steps() -> None:
+    with pytest.raises(ValidationError):
+        MDConfig(temperature=1000.0, pressure=0.0, timestep=0.001, n_steps=MAX_MD_STEPS + 1)
+
+
 def test_workflow_config_valid() -> None:
     config = WorkflowConfig(
         max_iterations=10,
@@ -90,6 +106,28 @@ def test_workflow_config_default() -> None:
     assert config.active_learning_dir == "active_learning"
     assert config.potentials_dir == "potentials"
     assert config.checkpoint_interval == 1
+    assert (
+        config.distillation.sampling_structures_per_system
+        == DEFAULT_DISTILLATION_SAMPLING_STRUCTURES
+    )
+
+
+def test_eon_config_max_temp(tmp_path: Path) -> None:
+    potential = tmp_path / "dummy.yace"
+    potential.touch()
+    config = EONConfig(
+        enabled=True, potential_path=potential, temperature=MAX_EON_TEMPERATURE
+    )
+    assert config.temperature == MAX_EON_TEMPERATURE
+
+
+def test_eon_config_exceed_max_temp(tmp_path: Path) -> None:
+    potential = tmp_path / "dummy.yace"
+    potential.touch()
+    with pytest.raises(ValidationError):
+        EONConfig(
+            enabled=True, potential_path=potential, temperature=MAX_EON_TEMPERATURE + 1.0
+        )
 
 
 def test_logging_config_valid() -> None:

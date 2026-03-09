@@ -204,6 +204,7 @@ def test_run_loop_iteration_halt(orchestrator: Orchestrator, tmp_path: Path) -> 
 
     # Add dummy cutout config
     from pyacemaker.domain_models.workflow import CutoutConfig
+
     orchestrator.config.workflow.cutout = CutoutConfig(
         core_radius=4.0, buffer_radius=3.0, enable_pre_relaxation=False, enable_passivation=False
     )
@@ -223,5 +224,9 @@ def test_run_loop_iteration_halt(orchestrator: Orchestrator, tmp_path: Path) -> 
 
     # Just check that it was updated and is somewhat related to refined_pot
     # If the previous state had current.yace, the new one should have refined.yace
-    assert "refined" in current_str or isinstance(orchestrator.state_manager.state.current_potential, MagicMock) or "current" in current_str
+    assert (
+        "refined" in current_str
+        or isinstance(orchestrator.state_manager.state.current_potential, MagicMock)
+        or "current" in current_str
+    )
     orchestrator.engine.run.assert_called()

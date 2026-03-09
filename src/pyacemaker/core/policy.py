@@ -103,9 +103,7 @@ class MDMicroBurstPolicy(SafeBasePolicy):
                 if hasattr(base_structure, "info") and "halt_step" in base_structure.info:
                     run_kwargs["resume_from_step"] = base_structure.info["halt_step"]
 
-                result = engine.run(
-                    structure=base_structure, potential=potential, **run_kwargs
-                )
+                result = engine.run(structure=base_structure, potential=potential, **run_kwargs)
 
                 # In a real implementation we would load result.trajectory_path
                 # But for architecture completeness, yield rattled structure or loaded structure
@@ -153,7 +151,7 @@ class NormalModePolicy(SafeBasePolicy):
         max_gamma = 0.0
         c_gamma = None
         if hasattr(base_structure, "arrays") and "c_gamma" in base_structure.arrays:
-            c_gamma = base_structure.get_array("c_gamma") # type: ignore[no-untyped-call]
+            c_gamma = base_structure.get_array("c_gamma")  # type: ignore[no-untyped-call]
             if c_gamma is not None and len(c_gamma) > 0:
                 max_gamma = float(np.max(c_gamma))
 
