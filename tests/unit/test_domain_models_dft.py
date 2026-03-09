@@ -152,6 +152,16 @@ def test_dft_config_external_paths(
         )
         assert config.pseudopotentials["Fe"] == str(outside_file.absolute())
 
+        # Case 1.5: Absolute path with non-existent file -> Denied
+        with pytest.raises(ValidationError):
+            DFTConfig(
+                code="qe",
+                functional="PBE",
+                kpoints_density=0.04,
+                encut=500.0,
+                pseudopotentials={"Fe": "/non/existent/path/for/sure/fe.upf"},
+            )
+
         # Case 2: Relative path to outside file -> Allowed
         # Construct relative path from dummy_pseudopotentials_dir to outside_file
         rel_path = "../outside_dir/secret.UPF"

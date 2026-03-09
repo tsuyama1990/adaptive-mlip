@@ -4,7 +4,7 @@ rootdir: /app
 configfile: pyproject.toml
 testpaths: tests
 plugins: cov-7.0.0, anyio-4.12.1
-collected 250 items
+collected 251 items
 
 tests/e2e/test_engine_integration.py ..                                  [  0%]
 tests/e2e/test_orchestrator.py .......                                   [  3%]
@@ -12,7 +12,7 @@ tests/e2e/test_orchestrator_loop.py ...                                  [  4%]
 tests/e2e/test_orchestrator_refinement.py ..                             [  5%]
 tests/integration/test_pacemaker_integration.py ..                       [  6%]
 tests/integration/test_scenarios.py .                                    [  6%]
-tests/uat/test_cycle01_uat.py ...                                        [  8%]
+tests/uat/test_cycle01_uat.py ...                                        [  7%]
 tests/uat/test_cycle02_uat.py ..                                         [  8%]
 tests/uat/test_cycle03_uat.py ..                                         [  9%]
 tests/uat/test_cycle04_uat.py ...                                        [ 10%]
@@ -22,16 +22,16 @@ tests/uat/test_cycle08_uat.py ...                                        [ 13%]
 tests/unit/test_active_set.py .....                                      [ 15%]
 tests/unit/test_active_set_anchor.py ....                                [ 17%]
 tests/unit/test_delta.py ....                                            [ 18%]
-tests/unit/test_domain_models.py ................                        [ 25%]
+tests/unit/test_domain_models.py .................                       [ 25%]
 tests/unit/test_domain_models_dft.py .............                       [ 30%]
 tests/unit/test_domain_models_eon.py ....                                [ 32%]
 tests/unit/test_domain_models_md.py ...........                          [ 36%]
 tests/unit/test_domain_models_md_new.py ..                               [ 37%]
 tests/unit/test_domain_models_scenario.py ..                             [ 38%]
-tests/unit/test_domain_models_training.py .......                        [ 40%]
+tests/unit/test_domain_models_training.py .......                        [ 41%]
 tests/unit/test_domain_models_validation.py ....                         [ 42%]
 tests/unit/test_elastic.py ....                                          [ 44%]
-tests/unit/test_embedding.py .......                                     [ 46%]
+tests/unit/test_embedding.py .......                                     [ 47%]
 tests/unit/test_engine.py .......                                        [ 49%]
 tests/unit/test_engine_halt_step.py ..                                   [ 50%]
 tests/unit/test_engine_relax.py ...                                      [ 51%]
@@ -97,7 +97,7 @@ src/pyacemaker/core/io_manager.py               74     30    59%   58-71, 78-81,
 src/pyacemaker/core/lammps_generator.py        132     19    86%   39-40, 114-130, 138, 157-164
 src/pyacemaker/core/loop.py                     70      6    91%   56, 63, 79-82, 85
 src/pyacemaker/core/m3gnet_wrapper.py           20      6    70%   26-27, 33-35, 52-54
-src/pyacemaker/core/oracle.py                  125     12    90%   59, 141-146, 193, 231-232, 235-236, 244, 271
+src/pyacemaker/core/oracle.py                  125     11    91%   141-146, 193, 231-232, 235-236, 244, 271
 src/pyacemaker/core/policy.py                  115     27    77%   40-41, 102-122, 154-156, 163, 174-177, 207, 214
 src/pyacemaker/core/policy_factory.py           31      7    77%   47, 53-54, 58-59, 86-87
 src/pyacemaker/core/report.py                   12      1    92%   85
@@ -140,7 +140,7 @@ src/pyacemaker/utils/phonons.py                 51      2    96%   51, 69
 src/pyacemaker/utils/process.py                 25     21    16%   35-77
 src/pyacemaker/utils/structure.py                6      2    67%   19-20
 --------------------------------------------------------------------------
-TOTAL                                         3033    475    84%
-======================= 250 passed, 3 warnings in 3.78s ========================
+TOTAL                                         3033    474    84%
+======================= 251 passed, 3 warnings in 4.45s ========================
 /app/.venv/lib/python3.12/site-packages/coverage/inorout.py:561: CoverageWarning: Module dev_src was never imported. (module-not-imported); see https://coverage.readthedocs.io/en/7.13.4/messages.html#warning-module-not-imported
   self.warn(f"Module {pkg} was never imported.", slug="module-not-imported")

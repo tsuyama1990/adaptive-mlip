@@ -2,7 +2,7 @@ import sys
 import tempfile
 from collections.abc import Generator
 from pathlib import Path
-from typing import Any, TypedDict
+from typing import Any, TypedDict, cast
 from unittest.mock import MagicMock
 
 import numpy as np
@@ -145,7 +145,7 @@ class MockCalculator(Calculator):
     setup_error: bool
     attempts: int
     test_energy: float
-    results: dict[str, Any]
+    results: dict[Any, Any]
 
     def __init__(
         self, fail_count: int = 0, setup_error: bool = False, test_energy: float | None = None
@@ -164,6 +164,7 @@ class MockCalculator(Calculator):
         self.setup_error = setup_error
         self.attempts = 0
         self.test_energy = test_energy if test_energy is not None else TEST_ENERGY_GENERIC
+        self.results = {}
 
     def calculate(
         self,
@@ -295,6 +296,10 @@ def create_test_config_dict(**overrides: Any) -> ConfigDictType:
     Raises:
         ValueError: If validation fails when assembling the config.
     """
+    if not isinstance(overrides, dict):
+        msg = "Overrides must be dict"
+        raise TypeError(msg)
+
     defaults: dict[str, Any] = {
         "project_name": "TestProject",
         "structure": {
@@ -360,4 +365,4 @@ def create_test_config_dict(**overrides: Any) -> ConfigDictType:
         msg = f"Failed to merge test overrides due to validation constraints: {e}"
         raise ValueError(msg) from e
     else:
-        return model.model_dump()  # type: ignore[no-any-return]
+        return cast(ConfigDictType, model.model_dump())

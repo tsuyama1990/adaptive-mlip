@@ -56,7 +56,7 @@ class DFTConfig(BaseModel):
 
     # Pseudopotentials
     pseudopotentials: dict[str, str] = Field(
-        ..., description="Mapping of element symbols to pseudopotential filenames"
+        ..., min_length=1, description="Mapping of element symbols to pseudopotential filenames"
     )
 
     @staticmethod

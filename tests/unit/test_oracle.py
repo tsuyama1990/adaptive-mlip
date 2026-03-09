@@ -178,6 +178,10 @@ def test_dft_manager_invalid_input(mock_dft_config: DFTConfig) -> None:
     with pytest.raises(TypeError, match="Oracle failed to create iterator"):
         manager.compute(atoms_list)  # type: ignore[arg-type]
 
+    # Explicitly check None
+    with pytest.raises(TypeError, match="Oracle failed to create iterator"):
+        manager.compute(None)  # type: ignore[arg-type]
+
 
 def test_dft_manager_empty_iterator(mock_dft_config: DFTConfig) -> None:
     """Test compute handles empty iterator correctly safely."""

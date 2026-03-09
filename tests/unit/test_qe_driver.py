@@ -104,6 +104,21 @@ def test_qe_driver_invalid_input(mock_dft_config: DFTConfig) -> None:
     with pytest.raises(ValueError, match="Invalid chemical symbol"):
         driver.get_calculator(atoms, mock_dft_config)
 
+    from pydantic import ValidationError
+
+    # Empty pseudopotential dict - should fail validation at DFTConfig level
+    with pytest.raises(ValidationError):
+        driver.get_calculator(
+            atoms,
+            DFTConfig(
+                pseudopotentials={},
+                code="pw.x",
+                encut=100.0,
+                kpoints_density=0.04,
+                functional="PBE",
+            ),
+        )
+
 
 def test_qe_driver_parameters(mock_dft_config: DFTConfig) -> None:
     """Test that parameters from config are passed to Espresso."""

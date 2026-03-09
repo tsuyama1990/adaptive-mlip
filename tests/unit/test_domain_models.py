@@ -36,6 +36,13 @@ def test_structure_config_invalid_element(
         StructureConfig(elements=["Xy"], supercell_size=[1, 1, 1])  # Xy is not an element
 
 
+def test_structure_config_empty_elements(
+    dummy_pseudopotentials_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    with pytest.raises(ValidationError):
+        StructureConfig(elements=[], supercell_size=[1, 1, 1])
+
+
 def test_structure_config_duplicates(
     dummy_pseudopotentials_dir: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
