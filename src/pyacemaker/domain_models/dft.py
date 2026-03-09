@@ -1,3 +1,5 @@
+import re
+
 from pydantic import BaseModel, ConfigDict, Field, PositiveFloat, field_validator
 
 from pyacemaker.domain_models.defaults import (
@@ -64,10 +66,8 @@ class DFTConfig(BaseModel):
         Validates that pseudopotential values are strict, sanitized filenames
         without any directory traversal or path separators.
         """
-        import re
-
         MAX_FILENAME_LENGTH = 255
-        # Only allow alphanumeric, dot, underscore, dash, plus. NO SLASHES OR BACKSLASHES.
+        # Allow dots for file extensions, but prevent path traversal using directory separators or double dots.
         SAFE_FILENAME_PATTERN = re.compile(r"^[a-zA-Z0-9_\-\+\.]+$")
 
         for elem, filename in v.items():

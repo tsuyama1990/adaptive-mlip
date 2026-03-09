@@ -36,9 +36,13 @@ def test_run_command_dangerous_characters():
         ["echo", "$USER"],
     ]
 
-    for cmd in dangerous_cmds:
-        with pytest.raises(ValueError, match="Argument contains potentially dangerous characters"):
-            run_command(cmd)
+    with patch("pyacemaker.utils.process.subprocess.run") as mock_run:
+        for cmd in dangerous_cmds:
+            with pytest.raises(ValueError, match="Argument contains potentially dangerous characters"):
+                run_command(cmd)
+
+        # Verify that subprocess.run was never actually called
+        mock_run.assert_not_called()
 
 
 def test_run_command_long_arguments(caplog):

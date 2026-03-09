@@ -4,7 +4,7 @@ rootdir: /app
 configfile: pyproject.toml
 testpaths: tests
 plugins: cov-7.0.0, anyio-4.12.1
-collected 257 items
+collected 256 items
 
 tests/e2e/test_engine_integration.py ..                                  [  0%]
 tests/e2e/test_orchestrator.py .......                                   [  3%]
@@ -22,17 +22,17 @@ tests/uat/test_cycle08_uat.py ...                                        [ 13%]
 tests/unit/test_active_set.py .....                                      [ 15%]
 tests/unit/test_active_set_anchor.py ....                                [ 16%]
 tests/unit/test_delta.py ....                                            [ 18%]
-tests/unit/test_domain_models.py .................                       [ 24%]
+tests/unit/test_domain_models.py .................                       [ 25%]
 tests/unit/test_domain_models_dft.py ...........                         [ 29%]
 tests/unit/test_domain_models_eon.py ....                                [ 30%]
 tests/unit/test_domain_models_md.py ...........                          [ 35%]
 tests/unit/test_domain_models_md_new.py ..                               [ 35%]
 tests/unit/test_domain_models_scenario.py ..                             [ 36%]
 tests/unit/test_domain_models_training.py .......                        [ 39%]
-tests/unit/test_domain_models_validation.py ....                         [ 40%]
-tests/unit/test_elastic.py .......                                       [ 43%]
+tests/unit/test_domain_models_validation.py ....                         [ 41%]
+tests/unit/test_elastic.py ......                                        [ 43%]
 tests/unit/test_embedding.py .......                                     [ 46%]
-tests/unit/test_engine.py .......                                        [ 49%]
+tests/unit/test_engine.py .......                                        [ 48%]
 tests/unit/test_engine_halt_step.py ..                                   [ 49%]
 tests/unit/test_engine_relax.py ...                                      [ 50%]
 tests/unit/test_eon_driver.py .....                                      [ 52%]
@@ -44,7 +44,7 @@ tests/unit/test_io.py ........                                           [ 60%]
 tests/unit/test_io_manager.py ..                                         [ 61%]
 tests/unit/test_lammps_driver.py ...........                             [ 65%]
 tests/unit/test_lammps_driver_security.py ...                            [ 66%]
-tests/unit/test_lammps_generator.py ...                                  [ 68%]
+tests/unit/test_lammps_generator.py ...                                  [ 67%]
 tests/unit/test_lammps_generator_reorder.py ..                           [ 68%]
 tests/unit/test_loop.py .......                                          [ 71%]
 tests/unit/test_main.py ...                                              [ 72%]
@@ -142,6 +142,6 @@ src/pyacemaker/utils/process.py                 25      0   100%
 src/pyacemaker/utils/structure.py                6      2    67%   19-20
 --------------------------------------------------------------------------
 TOTAL                                         2996    392    87%
-======================= 257 passed, 3 warnings in 4.21s ========================
+======================= 256 passed, 3 warnings in 3.83s ========================
 /app/.venv/lib/python3.12/site-packages/coverage/inorout.py:561: CoverageWarning: Module dev_src was never imported. (module-not-imported); see https://coverage.readthedocs.io/en/7.13.4/messages.html#warning-module-not-imported
   self.warn(f"Module {pkg} was never imported.", slug="module-not-imported")

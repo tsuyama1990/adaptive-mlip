@@ -19,6 +19,7 @@ from pyacemaker.domain_models import (
     TrainingConfig,
     WorkflowConfig,
 )
+from pyacemaker.domain_models.workflow import CutoutConfig
 from pyacemaker.orchestrator import Orchestrator
 
 
@@ -101,8 +102,6 @@ def test_orchestrator_refinement_logic(tmp_path: Path) -> None:
     )
 
     # Add dummy cutout config that tests fail because of missing config
-    from pyacemaker.domain_models.workflow import CutoutConfig
-
     config.workflow.cutout = CutoutConfig(
         core_radius=4.0, buffer_radius=3.0, enable_pre_relaxation=False, enable_passivation=False
     )
@@ -140,7 +139,9 @@ def test_orchestrator_refinement_logic(tmp_path: Path) -> None:
     # mock incremental_train with a mock that returns the path instead of failing
     from unittest.mock import MagicMock
 
-    orch.trainer.incremental_train = MagicMock(return_value=refined_pot)
+    # We use MagicMock here to avoid dependency on actual Pacemaker execution during testing.
+    # The incremental_train method is mocked to simply return the expected path.
+    orch.trainer.incremental_train = MagicMock(return_value=refined_pot) # type: ignore[assignment]
 
     # 5. Create Simulation Result
     result = MDSimulationResult(
@@ -196,8 +197,6 @@ def test_orchestrator_refinement_extraction_failure(tmp_path: Path, caplog: Any)
         ),
         logging=LoggingConfig(level="DEBUG"),
     )
-
-    from pyacemaker.domain_models.workflow import CutoutConfig
 
     config.workflow.cutout = CutoutConfig(
         core_radius=4.0, buffer_radius=3.0, enable_pre_relaxation=False, enable_passivation=False

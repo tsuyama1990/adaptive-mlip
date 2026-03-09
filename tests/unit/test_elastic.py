@@ -34,10 +34,6 @@ class TestElasticCalculator:
         B = ElasticCalculator.calculate_bulk_modulus(c_ij, "cubic")
         assert np.isclose(B, 133.333, atol=0.01)
 
-    def test_calculate_voigt_reuss_hill(self):
-        # Test average moduli
-        pass
-
     def test_calculate_properties(self, calculator, mock_engine):
         from pathlib import Path
 
