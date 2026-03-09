@@ -1,0 +1,74 @@
+{
+  "project_session_id": "sessions/1111508674166794897",
+  "feature_branch": "dev/int-20260308-0603",
+  "integration_branch": "dev/int-20260308-0603",
+  "qa_session_id": null,
+  "cycles": [
+    {
+      "id": "01",
+      "status": "completed",
+      "branch_name": null,
+      "jules_session_id": "sessions/13753297688778497893",
+      "current_iteration": 1,
+      "pr_url": null,
+      "last_error": "Session timed out. Last error: Timed out after 7203.686271962943s",
+      "session_restart_count": 0,
+      "max_session_restarts": 2,
+      "created_at": "2026-03-08T06:26:13.111581Z",
+      "updated_at": "2026-03-08T14:59:24.904678Z"
+    },
+    {
+      "id": "02",
+      "status": "completed",
+      "branch_name": null,
+      "jules_session_id": "sessions/14752296696081506542",
+      "current_iteration": 1,
+      "pr_url": null,
+      "last_error": null,
+      "session_restart_count": 0,
+      "max_session_restarts": 2,
+      "created_at": "2026-03-08T06:26:13.111588Z",
+      "updated_at": "2026-03-08T18:57:53.410582Z"
+    },
+    {
+      "id": "03",
+      "status": "completed",
+      "branch_name": null,
+      "jules_session_id": "sessions/2069180545332136114",
+      "current_iteration": 1,
+      "pr_url": null,
+      "last_error": null,
+      "session_restart_count": 0,
+      "max_session_restarts": 2,
+      "created_at": "2026-03-08T06:26:13.111590Z",
+      "updated_at": "2026-03-09T02:21:42.874380Z"
+    },
+    {
+      "id": "04",
+      "status": "completed",
+      "branch_name": null,
+      "jules_session_id": "sessions/11993633031823889163",
+      "current_iteration": 1,
+      "pr_url": null,
+      "last_error": null,
+      "session_restart_count": 0,
+      "max_session_restarts": 2,
+      "created_at": "2026-03-08T06:26:13.111592Z",
+      "updated_at": "2026-03-09T04:19:30.626354Z"
+    },
+    {
+      "id": "05",
+      "status": "completed",
+      "branch_name": null,
+      "jules_session_id": "sessions/10133585936595881087",
+      "current_iteration": 1,
+      "pr_url": null,
+      "last_error": null,
+      "session_restart_count": 0,
+      "max_session_restarts": 2,
+      "created_at": "2026-03-08T06:26:13.111594Z",
+      "updated_at": "2026-03-09T09:24:14.733906Z"
+    }
+  ],
+  "last_updated": "2026-03-09T09:24:14.733950Z"
+}
