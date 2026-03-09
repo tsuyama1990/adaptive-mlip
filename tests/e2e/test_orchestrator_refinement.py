@@ -110,8 +110,16 @@ def test_orchestrator_refinement_logic(tmp_path: Path) -> None:
     )
 
     # Add dummy cutout config that tests fail because of missing config
-    config.workflow.cutout = CutoutConfig(
-        core_radius=4.0, buffer_radius=3.0, enable_pre_relaxation=False, enable_passivation=False
+    config = config.model_copy(
+        update={
+            "workflow": config.workflow.model_copy(
+                update={
+                    "cutout": CutoutConfig(
+                        core_radius=4.0, buffer_radius=3.0, enable_pre_relaxation=False, enable_passivation=False
+                    )
+                }
+            )
+        }
     )
 
     # 2. Setup Orchestrator
@@ -170,7 +178,7 @@ def test_orchestrator_refinement_logic(tmp_path: Path) -> None:
     called_dataset, called_strategy, called_initial = orch.trainer.incremental_train_called_with  # type: ignore[attr-defined]
     assert called_initial == "old.yace"
     # Note: Depending on ASE's extxyz write, the orchestrator might use .xyz or .extxyz internally
-    assert called_dataset.endswith(".xyz") or called_dataset.endswith(".extxyz")
+    assert called_dataset.endswith((".xyz", ".extxyz"))
     assert "training_data" in called_dataset
 
     # Check if training data was written
@@ -208,8 +216,16 @@ def test_orchestrator_refinement_extraction_failure(tmp_path: Path, caplog: Any)
         logging=LoggingConfig(level="DEBUG"),
     )
 
-    config.workflow.cutout = CutoutConfig(
-        core_radius=4.0, buffer_radius=3.0, enable_pre_relaxation=False, enable_passivation=False
+    config = config.model_copy(
+        update={
+            "workflow": config.workflow.model_copy(
+                update={
+                    "cutout": CutoutConfig(
+                        core_radius=4.0, buffer_radius=3.0, enable_pre_relaxation=False, enable_passivation=False
+                    )
+                }
+            )
+        }
     )
     orch = Orchestrator(config)
 

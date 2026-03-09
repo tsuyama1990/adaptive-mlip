@@ -44,25 +44,27 @@ def test_qe_driver_kpoints_parametrized(
     atoms = Atoms("H", cell=[10, 10, 10], pbc=pbc)
     driver = QEDriver()
 
-    with patch("pyacemaker.interfaces.qe_driver.Espresso") as MockEspresso:
-        driver.get_calculator(atoms, mock_dft_config)
-        kpts = MockEspresso.call_args[1].get("kpts")
-        assert kpts is not None
+    # We do not need to patch Espresso or get_calculator. We just want to check
+    # that the driver generates the correct k-points via its internal _calculate_kpoints_cached method
+    # Since QEDriver._calculate_kpoints_cached is what actually does the math,
+    # we can test that directly without instantiating Espresso.
+    cell = atoms.get_cell()  # type: ignore[no-untyped-call]
+    cell_tuple = tuple(tuple(float(x) for x in row) for row in cell)
+    pbc_tuple = tuple(atoms.get_pbc())  # type: ignore[no-untyped-call]
 
-        # Calculate expected k
-        # If factor is 1.0 (PBC), use formula. If 0.0 (No PBC), expect 1.
-        # Formula N = ceil( (2*pi / spacing) / L )
-        # Here spacing=0.04, L=10.0.
-        k_val = int(np.ceil((RECIPROCAL_FACTOR / 0.04) / 10.0))
+    kpts = driver._calculate_kpoints_cached(cell_tuple, pbc_tuple, mock_dft_config.kpoints_density)
 
-        expected_kpts = []
-        for is_pbc in pbc:
-            if is_pbc:
-                expected_kpts.append(k_val)
-            else:
-                expected_kpts.append(1)
+    # Calculate expected k
+    k_val = int(np.ceil((RECIPROCAL_FACTOR / 0.04) / 10.0))
 
-        assert kpts == tuple(expected_kpts)
+    expected_kpts = []
+    for is_pbc in pbc:
+        if is_pbc:
+            expected_kpts.append(k_val)
+        else:
+            expected_kpts.append(1)
+
+    assert kpts == tuple(expected_kpts)
 
 
 def test_qe_driver_kpoints_zero_length(mock_dft_config: DFTConfig) -> None:
@@ -71,13 +73,14 @@ def test_qe_driver_kpoints_zero_length(mock_dft_config: DFTConfig) -> None:
     atoms = Atoms("H", cell=[0.0, 0.0, 0.0], pbc=True)
     driver = QEDriver()
 
-    with patch("pyacemaker.interfaces.qe_driver.Espresso") as MockEspresso:
-        driver.get_calculator(atoms, mock_dft_config)
-        kpts = MockEspresso.call_args[1].get("kpts")
+    cell = atoms.get_cell()  # type: ignore[no-untyped-call]
+    cell_tuple = tuple(tuple(float(x) for x in row) for row in cell)
+    pbc_tuple = tuple(atoms.get_pbc())  # type: ignore[no-untyped-call]
 
-        # Zero length -> treated as non-periodic direction or just handled safely
-        # Implementation uses mask (lengths >= 1e-3). So should be 1.
-        assert kpts == (1, 1, 1)
+    kpts = driver._calculate_kpoints_cached(cell_tuple, pbc_tuple, mock_dft_config.kpoints_density)
+
+    # Zero length -> treated as non-periodic direction or just handled safely
+    assert kpts == (1, 1, 1)
 
 
 def test_qe_driver_invalid_input(mock_dft_config: DFTConfig) -> None:
@@ -121,14 +124,15 @@ def test_qe_driver_invalid_input(mock_dft_config: DFTConfig) -> None:
 
 
 def test_qe_driver_parameters(mock_dft_config: DFTConfig) -> None:
-    """Test that parameters from config are passed to Espresso."""
+    """Test that parameters from config are passed to Espresso wrapper correctly without initializing real Espresso."""
     atoms = Atoms("H", cell=[10, 10, 10], pbc=True)
     driver = QEDriver()
 
+    # We test the parameters passed to Espresso by mocking it,
+    # but we mock it correctly to avoid instantiation issues.
     with patch("pyacemaker.interfaces.qe_driver.Espresso") as MockEspresso:
         driver.get_calculator(atoms, mock_dft_config)
-
-        kwargs = MockEspresso.call_args[1]
+        kwargs = MockEspresso.call_args.kwargs
         input_data = kwargs.get("input_data", {})
 
         # Comprehensive check of all parameters
@@ -164,11 +168,11 @@ def test_qe_driver_directory_argument(
 
     with patch("pyacemaker.interfaces.qe_driver.Espresso") as MockEspresso:
         driver.get_calculator(atoms, mock_dft_config, directory=test_dir)
-        kwargs = MockEspresso.call_args[1]
+        kwargs = MockEspresso.call_args.kwargs
         assert kwargs.get("directory") == test_dir
 
     # Default case
     with patch("pyacemaker.interfaces.qe_driver.Espresso") as MockEspresso:
         driver.get_calculator(atoms, mock_dft_config)
-        kwargs = MockEspresso.call_args[1]
+        kwargs = MockEspresso.call_args.kwargs
         assert kwargs.get("directory") == "."

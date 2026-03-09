@@ -9,7 +9,8 @@ from pyacemaker.utils.process import run_command
 
 def test_run_command_success():
     """Test successful command execution."""
-    with patch("pyacemaker.utils.process.subprocess.run") as mock_run:
+    with patch("shutil.which", return_value="/bin/echo"), \
+         patch("pyacemaker.utils.process.subprocess.run") as mock_run:
         mock_result = MagicMock()
         mock_run.return_value = mock_result
 
@@ -39,7 +40,8 @@ def test_run_command_dangerous_characters():
         ["echo", "$(ls)"],
     ]
 
-    with patch("pyacemaker.utils.process.subprocess.run") as mock_run:
+    with patch("shutil.which", return_value="/bin/echo"), \
+         patch("pyacemaker.utils.process.subprocess.run") as mock_run:
         for cmd in dangerous_cmds:
             with pytest.raises(ValueError, match="Argument contains potentially dangerous characters"):
                 run_command(cmd)
@@ -49,7 +51,8 @@ def test_run_command_dangerous_characters():
 
 def test_run_command_shell_true():
     """Test that run_command properly prevents passing shell=True if somehow attempted."""
-    with patch("pyacemaker.utils.process.subprocess.run") as mock_run:
+    with patch("shutil.which", return_value="/bin/echo"), \
+         patch("pyacemaker.utils.process.subprocess.run") as mock_run:
         # Since run_command doesn't accept shell as a kwarg, it always passes shell=False
         # But if someone tries to hack the cmd array itself with shell constructs
         # the dangerous_characters check should catch it or the assert will prove shell=False.
@@ -63,7 +66,9 @@ def test_run_command_long_arguments(caplog):
     long_arg = "a" * 150
     cmd = ["echo", long_arg]
 
-    with caplog.at_level(logging.DEBUG), patch("pyacemaker.utils.process.subprocess.run"):
+    with caplog.at_level(logging.DEBUG), \
+         patch("shutil.which", return_value="/bin/echo"), \
+         patch("pyacemaker.utils.process.subprocess.run"):
         run_command(cmd)
 
     assert "[TRUNCATED]" in caplog.text
@@ -77,6 +82,7 @@ def test_run_command_called_process_error(caplog):
     error = subprocess.CalledProcessError(1, cmd, stderr="Command failed")
 
     with (
+        patch("shutil.which", return_value="/bin/false"),
         patch("pyacemaker.utils.process.subprocess.run", side_effect=error),
         pytest.raises(subprocess.CalledProcessError),
     ):
@@ -88,14 +94,16 @@ def test_run_command_called_process_error(caplog):
 
 
 def test_run_command_file_not_found_error(caplog):
-    """Test that FileNotFoundError is caught, logged, and re-raised."""
+    """Test that FileNotFoundError is raised when command is not in PATH."""
     cmd = ["nonexistent_command"]
-    error = FileNotFoundError("No such file or directory")
 
     with (
-        patch("pyacemaker.utils.process.subprocess.run", side_effect=error),
-        pytest.raises(FileNotFoundError),
+        patch("shutil.which", return_value=None),
+        pytest.raises(FileNotFoundError, match="Command not found or not executable")
     ):
         run_command(cmd)
 
-    assert "Executable not found: nonexistent_command" in caplog.text
+def test_run_command_empty_cmd():
+    """Test that empty command raises ValueError."""
+    with pytest.raises(ValueError, match="Command list cannot be empty"):
+        run_command([])

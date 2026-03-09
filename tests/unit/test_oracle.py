@@ -34,8 +34,10 @@ def test_dft_manager_compute_success(mock_dft_config: DFTConfig) -> None:
     """Test successful computation using dependency injection."""
     atoms = Atoms("H", cell=[10, 10, 10], pbc=True)
 
+    from pyacemaker.interfaces.qe_driver import QEDriver
+
     # Create Mock Driver
-    mock_driver = MagicMock()
+    mock_driver = MagicMock(spec=QEDriver)
     # Mock returns a calculator instance
     calc = MockCalculator(fail_count=0)
     mock_driver.get_calculator.return_value = calc
@@ -59,8 +61,10 @@ def test_dft_manager_self_healing(mock_dft_config: DFTConfig) -> None:
     """Test self-healing mechanism."""
     atoms = Atoms("H", cell=[10, 10, 10], pbc=True)
 
-    # Mock Driver
-    mock_driver = MagicMock()
+    from pyacemaker.interfaces.qe_driver import QEDriver
+
+    # Create Mock Driver
+    mock_driver = MagicMock(spec=QEDriver)
 
     # The calculator needs to fail first, then succeed.
     calc_fail = MockCalculator(fail_count=1)  # Fails once (attempt 1)
@@ -99,9 +103,11 @@ def test_dft_manager_self_healing(mock_dft_config: DFTConfig) -> None:
 
 def test_dft_manager_fatal_error(mock_dft_config: DFTConfig) -> None:
     """Test fatal error after exhausting retries."""
+    from pyacemaker.interfaces.qe_driver import QEDriver
+
     atoms = Atoms("H", cell=[10, 10, 10], pbc=True)
 
-    mock_driver = MagicMock()
+    mock_driver = MagicMock(spec=QEDriver)
     # Always fail
     mock_driver.get_calculator.return_value = MockCalculator(fail_count=100)
 
@@ -119,9 +125,11 @@ def test_dft_manager_fatal_error(mock_dft_config: DFTConfig) -> None:
 
 def test_dft_manager_setup_error(mock_dft_config: DFTConfig) -> None:
     """Test handling of CalculatorSetupError."""
+    from pyacemaker.interfaces.qe_driver import QEDriver
+
     atoms = Atoms("H", cell=[10, 10, 10], pbc=True)
 
-    mock_driver = MagicMock()
+    mock_driver = MagicMock(spec=QEDriver)
     # Fails with setup error (e.g. missing pseudo file)
     mock_driver.get_calculator.return_value = MockCalculator(setup_error=True)
 
@@ -209,9 +217,10 @@ def test_dft_manager_embedding(mock_dft_config: DFTConfig, monkeypatch: pytest.M
     mock_embed.return_value = embedded_atoms
 
     monkeypatch.setattr("pyacemaker.core.oracle.embed_cluster", mock_embed)
+    from pyacemaker.interfaces.qe_driver import QEDriver
 
     # Mock Driver
-    mock_driver = MagicMock()
+    mock_driver = MagicMock(spec=QEDriver)
     mock_driver.get_calculator.return_value = MockCalculator(fail_count=0)
 
     manager = DFTManager(mock_dft_config, driver=mock_driver)

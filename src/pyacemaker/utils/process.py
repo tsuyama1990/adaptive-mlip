@@ -33,6 +33,18 @@ def run_command(
     # This covers paths, simple options, and numbers.
     # Special characters (like &, ;, |, $) which are dangerous in shells are rejected.
     import re
+    import shutil
+
+    # Check if command exists and has execute permissions
+    if not cmd:
+        msg = "Command list cannot be empty."
+        raise ValueError(msg)
+
+    executable = cmd[0]
+    if not shutil.which(executable):
+        msg = f"Command not found or not executable: {executable}"
+        raise FileNotFoundError(msg)
+
     # More permissive regex for typical file paths and CLI args, but blocking shell metachars
     # Allowing spaces in paths is tricky but " " is safe if not parsed by shell.
     # However, since shell=False, the main risk is the command itself being malicious if arguments are passed to a sub-shell.

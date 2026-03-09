@@ -70,7 +70,15 @@ def create_dummy_pseudopotentials(path: Path | str, elements: list[str]) -> None
         base_path.mkdir(parents=True, exist_ok=True)
         for el in elements:
             file_path = base_path / f"{el}.UPF"
-            file_path.touch()
+            # Write a minimal valid UPF header instead of an empty file
+            # This ensures that architectural validation layers evaluating UPF format
+            # during setup/parsing don't fail unexpectedly.
+            upf_content = f"""<UPF version="2.0.1">
+  <PP_INFO>
+    Dummy pseudopotential for {el}
+  </PP_INFO>
+</UPF>"""
+            file_path.write_text(upf_content)
     except OSError as e:
         msg = f"Failed to create dummy pseudopotential files at {path}"
         raise OSError(msg) from e

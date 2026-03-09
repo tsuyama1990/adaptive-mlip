@@ -1,5 +1,4 @@
 import re
-
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, PositiveFloat, field_validator
@@ -70,7 +69,9 @@ class DFTConfig(BaseModel):
         """
         MAX_FILENAME_LENGTH = 255
         # Restrict to alphanumeric, underscore, and dots to prevent injection attacks (remove + and -).
-        SAFE_FILENAME_PATTERN = re.compile(r"^[a-zA-Z0-9_\.]+$")
+        # We explicitly require that between any dots there is an alphanumeric/underscore char,
+        # preventing '..' directly within the regex.
+        SAFE_FILENAME_PATTERN = re.compile(r"^[a-zA-Z0-9_]+(\.[a-zA-Z0-9_]+)*$")
 
         for elem, filename in v.items():
             if not filename or not filename.strip():
@@ -83,10 +84,6 @@ class DFTConfig(BaseModel):
 
             if not SAFE_FILENAME_PATTERN.match(filename):
                 msg = f"Pseudopotential filename for {elem} contains invalid characters or directory separators: {filename}"
-                raise ValueError(msg)
-
-            if ".." in filename or "/" in filename or "\\" in filename:
-                msg = f"Directory traversal is forbidden for pseudopotentials: {filename}"
                 raise ValueError(msg)
 
         return v
