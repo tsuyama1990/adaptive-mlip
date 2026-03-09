@@ -4,6 +4,7 @@ from pathlib import Path
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from pyacemaker.domain_models.constants import DEFAULT_EON_EXECUTABLE, DEFAULT_EON_SEED
+from pyacemaker.domain_models.defaults import MAX_EON_TEMPERATURE
 from pyacemaker.utils.path import validate_path_safe
 
 
@@ -20,7 +21,9 @@ class EONConfig(BaseModel):
     potential_path: Path = Field(..., description="Path to the potential file")
 
     # Audit Fix: Add upper bound for temperature
-    temperature: float = Field(300.0, gt=0.0, le=10000.0, description="Temperature in Kelvin")
+    temperature: float = Field(
+        300.0, gt=0.0, le=MAX_EON_TEMPERATURE, description="Temperature in Kelvin"
+    )
 
     akmc_steps: int = Field(100, ge=1, description="Number of aKMC steps to run")
     supercell: list[int] = Field(
