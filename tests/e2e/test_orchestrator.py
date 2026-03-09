@@ -73,7 +73,7 @@ class FakeTrainer(BaseTrainer):
 
 
 class FakeEngine(BaseEngine):
-    def run(self, structure: Atoms | None, potential: Any) -> MDSimulationResult:
+    def run(self, structure: Atoms | None, potential: Any, **kwargs: Any) -> MDSimulationResult:
         return MDSimulationResult(
             energy=-10.0,
             forces=[[0.0, 0.0, 0.0]],

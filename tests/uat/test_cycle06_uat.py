@@ -128,6 +128,15 @@ def test_scenario_06_01_active_learning_campaign(uat_config: PyAceConfig, tmp_pa
         mock_gen.generate_local.return_value = iter([Atoms("Fe")])
         mock_selector.select.return_value = iter([Atoms("Fe")])
 
+        # We also mock incremental_train since that's what's called now for refinements
+        mock_trainer.incremental_train = MagicMock(return_value=pot2)
+
+        # Add dummy cutout config that tests fail because of missing config
+        from pyacemaker.domain_models.workflow import CutoutConfig
+        uat_config.workflow.cutout = CutoutConfig(
+            core_radius=4.0, buffer_radius=3.0, enable_pre_relaxation=False, enable_passivation=False
+        )
+
         # Run Orchestrator
         orch = Orchestrator(uat_config)
         orch.run()
@@ -137,7 +146,8 @@ def test_scenario_06_01_active_learning_campaign(uat_config: PyAceConfig, tmp_pa
         assert orch.loop_state.iteration == 2
         # Check calls
         assert mock_engine.run.call_count == 2
-        assert mock_trainer.train.call_count >= 2
+        assert mock_trainer.train.call_count >= 1 # at least cold start train
+        assert mock_trainer.incremental_train.call_count >= 1 # refine train
 
 
 def test_scenario_06_02_resume_capability(uat_config: PyAceConfig, tmp_path: Path) -> None:

@@ -26,6 +26,9 @@ class MockPolicy(SafeBasePolicy):
         n_structures: int = 1,
         engine: Any | None = None,
         potential: str | Path | None = None,
+        thresholds: Any | None = None,
+        cutout_config: Any | None = None,
+        loop_strategy: Any | None = None,
     ) -> Iterator[Atoms]:
         for _ in range(n_structures):
             a = base_structure.copy() # type: ignore[no-untyped-call]

@@ -100,6 +100,12 @@ def test_orchestrator_refinement_logic(tmp_path: Path) -> None:
         logging=LoggingConfig(level="DEBUG"),
     )
 
+    # Add dummy cutout config that tests fail because of missing config
+    from pyacemaker.domain_models.workflow import CutoutConfig
+    config.workflow.cutout = CutoutConfig(
+        core_radius=4.0, buffer_radius=3.0, enable_pre_relaxation=False, enable_passivation=False
+    )
+
     # 2. Setup Orchestrator
     orch = Orchestrator(config)
 
@@ -130,6 +136,9 @@ def test_orchestrator_refinement_logic(tmp_path: Path) -> None:
     orch.oracle = FakeOracle()
     refined_pot = tmp_path / "refined.yace"
     orch.trainer = FakeTrainer(refined_pot)
+    # mock incremental_train with a mock that returns the path instead of failing
+    from unittest.mock import MagicMock
+    orch.trainer.incremental_train = MagicMock(return_value=refined_pot)
 
     # 5. Create Simulation Result
     result = MDSimulationResult(
@@ -185,6 +194,11 @@ def test_orchestrator_refinement_extraction_failure(tmp_path: Path, caplog: Any)
         ),
         logging=LoggingConfig(level="DEBUG"),
     )
+
+    from pyacemaker.domain_models.workflow import CutoutConfig
+    config.workflow.cutout = CutoutConfig(
+        core_radius=4.0, buffer_radius=3.0, enable_pre_relaxation=False, enable_passivation=False
+    )
     orch = Orchestrator(config)
 
     # Inject modules
@@ -211,13 +225,13 @@ def test_orchestrator_refinement_extraction_failure(tmp_path: Path, caplog: Any)
     )
 
     with pytest.MonkeyPatch.context() as m:
-        # Patch extract_local_region to raise exception
+        # Patch extract_intelligent_cluster to raise exception
         def mock_fail(*args: Any, **kwargs: Any) -> None:
             msg = "Boom"
             raise ValueError(msg)
 
         # Need to patch where it is IMPORTED in orchestrator.py
-        m.setattr("pyacemaker.orchestrator.extract_local_region", mock_fail)
+        m.setattr("pyacemaker.orchestrator.extract_intelligent_cluster", mock_fail)
 
         new_pot = orch._refine_potential(result, Path("p"), {})
 
