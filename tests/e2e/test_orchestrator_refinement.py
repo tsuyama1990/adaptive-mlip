@@ -29,7 +29,8 @@ class FakeGenerator(BaseGenerator):
         pass
 
     def generate(self, n_candidates: int) -> Iterator[Atoms]:
-        yield from []
+        for _ in range(n_candidates):
+            yield Atoms("H", positions=[[0, 0, 0]])
 
     def generate_local(
         self, base_structure: Atoms, n_candidates: int, **kwargs: Any

@@ -1,5 +1,9 @@
 import logging
+import os
+import re
+import shutil
 import subprocess
+import sys
 
 logger = logging.getLogger(__name__)
 
@@ -32,8 +36,6 @@ def run_command(
     # We allow alphanumeric, dot, dash, underscore, slash, equal, comma, colon.
     # This covers paths, simple options, and numbers.
     # Special characters (like &, ;, |, $) which are dangerous in shells are rejected.
-    import re
-    import shutil
 
     # Check if command exists and has execute permissions
     if not cmd:
@@ -41,21 +43,33 @@ def run_command(
         raise ValueError(msg)
 
     executable = cmd[0]
-    if not shutil.which(executable):
+    full_path = shutil.which(executable)
+    if not full_path or not os.access(full_path, os.X_OK):
         msg = f"Command not found or not executable: {executable}"
         raise FileNotFoundError(msg)
 
-    # More permissive regex for typical file paths and CLI args, but blocking shell metachars
-    # Allowing spaces in paths is tricky but " " is safe if not parsed by shell.
-    # However, since shell=False, the main risk is the command itself being malicious if arguments are passed to a sub-shell.
-    # But here we just want to ensure "integrity" of arguments.
+    # Add additional validation to ensure the executable is in a trusted directory.
+    # We resolve the real path to prevent symlink traversal to untrusted locations.
+    real_path = os.path.realpath(full_path)
+    from pathlib import Path
+    trusted_dirs = [
+        "/bin", "/usr/bin", "/usr/local/bin", "/opt/conda/bin",
+        str(Path("~/.local/bin").expanduser()), str(Path("~/.cargo/bin").expanduser()),
+        # Allow current virtual environment bin directory
+        str(Path(sys.executable).parent) if hasattr(sys, 'executable') else ""
+    ]
+    # Check if the executable is within one of the trusted directories
+    is_trusted = any(real_path.startswith(os.path.realpath(td) + os.sep) for td in trusted_dirs if td)
+    if not is_trusted:
+        msg = f"Executable is not in a trusted directory: {real_path}"
+        raise PermissionError(msg)
 
-    # Check for dangerous shell characters even if shell=False, as a defense-in-depth measure.
-    # This prevents arguments that might be interpreted by the executed program in a dangerous way.
-    dangerous_chars = re.compile(r"[;&|`$]")
+    # Comprehensive allowlist approach for argument characters.
+    # We only allow alphanumeric characters and a strict set of safe punctuation.
+    allowed_pattern = re.compile(r"^[a-zA-Z0-9_./\-+:=,@]+$")
     for arg in cmd:
-        if dangerous_chars.search(arg):
-            msg = f"Argument contains potentially dangerous characters: {arg}"
+        if not allowed_pattern.match(arg):
+            msg = f"Argument contains non-allowlisted characters: {arg}"
             raise ValueError(msg)
 
     # Mask potentially sensitive arguments (basic heuristic)

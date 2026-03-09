@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
@@ -48,9 +49,13 @@ def test_uat_02_01_single_point_calculation(
 
     # Use dependency injection instead of monkeypatching
     mock_driver_instance = MagicMock(spec=QEDriver)
-    mock_driver_instance.get_calculator.side_effect = lambda atoms, config, **kwargs: (
-        MockCalculator(fail_count=0, test_energy=TEST_ENERGY_H2O)
-    )
+
+    def mock_get_calc(atoms: Atoms, config: DFTConfig, **kwargs: Any) -> MockCalculator:
+        calc = MockCalculator(fail_count=0, test_energy=TEST_ENERGY_H2O)
+        calc.directory = kwargs.get("directory", ".")
+        return calc
+
+    mock_driver_instance.get_calculator.side_effect = mock_get_calc
 
     manager = DFTManager(uat_dft_config, driver=mock_driver_instance)
 
@@ -82,7 +87,16 @@ def test_uat_02_02_self_healing(
     calc_fail = MockCalculator(fail_count=1, test_energy=TEST_ENERGY_H2O)
     calc_success = MockCalculator(fail_count=0, test_energy=TEST_ENERGY_H2O)
 
-    mock_driver_instance.get_calculator.side_effect = [calc_fail, calc_success]
+    def mock_get_calc(atoms: Atoms, config: DFTConfig, **kwargs: Any) -> MockCalculator:
+        # Use a list attribute to track calls and return different calculators
+        if not hasattr(mock_get_calc, "calls"):
+            mock_get_calc.calls = 0  # type: ignore[attr-defined]
+        calc = [calc_fail, calc_success][mock_get_calc.calls]  # type: ignore[attr-defined]
+        calc.directory = kwargs.get("directory", ".")
+        mock_get_calc.calls += 1  # type: ignore[attr-defined]
+        return calc
+
+    mock_driver_instance.get_calculator.side_effect = mock_get_calc
 
     manager = DFTManager(uat_dft_config, driver=mock_driver_instance)
 

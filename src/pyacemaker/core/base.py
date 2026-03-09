@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from pathlib import Path
 from typing import Any
 
@@ -104,7 +104,7 @@ class BaseOracle(ABC):
     """
 
     @abstractmethod
-    def compute(self, structures: Iterator[Atoms], batch_size: int = 10) -> Iterator[Atoms]:
+    def compute(self, structures: Iterable[Atoms], batch_size: int = 10) -> Iterator[Atoms]:
         """
         Computes properties (energy, forces, stress) for the given structures.
 

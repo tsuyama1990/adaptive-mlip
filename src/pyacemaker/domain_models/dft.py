@@ -16,7 +16,7 @@ from pyacemaker.domain_models.defaults import (
 class DFTConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    code: Literal["qe", "vasp", "quantum_espresso"] = Field(..., description="DFT code to use")
+    code: Literal["qe", "vasp"] = Field(..., description="DFT code to use")
     functional: Literal["PBE", "LDA", "B3LYP", "optB88-vdW", "SCAN"] = Field(..., description="Exchange-correlation functional")
     kpoints_density: PositiveFloat = Field(..., description="K-points density in 1/Angstrom")
     encut: PositiveFloat = Field(..., description="Energy cutoff in eV")
@@ -67,11 +67,12 @@ class DFTConfig(BaseModel):
         Validates that pseudopotential values are strict, sanitized filenames
         without any directory traversal or path separators.
         """
+        from pathlib import Path
+
         MAX_FILENAME_LENGTH = 255
-        # Restrict to alphanumeric, underscore, and dots to prevent injection attacks (remove + and -).
-        # We explicitly require that between any dots there is an alphanumeric/underscore char,
-        # preventing '..' directly within the regex.
-        SAFE_FILENAME_PATTERN = re.compile(r"^[a-zA-Z0-9_]+(\.[a-zA-Z0-9_]+)*$")
+        # Restrict to alphanumeric, underscore, minus, plus, and dots to prevent injection attacks.
+        # We explicitly require that between any dots there is an allowed char, preventing '..'.
+        SAFE_FILENAME_PATTERN = re.compile(r"^[a-zA-Z0-9_\-\+]+(\.[a-zA-Z0-9_\-\+]+)*$")
 
         for elem, filename in v.items():
             if not filename or not filename.strip():
@@ -82,8 +83,13 @@ class DFTConfig(BaseModel):
                 msg = f"Pseudopotential filename for {elem} exceeds maximum length of {MAX_FILENAME_LENGTH}"
                 raise ValueError(msg)
 
-            if not SAFE_FILENAME_PATTERN.match(filename):
-                msg = f"Pseudopotential filename for {elem} contains invalid characters or directory separators: {filename}"
+            base_name = Path(filename).name
+            if base_name != filename:
+                msg = f"Pseudopotential filename for {elem} must not contain path separators: {filename}"
+                raise ValueError(msg)
+
+            if not SAFE_FILENAME_PATTERN.match(base_name):
+                msg = f"Pseudopotential filename for {elem} contains invalid characters or consecutive dots: {filename}"
                 raise ValueError(msg)
 
         return v

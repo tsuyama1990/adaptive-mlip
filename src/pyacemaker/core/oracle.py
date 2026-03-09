@@ -1,7 +1,7 @@
 import contextlib
 import logging
 import tempfile
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterable, Iterator
 from pathlib import Path
 
 import numpy as np
@@ -11,7 +11,7 @@ from ase.calculators.calculator import PropertyNotImplementedError
 from pyacemaker.core.base import BaseOracle
 from pyacemaker.core.exceptions import OracleError
 from pyacemaker.domain_models import DFTConfig
-from pyacemaker.domain_models.constants import ERR_ORACLE_FAILED, ERR_ORACLE_ITERATOR
+from pyacemaker.domain_models.constants import ERR_ORACLE_FAILED
 from pyacemaker.domain_models.workflow import ActiveLearningThresholds
 from pyacemaker.interfaces.qe_driver import QEDriver
 from pyacemaker.utils.embedding import embed_cluster
@@ -48,17 +48,11 @@ class DFTManager(BaseOracle):
             self._strategy_use_cg,
         ]
 
-    def compute(self, structures: Iterator[Atoms], batch_size: int = 10) -> Iterator[Atoms]:
+    def compute(self, structures: Iterable[Atoms], batch_size: int = 10) -> Iterator[Atoms]:
         """
         Computes DFT properties for stream of structures.
         """
-        if isinstance(structures, (list, tuple)):
-            raise TypeError(ERR_ORACLE_ITERATOR.format(type=type(structures)))
-
-        if not isinstance(structures, Iterator):
-            raise TypeError(ERR_ORACLE_ITERATOR.format(type=type(structures)))
-
-        return self._compute_generator(structures, batch_size)
+        return self._compute_generator(iter(structures), batch_size)
 
     def _compute_generator(self, structures: Iterator[Atoms], batch_size: int) -> Iterator[Atoms]:
         """Internal generator for streaming computations processing one-by-one without batch lists."""
@@ -188,11 +182,8 @@ class MACEManager(BaseOracle):
         # Mock MACE initialization
         self.is_initialized = True
 
-    def compute(self, structures: Iterator[Atoms], batch_size: int = 10) -> Iterator[Atoms]:
-        if not isinstance(structures, Iterator):
-            raise TypeError(ERR_ORACLE_ITERATOR.format(type=type(structures)))
-
-        return self._compute_generator(structures, batch_size)
+    def compute(self, structures: Iterable[Atoms], batch_size: int = 10) -> Iterator[Atoms]:
+        return self._compute_generator(iter(structures), batch_size)
 
     def _compute_generator(self, structures: Iterator[Atoms], batch_size: int) -> Iterator[Atoms]:
         for atoms in structures:
@@ -239,11 +230,8 @@ class TieredOracle(BaseOracle):
         self.dft = dft_manager
         self.thresholds = thresholds
 
-    def compute(self, structures: Iterator[Atoms], batch_size: int = 10) -> Iterator[Atoms]:
-        if not isinstance(structures, Iterator):
-            raise TypeError(ERR_ORACLE_ITERATOR.format(type=type(structures)))
-
-        return self._compute_generator(structures, batch_size)
+    def compute(self, structures: Iterable[Atoms], batch_size: int = 10) -> Iterator[Atoms]:
+        return self._compute_generator(iter(structures), batch_size)
 
     def _compute_generator(self, structures: Iterator[Atoms], batch_size: int) -> Iterator[Atoms]:
         for atoms in structures:

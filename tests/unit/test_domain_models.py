@@ -74,7 +74,7 @@ def test_dft_config_valid(
     create_dummy_pseudopotentials(dummy_pseudopotentials_dir, ["Fe"])
 
     config = DFTConfig(
-        code="quantum_espresso",
+        code="qe",
         functional="PBE",
         kpoints_density=0.04,
         encut=500.0,

@@ -62,13 +62,12 @@ class TestElasticCalculator:
             nonlocal call_count
             stress = np.zeros(6)
             if call_count < calculator.steps:
-                # Normal strain in xx direction
                 idx = call_count
                 eps = strains[idx]
                 stress[0] = C11_bar * eps
                 stress[1] = C12_bar * eps
+                stress[2] = C12_bar * eps
             else:
-                # Shear strain
                 idx = call_count - calculator.steps
                 eps = strains[idx]
                 stress[5] = C44_bar * eps

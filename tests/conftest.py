@@ -8,7 +8,7 @@ from unittest.mock import MagicMock
 import numpy as np
 import pytest
 from ase import Atoms
-from ase.calculators.calculator import Calculator, CalculatorSetupError
+from ase.calculators.calculator import CalculatorSetupError
 
 from pyacemaker.domain_models import (
     DFTConfig,
@@ -134,7 +134,7 @@ def mock_md_config() -> MDConfig:
     )
 
 
-class MockCalculator(Calculator):
+class MockCalculator:
     """
     Mock ASE calculator for testing purposes.
     Can simulate failures and setup errors.
@@ -154,6 +154,7 @@ class MockCalculator(Calculator):
     attempts: int
     test_energy: float
     results: dict[Any, Any]
+    parameters: dict[Any, Any]
 
     def __init__(
         self, fail_count: int = 0, setup_error: bool = False, test_energy: float | None = None
@@ -166,13 +167,32 @@ class MockCalculator(Calculator):
             setup_error: Whether the calculator should fail during setup (`calculate()`).
             test_energy: The energy value returned upon successful calculation.
         """
-        super().__init__()  # type: ignore[no-untyped-call]
         self.implemented_properties = ["energy", "forces", "stress"]
         self.fail_count = fail_count
         self.setup_error = setup_error
         self.attempts = 0
         self.test_energy = test_energy if test_energy is not None else TEST_ENERGY_GENERIC
         self.results = {}
+        self.parameters = {}
+        self.name = "mock"
+
+    def get_potential_energy(self, atoms: Atoms | None = None) -> float:
+        """Mock method for getting potential energy."""
+        if not hasattr(self, "results") or "energy" not in self.results:
+            self.calculate(atoms)
+        return self.results.get("energy", 0.0)
+
+    def get_forces(self, atoms: Atoms | None = None) -> np.ndarray:
+        """Mock method for getting forces."""
+        if not hasattr(self, "results") or "forces" not in self.results:
+            self.calculate(atoms)
+        return self.results.get("forces", np.zeros((1, 3)))
+
+    def get_stress(self, atoms: Atoms | None = None) -> np.ndarray:
+        """Mock method for getting stress."""
+        if not hasattr(self, "results") or "stress" not in self.results:
+            self.calculate(atoms)
+        return self.results.get("stress", np.zeros(6))
 
     def calculate(
         self,

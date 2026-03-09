@@ -177,17 +177,24 @@ def test_dft_manager_strategies(mock_dft_config: DFTConfig) -> None:
     assert config_copy.diagonalization == "cg"
 
 
-def test_dft_manager_invalid_input(mock_dft_config: DFTConfig) -> None:
-    """Test compute raises TypeError for non-iterator input."""
-    manager = DFTManager(mock_dft_config)
-    atoms_list = [Atoms("H")]
+def test_dft_manager_list_input(mock_dft_config: DFTConfig) -> None:
+    """Test compute accepts list inputs gracefully by converting them to iterators."""
+    atoms = Atoms("H", cell=[10, 10, 10], pbc=True)
 
-    # Check that it raises TypeError immediately upon calling compute (before next)
-    with pytest.raises(TypeError, match="Oracle failed to create iterator"):
-        manager.compute(atoms_list)  # type: ignore[arg-type]
+    from pyacemaker.interfaces.qe_driver import QEDriver
+    mock_driver = MagicMock(spec=QEDriver)
+    mock_driver.get_calculator.return_value = MockCalculator(fail_count=0)
 
-    # Explicitly check None
-    with pytest.raises(TypeError, match="Oracle failed to create iterator"):
+    manager = DFTManager(mock_dft_config, driver=mock_driver)
+    atoms_list = [atoms]
+
+    # Check that it works with list input
+    generator = manager.compute(atoms_list)
+    result = next(generator)
+    assert result.get_potential_energy() == TEST_ENERGY_GENERIC  # type: ignore[no-untyped-call]
+
+    # Explicitly check None fails gracefully (TypeError from Python's iter())
+    with pytest.raises(TypeError):
         manager.compute(None)  # type: ignore[arg-type]
 
 

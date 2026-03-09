@@ -9,7 +9,9 @@ from pyacemaker.utils.process import run_command
 
 def test_run_command_success():
     """Test successful command execution."""
-    with patch("shutil.which", return_value="/bin/echo"), \
+    with patch("pyacemaker.utils.process.shutil.which", return_value="/bin/echo"), \
+         patch("pyacemaker.utils.process.os.access", return_value=True), \
+         patch("pyacemaker.utils.process.os.path.realpath", side_effect=lambda p: p), \
          patch("pyacemaker.utils.process.subprocess.run") as mock_run:
         mock_result = MagicMock()
         mock_run.return_value = mock_result
@@ -38,12 +40,16 @@ def test_run_command_dangerous_characters():
         ["rm", "-rf", "/&&echo"],
         ["cat", "file||die"],
         ["echo", "$(ls)"],
+        ["echo", "foo\nbar"], # newline
+        ["echo", "\x00"], # null byte
     ]
 
-    with patch("shutil.which", return_value="/bin/echo"), \
+    with patch("pyacemaker.utils.process.shutil.which", return_value="/bin/echo"), \
+         patch("pyacemaker.utils.process.os.access", return_value=True), \
+         patch("pyacemaker.utils.process.os.path.realpath", side_effect=lambda p: p), \
          patch("pyacemaker.utils.process.subprocess.run") as mock_run:
         for cmd in dangerous_cmds:
-            with pytest.raises(ValueError, match="Argument contains potentially dangerous characters"):
+            with pytest.raises(ValueError, match="Argument contains non-allowlisted characters"):
                 run_command(cmd)
 
         # Verify that subprocess.run was never actually called
@@ -51,7 +57,9 @@ def test_run_command_dangerous_characters():
 
 def test_run_command_shell_true():
     """Test that run_command properly prevents passing shell=True if somehow attempted."""
-    with patch("shutil.which", return_value="/bin/echo"), \
+    with patch("pyacemaker.utils.process.shutil.which", return_value="/bin/echo"), \
+         patch("pyacemaker.utils.process.os.access", return_value=True), \
+         patch("pyacemaker.utils.process.os.path.realpath", side_effect=lambda p: p), \
          patch("pyacemaker.utils.process.subprocess.run") as mock_run:
         # Since run_command doesn't accept shell as a kwarg, it always passes shell=False
         # But if someone tries to hack the cmd array itself with shell constructs
@@ -67,7 +75,9 @@ def test_run_command_long_arguments(caplog):
     cmd = ["echo", long_arg]
 
     with caplog.at_level(logging.DEBUG), \
-         patch("shutil.which", return_value="/bin/echo"), \
+         patch("pyacemaker.utils.process.shutil.which", return_value="/bin/echo"), \
+         patch("pyacemaker.utils.process.os.access", return_value=True), \
+         patch("pyacemaker.utils.process.os.path.realpath", side_effect=lambda p: p), \
          patch("pyacemaker.utils.process.subprocess.run"):
         run_command(cmd)
 
@@ -82,7 +92,9 @@ def test_run_command_called_process_error(caplog):
     error = subprocess.CalledProcessError(1, cmd, stderr="Command failed")
 
     with (
-        patch("shutil.which", return_value="/bin/false"),
+        patch("pyacemaker.utils.process.shutil.which", return_value="/bin/false"),
+        patch("pyacemaker.utils.process.os.access", return_value=True),
+        patch("pyacemaker.utils.process.os.path.realpath", side_effect=lambda p: p),
         patch("pyacemaker.utils.process.subprocess.run", side_effect=error),
         pytest.raises(subprocess.CalledProcessError),
     ):
@@ -98,7 +110,7 @@ def test_run_command_file_not_found_error(caplog):
     cmd = ["nonexistent_command"]
 
     with (
-        patch("shutil.which", return_value=None),
+        patch("pyacemaker.utils.process.shutil.which", return_value=None),
         pytest.raises(FileNotFoundError, match="Command not found or not executable")
     ):
         run_command(cmd)
@@ -107,3 +119,15 @@ def test_run_command_empty_cmd():
     """Test that empty command raises ValueError."""
     with pytest.raises(ValueError, match="Command list cannot be empty"):
         run_command([])
+
+def test_run_command_untrusted_dir():
+    """Test that PermissionError is raised when command is not in trusted dir."""
+    cmd = ["/opt/malicious/script.sh"]
+
+    with (
+        patch("pyacemaker.utils.process.shutil.which", return_value="/opt/malicious/script.sh"),
+        patch("pyacemaker.utils.process.os.access", return_value=True),
+        patch("pyacemaker.utils.process.os.path.realpath", side_effect=lambda p: p),
+        pytest.raises(PermissionError, match="Executable is not in a trusted directory")
+    ):
+        run_command(cmd)
