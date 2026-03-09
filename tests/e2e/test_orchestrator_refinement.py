@@ -52,10 +52,18 @@ class FakeOracle(BaseOracle):
 class FakeTrainer(BaseTrainer):
     def __init__(self, output_path: Path) -> None:
         self.output_path = output_path
+        self.incremental_train_called_with = None
 
     def train(
         self, training_data_path: str | Path, initial_potential: str | Path | None = None
     ) -> Any:
+        self.output_path.touch()
+        return self.output_path
+
+    def incremental_train(
+        self, new_data_path: str | Path, strategy_config: Any, initial_potential: str | Path | None = None
+    ) -> Any:
+        self.incremental_train_called_with = (new_data_path, strategy_config, initial_potential)
         self.output_path.touch()
         return self.output_path
 
@@ -136,12 +144,6 @@ def test_orchestrator_refinement_logic(tmp_path: Path) -> None:
     orch.oracle = FakeOracle()
     refined_pot = tmp_path / "refined.yace"
     orch.trainer = FakeTrainer(refined_pot)
-    # mock incremental_train with a mock that returns the path instead of failing
-    from unittest.mock import MagicMock
-
-    # We use MagicMock here to avoid dependency on actual Pacemaker execution during testing.
-    # The incremental_train method is mocked to simply return the expected path.
-    orch.trainer.incremental_train = MagicMock(return_value=refined_pot) # type: ignore[assignment]
 
     # 5. Create Simulation Result
     result = MDSimulationResult(
@@ -162,6 +164,14 @@ def test_orchestrator_refinement_logic(tmp_path: Path) -> None:
     new_pot = orch._refine_potential(result, Path("old.yace"), paths)
 
     assert new_pot == refined_pot
+
+    # Verify incremental_train was called with expected arguments
+    assert orch.trainer.incremental_train_called_with is not None  # type: ignore[attr-defined]
+    called_dataset, called_strategy, called_initial = orch.trainer.incremental_train_called_with  # type: ignore[attr-defined]
+    assert called_initial == "old.yace"
+    # Note: Depending on ASE's extxyz write, the orchestrator might use .xyz or .extxyz internally
+    assert called_dataset.endswith(".xyz") or called_dataset.endswith(".extxyz")
+    assert "training_data" in called_dataset
 
     # Check if training data was written
     # Orchestrator uses FILENAME_TRAINING constant.

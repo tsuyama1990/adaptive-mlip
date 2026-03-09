@@ -17,7 +17,7 @@ def mock_dft_config(dummy_pseudopotentials_dir: Path, monkeypatch: pytest.Monkey
     create_dummy_pseudopotentials(dummy_pseudopotentials_dir, ["H"])
 
     return DFTConfig(
-        code="pw.x",
+        code="qe",
         functional="PBE",
         kpoints_density=0.04,
         encut=500.0,
@@ -112,7 +112,7 @@ def test_qe_driver_invalid_input(mock_dft_config: DFTConfig) -> None:
             atoms,
             DFTConfig(
                 pseudopotentials={},
-                code="pw.x",
+                code="qe",
                 encut=100.0,
                 kpoints_density=0.04,
                 functional="PBE",

@@ -82,7 +82,7 @@ def mock_dft_config(dummy_pseudopotentials_dir: Path, monkeypatch: Any) -> DFTCo
     create_dummy_pseudopotentials(dummy_pseudopotentials_dir, ["H", "O", "Fe"])
 
     return DFTConfig(
-        code="pw.x",
+        code="qe",
         functional="PBE",
         kpoints_density=0.04,
         encut=500.0,

@@ -1,5 +1,7 @@
 import re
 
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict, Field, PositiveFloat, field_validator
 
 from pyacemaker.domain_models.defaults import (
@@ -15,8 +17,8 @@ from pyacemaker.domain_models.defaults import (
 class DFTConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    code: str = Field(..., description="DFT code to use")
-    functional: str = Field(..., description="Exchange-correlation functional")
+    code: Literal["qe", "vasp", "quantum_espresso"] = Field(..., description="DFT code to use")
+    functional: Literal["PBE", "LDA", "B3LYP", "optB88-vdW", "SCAN"] = Field(..., description="Exchange-correlation functional")
     kpoints_density: PositiveFloat = Field(..., description="K-points density in 1/Angstrom")
     encut: PositiveFloat = Field(..., description="Energy cutoff in eV")
 
@@ -67,8 +69,8 @@ class DFTConfig(BaseModel):
         without any directory traversal or path separators.
         """
         MAX_FILENAME_LENGTH = 255
-        # Allow dots for file extensions, but prevent path traversal using directory separators or double dots.
-        SAFE_FILENAME_PATTERN = re.compile(r"^[a-zA-Z0-9_\-\+\.]+$")
+        # Restrict to alphanumeric, underscore, and dots to prevent injection attacks (remove + and -).
+        SAFE_FILENAME_PATTERN = re.compile(r"^[a-zA-Z0-9_\.]+$")
 
         for elem, filename in v.items():
             if not filename or not filename.strip():

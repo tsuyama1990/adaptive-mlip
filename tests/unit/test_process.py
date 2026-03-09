@@ -34,6 +34,9 @@ def test_run_command_dangerous_characters():
         ["cat", "file|"],
         ["echo", "`ls`"],
         ["echo", "$USER"],
+        ["rm", "-rf", "/&&echo"],
+        ["cat", "file||die"],
+        ["echo", "$(ls)"],
     ]
 
     with patch("pyacemaker.utils.process.subprocess.run") as mock_run:
@@ -43,6 +46,16 @@ def test_run_command_dangerous_characters():
 
         # Verify that subprocess.run was never actually called
         mock_run.assert_not_called()
+
+def test_run_command_shell_true():
+    """Test that run_command properly prevents passing shell=True if somehow attempted."""
+    with patch("pyacemaker.utils.process.subprocess.run") as mock_run:
+        # Since run_command doesn't accept shell as a kwarg, it always passes shell=False
+        # But if someone tries to hack the cmd array itself with shell constructs
+        # the dangerous_characters check should catch it or the assert will prove shell=False.
+        run_command(["echo", "hello"])
+        mock_run.assert_called_once()
+        assert mock_run.call_args.kwargs.get("shell") is False
 
 
 def test_run_command_long_arguments(caplog):
