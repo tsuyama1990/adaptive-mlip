@@ -1,4 +1,3 @@
-import copy
 import secrets
 from collections.abc import Iterator
 from pathlib import Path
@@ -91,15 +90,15 @@ class MDMicroBurstPolicy(SafeBasePolicy):
         for _ in range(n_structures):
             # Using MD Engine for actual burst exploration
             # Ensure safe config override for microburst
-            if hasattr(engine, "config"):
-                burst_config = copy.deepcopy(engine.config)
-                if hasattr(burst_config, "n_steps"):
-                    burst_config.n_steps = POLICY_MICROBURST_N_STEPS  # Micro burst short steps
+            # Pass override_n_steps via run_kwargs
 
             if isinstance(engine, BaseEngine):
                 # Pass resume_from_step and fix python/invoke args for seamless Master-Slave inversion
                 # These parameters ensure velocity and coordinate preservation across potential switches.
-                run_kwargs: dict[str, Any] = {"use_fix_invoke": True}
+                run_kwargs: dict[str, Any] = {
+                    "use_fix_invoke": True,
+                    "override_n_steps": POLICY_MICROBURST_N_STEPS,
+                }
                 if hasattr(base_structure, "info") and "halt_step" in base_structure.info:
                     run_kwargs["resume_from_step"] = base_structure.info["halt_step"]
 
@@ -117,9 +116,9 @@ class MDMicroBurstPolicy(SafeBasePolicy):
                                 if isinstance(atoms, Atoms):
                                     yield atoms
                                     continue
-                        except OSError:
-                            # specifically handle file read errors
-                            pass
+                        except OSError as e:
+                            msg = f"Failed to read microburst trajectory at {traj_path}"
+                            raise RuntimeError(msg) from e
 
             # Fallback if engine run doesn't produce loaded structure
             burst_structure = base_structure.copy()  # type: ignore[no-untyped-call]
