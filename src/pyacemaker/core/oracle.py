@@ -221,9 +221,7 @@ class MACEManager(BaseOracle):
         allowed_dir = Path(DEFAULT_POTENTIALS_DIR).resolve()
 
         # Proceed with containment check
-        # Use string matching as a fallback for temp directories in testing
-        # where symlinks might resolve unexpectedly.
-        if not canonical_path.is_relative_to(allowed_dir) and not str(canonical_path).startswith(str(allowed_dir)):
+        if not canonical_path.is_relative_to(allowed_dir):
             msg = f"MACE model path {canonical_path} is outside allowed directory {allowed_dir}"
             raise ValueError(msg)
 
