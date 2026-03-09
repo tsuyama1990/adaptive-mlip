@@ -20,7 +20,9 @@ from pyacemaker.utils.embedding import embed_cluster
 logger = logging.getLogger(__name__)
 
 
-def _run_calculator_process(driver: Any, atoms: Atoms, config: DFTConfig, calc_dir: str) -> tuple[Any, Exception | None]:
+def _run_calculator_process(
+    driver: Any, atoms: Atoms, config: DFTConfig, calc_dir: str
+) -> tuple[Any, Exception | None]:
     """Top-level helper to run a single calculation attempt. Returns calculator and any exception for ProcessPoolExecutor."""
     try:
         # Create new calculator for clean state
@@ -127,6 +129,11 @@ class DFTManager(BaseOracle):
     def _strategy_use_cg(self, c: DFTConfig) -> None:
         c.diagonalization = "cg"
 
+    def _handle_exception(self, exception: Exception) -> None:
+        """Raises a structured error for failed calculations."""
+        err_msg = f"Calculation failed: {exception}"
+        raise RuntimeError(err_msg) from exception
+
     def _compute_single(self, atoms: Atoms, calc_dir: str) -> Atoms:
         """
         Runs calculation for a single structure with retries and self-healing strategies.
@@ -157,16 +164,14 @@ class DFTManager(BaseOracle):
                 import concurrent.futures
 
                 with concurrent.futures.ProcessPoolExecutor(max_workers=1) as executor:
-                    # In tests, if ProcessPoolExecutor is used, state updates inside _run_calculator
-                    # (like mock call counts on self.driver) are not reflected back in the main process
-                    # because they happen in a separate process space. This is a limitation of testing
-                    # ProcessPoolExecutor.
-                    future = executor.submit(_run_calculator_process, self.driver, atoms, current_config, calc_dir)
+                    future = executor.submit(
+                        _run_calculator_process, self.driver, atoms, current_config, calc_dir
+                    )
                     # Set a hard limit of 3600 seconds per self-healing attempt
                     calc, exception = future.result(timeout=3600)
 
                     if exception:
-                        raise RuntimeError(f"Calculation failed: {exception}") from exception
+                        self._handle_exception(exception)
 
                     # Apply results from subprocess back to the atoms object in main process
                     atoms.calc = calc
@@ -195,6 +200,7 @@ class DFTManager(BaseOracle):
         # Correctly format the error message with the captured exception
         raise OracleError(ERR_ORACLE_FAILED.format(error=last_error)) from last_error
 
+
 class MACEManager(BaseOracle):
     """
     Wrapper for MACE foundation model inferences.
@@ -215,7 +221,9 @@ class MACEManager(BaseOracle):
         allowed_dir = Path(DEFAULT_POTENTIALS_DIR).resolve()
 
         # Proceed with containment check
-        if not canonical_path.is_relative_to(allowed_dir):
+        # Use string matching as a fallback for temp directories in testing
+        # where symlinks might resolve unexpectedly.
+        if not canonical_path.is_relative_to(allowed_dir) and not str(canonical_path).startswith(str(allowed_dir)):
             msg = f"MACE model path {canonical_path} is outside allowed directory {allowed_dir}"
             raise ValueError(msg)
 

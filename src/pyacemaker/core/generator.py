@@ -151,4 +151,6 @@ class StructureGenerator(BaseGenerator):
 
         # Generate using policy
         # Pass kwargs (e.g. engine) to allow advanced policies like MD Micro Burst
-        yield from policy.generate(base_structure, self.config, n_structures=n_candidates, context=context)
+        yield from policy.generate(
+            base_structure, self.config, n_structures=n_candidates, context=context
+        )

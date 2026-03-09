@@ -1,8 +1,6 @@
 from pathlib import Path
 from typing import Any
-from unittest.mock import MagicMock
 
-import numpy as np
 import pytest
 from ase import Atoms
 
@@ -40,8 +38,8 @@ def test_dft_manager_streaming_behavior(mock_dft_config: DFTConfig) -> None:
             i += 1
 
     # 2. Mock driver
-    from tests.unit.test_oracle import FakeDriver
     from tests.conftest import MockCalculator
+    from tests.unit.test_oracle import FakeDriver
 
     fake_driver = FakeDriver(calcs=MockCalculator(fail_count=0))
 
