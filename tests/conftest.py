@@ -1,30 +1,34 @@
 import sys
-from typing import Any
+from pathlib import Path
+from typing import Any, TypedDict
 from unittest.mock import MagicMock
 
-# Mock lammps module globally before any imports that depend on it
-sys.modules["lammps"] = MagicMock()
+import numpy as np
+import pytest
+from ase import Atoms
+from ase.calculators.calculator import Calculator, CalculatorSetupError
 
-import numpy as np  # noqa: E402
-import pytest  # noqa: E402
-from ase import Atoms  # noqa: E402
-from ase.calculators.calculator import Calculator, CalculatorSetupError  # noqa: E402
-
-from pyacemaker.domain_models import (  # noqa: E402
+from pyacemaker.domain_models import (
     DFTConfig,
     HybridParams,
     MDConfig,
     StructureConfig,
     TrainingConfig,
 )
-from pyacemaker.domain_models.structure import ExplorationPolicy  # noqa: E402
-from tests.constants import TEST_ENERGY_GENERIC  # noqa: E402
+from pyacemaker.domain_models.structure import ExplorationPolicy
+from tests.constants import TEST_ENERGY_GENERIC
 
 
-def create_dummy_pseudopotentials(path: Any, elements: list[str]) -> None:
+@pytest.fixture(autouse=True)
+def _mock_lammps_module(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setitem(sys.modules, "lammps", MagicMock())
+
+
+def create_dummy_pseudopotentials(path: Path | str, elements: list[str]) -> None:
     """Helper to create dummy pseudopotential files."""
+    base_path = Path(path)
     for el in elements:
-        file_path = path / f"{el}.UPF"
+        file_path = base_path / f"{el}.UPF"
         file_path.touch()
 
 
@@ -118,7 +122,70 @@ class MockCalculator(Calculator):
         }
 
 
-def create_test_config_dict(**overrides: Any) -> dict[str, Any]:
+class StructureDict(TypedDict, total=False):
+    elements: list[str]
+    supercell_size: list[int]
+    policy_name: str
+
+
+class DFTDict(TypedDict, total=False):
+    code: str
+    functional: str
+    kpoints_density: float
+    encut: float
+    pseudopotentials: dict[str, str]
+    mixing_beta: float
+    smearing_type: str
+    smearing_width: float
+    diagonalization: str
+
+
+class TrainingDict(TypedDict, total=False):
+    potential_type: str
+    cutoff_radius: float
+    max_basis_size: int
+    delta_learning: bool
+    active_set_optimization: bool
+
+
+class MDDict(TypedDict, total=False):
+    temperature: float
+    pressure: float
+    timestep: float
+    n_steps: int
+    uncertainty_threshold: float
+    check_interval: int
+
+
+class OTFDict(TypedDict, total=False):
+    uncertainty_threshold: float
+    local_n_candidates: int
+    local_n_select: int
+    max_retries: int
+
+
+class WorkflowDict(TypedDict, total=False):
+    max_iterations: int
+    state_file_path: str
+    active_learning_dir: str
+    potentials_dir: str
+    n_candidates: int
+    batch_size: int
+    otf: OTFDict
+
+
+class ConfigDictType(TypedDict, total=False):
+    project_name: str
+    structure: StructureDict
+    dft: DFTDict
+    training: TrainingDict
+    md: MDDict
+    validation: dict[str, Any]
+    workflow: WorkflowDict
+    logging: dict[str, Any]
+
+
+def create_test_config_dict(**overrides: Any) -> ConfigDictType:
     """
     Helper to create a valid config dictionary using Pydantic defaults.
     Constructs dictionary first to allow overrides before validation.
@@ -129,7 +196,7 @@ def create_test_config_dict(**overrides: Any) -> dict[str, Any]:
     # Actually, we should use safe defaults for Pydantic construction if possible,
     # but validation is strict.
 
-    defaults = {
+    defaults: dict[str, Any] = {
         "project_name": "TestProject",
         "structure": {
             "elements": ["Fe"],
@@ -187,4 +254,4 @@ def create_test_config_dict(**overrides: Any) -> dict[str, Any]:
         else:
             defaults[key] = value
 
-    return defaults
+    return defaults  # type: ignore[return-value]

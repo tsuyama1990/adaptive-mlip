@@ -68,9 +68,11 @@ FILE_NAME_MGO_SURFACE: Final[str] = "mgo_surface.xyz"
 FILE_NAME_DEPOSITED: Final[str] = "deposited.xyz"
 FILE_NAME_EON_POS: Final[str] = "pos.con"
 
+ENV_VAR_NAME_UV_PROJECT_ENV: Final[str] = "UV_PROJECT_ENVIRONMENT"
 UV_PROJECT_ENVIRONMENT_DEFAULT: Final[str] = ".venv"
 
 __all__ = [
+    "ENV_VAR_NAME_UV_PROJECT_ENV",
     "DANGEROUS_PATH_CHARS",
     "DEFAULT_EON_EXECUTABLE",
     "DEFAULT_EON_SEED",
