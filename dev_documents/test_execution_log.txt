@@ -4,7 +4,7 @@ rootdir: /app
 configfile: pyproject.toml
 testpaths: tests
 plugins: cov-7.0.0, anyio-4.12.1
-collected 251 items
+collected 249 items
 
 tests/e2e/test_engine_integration.py ..                                  [  0%]
 tests/e2e/test_orchestrator.py .......                                   [  3%]
@@ -12,7 +12,7 @@ tests/e2e/test_orchestrator_loop.py ...                                  [  4%]
 tests/e2e/test_orchestrator_refinement.py ..                             [  5%]
 tests/integration/test_pacemaker_integration.py ..                       [  6%]
 tests/integration/test_scenarios.py .                                    [  6%]
-tests/uat/test_cycle01_uat.py ...                                        [  7%]
+tests/uat/test_cycle01_uat.py ...                                        [  8%]
 tests/uat/test_cycle02_uat.py ..                                         [  8%]
 tests/uat/test_cycle03_uat.py ..                                         [  9%]
 tests/uat/test_cycle04_uat.py ...                                        [ 10%]
@@ -23,15 +23,15 @@ tests/unit/test_active_set.py .....                                      [ 15%]
 tests/unit/test_active_set_anchor.py ....                                [ 17%]
 tests/unit/test_delta.py ....                                            [ 18%]
 tests/unit/test_domain_models.py .................                       [ 25%]
-tests/unit/test_domain_models_dft.py .............                       [ 30%]
-tests/unit/test_domain_models_eon.py ....                                [ 32%]
+tests/unit/test_domain_models_dft.py ...........                         [ 30%]
+tests/unit/test_domain_models_eon.py ....                                [ 31%]
 tests/unit/test_domain_models_md.py ...........                          [ 36%]
-tests/unit/test_domain_models_md_new.py ..                               [ 37%]
-tests/unit/test_domain_models_scenario.py ..                             [ 38%]
-tests/unit/test_domain_models_training.py .......                        [ 41%]
+tests/unit/test_domain_models_md_new.py ..                               [ 36%]
+tests/unit/test_domain_models_scenario.py ..                             [ 37%]
+tests/unit/test_domain_models_training.py .......                        [ 40%]
 tests/unit/test_domain_models_validation.py ....                         [ 42%]
-tests/unit/test_elastic.py ....                                          [ 44%]
-tests/unit/test_embedding.py .......                                     [ 47%]
+tests/unit/test_elastic.py ....                                          [ 43%]
+tests/unit/test_embedding.py .......                                     [ 46%]
 tests/unit/test_engine.py .......                                        [ 49%]
 tests/unit/test_engine_halt_step.py ..                                   [ 50%]
 tests/unit/test_engine_relax.py ...                                      [ 51%]
@@ -43,11 +43,11 @@ tests/unit/test_generator_local.py ..                                    [ 58%]
 tests/unit/test_io.py ........                                           [ 61%]
 tests/unit/test_io_manager.py ..                                         [ 62%]
 tests/unit/test_lammps_driver.py ...........                             [ 66%]
-tests/unit/test_lammps_driver_security.py ...                            [ 68%]
+tests/unit/test_lammps_driver_security.py ...                            [ 67%]
 tests/unit/test_lammps_generator.py ...                                  [ 69%]
-tests/unit/test_lammps_generator_reorder.py ..                           [ 70%]
+tests/unit/test_lammps_generator_reorder.py ..                           [ 69%]
 tests/unit/test_loop.py .......                                          [ 72%]
-tests/unit/test_main.py ...                                              [ 74%]
+tests/unit/test_main.py ...                                              [ 73%]
 tests/unit/test_oracle.py ........                                       [ 77%]
 tests/unit/test_oracle_streaming.py .                                    [ 77%]
 tests/unit/test_path_validation.py .....                                 [ 79%]
@@ -56,10 +56,10 @@ tests/unit/test_phonons.py ..                                            [ 81%]
 tests/unit/test_policies_new.py ....                                     [ 83%]
 tests/unit/test_policy_factory.py ...                                    [ 84%]
 tests/unit/test_qe_driver.py .......                                     [ 87%]
-tests/unit/test_report.py ..                                             [ 88%]
+tests/unit/test_report.py ..                                             [ 87%]
 tests/unit/test_scenarios_fept_mgo.py ......                             [ 90%]
 tests/unit/test_streaming_io.py ...                                      [ 91%]
-tests/unit/test_trainer_pacemaker.py ......                              [ 94%]
+tests/unit/test_trainer_pacemaker.py ......                              [ 93%]
 tests/unit/test_validator.py ....                                        [ 95%]
 tests/unit/test_validator_security.py ...........                        [100%]
 
@@ -108,7 +108,7 @@ src/pyacemaker/domain_models/__init__.py        11      0   100%
 src/pyacemaker/domain_models/config.py          22      0   100%
 src/pyacemaker/domain_models/constants.py       17      0   100%
 src/pyacemaker/domain_models/defaults.py       131      0   100%
-src/pyacemaker/domain_models/dft.py             69     14    80%   76-77, 80-81, 95-96, 102-103, 119-124
+src/pyacemaker/domain_models/dft.py             36      4    89%   80-81, 88-89
 src/pyacemaker/domain_models/eon.py             34      4    88%   66-69
 src/pyacemaker/domain_models/logging.py         31      9    71%   24-25, 31, 39, 45-47, 50-51
 src/pyacemaker/domain_models/md.py             133     24    82%   40, 62-63, 82-83, 119-120, 125-126, 128-129, 133-134, 136-137, 234, 240-241, 249-250, 257-258, 260-261
@@ -140,7 +140,7 @@ src/pyacemaker/utils/phonons.py                 51      2    96%   51, 69
 src/pyacemaker/utils/process.py                 25     21    16%   35-77
 src/pyacemaker/utils/structure.py                6      2    67%   19-20
 --------------------------------------------------------------------------
-TOTAL                                         3033    474    84%
-======================= 251 passed, 3 warnings in 4.45s ========================
+TOTAL                                         3000    464    85%
+======================= 249 passed, 3 warnings in 3.30s ========================
 /app/.venv/lib/python3.12/site-packages/coverage/inorout.py:561: CoverageWarning: Module dev_src was never imported. (module-not-imported); see https://coverage.readthedocs.io/en/7.13.4/messages.html#warning-module-not-imported
   self.warn(f"Module {pkg} was never imported.", slug="module-not-imported")

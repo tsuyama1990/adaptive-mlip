@@ -132,90 +132,27 @@ def test_dft_config_empty_pseudopotential() -> None:
 def test_dft_config_external_paths(
     dummy_pseudopotentials_dir: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Test that external paths (absolute or relative) are allowed if file exists."""
+    """Test that external paths (absolute or relative) are strictly denied."""
     monkeypatch.chdir(dummy_pseudopotentials_dir)
 
-    # Create a file in parent directory (simulates system library)
-    outside_dir = dummy_pseudopotentials_dir.parent / "outside_dir"
-    outside_dir.mkdir(exist_ok=True)
-    outside_file = outside_dir / "secret.UPF"
-    outside_file.touch()
-
-    try:
-        # Case 1: Absolute path to outside file -> Allowed
-        config = DFTConfig(
-            code="qe",
-            functional="PBE",
-            kpoints_density=0.04,
-            encut=500.0,
-            pseudopotentials={"Fe": str(outside_file.absolute())},
-        )
-        assert config.pseudopotentials["Fe"] == str(outside_file.absolute())
-
-        # Case 1.5: Absolute path with non-existent file -> Denied
-        with pytest.raises(ValidationError):
-            DFTConfig(
-                code="qe",
-                functional="PBE",
-                kpoints_density=0.04,
-                encut=500.0,
-                pseudopotentials={"Fe": "/non/existent/path/for/sure/fe.upf"},
-            )
-
-        # Case 2: Relative path to outside file -> Allowed
-        # Construct relative path from dummy_pseudopotentials_dir to outside_file
-        rel_path = "../outside_dir/secret.UPF"
-        config = DFTConfig(
-            code="qe",
-            functional="PBE",
-            kpoints_density=0.04,
-            encut=500.0,
-            pseudopotentials={"Fe": rel_path},
-        )
-        assert config.pseudopotentials["Fe"] == rel_path
-
-    finally:
-        # Cleanup
-        if outside_file.exists():
-            outside_file.unlink()
-        if outside_dir.exists():
-            outside_dir.rmdir()
-
-
-def test_dft_config_symlinks_forbidden(
-    dummy_pseudopotentials_dir: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Test that symlinks are forbidden."""
-    monkeypatch.chdir(dummy_pseudopotentials_dir)
-
-    real_file = dummy_pseudopotentials_dir / "real.UPF"
-    real_file.touch()
-    symlink_file = dummy_pseudopotentials_dir / "link.UPF"
-    symlink_file.symlink_to(real_file)
-
-    with pytest.raises(ValidationError, match="Symlinks are not allowed"):
+    # Case 1: Absolute path -> Denied
+    with pytest.raises(ValidationError):
         DFTConfig(
             code="qe",
             functional="PBE",
             kpoints_density=0.04,
             encut=500.0,
-            pseudopotentials={"Fe": "link.UPF"},
+            pseudopotentials={"Fe": "/non/existent/path/for/sure/fe.upf"},
         )
 
-
-def test_dft_config_file_not_found(
-    dummy_pseudopotentials_dir: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Test that non-existent file raises error."""
-    monkeypatch.chdir(dummy_pseudopotentials_dir)
-
-    with pytest.raises(ValidationError, match="Pseudopotential file not found"):
+    # Case 2: Relative path with directory traversal -> Denied
+    with pytest.raises(ValidationError):
         DFTConfig(
             code="qe",
             functional="PBE",
             kpoints_density=0.04,
             encut=500.0,
-            pseudopotentials={"Fe": "missing.UPF"},
+            pseudopotentials={"Fe": "../outside_dir/secret.UPF"},
         )
 
 

@@ -49,7 +49,7 @@ def mock_config(tmp_path: Path) -> PyAceConfig:
             "functional": "PBE",
             "kpoints_density": 0.04,
             "encut": 500.0,
-            "pseudopotentials": {"Fe": str(tmp_path / "Fe.UPF")},
+            "pseudopotentials": {"Fe": "Fe.UPF"},
             "mixing_beta": 0.7,
             "smearing_type": "mv",
             "smearing_width": 0.1,
