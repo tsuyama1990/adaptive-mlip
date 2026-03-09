@@ -13,9 +13,11 @@ from pyacemaker.main import main
 from tests.conftest import create_dummy_pseudopotentials
 
 
-def test_main_dry_run(caplog: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.chdir(tmp_path)
-    create_dummy_pseudopotentials(tmp_path, ["Al"])
+def test_main_dry_run(
+    caplog: Any, dummy_pseudopotentials_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(dummy_pseudopotentials_dir)
+    create_dummy_pseudopotentials(dummy_pseudopotentials_dir, ["Al"])
 
     config_data = """
 project_name: TestProject
@@ -41,7 +43,7 @@ md:
 workflow:
     max_iterations: 10
 """
-    p = tmp_path / "config.yaml"
+    p = dummy_pseudopotentials_dir / "config.yaml"
     p.write_text(config_data)
 
     with patch(
@@ -57,8 +59,10 @@ workflow:
     assert LOG_DRY_RUN_COMPLETE in caplog.text
 
 
-def test_main_file_not_found(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    monkeypatch.chdir(tmp_path)
+def test_main_file_not_found(
+    monkeypatch: pytest.MonkeyPatch, dummy_pseudopotentials_dir: Path
+) -> None:
+    monkeypatch.chdir(dummy_pseudopotentials_dir)
     with patch(
         "argparse.ArgumentParser.parse_args",
         return_value=MagicMock(config="non_existent.yaml", dry_run=False, scenario=None),
@@ -68,9 +72,11 @@ def test_main_file_not_found(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) ->
         assert excinfo.value.code == 1
 
 
-def test_main_run(caplog: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.chdir(tmp_path)
-    create_dummy_pseudopotentials(tmp_path, ["Al"])
+def test_main_run(
+    caplog: Any, dummy_pseudopotentials_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(dummy_pseudopotentials_dir)
+    create_dummy_pseudopotentials(dummy_pseudopotentials_dir, ["Al"])
 
     config_data = """
 project_name: TestRun
@@ -96,7 +102,7 @@ md:
 workflow:
     max_iterations: 10
 """
-    p = tmp_path / "run_config.yaml"
+    p = dummy_pseudopotentials_dir / "run_config.yaml"
     p.write_text(config_data)
 
     with (

@@ -1,4 +1,6 @@
 import sys
+import tempfile
+from collections.abc import Generator
 from pathlib import Path
 from typing import Any, TypedDict
 from unittest.mock import MagicMock
@@ -45,11 +47,19 @@ def _mock_lammps_module(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setitem(sys.modules, "lammps", MagicMock())
 
 
+@pytest.fixture
+def dummy_pseudopotentials_dir() -> Generator[Path, None, None]:
+    """Provides a temporary directory with dummy pseudopotential files that cleans itself up."""
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        yield Path(tmp_dir)
+
+
 def create_dummy_pseudopotentials(path: Path | str, elements: list[str]) -> None:
     """Helper to safely create dummy pseudopotential files for testing.
 
     Args:
         path: Directory path where the UPF files should be created.
+              This should strictly be a temporary directory provided by a fixture.
         elements: List of chemical element symbols (e.g., ['Fe', 'Pt']).
 
     Raises:
@@ -67,9 +77,9 @@ def create_dummy_pseudopotentials(path: Path | str, elements: list[str]) -> None
 
 
 @pytest.fixture
-def mock_dft_config(tmp_path: Any, monkeypatch: Any) -> DFTConfig:
-    monkeypatch.chdir(tmp_path)
-    create_dummy_pseudopotentials(tmp_path, ["H", "O", "Fe"])
+def mock_dft_config(dummy_pseudopotentials_dir: Path, monkeypatch: Any) -> DFTConfig:
+    monkeypatch.chdir(dummy_pseudopotentials_dir)
+    create_dummy_pseudopotentials(dummy_pseudopotentials_dir, ["H", "O", "Fe"])
 
     return DFTConfig(
         code="pw.x",
@@ -193,6 +203,7 @@ class MockCalculator(Calculator):
 
 class StructureDict(TypedDict, total=False):
     """Represents configuration specifically for structural generation and policies."""
+
     elements: list[str]
     supercell_size: list[int]
     policy_name: str
@@ -200,6 +211,7 @@ class StructureDict(TypedDict, total=False):
 
 class DFTDict(TypedDict, total=False):
     """Configuration associated with the First Principles engine (Quantum Espresso)."""
+
     code: str
     functional: str
     kpoints_density: float
@@ -213,6 +225,7 @@ class DFTDict(TypedDict, total=False):
 
 class TrainingDict(TypedDict, total=False):
     """Settings dictating how the MACE/ACE potentials are trained."""
+
     potential_type: str
     cutoff_radius: float
     max_basis_size: int
@@ -222,6 +235,7 @@ class TrainingDict(TypedDict, total=False):
 
 class MDDict(TypedDict, total=False):
     """Molecular Dynamics loop configuration parameters."""
+
     temperature: float
     pressure: float
     timestep: float
@@ -232,6 +246,7 @@ class MDDict(TypedDict, total=False):
 
 class OTFDict(TypedDict, total=False):
     """On-The-Fly settings controlling uncertainty tolerances during MD."""
+
     uncertainty_threshold: float
     local_n_candidates: int
     local_n_select: int
@@ -240,6 +255,7 @@ class OTFDict(TypedDict, total=False):
 
 class WorkflowDict(TypedDict, total=False):
     """Top-level execution and operational settings, logging directories."""
+
     max_iterations: int
     state_file_path: str
     active_learning_dir: str
@@ -251,6 +267,7 @@ class WorkflowDict(TypedDict, total=False):
 
 class ConfigDictType(TypedDict, total=False):
     """Complete root configuration dictionary representation for testing."""
+
     project_name: str
     structure: StructureDict
     dft: DFTDict
@@ -331,6 +348,7 @@ def create_test_config_dict(**overrides: Any) -> ConfigDictType:
 
     try:
         from pydantic import ValidationError
+
         # Merge dict properly utilizing Pydantic config
         model = PyAceConfig.model_validate(defaults)
 
