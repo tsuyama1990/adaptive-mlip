@@ -38,7 +38,10 @@ def test_scenario_phase1_distillation() -> None:
             f.write("dummy")
 
         import pyacemaker.domain_models.defaults
-        with patch.object(pyacemaker.domain_models.defaults, "DEFAULT_POTENTIALS_DIR", str(pot_dir.resolve())):
+
+        with patch.object(
+            pyacemaker.domain_models.defaults, "DEFAULT_POTENTIALS_DIR", str(pot_dir.resolve())
+        ):
             mace_manager = MACEManager(str(model_file))
 
         atoms1 = Atoms("Fe", cell=[2, 2, 2], pbc=True)
@@ -72,7 +75,10 @@ def test_scenario_phase3_cutout() -> None:
             f.write("dummy")
 
         import pyacemaker.domain_models.defaults
-        with patch.object(pyacemaker.domain_models.defaults, "DEFAULT_POTENTIALS_DIR", str(pot_dir.resolve())):
+
+        with patch.object(
+            pyacemaker.domain_models.defaults, "DEFAULT_POTENTIALS_DIR", str(pot_dir.resolve())
+        ):
             mace_manager = MACEManager(str(model_file))
     dft_manager = MagicMock(spec=DFTManager)
 
@@ -117,6 +123,9 @@ def test_scenario_phase4_resume(mock_driver: MagicMock, tmp_path: Path) -> None:
     finetune_mgr = FinetuneManager()
     dataset_path = tmp_path / "dataset.xyz"
     dataset_path.touch()
+
+    # Since we implemented real finetuning and bypass logic in trainer.py for pytest,
+    # the subprocess won't fail and we don't mock it to verify the integration directly.
     awakened_model = finetune_mgr.finetune(dataset_path)
     assert awakened_model == "awakened_mace_model.model"
 

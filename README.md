@@ -34,20 +34,20 @@ graph TD
         STATE[State Manager / SQLite]
     end
 
-    subgraph Phase 1: Distillation
+    subgraph Distillation
         P1_GEN[Combinatorial Generator]
         P1_DIR[ActiveSet Selector]
         P1_ORACLE[MACEManager Oracle]
         P1_TRAIN[Pacemaker Trainer]
     end
 
-    subgraph Phase 2: Validation
+    subgraph Validation
         P2_VAL[Validator Subsystem]
         P2_PHONON[Phonon / Elastic]
         P2_MINIMD[Miniature MD Test]
     end
 
-    subgraph Phase 3 & 4: Active Learning Loop
+    subgraph Active Learning Loop
         LAMMPS[LammpsEngine C++ Loop]
         EVAL[Two-Tier Evaluator]
         CUTOUT[Intelligent Cutout]
@@ -57,7 +57,7 @@ graph TD
         DELTA[Incremental Trainer]
     end
 
-    %% Flow Phase 1
+    %% Flow Distillation
     CFG --> ORCH
     ORCH --> P1_GEN
     P1_GEN -- Structure Pool --> P1_DIR
@@ -65,13 +65,13 @@ graph TD
     P1_ORACLE -- Confident Data --> P1_TRAIN
     P1_TRAIN -- base.yace --> P2_VAL
 
-    %% Flow Phase 2
+    %% Flow Validation
     P2_VAL --> P2_PHONON
     P2_VAL --> P2_MINIMD
     P2_MINIMD -- Success --> LAMMPS
     P2_MINIMD -- Fail --> P1_GEN
 
-    %% Flow Phase 3 & 4
+    %% Flow Active Learning Loop
     LAMMPS -- Halt Signal --> EVAL
     EVAL -- Thermal Noise --> LAMMPS
     EVAL -- True Event --> CUTOUT
