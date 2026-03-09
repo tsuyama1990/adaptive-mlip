@@ -1,3 +1,4 @@
+# ruff: noqa: N803
 from typing import Any
 
 import marimo

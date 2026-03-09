@@ -126,7 +126,9 @@ def test_dft_manager_self_healing(
     assert result.get_potential_energy() == TEST_ENERGY_GENERIC  # type: ignore[no-untyped-call]
 
 
-def test_dft_manager_fatal_error(mock_dft_config: DFTConfig, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_dft_manager_fatal_error(
+    mock_dft_config: DFTConfig, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Test fatal error after exhausting retries."""
     atoms = Atoms("H", cell=[10, 10, 10], pbc=True)
 
@@ -173,7 +175,9 @@ def test_dft_manager_fatal_error(mock_dft_config: DFTConfig, monkeypatch: pytest
     # We will just assert that the code raises the correct exception.
 
 
-def test_dft_manager_setup_error(mock_dft_config: DFTConfig, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_dft_manager_setup_error(
+    mock_dft_config: DFTConfig, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Test handling of CalculatorSetupError."""
     atoms = Atoms("H", cell=[10, 10, 10], pbc=True)
 
