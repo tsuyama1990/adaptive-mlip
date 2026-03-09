@@ -68,7 +68,7 @@ def test_write_lammps_streaming_basic():
     # Verify structure using ASE read
     # ASE read lammps-data format requires explicit masses or known types.
     # Our format is standard lammps data.
-    read_atoms = read(path, format="lammps-data", style="atomic")
+    read_atoms = read(path, format="lammps-data", atom_style="atomic")
     assert len(read_atoms) == 2
     # Check if positions match roughly
     # Note: Lammps read might reorder or center differently depending on settings,
