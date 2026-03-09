@@ -8,6 +8,7 @@ from ase import Atoms
 from pyacemaker.core.exceptions import OracleError
 from pyacemaker.core.oracle import DFTManager
 from pyacemaker.domain_models import DFTConfig
+from pyacemaker.interfaces.qe_driver import QEDriver
 from tests.conftest import MockCalculator, create_dummy_pseudopotentials
 from tests.constants import TEST_ENERGY_GENERIC
 
@@ -30,7 +31,7 @@ def mock_dft_config(dummy_pseudopotentials_dir: Path, monkeypatch: pytest.Monkey
     )
 
 
-class FakeDriver:
+class FakeDriver(QEDriver):
     """Fake driver to be picklable for ProcessPoolExecutor"""
 
     def __init__(self, calcs: list[MockCalculator] | MockCalculator | None = None) -> None:
@@ -59,7 +60,7 @@ def test_dft_manager_compute_success(mock_dft_config: DFTConfig) -> None:
     fake_driver = FakeDriver()
 
     # Inject fake driver
-    manager = DFTManager(mock_dft_config, driver=fake_driver)  # type: ignore[arg-type]
+    manager = DFTManager(mock_dft_config, driver=fake_driver)
 
     # Verify generator behavior with next() instead of list()
     generator = manager.compute(iter([atoms]))
@@ -118,7 +119,7 @@ def test_dft_manager_self_healing(
     monkeypatch.setattr("concurrent.futures.ProcessPoolExecutor", DummyExecutor)
 
     fake_driver = FakeDriver()
-    manager = DFTManager(mock_dft_config, driver=fake_driver)  # type: ignore[arg-type]
+    manager = DFTManager(mock_dft_config, driver=fake_driver)
 
     gen = manager.compute(iter([atoms]))
     result = next(gen)
@@ -160,7 +161,7 @@ def test_dft_manager_fatal_error(
 
     fake_driver = FakeDriver(calcs=MockCalculator(fail_count=100))
 
-    manager = DFTManager(mock_dft_config, driver=fake_driver)  # type: ignore[arg-type]
+    manager = DFTManager(mock_dft_config, driver=fake_driver)
 
     # Now raises OracleError
     # Use next() to trigger execution
@@ -209,7 +210,7 @@ def test_dft_manager_setup_error(
 
     fake_driver = FakeDriver(calcs=MockCalculator(setup_error=True))
 
-    manager = DFTManager(mock_dft_config, driver=fake_driver)  # type: ignore[arg-type]
+    manager = DFTManager(mock_dft_config, driver=fake_driver)
 
     gen = manager.compute(iter([atoms]))
     with pytest.raises(OracleError, match="Oracle calculation failed"):
@@ -298,7 +299,7 @@ def test_dft_manager_embedding(mock_dft_config: DFTConfig, monkeypatch: pytest.M
     # Mock Driver
     fake_driver = FakeDriver(calcs=MockCalculator(fail_count=0))
 
-    manager = DFTManager(mock_dft_config, driver=fake_driver)  # type: ignore[arg-type]
+    manager = DFTManager(mock_dft_config, driver=fake_driver)
 
     atoms = Atoms("H", positions=[[0, 0, 0]])
     # Must be iterator

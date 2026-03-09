@@ -57,14 +57,11 @@ class DummyExecutor:
             return DummyFuture(None, e)
 
 
-def test_uat_02_01_single_point_calculation(
-    uat_dft_config: DFTConfig, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_uat_02_01_single_point_calculation(uat_dft_config: DFTConfig) -> None:
     """
     Scenario 02-01: Single Point Calculation.
     Verify that the system can run a simple DFT calculation (mocked).
     """
-    monkeypatch.setattr("concurrent.futures.ProcessPoolExecutor", DummyExecutor)
     # 1. Preparation: H2O molecule
     h2o = Atoms(
         "H2O", positions=[[0, 0, 0], [0, 0, 0.96], [0, 0.96, 0]], cell=[10, 10, 10], pbc=True
@@ -77,7 +74,10 @@ def test_uat_02_01_single_point_calculation(
     # We patch at the source where DFTManager imports it or uses it
     # DFTManager imports QEDriver from interfaces.qe_driver
 
-    with patch("pyacemaker.core.oracle.QEDriver") as MockDriverClass:
+    with (
+        patch("pyacemaker.core.oracle.QEDriver") as MockDriverClass,
+        patch("concurrent.futures.ProcessPoolExecutor", DummyExecutor),
+    ):
         mock_driver_instance = MockDriverClass.return_value
         # Mock get_calculator to return a MockCalculator instance with H2O energy
         # Accept **kwargs to handle 'directory' argument
@@ -97,20 +97,22 @@ def test_uat_02_01_single_point_calculation(
 
 
 def test_uat_02_02_self_healing(
-    uat_dft_config: DFTConfig, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+    uat_dft_config: DFTConfig, caplog: pytest.LogCaptureFixture
 ) -> None:
     """
     Scenario 02-02: Self-Healing Test.
     Verify that the system recovers from a simulated SCF convergence failure.
     """
-    monkeypatch.setattr("concurrent.futures.ProcessPoolExecutor", DummyExecutor)
     # 1. Preparation
     h2o = Atoms(
         "H2O", positions=[[0, 0, 0], [0, 0, 0.96], [0, 0.96, 0]], cell=[10, 10, 10], pbc=True
     )
 
     # 2. Action: Run DFTManager with failure
-    with patch("pyacemaker.core.oracle.QEDriver") as MockDriverClass:
+    with (
+        patch("pyacemaker.core.oracle.QEDriver") as MockDriverClass,
+        patch("concurrent.futures.ProcessPoolExecutor", DummyExecutor),
+    ):
         mock_driver_instance = MockDriverClass.return_value
 
         # Mock failure on first attempt, success on second

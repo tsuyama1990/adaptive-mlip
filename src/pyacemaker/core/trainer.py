@@ -79,9 +79,14 @@ class PacemakerTrainer(BaseTrainer):
         Raises:
             TrainerError: If the training data file does not exist or format is invalid.
         """
+        # Get path from environment or default
+        import os
+
+        pace_train_cmd = os.environ.get("PACE_TRAIN_CMD", "pace_train")
+
         # Ensure pace_train is installed
-        if not shutil.which("pace_train"):
-            msg = "Executable 'pace_train' not found in PATH."
+        if not shutil.which(pace_train_cmd):
+            msg = f"Executable '{pace_train_cmd}' not found in PATH."
             raise TrainerError(msg)
 
         data_path = Path(training_data_path).resolve()
@@ -102,15 +107,17 @@ class PacemakerTrainer(BaseTrainer):
 
         import re
 
+        from pyacemaker.domain_models.defaults import LAMMPS_SAFE_CMD_PATTERN
+
         for key, val in pacemaker_config.items():
-            if isinstance(val, str) and re.search(r"(\bexec\b|\bsystem\b|\bos\.|;|\||>|<|&)", val):
+            if isinstance(val, str) and not re.match(LAMMPS_SAFE_CMD_PATTERN, val):
                 msg = f"Malicious content detected in configuration value for key '{key}'"
                 raise TrainerError(msg)
 
         dump_yaml(pacemaker_config, input_yaml_path)
 
         # Run pace_train
-        cmd = ["pace_train", str(input_yaml_path)]
+        cmd = [pace_train_cmd, str(input_yaml_path)]
 
         if initial_potential:
             initial_path = Path(initial_potential)
@@ -168,22 +175,29 @@ class FinetuneManager:
 
         output_model = "awakened_mace_model.model"
 
+        # Get paths and options from environment or default
+        import os
+
+        mace_train_cmd = os.environ.get("MACE_TRAIN_CMD", "mace_run_train")
+        foundation_model = os.environ.get("MACE_FOUNDATION_MODEL", "mace-mp-0-medium")
+
         # Real logic: execute mace_run_train command to finetune.
         # We specify the training file and an output model path.
         cmd = [
-            "mace_run_train",
+            mace_train_cmd,
             "--name",
             "awakened_mace_model",
             "--train_file",
             str(dataset_path),
             "--foundation_model",
-            "mace-mp-0-medium",
+            foundation_model,
         ]
 
         try:
             # Use the existing wrapper which handles exceptions and logging
             # Check if this is a test environment mock execution run
             import sys
+
             if "pytest" in sys.modules:
                 # We do not want to actually block on a long mace_run_train process during unit/UAT tests
                 # unless explicitly requested, but we've formulated the command.
@@ -194,8 +208,11 @@ class FinetuneManager:
         except subprocess.CalledProcessError as e:
             # mace_run_train may fail if model doesn't exist locally without internet in CI/CD sandbox
             import logging
+
             logger = logging.getLogger(__name__)
-            logger.warning(f"MACE Finetuning failed with exit code {e.returncode}. This might be due to missing foundation model in sandbox. Proceeding with default for robustness. {e}")
+            logger.warning(
+                f"MACE Finetuning failed with exit code {e.returncode}. This might be due to missing foundation model in sandbox. Proceeding with default for robustness. {e}"
+            )
             return output_model
         except Exception as e:
             msg = f"MACE Finetuning failed unexpectedly: {e}"

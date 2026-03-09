@@ -29,23 +29,24 @@ def test_scenario_phase1_distillation() -> None:
     assert config.distillation.enable is True
 
     # 1. MACE evaluates structures
-    import tempfile
+    import numpy as np
 
-    with tempfile.TemporaryDirectory() as temp_dir:
-        pot_dir = Path(temp_dir)
-        model_file = pot_dir / "model"
-        with model_file.open("w") as f:
-            f.write("dummy")
+    atoms1 = Atoms("Fe", cell=[2, 2, 2], pbc=True)
+    atoms2 = Atoms("Pt", cell=[2, 2, 2], pbc=True)
 
-        import pyacemaker.domain_models.defaults
+    def mock_compute(self_obj, structures, batch_size=10):
+        for atoms in structures:
+            atoms_copy = atoms.copy()
+            atoms_copy.info["energy"] = -10.0
+            atoms_copy.new_array("forces", np.zeros((len(atoms_copy), 3)))
+            atoms_copy.new_array("c_gamma", np.random.uniform(0.01, 0.1, size=len(atoms_copy)))
+            yield atoms_copy
 
-        with patch.object(
-            pyacemaker.domain_models.defaults, "DEFAULT_POTENTIALS_DIR", str(pot_dir.resolve())
-        ):
-            mace_manager = MACEManager(str(model_file))
-
-        atoms1 = Atoms("Fe", cell=[2, 2, 2], pbc=True)
-        atoms2 = Atoms("Pt", cell=[2, 2, 2], pbc=True)
+    with (
+        patch.object(MACEManager, "__init__", return_value=None),
+        patch.object(MACEManager, "compute", mock_compute),
+    ):
+        mace_manager = MACEManager("dummy_model")
 
         results = list(mace_manager.compute(iter([atoms1, atoms2])))
 
@@ -66,21 +67,28 @@ def test_scenario_phase3_cutout() -> None:
     thresholds = ActiveLearningThresholds(threshold_call_dft=0.05, threshold_add_train=0.02)
     config = CutoutConfig(core_radius=3.0, buffer_radius=2.0)
 
-    import tempfile
+    with patch.object(MACEManager, "__init__", return_value=None):
+        mace_manager = MACEManager("dummy_model")
 
-    with tempfile.TemporaryDirectory() as temp_dir:
-        pot_dir = Path(temp_dir)
-        model_file = pot_dir / "model"
-        with model_file.open("w") as f:
-            f.write("dummy")
+    # We mock MACEManager's compute locally since TieredOracle calls it
+    import numpy as np
 
-        import pyacemaker.domain_models.defaults
+    def mock_mace_compute(self_obj, structures, batch_size=10):
+        for atoms in structures:
+            atoms_copy = atoms.copy()
+            atoms_copy.new_array(
+                "c_gamma", np.array([0.1, 0.1])
+            )  # Fake high uncertainty to trigger DFT
+            yield atoms_copy
 
-        with patch.object(
-            pyacemaker.domain_models.defaults, "DEFAULT_POTENTIALS_DIR", str(pot_dir.resolve())
-        ):
-            mace_manager = MACEManager(str(model_file))
+    mace_manager.compute = mock_mace_compute.__get__(mace_manager)
     dft_manager = MagicMock(spec=DFTManager)
+
+    # Need to mock DFTManager.compute generator to yield back atoms so next() works
+    def mock_dft_compute(structures, batch_size=10):
+        yield from structures
+
+    dft_manager.compute.side_effect = mock_dft_compute
 
     oracle = TieredOracle(mace_manager, dft_manager, thresholds)
 
@@ -88,11 +96,8 @@ def test_scenario_phase3_cutout() -> None:
     # The oracle evaluates a structure. MACE mock yields max_g around 0.1
     atoms = Atoms("FePt", positions=[[0, 0, 0], [1, 1, 1]], cell=[10, 10, 10])
 
-    import numpy as np
-
-    with patch("pyacemaker.core.oracle.np.random.uniform", return_value=np.array([0.1, 0.1])):
-        gen = oracle.compute(iter([atoms]))
-        _result = next(gen)
+    gen = oracle.compute(iter([atoms]))
+    _result = next(gen)
 
     # max_g = 0.1 > 0.05, so it falls back to DFT
     dft_manager.compute.assert_called()
@@ -122,12 +127,13 @@ def test_scenario_phase4_resume(mock_driver: MagicMock, tmp_path: Path) -> None:
     # 1. Finetune MACE
     finetune_mgr = FinetuneManager()
     dataset_path = tmp_path / "dataset.xyz"
-    dataset_path.touch()
 
-    # Since we implemented real finetuning and bypass logic in trainer.py for pytest,
-    # the subprocess won't fail and we don't mock it to verify the integration directly.
-    awakened_model = finetune_mgr.finetune(dataset_path)
-    assert awakened_model == "awakened_mace_model.model"
+    # Mock subprocess.run for tests to prevent real execution and isolate logic
+    with patch("pyacemaker.utils.process.subprocess.run") as mock_run:
+        mock_run.return_value.returncode = 0
+        awakened_model = finetune_mgr.finetune(dataset_path)
+        assert awakened_model == "awakened_mace_model.model"
+        mock_run.assert_called_once()
 
     # 2. ACE Incremental Update
     t_config = TrainingConfig(
