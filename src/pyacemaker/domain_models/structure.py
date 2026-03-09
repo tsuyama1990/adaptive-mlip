@@ -1,7 +1,15 @@
 from enum import StrEnum
+from pathlib import Path
+from typing import Any
 
 from ase.data import chemical_symbols
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+from pyacemaker.domain_models.workflow import (
+    ActiveLearningThresholds,
+    CutoutConfig,
+    LoopStrategyConfig,
+)
 
 
 class ExplorationPolicy(StrEnum):
@@ -122,3 +130,13 @@ class StructureConfig(BaseModel):
             self.policy_name = self.active_policies[0]
 
         return self
+
+
+class PolicyContext(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    engine: Any | None = None
+    potential: str | Path | None = None
+    thresholds: ActiveLearningThresholds | None = None
+    cutout_config: CutoutConfig | None = None
+    loop_strategy: LoopStrategyConfig | None = None

@@ -24,11 +24,7 @@ class MockPolicy(SafeBasePolicy):
         base_structure: Atoms,
         config: StructureConfig,
         n_structures: int = 1,
-        engine: Any | None = None,
-        potential: str | Path | None = None,
-        thresholds: Any | None = None,
-        cutout_config: Any | None = None,
-        loop_strategy: Any | None = None,
+        context: Any = None,
     ) -> Iterator[Atoms]:
         for _ in range(n_structures):
             a = base_structure.copy()  # type: ignore[no-untyped-call]
@@ -97,12 +93,14 @@ def test_md_micro_burst_policy() -> None:
 
     # MDMicroBurst implementation currently uses randomized perturbation.
     # Just asserting it generates the structures appropriately for the updated mock behaviors
+    from pyacemaker.domain_models.structure import PolicyContext
     policy = MDMicroBurstPolicy()
     config = StructureConfig(elements=["H"], supercell_size=[1, 1, 1])
     base = Atoms("H", positions=[[0, 0, 0]])
+    context = PolicyContext(engine=initial_engine, potential="pot")
 
     results = list(
-        policy.generate(base, config, n_structures=1, engine=initial_engine, potential="pot")
+        policy.generate(base, config, n_structures=1, context=context)
     )
 
     assert len(results) == 1

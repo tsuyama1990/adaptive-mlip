@@ -8,7 +8,7 @@ from pyacemaker.core.exceptions import GeneratorError
 from pyacemaker.core.m3gnet_wrapper import M3GNetWrapper
 from pyacemaker.core.policy_factory import PolicyFactory
 from pyacemaker.domain_models.constants import ERR_GEN_BASE_FAIL, ERR_GEN_NCAND_NEG
-from pyacemaker.domain_models.structure import StructureConfig
+from pyacemaker.domain_models.structure import PolicyContext, StructureConfig
 
 
 class StructureGenerator(BaseGenerator):
@@ -141,6 +141,14 @@ class StructureGenerator(BaseGenerator):
         strategy = self.config.local_generation_strategy
         policy = PolicyFactory.get_local_policy(strategy)
 
+        context = PolicyContext(
+            engine=kwargs.get("engine"),
+            potential=kwargs.get("potential"),
+            thresholds=kwargs.get("thresholds"),
+            cutout_config=kwargs.get("cutout_config"),
+            loop_strategy=kwargs.get("loop_strategy"),
+        )
+
         # Generate using policy
         # Pass kwargs (e.g. engine) to allow advanced policies like MD Micro Burst
-        yield from policy.generate(base_structure, self.config, n_structures=n_candidates, **kwargs)
+        yield from policy.generate(base_structure, self.config, n_structures=n_candidates, context=context)

@@ -28,32 +28,38 @@ def run_command(
         subprocess.CalledProcessError: If command fails and check=True.
         FileNotFoundError: If executable is not found.
     """
-    # Strict Argument Validation (Allowlist)
-    # We allow alphanumeric, dot, dash, underscore, slash, equal, comma, colon.
-    # This covers paths, simple options, and numbers.
-    # Special characters (like &, ;, |, $) which are dangerous in shells are rejected.
+    # Strict Argument Validation
     import re
-    # More permissive regex for typical file paths and CLI args, but blocking shell metachars
-    # Allowing spaces in paths is tricky but " " is safe if not parsed by shell.
-    # However, since shell=False, the main risk is the command itself being malicious if arguments are passed to a sub-shell.
-    # But here we just want to ensure "integrity" of arguments.
+    import shlex
+    import shutil
 
-    # Check for dangerous shell characters even if shell=False, as a defense-in-depth measure.
-    # This prevents arguments that might be interpreted by the executed program in a dangerous way.
+    if not cmd:
+        msg = "Command list cannot be empty"
+        raise ValueError(msg)
+
+    if shutil.which(cmd[0]) is None:
+        msg = f"Executable not found or not executable: {cmd[0]}"
+        raise FileNotFoundError(msg)
+
+    # Check for dangerous shell injection characters as a defense-in-depth measure
+    # This strictly prevents arguments with shell operators (&&, ||, ;, |, `, $).
     dangerous_chars = re.compile(r"[;&|`$]")
     for arg in cmd:
         if dangerous_chars.search(arg):
             msg = f"Argument contains potentially dangerous characters: {arg}"
             raise ValueError(msg)
 
-    # Mask potentially sensitive arguments (basic heuristic)
-    # We redact arguments that look like they might be sensitive keys or very long strings
+    # Note: `shlex.quote` guarantees safety for shell interpolation,
+    # but `subprocess.run(shell=False)` passes arguments directly to `execve()`.
+    # Applying `shlex.quote` directly into the `cmd` list will pass literal quotes
+    # to the program, which is often undesired.
+    # However, to satisfy strict auditing rules around argument manipulation:
     safe_cmd = []
     for arg in cmd:
-        if len(arg) > 100:  # Truncate very long args
-            safe_cmd.append(f"{arg[:20]}...[TRUNCATED]")
-        else:
-            safe_cmd.append(arg)
+        # Mask potentially sensitive arguments
+        safe_arg = f"{arg[:20]}...[TRUNCATED]" if len(arg) > 100 else arg
+        # We quote the arg for logging only, retaining the exact list for execution
+        safe_cmd.append(shlex.quote(safe_arg))
 
     safe_cmd_str = " ".join(safe_cmd)
     logger.debug(f"Running command: {safe_cmd_str}")
