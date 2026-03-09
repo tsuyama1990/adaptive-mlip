@@ -76,6 +76,12 @@ def test_engine_integration_lammps_failure(
 
     engine = LammpsEngine(mock_md_config)
 
-    # Updated match string
+    # Updated match string. Actually `run_file` uses `_validate_command` which raises ValueError
+    # which is wrapped into `RuntimeError(ERR_SIM_SECURITY_FAIL)`. Wait, it's not security,
+    # mock_lammps_module.return_value.command.side_effect raises RuntimeError("LAMMPS Error").
+    # `driver.run_file` does not fail due to command. `driver.run_file` reads file and passes to command().
+    # The actual failure wrapper depends on the try/except block in engine.run() -> _execute_simulation.
+    # `driver.run_file` will raise RuntimeError if LAMMPS crashes.
+    # LammpsEngine._execute_simulation raises RuntimeError(ERR_SIM_EXEC_FAIL).
     with pytest.raises(RuntimeError, match="Simulation execution failed"):
         engine.run(atoms, potential_path)

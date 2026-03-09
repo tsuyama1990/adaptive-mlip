@@ -105,14 +105,7 @@ class PacemakerTrainer(BaseTrainer):
         Raises:
             TrainerError: If the training data file does not exist or format is invalid.
         """
-        # Get path from environment without default
-        import os
-
-        try:
-            pace_train_cmd = os.environ["PACE_TRAIN_CMD"]
-        except KeyError:
-            msg = "Environment variable 'PACE_TRAIN_CMD' is required."
-            raise TrainerError(msg) from None
+        pace_train_cmd = self.config.pace_train_cmd
 
         # Ensure pace_train is installed
         if not shutil.which(pace_train_cmd):
@@ -120,7 +113,13 @@ class PacemakerTrainer(BaseTrainer):
             raise TrainerError(msg)
 
         data_path = Path(training_data_path).resolve()
-        self._validate_training_data(data_path)
+
+        from pyacemaker.domain_models.validation import FileFormatValidator
+
+        try:
+            FileFormatValidator.validate_training_data_format(data_path)
+        except (ValueError, FileNotFoundError) as e:
+            raise TrainerError(str(e)) from e
 
         # Determine output directory (same as data file)
         output_dir = data_path.parent
@@ -137,12 +136,17 @@ class PacemakerTrainer(BaseTrainer):
 
         import re
 
-        from pyacemaker.domain_models.defaults import LAMMPS_SAFE_CMD_PATTERN
+        from pyacemaker.domain_models.defaults import SAFE_CMD_PATTERN
 
-        for key, val in pacemaker_config.items():
-            if isinstance(val, str) and not re.match(LAMMPS_SAFE_CMD_PATTERN, val):
-                msg = f"Malicious content detected in configuration value for key '{key}'"
-                raise TrainerError(msg)
+        def _recursive_validate(config_dict: dict[str, Any]) -> None:
+            for key, val in config_dict.items():
+                if isinstance(val, str) and not re.match(SAFE_CMD_PATTERN, val):
+                    msg = f"Malicious content detected in configuration value for key '{key}'"
+                    raise TrainerError(msg)
+                if isinstance(val, dict):
+                    _recursive_validate(val)
+
+        _recursive_validate(pacemaker_config)
 
         dump_yaml(pacemaker_config, input_yaml_path)
 
@@ -173,28 +177,13 @@ class PacemakerTrainer(BaseTrainer):
 
         return potential_path
 
-    def _validate_training_data(self, data_path: Path) -> None:
-        """Validates existence and basic format of training data."""
-        if not data_path.exists():
-            msg = f"Training data not found: {data_path}"
-            raise TrainerError(msg)
-
-        if data_path.suffix not in {".pckl", ".xyz", ".extxyz", ".gzip"}:
-            msg = f"Invalid training data format: {data_path.suffix}"
-            raise TrainerError(msg)
-
-        # Check for empty file
-        if data_path.stat().st_size == 0:
-            msg = f"Training data file is empty: {data_path}"
-            raise TrainerError(msg)
-
 
 class FinetuneManager:
     """
     Manager to briefly train the final readout layers of the MACE foundation model.
     """
 
-    def finetune(self, dataset_path: str | Path) -> str:
+    def finetune(self, dataset_path: str | Path, config: TrainingConfig) -> str:
         """
         Finetunes the awakened MACE model using the provided dataset.
         Returns the path to the awakened model.
@@ -205,16 +194,8 @@ class FinetuneManager:
 
         output_model = "awakened_mace_model.model"
 
-        # Get paths and options from environment without default
-        import os
-
-        try:
-            mace_train_cmd = os.environ["MACE_TRAIN_CMD"]
-            foundation_model = os.environ["MACE_FOUNDATION_MODEL"]
-        except KeyError as e:
-            msg = f"Environment variable {e} is required for MACE finetuning."
-            from pyacemaker.core.exceptions import TrainerError
-            raise TrainerError(msg) from None
+        mace_train_cmd = config.mace_train_cmd
+        foundation_model = config.mace_foundation_model
 
         # Real logic: execute mace_run_train command to finetune.
         # We specify the training file and an output model path.
@@ -230,15 +211,6 @@ class FinetuneManager:
 
         try:
             # Use the existing wrapper which handles exceptions and logging
-            # Check if this is a test environment mock execution run
-            import sys
-
-            if "pytest" in sys.modules:
-                # We do not want to actually block on a long mace_run_train process during unit/UAT tests
-                # unless explicitly requested, but we've formulated the command.
-                # However, strictly no mocks means we must execute it. The UAT test will mock `run_command`
-                # so if we reach here and run_command fails we should just bubble it or bypass if mocked.
-                pass
             run_command(cmd)
         except subprocess.CalledProcessError as e:
             # mace_run_train may fail if model doesn't exist locally without internet in CI/CD sandbox

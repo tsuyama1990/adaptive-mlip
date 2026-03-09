@@ -28,10 +28,7 @@ def config() -> TrainingConfig:
 
 
 @pytest.fixture
-def trainer(config: TrainingConfig, monkeypatch: pytest.MonkeyPatch) -> PacemakerTrainer:
-    monkeypatch.setenv("PACE_TRAIN_CMD", "pace_train")
-    monkeypatch.setenv("MACE_TRAIN_CMD", "mace_run_train")
-    monkeypatch.setenv("MACE_FOUNDATION_MODEL", "mace-mp-0-medium")
+def trainer(config: TrainingConfig) -> PacemakerTrainer:
     return PacemakerTrainer(config)
 
 

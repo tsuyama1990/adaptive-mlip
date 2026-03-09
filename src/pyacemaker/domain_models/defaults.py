@@ -159,8 +159,8 @@ DEFAULT_MD_MINIMIZE_TOL = 1e-4
 LAMMPS_MINIMIZE_MAX_ITER = 10000
 LAMMPS_MINIMIZE_STEPS = 10000
 LAMMPS_VELOCITY_SEED = 12345
-# Allowed characters in LAMMPS commands: Alphanumeric, space, common punctuation including *
-LAMMPS_SAFE_CMD_PATTERN = r"^[a-zA-Z0-9\s_\-\.\/=\"\*]+$"
+# Allowed characters in LAMMPS and Pacemaker commands: strictly whitelisted to prevent injection
+SAFE_CMD_PATTERN = r"^[a-zA-Z0-9\s_\-\.\/=\*]+$"
 LAMMPS_SCREEN_ARG = "-screen"
 LAMMPS_MIN_STYLE_CG = "cg"
 

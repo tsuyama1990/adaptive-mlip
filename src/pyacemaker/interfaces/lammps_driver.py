@@ -6,7 +6,7 @@ import numpy as np
 from ase import Atoms
 from lammps import lammps
 
-from pyacemaker.domain_models.constants import LAMMPS_SAFE_CMD_PATTERN
+from pyacemaker.domain_models.constants import SAFE_CMD_PATTERN
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +18,7 @@ class LammpsDriver:
     """
 
     # Whitelist of allowed characters in LAMMPS commands
-    SAFE_CMD_PATTERN = re.compile(LAMMPS_SAFE_CMD_PATTERN)
+    LAMMPS_SAFE_CMD_PATTERN = re.compile(SAFE_CMD_PATTERN)
 
     def __init__(self, cmdargs: list[str] | None = None) -> None:
         """
@@ -40,7 +40,7 @@ class LammpsDriver:
 
     def _validate_command(self, cmd: str) -> None:
         """Validates a single command against security rules."""
-        if not self.SAFE_CMD_PATTERN.match(cmd):
+        if not self.LAMMPS_SAFE_CMD_PATTERN.match(cmd):
             msg = f"Command contains forbidden characters: {cmd}"
             raise ValueError(msg)
 

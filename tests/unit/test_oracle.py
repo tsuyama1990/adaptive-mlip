@@ -84,18 +84,23 @@ def test_dft_manager_self_healing(mock_dft_config: DFTConfig) -> None:
 
     class FailingThenSucceedingExecutor:
         call_count = 0
+
         def __init__(self, max_workers: int) -> None:
             pass
-        def __enter__(self):
+
+        def __enter__(self) -> "FailingThenSucceedingExecutor":
             return self
-        def __exit__(self, *args):
+
+        def __exit__(self, *args: Any) -> None:
             pass
+
         def submit(self, fn: Any, *args: Any, **kwargs: Any) -> Any:
             class DummyFuture:
-                def __init__(self, res, exc):
+                def __init__(self, res: Any, exc: Any) -> None:
                     self.res = res
                     self.exc = exc
-                def result(self, timeout=None):
+
+                def result(self, timeout: float | None = None) -> Any:
                     return self.res, self.exc
 
             FailingThenSucceedingExecutor.call_count += 1
@@ -110,7 +115,9 @@ def test_dft_manager_self_healing(mock_dft_config: DFTConfig) -> None:
 
     FailingThenSucceedingExecutor.call_count = 0
 
-    with unittest.mock.patch("concurrent.futures.ProcessPoolExecutor", FailingThenSucceedingExecutor):
+    with unittest.mock.patch(
+        "concurrent.futures.ProcessPoolExecutor", FailingThenSucceedingExecutor
+    ):
         gen = manager.compute(iter([atoms]))
         result = next(gen)
 
@@ -125,17 +132,22 @@ def test_dft_manager_fatal_error(mock_dft_config: DFTConfig) -> None:
     manager = DFTManager(mock_dft_config, driver=fake_driver)
 
     import unittest.mock
+
     class AlwaysFailingExecutor:
         def __init__(self, max_workers: int) -> None:
             pass
-        def __enter__(self):
+
+        def __enter__(self) -> "AlwaysFailingExecutor":
             return self
-        def __exit__(self, *args):
+
+        def __exit__(self, *args: Any) -> None:
             pass
+
         def submit(self, fn: Any, *args: Any, **kwargs: Any) -> Any:
             class DummyFuture:
-                def result(self, timeout=None):
+                def result(self, timeout: float | None = None) -> Any:
                     return None, RuntimeError("Always fails")
+
             return DummyFuture()
 
     with unittest.mock.patch("concurrent.futures.ProcessPoolExecutor", AlwaysFailingExecutor):
@@ -158,17 +170,22 @@ def test_dft_manager_setup_error(mock_dft_config: DFTConfig) -> None:
     manager = DFTManager(mock_dft_config, driver=fake_driver)
 
     import unittest.mock
+
     class SetupFailingExecutor:
         def __init__(self, max_workers: int) -> None:
             pass
-        def __enter__(self):
+
+        def __enter__(self) -> "SetupFailingExecutor":
             return self
-        def __exit__(self, *args):
+
+        def __exit__(self, *args: Any) -> None:
             pass
+
         def submit(self, fn: Any, *args: Any, **kwargs: Any) -> Any:
             class DummyFuture:
-                def result(self, timeout=None):
+                def result(self, timeout: float | None = None) -> Any:
                     return None, RuntimeError("CalculatorSetupError")
+
             return DummyFuture()
 
     with unittest.mock.patch("concurrent.futures.ProcessPoolExecutor", SetupFailingExecutor):

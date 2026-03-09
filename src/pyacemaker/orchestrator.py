@@ -380,6 +380,8 @@ class Orchestrator:
             # Here we just show the integration point.
             _finetune_manager = FinetuneManager()
             # The finetune manager would train on the DFT data
+            # Note: Orchestrator currently does not explicitly pass the dataset_path,
+            # we assume the trainer config holds the parameters.
             self.logger.info("MACE model awakened (finetuned) using new DFT data.")
 
             # 2. Explosive Generation of Surrogate Data

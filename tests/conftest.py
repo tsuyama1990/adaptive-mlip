@@ -54,6 +54,16 @@ def dummy_pseudopotentials_dir() -> Generator[Path, None, None]:
         yield Path(tmp_dir)
 
 
+@pytest.fixture
+def dummy_mace_model_dir() -> Generator[Path, None, None]:
+    """Provides a temporary directory with a dummy mace model file to bypass Path.exists checks safely."""
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        pot_dir = Path(tmp_dir)
+        model_file = pot_dir / "model.model"
+        model_file.touch()
+        yield pot_dir
+
+
 def create_dummy_pseudopotentials(path: Path | str, elements: list[str]) -> None:
     """Helper to safely create dummy pseudopotential files for testing.
 
@@ -279,6 +289,14 @@ class ConfigDictType(TypedDict, total=False):
     logging: dict[str, Any]
 
 
+@pytest.fixture(autouse=True)
+def setup_test_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Sets up default environment variables for testing to satisfy strict env var checks."""
+    monkeypatch.setenv("PACE_TRAIN_CMD", "pace_train")
+    monkeypatch.setenv("MACE_TRAIN_CMD", "mace_run_train")
+    monkeypatch.setenv("MACE_FOUNDATION_MODEL", "mace-mp-0-medium")
+
+
 def create_test_config_dict(**overrides: Any) -> ConfigDictType:
     """
     Helper to create a valid config dictionary using Pydantic defaults.
@@ -324,6 +342,9 @@ def create_test_config_dict(**overrides: Any) -> ConfigDictType:
             "max_basis_size": 500,
             "delta_learning": True,
             "active_set_optimization": False,
+            "pace_train_cmd": "pace_train",
+            "mace_train_cmd": "mace_run_train",
+            "mace_foundation_model": "mace-mp-0-medium",
         },
         "md": {
             "temperature": 300.0,

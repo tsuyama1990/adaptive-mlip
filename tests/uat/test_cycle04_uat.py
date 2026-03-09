@@ -11,11 +11,8 @@ from pyacemaker.core.trainer import PacemakerTrainer
 from pyacemaker.domain_models.training import TrainingConfig
 
 
-def test_uat_fit_potential(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_uat_fit_potential(tmp_path: Path) -> None:
     # GIVEN a labelled dataset
-    monkeypatch.setenv("PACE_TRAIN_CMD", "pace_train")
-    monkeypatch.setenv("MACE_TRAIN_CMD", "mace_run_train")
-    monkeypatch.setenv("MACE_FOUNDATION_MODEL", "mace-mp-0-medium")
     dataset_path = tmp_path / "train.xyz"
     write(dataset_path, Atoms("H2", positions=[[0, 0, 0], [0, 0, 1]]))
 
@@ -55,11 +52,8 @@ def test_uat_fit_potential(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> N
         assert config_dict["backend"]["display_step"] == 50
 
 
-def test_uat_fit_potential_failure(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_uat_fit_potential_failure(tmp_path: Path) -> None:
     # GIVEN a labelled dataset
-    monkeypatch.setenv("PACE_TRAIN_CMD", "pace_train")
-    monkeypatch.setenv("MACE_TRAIN_CMD", "mace_run_train")
-    monkeypatch.setenv("MACE_FOUNDATION_MODEL", "mace-mp-0-medium")
     dataset_path = tmp_path / "train.xyz"
     write(dataset_path, Atoms("H"))
 

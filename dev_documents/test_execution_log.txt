@@ -4,7 +4,7 @@ rootdir: /app
 configfile: pyproject.toml
 testpaths: tests
 plugins: cov-7.0.0, anyio-4.12.1
-collected 256 items
+collected 259 items
 
 tests/e2e/test_engine_integration.py ..                                  [  0%]
 tests/e2e/test_orchestrator.py .......                                   [  3%]
@@ -17,36 +17,36 @@ tests/uat/test_cycle02_uat.py ..                                         [  8%]
 tests/uat/test_cycle03_uat.py ..                                         [  9%]
 tests/uat/test_cycle04_uat.py ...                                        [ 10%]
 tests/uat/test_cycle06_uat.py ..                                         [ 11%]
-tests/uat/test_cycle07_uat.py ..                                         [ 12%]
-tests/uat/test_cycle08_uat.py ..F                                        [ 13%]
+tests/uat/test_cycle07_uat.py ..                                         [ 11%]
+tests/uat/test_cycle08_uat.py ...                                        [ 13%]
 tests/unit/test_active_set.py .....                                      [ 15%]
 tests/unit/test_active_set_anchor.py ....                                [ 16%]
 tests/unit/test_delta.py ....                                            [ 18%]
-tests/unit/test_domain_models.py .................                       [ 25%]
-tests/unit/test_domain_models_dft.py ...........                         [ 29%]
+tests/unit/test_domain_models.py .................                       [ 24%]
+tests/unit/test_domain_models_dft.py ...........                         [ 28%]
 tests/unit/test_domain_models_eon.py ....                                [ 30%]
-tests/unit/test_domain_models_md.py ...........                          [ 35%]
+tests/unit/test_domain_models_md.py ...........                          [ 34%]
 tests/unit/test_domain_models_md_new.py ..                               [ 35%]
 tests/unit/test_domain_models_scenario.py ..                             [ 36%]
-tests/unit/test_domain_models_training.py .......                        [ 39%]
-tests/unit/test_domain_models_validation.py ....                         [ 41%]
+tests/unit/test_domain_models_training.py .......                        [ 38%]
+tests/unit/test_domain_models_validation.py ....                         [ 40%]
 tests/unit/test_elastic.py ....                                          [ 42%]
-tests/unit/test_embedding.py .......                                     [ 45%]
-tests/unit/test_engine.py .......                                        [ 48%]
+tests/unit/test_embedding.py .......                                     [ 44%]
+tests/unit/test_engine.py .......                                        [ 47%]
 tests/unit/test_engine_halt_step.py ..                                   [ 48%]
-tests/unit/test_engine_relax.py ...                                      [ 50%]
+tests/unit/test_engine_relax.py ...                                      [ 49%]
 tests/unit/test_eon_driver.py .....                                      [ 51%]
-tests/unit/test_extraction.py .....                                      [ 53%]
-tests/unit/test_factory.py ..                                            [ 54%]
+tests/unit/test_extraction.py ........                                   [ 54%]
+tests/unit/test_factory.py ..                                            [ 55%]
 tests/unit/test_generator.py ......                                      [ 57%]
-tests/unit/test_generator_local.py ..                                    [ 57%]
-tests/unit/test_io.py ........                                           [ 60%]
-tests/unit/test_io_manager.py ..                                         [ 61%]
+tests/unit/test_generator_local.py ..                                    [ 58%]
+tests/unit/test_io.py ........                                           [ 61%]
+tests/unit/test_io_manager.py ..                                         [ 62%]
 tests/unit/test_lammps_driver.py ...........                             [ 66%]
 tests/unit/test_lammps_driver_security.py ...                            [ 67%]
 tests/unit/test_lammps_generator.py ...                                  [ 68%]
 tests/unit/test_lammps_generator_reorder.py ..                           [ 69%]
-tests/unit/test_loop.py .......                                          [ 71%]
+tests/unit/test_loop.py .......                                          [ 72%]
 tests/unit/test_main.py ...                                              [ 73%]
 tests/unit/test_oracle.py ........                                       [ 76%]
 tests/unit/test_oracle_streaming.py .                                    [ 76%]
@@ -64,210 +64,6 @@ tests/unit/test_trainer_pacemaker.py ......                              [ 94%]
 tests/unit/test_validator.py ....                                        [ 95%]
 tests/unit/test_validator_security.py ...........                        [100%]
 
-=================================== FAILURES ===================================
-_________________________ test_scenario_phase4_resume __________________________
-
-self = <pyacemaker.core.trainer.FinetuneManager object at 0x7f96c10e6660>
-dataset_path = PosixPath('/tmp/pytest-of-jules/pytest-1/test_scenario_phase4_resume0/dataset.xyz')
-
-    def finetune(self, dataset_path: str | Path) -> str:
-        """
-        Finetunes the awakened MACE model using the provided dataset.
-        Returns the path to the awakened model.
-        """
-        import subprocess
-
-        from pyacemaker.utils.process import run_command
-
-        output_model = "awakened_mace_model.model"
-
-        # Real logic: execute mace_run_train command to finetune.
-        # We specify the training file and an output model path.
-        cmd = [
-            "mace_run_train",
-            "--name",
-            "awakened_mace_model",
-            "--train_file",
-            str(dataset_path),
-            "--foundation_model",
-            "mace-mp-0-medium",
-        ]
-
-        try:
-            # Use the existing wrapper which handles exceptions and logging
->           run_command(cmd)
-
-src/pyacemaker/core/trainer.py:185:
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
-src/pyacemaker/utils/process.py:68: in run_command
-    return subprocess.run(  # noqa: S603
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
-
-input = None, capture_output = True, timeout = None, check = True
-popenargs = (['mace_run_train', '--name', 'awakened_mace_model', '--train_file', '/tmp/pytest-of-jules/pytest-1/test_scenario_phase4_resume0/dataset.xyz', '--foundation_model', ...],)
-kwargs = {'cwd': None, 'shell': False, 'stderr': -1, 'stdout': -1, ...}
-process = <Popen: returncode: 1 args: ['mace_run_train', '--name', 'awakened_mace_mode...>
-stdout = 'cuequivariance or cuequivariance_torch is not available. Cuequivariance acceleration will be disabled.\n2026-03-09 19...ING SETTINGS===========\n2026-03-09 19:53:39.435 INFO: MACE version: 0.3.15\n2026-03-09 19:53:39.435 INFO: Using CPU\n'
-stderr = "/app/.venv/lib/python3.12/site-packages/e3nn/o3/_wigner.py:10: UserWarning: Environment variable TORCH_FORCE_NO_WEIGH...5\n                     ^^^^^^^^^^^^^^^^\nFileNotFoundError: [Errno 2] No such file or directory: 'mace-mp-0-medium'\n"
-retcode = 1
-
-    def run(*popenargs,
-            input=None, capture_output=False, timeout=None, check=False, **kwargs):
-        """Run command with arguments and return a CompletedProcess instance.
-
-        The returned instance will have attributes args, returncode, stdout and
-        stderr. By default, stdout and stderr are not captured, and those attributes
-        will be None. Pass stdout=PIPE and/or stderr=PIPE in order to capture them,
-        or pass capture_output=True to capture both.
-
-        If check is True and the exit code was non-zero, it raises a
-        CalledProcessError. The CalledProcessError object will have the return code
-        in the returncode attribute, and output & stderr attributes if those streams
-        were captured.
-
-        If timeout (seconds) is given and the process takes too long,
-         a TimeoutExpired exception will be raised.
-
-        There is an optional argument "input", allowing you to
-        pass bytes or a string to the subprocess's stdin.  If you use this argument
-        you may not also use the Popen constructor's "stdin" argument, as
-        it will be used internally.
-
-        By default, all communication is in bytes, and therefore any "input" should
-        be bytes, and the stdout and stderr will be bytes. If in text mode, any
-        "input" should be a string, and stdout and stderr will be strings decoded
-        according to locale encoding, or by "encoding" if set. Text mode is
-        triggered by setting any of text, encoding, errors or universal_newlines.
-
-        The other arguments are the same as for the Popen constructor.
-        """
-        if input is not None:
-            if kwargs.get('stdin') is not None:
-                raise ValueError('stdin and input arguments may not both be used.')
-            kwargs['stdin'] = PIPE
-
-        if capture_output:
-            if kwargs.get('stdout') is not None or kwargs.get('stderr') is not None:
-                raise ValueError('stdout and stderr arguments may not be used '
-                                 'with capture_output.')
-            kwargs['stdout'] = PIPE
-            kwargs['stderr'] = PIPE
-
-        with Popen(*popenargs, **kwargs) as process:
-            try:
-                stdout, stderr = process.communicate(input, timeout=timeout)
-            except TimeoutExpired as exc:
-                process.kill()
-                if _mswindows:
-                    # Windows accumulates the output in a single blocking
-                    # read() call run on child threads, with the timeout
-                    # being done in a join() on those threads.  communicate()
-                    # _after_ kill() is required to collect that and add it
-                    # to the exception.
-                    exc.stdout, exc.stderr = process.communicate()
-                else:
-                    # POSIX _communicate already populated the output so
-                    # far into the TimeoutExpired exception.
-                    process.wait()
-                raise
-            except:  # Including KeyboardInterrupt, communicate handled that.
-                process.kill()
-                # We don't call process.wait() as .__exit__ does that for us.
-                raise
-            retcode = process.poll()
-            if check and retcode:
->               raise CalledProcessError(retcode, process.args,
-                                         output=stdout, stderr=stderr)
-E               subprocess.CalledProcessError: Command '['mace_run_train', '--name', 'awakened_mace_model', '--train_file', '/tmp/pytest-of-jules/pytest-1/test_scenario_phase4_resume0/dataset.xyz', '--foundation_model', 'mace-mp-0-medium']' returned non-zero exit status 1.
-
-/home/jules/.pyenv/versions/3.12.12/lib/python3.12/subprocess.py:571: CalledProcessError
-
-The above exception was the direct cause of the following exception:
-
-mock_driver = <MagicMock name='LammpsDriver' id='140285460771376'>
-tmp_path = PosixPath('/tmp/pytest-of-jules/pytest-1/test_scenario_phase4_resume0')
-
-    @patch("pyacemaker.core.engine.LammpsDriver")
-    def test_scenario_phase4_resume(mock_driver: MagicMock, tmp_path: Path) -> None:
-        """
-        Scenario 4: Hierarchical Fine-Tuning and Seamless Resume
-        """
-        # 1. Finetune MACE
-        finetune_mgr = FinetuneManager()
-        dataset_path = tmp_path / "dataset.xyz"
-        dataset_path.touch()
->       awakened_model = finetune_mgr.finetune(dataset_path)
-                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-tests/uat/test_cycle08_uat.py:126:
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
-
-self = <pyacemaker.core.trainer.FinetuneManager object at 0x7f96c10e6660>
-dataset_path = PosixPath('/tmp/pytest-of-jules/pytest-1/test_scenario_phase4_resume0/dataset.xyz')
-
-    def finetune(self, dataset_path: str | Path) -> str:
-        """
-        Finetunes the awakened MACE model using the provided dataset.
-        Returns the path to the awakened model.
-        """
-        import subprocess
-
-        from pyacemaker.utils.process import run_command
-
-        output_model = "awakened_mace_model.model"
-
-        # Real logic: execute mace_run_train command to finetune.
-        # We specify the training file and an output model path.
-        cmd = [
-            "mace_run_train",
-            "--name",
-            "awakened_mace_model",
-            "--train_file",
-            str(dataset_path),
-            "--foundation_model",
-            "mace-mp-0-medium",
-        ]
-
-        try:
-            # Use the existing wrapper which handles exceptions and logging
-            run_command(cmd)
-        except subprocess.CalledProcessError as e:
-            msg = f"MACE Finetuning failed with exit code {e.returncode}: {e}"
->           raise TrainerError(msg) from e
-E           pyacemaker.core.exceptions.TrainerError: MACE Finetuning failed with exit code 1: Command '['mace_run_train', '--name', 'awakened_mace_model', '--train_file', '/tmp/pytest-of-jules/pytest-1/test_scenario_phase4_resume0/dataset.xyz', '--foundation_model', 'mace-mp-0-medium']' returned non-zero exit status 1.
-
-src/pyacemaker/core/trainer.py:188: TrainerError
------------------------------- Captured log call -------------------------------
-ERROR    pyacemaker.utils.process:process.py:77 Command failed: mace_run_train --name awakened_mace_model --train_file /tmp/pytest-of-jules/pytest-1/test_scenario_phase4_resume0/dataset.xyz --foundation_model mace-mp-0-medium. Exit code: 1. Stderr: /app/.venv/lib/python3.12/site-packages/e3nn/o3/_wigner.py:10: UserWarning: Environment variable TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD detected, since the`weights_only` argument was not explicitly passed to `torch.load`, forcing weights_only=False.
-  _Jd, _W3j_flat, _W3j_indices = torch.load(os.path.join(os.path.dirname(__file__), 'constants.pt'))
-/app/.venv/lib/python3.12/site-packages/mace/cli/run_train.py:169: UserWarning: Environment variable TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD detected, since the`weights_only` argument was not explicitly passed to `torch.load`, forcing weights_only=False.
-  model_foundation = torch.load(
-Traceback (most recent call last):
-  File "/app/.venv/bin/mace_run_train", line 10, in <module>
-    sys.exit(main())
-             ^^^^^^
-  File "/app/.venv/lib/python3.12/site-packages/mace/cli/run_train.py", line 83, in main
-    run(args)
-  File "/app/.venv/lib/python3.12/site-packages/mace/cli/run_train.py", line 169, in run
-    model_foundation = torch.load(
-                       ^^^^^^^^^^^
-  File "/app/.venv/lib/python3.12/site-packages/torch/serialization.py", line 1500, in load
-    with _open_file_like(f, "rb") as opened_file:
-         ^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/app/.venv/lib/python3.12/site-packages/torch/serialization.py", line 768, in _open_file_like
-    return _open_file(name_or_buffer, mode)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/app/.venv/lib/python3.12/site-packages/torch/serialization.py", line 749, in __init__
-    super().__init__(open(name, mode))  # noqa: SIM115
-                     ^^^^^^^^^^^^^^^^
-FileNotFoundError: [Errno 2] No such file or directory: 'mace-mp-0-medium'
-Traceback (most recent call last):
-  File "/app/src/pyacemaker/utils/process.py", line 68, in run_command
-    return subprocess.run(  # noqa: S603
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.12/lib/python3.12/subprocess.py", line 571, in run
-    raise CalledProcessError(retcode, process.args,
-subprocess.CalledProcessError: Command '['mace_run_train', '--name', 'awakened_mace_model', '--train_file', '/tmp/pytest-of-jules/pytest-1/test_scenario_phase4_resume0/dataset.xyz', '--foundation_model', 'mace-mp-0-medium']' returned non-zero exit status 1.
 =============================== warnings summary ===============================
 tests/uat/test_cycle01_uat.py::test_scenario_01_02_guardrails_check_temp
   /app/.venv/lib/python3.12/site-packages/pydantic/main.py:464: UserWarning: Pydantic serializer warnings:
@@ -295,19 +91,19 @@ src/pyacemaker/core/active_set.py               71     10    86%   46-47, 60-61,
 src/pyacemaker/core/base.py                     30      0   100%
 src/pyacemaker/core/config_generator.py         36      3    92%   56-58
 src/pyacemaker/core/directory_manager.py        20      0   100%
-src/pyacemaker/core/engine.py                  120     32    73%   50, 64-65, 71-72, 86, 88, 91-92, 103-108, 114-115, 134, 140, 155-160, 166-167, 179, 204-209, 231
+src/pyacemaker/core/engine.py                  120     29    76%   50, 64-65, 71-72, 86, 88, 91-92, 104-105, 107-108, 114-115, 140, 155-160, 166-167, 179, 204-209, 231
 src/pyacemaker/core/exceptions.py                8      0   100%
 src/pyacemaker/core/generator.py                53     11    79%   36-39, 59, 62, 97, 107, 113, 115, 138
 src/pyacemaker/core/io_manager.py               74     30    59%   58-71, 78-81, 106-107, 110-115, 124-125, 129, 133-141
 src/pyacemaker/core/lammps_generator.py        132     19    86%   39-40, 114-130, 138, 157-164
 src/pyacemaker/core/loop.py                     70      6    91%   56, 63, 79-82, 85
 src/pyacemaker/core/m3gnet_wrapper.py           20      6    70%   26-27, 33-35, 52-54
-src/pyacemaker/core/oracle.py                  150     17    89%   180-185, 225-226, 230-231, 233-234, 242, 280-281, 284-285, 293, 320
+src/pyacemaker/core/oracle.py                  150     39    74%   180-185, 211-238, 241-244, 247-264, 280-281, 284-285, 293, 320
 src/pyacemaker/core/policy.py                  110     28    75%   30-31, 81-106, 134-136, 148, 161-164, 190, 197
 src/pyacemaker/core/policy_factory.py           31      7    77%   47, 53-54, 58-59, 86-87
 src/pyacemaker/core/report.py                   12      1    92%   85
 src/pyacemaker/core/state_manager.py            34      2    94%   37-38
-src/pyacemaker/core/trainer.py                  92     29    68%   30-46, 59-60, 100-101, 107-108, 128-131, 134-135, 142-143, 146-147, 189-196
+src/pyacemaker/core/trainer.py                 114     24    79%   41-45, 67-68, 82, 133-134, 143-144, 168-171, 174-175, 214-225
 src/pyacemaker/core/validator.py                68      7    90%   63, 68, 75-76, 79, 113, 150
 src/pyacemaker/domain_models/__init__.py        11      0   100%
 src/pyacemaker/domain_models/config.py          22      0   100%
@@ -319,8 +115,8 @@ src/pyacemaker/domain_models/logging.py         31      9    71%   24-25, 31, 39
 src/pyacemaker/domain_models/md.py             133     24    82%   40, 62-63, 82-83, 119-120, 125-126, 128-129, 133-134, 136-137, 234, 240-241, 249-250, 257-258, 260-261
 src/pyacemaker/domain_models/scenario.py         7      0   100%
 src/pyacemaker/domain_models/structure.py       71      4    94%   97-98, 116-117
-src/pyacemaker/domain_models/training.py        46      0   100%
-src/pyacemaker/domain_models/validation.py      17      0   100%
+src/pyacemaker/domain_models/training.py        49      0   100%
+src/pyacemaker/domain_models/validation.py      32      4    88%   48-49, 52-53
 src/pyacemaker/domain_models/workflow.py        58      4    93%   76-77, 79-80
 src/pyacemaker/factory.py                       32      3    91%   82-84
 src/pyacemaker/interfaces/__init__.py            5      0   100%
@@ -330,7 +126,7 @@ src/pyacemaker/interfaces/process.py            14      5    64%   12, 22-29
 src/pyacemaker/interfaces/qe_driver.py          48      2    96%   113-114
 src/pyacemaker/logger.py                        22      1    95%   42
 src/pyacemaker/main.py                          47      9    81%   21-24, 49-50, 59-60, 74
-src/pyacemaker/orchestrator.py                 312     58    81%   105-108, 159, 171, 197, 201-202, 226, 230-231, 261-262, 267, 279-281, 300, 324, 367, 371, 409-419, 430-431, 444-445, 453-459, 468-474, 493, 532-535, 544, 574-579, 618-621, 655
+src/pyacemaker/orchestrator.py                 312     58    81%   105-108, 159, 171, 197, 201-202, 226, 230-231, 261-262, 267, 279-281, 300, 324, 367, 371, 411-421, 432-433, 446-447, 455-461, 470-476, 495, 534-537, 546, 576-581, 620-623, 657
 src/pyacemaker/scenarios/__init__.py             3      0   100%
 src/pyacemaker/scenarios/base_scenario.py       12      1    92%   20
 src/pyacemaker/scenarios/fept_mgo.py           148     28    81%   80, 162-165, 170-172, 181-182, 195-196, 203, 216, 221-222, 225-226, 233, 237, 245-258, 266-268
@@ -342,12 +138,8 @@ src/pyacemaker/utils/io.py                      73      0   100%
 src/pyacemaker/utils/path.py                    38      4    89%   57-61
 src/pyacemaker/utils/perturbations.py           43      1    98%   77
 src/pyacemaker/utils/phonons.py                 51      2    96%   51, 69
-src/pyacemaker/utils/process.py                 32      3    91%   81-83
+src/pyacemaker/utils/process.py                 32      6    81%   76-83
 src/pyacemaker/utils/structure.py                6      2    67%   19-20
 --------------------------------------------------------------------------
-TOTAL                                         3058    460    85%
-=========================== short test summary info ============================
-FAILED tests/uat/test_cycle08_uat.py::test_scenario_phase4_resume - pyacemake...
-================== 1 failed, 255 passed, 3 warnings in 24.07s ==================
-/app/.venv/lib/python3.12/site-packages/coverage/inorout.py:561: CoverageWarning: Module dev_src was never imported. (module-not-imported); see https://coverage.readthedocs.io/en/7.13.4/messages.html#warning-module-not-imported
-  self.warn(f"Module {pkg} was never imported.", slug="module-not-imported")
+TOTAL                                         3098    481    84%
+======================= 259 passed, 3 warnings in 3.98s ========================

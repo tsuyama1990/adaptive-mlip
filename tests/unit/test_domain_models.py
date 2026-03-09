@@ -86,7 +86,14 @@ def test_dft_config_valid(
 def test_training_config_valid(
     dummy_pseudopotentials_dir: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    config = TrainingConfig(potential_type="ace", cutoff_radius=5.0, max_basis_size=500)
+    config = TrainingConfig(
+        potential_type="ace",
+        cutoff_radius=5.0,
+        max_basis_size=500,
+        pace_train_cmd="pace_train",
+        mace_train_cmd="mace_run_train",
+        mace_foundation_model="mace-mp-0-medium",
+    )
     assert config.cutoff_radius == 5.0
 
 
@@ -174,7 +181,14 @@ def test_pyace_config_valid(
         encut=400.0,
         pseudopotentials={"Al": "Al.UPF"},
     )
-    training = TrainingConfig(potential_type="ace", cutoff_radius=4.5, max_basis_size=500)
+    training = TrainingConfig(
+        potential_type="ace",
+        cutoff_radius=4.5,
+        max_basis_size=500,
+        pace_train_cmd="pace_train",
+        mace_train_cmd="mace_run_train",
+        mace_foundation_model="mace-mp-0-medium",
+    )
     md = MDConfig(temperature=300.0, pressure=0.0, timestep=0.001, n_steps=1000)
     workflow = WorkflowConfig(max_iterations=10)
     logging = LoggingConfig()
