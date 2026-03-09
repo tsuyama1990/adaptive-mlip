@@ -6,12 +6,7 @@ from typing import Any
 from ase import Atoms
 
 from pyacemaker.domain_models.md import MDSimulationResult
-from pyacemaker.domain_models.structure import StructureConfig
-from pyacemaker.domain_models.workflow import (
-    ActiveLearningThresholds,
-    CutoutConfig,
-    LoopStrategyConfig,
-)
+from pyacemaker.domain_models.structure import PolicyContext, StructureConfig
 
 
 class BasePolicy(ABC):
@@ -25,11 +20,7 @@ class BasePolicy(ABC):
         base_structure: Atoms,
         config: StructureConfig,
         n_structures: int = 1,
-        engine: Any | None = None,
-        potential: str | Path | None = None,
-        thresholds: ActiveLearningThresholds | None = None,
-        cutout_config: CutoutConfig | None = None,
-        loop_strategy: LoopStrategyConfig | None = None,
+        context: PolicyContext | None = None,
     ) -> Iterator[Atoms]:
         """
         Generates new candidates based on policy logic.

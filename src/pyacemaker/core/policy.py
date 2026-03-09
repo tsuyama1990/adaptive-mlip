@@ -13,12 +13,7 @@ from pyacemaker.domain_models.constants import (
     POLICY_MICROBURST_NOISE_STDEV,
     POLICY_NORMALMODE_NOISE_STDEV,
 )
-from pyacemaker.domain_models.structure import StructureConfig
-from pyacemaker.domain_models.workflow import (
-    ActiveLearningThresholds,
-    CutoutConfig,
-    LoopStrategyConfig,
-)
+from pyacemaker.domain_models.structure import PolicyContext, StructureConfig
 
 
 class SafeBasePolicy(BasePolicy):
@@ -27,11 +22,7 @@ class SafeBasePolicy(BasePolicy):
         base_structure: Atoms,
         config: StructureConfig,
         n_structures: int = 1,
-        engine: Any | None = None,
-        potential: str | Path | None = None,
-        thresholds: ActiveLearningThresholds | None = None,
-        cutout_config: CutoutConfig | None = None,
-        loop_strategy: LoopStrategyConfig | None = None,
+        context: PolicyContext | None = None,
     ) -> Iterator[Atoms]:
         """
         Generates new candidates based on policy logic.
@@ -51,11 +42,7 @@ class ColdStartPolicy(SafeBasePolicy):
         base_structure: Atoms,
         config: StructureConfig,
         n_structures: int = 1,
-        engine: Any | None = None,
-        potential: str | Path | None = None,
-        thresholds: ActiveLearningThresholds | None = None,
-        cutout_config: CutoutConfig | None = None,
-        loop_strategy: LoopStrategyConfig | None = None,
+        context: PolicyContext | None = None,
     ) -> Iterator[Atoms]:
         for _ in range(n_structures):
             yield base_structure.copy()  # type: ignore[no-untyped-call]
@@ -71,13 +58,9 @@ class MDMicroBurstPolicy(SafeBasePolicy):
         base_structure: Atoms,
         config: StructureConfig,
         n_structures: int = 1,
-        engine: Any | None = None,
-        potential: str | Path | None = None,
-        thresholds: ActiveLearningThresholds | None = None,
-        cutout_config: CutoutConfig | None = None,
-        loop_strategy: LoopStrategyConfig | None = None,
+        context: PolicyContext | None = None,
     ) -> Iterator[Atoms]:
-        if not engine:
+        if not context or not context.engine:
             for _ in range(n_structures):
                 burst_structure = base_structure.copy()  # type: ignore[no-untyped-call]
                 # It is safer in ase to retrieve positions, manipulate, and set them back
@@ -92,7 +75,7 @@ class MDMicroBurstPolicy(SafeBasePolicy):
             # Ensure safe config override for microburst
             # Pass override_n_steps via run_kwargs
 
-            if isinstance(engine, BaseEngine):
+            if isinstance(context.engine, BaseEngine):
                 # Pass resume_from_step and fix python/invoke args for seamless Master-Slave inversion
                 # These parameters ensure velocity and coordinate preservation across potential switches.
                 run_kwargs: dict[str, Any] = {
@@ -102,7 +85,7 @@ class MDMicroBurstPolicy(SafeBasePolicy):
                 if hasattr(base_structure, "info") and "halt_step" in base_structure.info:
                     run_kwargs["resume_from_step"] = base_structure.info["halt_step"]
 
-                result = engine.run(structure=base_structure, potential=potential, **run_kwargs)
+                result = context.engine.run(structure=base_structure, potential=context.potential, **run_kwargs)
 
                 # In a real implementation we would load result.trajectory_path
                 # But for architecture completeness, yield rattled structure or loaded structure
@@ -140,11 +123,7 @@ class NormalModePolicy(SafeBasePolicy):
         base_structure: Atoms,
         config: StructureConfig,
         n_structures: int = 1,
-        engine: Any | None = None,
-        potential: str | Path | None = None,
-        thresholds: ActiveLearningThresholds | None = None,
-        cutout_config: CutoutConfig | None = None,
-        loop_strategy: LoopStrategyConfig | None = None,
+        context: PolicyContext | None = None,
     ) -> Iterator[Atoms]:
         # Track uncertainty over smooth_steps
         max_gamma = 0.0
@@ -158,8 +137,8 @@ class NormalModePolicy(SafeBasePolicy):
         epicenter_indices: list[int] = []
         # We assume smooth_steps tracking is done at the orchestrator/engine level
         # Here we just use the threshold_add_train to identify epicenters if max_gamma > threshold_call_dft
-        if thresholds and c_gamma is not None and max_gamma > thresholds.threshold_call_dft:
-            epicenter_indices = np.where(c_gamma > thresholds.threshold_add_train)[0].tolist()
+        if context and context.thresholds and c_gamma is not None and max_gamma > context.thresholds.threshold_call_dft:
+            epicenter_indices = np.where(c_gamma > context.thresholds.threshold_add_train)[0].tolist()
 
         for _ in range(n_structures):
             mod_struct = base_structure.copy()  # type: ignore[no-untyped-call]
@@ -195,11 +174,7 @@ class CompositePolicy(SafeBasePolicy):
         base_structure: Atoms,
         config: StructureConfig,
         n_structures: int = 1,
-        engine: Any | None = None,
-        potential: str | Path | None = None,
-        thresholds: ActiveLearningThresholds | None = None,
-        cutout_config: CutoutConfig | None = None,
-        loop_strategy: LoopStrategyConfig | None = None,
+        context: PolicyContext | None = None,
     ) -> Iterator[Atoms]:
         # Divide n_structures among policies
         if not self.policies:
@@ -217,11 +192,7 @@ class CompositePolicy(SafeBasePolicy):
                 base_structure=base_structure,
                 config=config,
                 n_structures=n_target,
-                engine=engine,
-                potential=potential,
-                thresholds=thresholds,
-                cutout_config=cutout_config,
-                loop_strategy=loop_strategy,
+                context=context,
             ):
                 yield struct
                 generated += 1
@@ -237,11 +208,7 @@ class DefectPolicy(SafeBasePolicy):
         base_structure: Atoms,
         config: StructureConfig,
         n_structures: int = 1,
-        engine: Any | None = None,
-        potential: str | Path | None = None,
-        thresholds: ActiveLearningThresholds | None = None,
-        cutout_config: CutoutConfig | None = None,
-        loop_strategy: LoopStrategyConfig | None = None,
+        context: PolicyContext | None = None,
     ) -> Iterator[Atoms]:
         for _ in range(n_structures):
             mod_struct = base_structure.copy()  # type: ignore[no-untyped-call]
@@ -261,11 +228,7 @@ class RattlePolicy(SafeBasePolicy):
         base_structure: Atoms,
         config: StructureConfig,
         n_structures: int = 1,
-        engine: Any | None = None,
-        potential: str | Path | None = None,
-        thresholds: ActiveLearningThresholds | None = None,
-        cutout_config: CutoutConfig | None = None,
-        loop_strategy: LoopStrategyConfig | None = None,
+        context: PolicyContext | None = None,
     ) -> Iterator[Atoms]:
         for _ in range(n_structures):
             mod_struct = base_structure.copy()  # type: ignore[no-untyped-call]
@@ -283,11 +246,7 @@ class StrainPolicy(SafeBasePolicy):
         base_structure: Atoms,
         config: StructureConfig,
         n_structures: int = 1,
-        engine: Any | None = None,
-        potential: str | Path | None = None,
-        thresholds: ActiveLearningThresholds | None = None,
-        cutout_config: CutoutConfig | None = None,
-        loop_strategy: LoopStrategyConfig | None = None,
+        context: PolicyContext | None = None,
     ) -> Iterator[Atoms]:
         for _ in range(n_structures):
             mod_struct = base_structure.copy()  # type: ignore[no-untyped-call]
