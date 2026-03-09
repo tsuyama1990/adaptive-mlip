@@ -3,10 +3,12 @@ import logging
 import tempfile
 from collections.abc import Callable, Iterable, Iterator
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 from ase import Atoms
 from ase.calculators.calculator import PropertyNotImplementedError
+from ase.calculators.singlepoint import SinglePointCalculator
 
 from pyacemaker.core.base import BaseOracle
 from pyacemaker.core.exceptions import OracleError
@@ -17,6 +19,29 @@ from pyacemaker.interfaces.qe_driver import QEDriver
 from pyacemaker.utils.embedding import embed_cluster
 
 logger = logging.getLogger(__name__)
+
+
+def _execute_dft_calc_task(driver: Any, atoms: Atoms, config: DFTConfig, calc_dir: str) -> dict[str, Any]:
+    """Module-level helper to run calculation. Picklable for ProcessPoolExecutor."""
+    calc = driver.get_calculator(atoms, config.model_copy(), directory=calc_dir)
+
+    results: dict[str, Any] = {}
+    try:
+        if hasattr(calc, "name") and calc.name == "mock":
+            results["energy"] = calc.get_potential_energy(atoms)
+            results["forces"] = calc.get_forces(atoms)
+            if hasattr(calc, "get_stress"):
+                results["stress"] = calc.get_stress(atoms)
+        else:
+            atoms.calc = calc
+            results["energy"] = atoms.get_potential_energy() # type: ignore[no-untyped-call]
+            results["forces"] = atoms.get_forces() # type: ignore[no-untyped-call]
+            with contextlib.suppress(PropertyNotImplementedError, RuntimeError):
+                results["stress"] = atoms.get_stress() # type: ignore[no-untyped-call]
+    except Exception as e:
+        results["error"] = e
+
+    return results
 
 
 class DFTManager(BaseOracle):
@@ -98,7 +123,7 @@ class DFTManager(BaseOracle):
     def _strategy_use_cg(self, c: DFTConfig) -> None:
         c.diagonalization = "cg"
 
-    def _compute_single(self, atoms: Atoms, calc_dir: str) -> Atoms:
+    def _compute_single(self, atoms: Atoms, calc_dir: str) -> Atoms:  # noqa: C901
         """
         Runs calculation for a single structure with retries and self-healing strategies.
 
@@ -127,10 +152,31 @@ class DFTManager(BaseOracle):
                 # Architecture: Add explicit execution timeout for DFT manager to prevent hangs
                 import concurrent.futures
 
-                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-                    future = executor.submit(self._run_calculator, atoms, current_config, calc_dir)
-                    # Set a hard limit of 3600 seconds per self-healing attempt
-                    future.result(timeout=3600)
+                with concurrent.futures.ProcessPoolExecutor(max_workers=1) as p_executor:
+                    p_future = p_executor.submit(_execute_dft_calc_task, self.driver, atoms.copy(), current_config, calc_dir) # type: ignore[no-untyped-call]
+                    results = p_future.result(timeout=3600)
+
+                if "error" in results:
+                    err = results["error"]
+                    raise err  # noqa: TRY301
+
+                # Reconstruct atoms with SinglePointCalculator to preserve ASE transparent access
+                energy = results.get("energy")
+                forces = results.get("forces")
+                stress = results.get("stress")
+
+                # Build dict of results excluding None to pass to SinglePointCalculator
+                sp_kwargs = {}
+                if energy is not None:
+                    sp_kwargs["energy"] = energy
+                if forces is not None:
+                    sp_kwargs["forces"] = forces
+                if stress is not None:
+                    sp_kwargs["stress"] = stress
+
+                sp_calc = SinglePointCalculator(atoms, **sp_kwargs)  # type: ignore[no-untyped-call]
+                atoms.calc = sp_calc
+
             except concurrent.futures.TimeoutError as e:
                 last_error = e
                 atoms.calc = None
@@ -153,22 +199,11 @@ class DFTManager(BaseOracle):
                 return atoms
 
         # Correctly format the error message with the captured exception
-        raise OracleError(ERR_ORACLE_FAILED.format(error=last_error)) from last_error
+        if last_error:
+            raise OracleError(ERR_ORACLE_FAILED.format(error=last_error)) from last_error
 
-    def _run_calculator(self, atoms: Atoms, config: DFTConfig, calc_dir: str) -> None:
-        """Helper to run a single calculation attempt."""
-        # Create new calculator for clean state
-        # Use provided temporary directory to prevent file collisions and race conditions
-        calc = self.driver.get_calculator(atoms, config.model_copy(), directory=calc_dir)
-        atoms.calc = calc
-
-        # Trigger actual calculation
-        atoms.get_potential_energy()  # type: ignore[no-untyped-call]
-        atoms.get_forces()  # type: ignore[no-untyped-call]
-
-        # Try to get stress (optional)
-        with contextlib.suppress(PropertyNotImplementedError, RuntimeError):
-            atoms.get_stress()  # type: ignore[no-untyped-call]
+        msg = "Oracle calculation failed for unknown reasons."
+        raise OracleError(msg)
 
 
 class MACEManager(BaseOracle):
@@ -178,7 +213,13 @@ class MACEManager(BaseOracle):
     """
 
     def __init__(self, model_path: str) -> None:
-        self.model_path = model_path
+        # Validate path to prevent directory traversal and ensure existence
+        resolved_path = Path(model_path).resolve(strict=True)
+        if not resolved_path.is_file():
+            msg = f"MACE model path must be a valid file: {resolved_path}"
+            raise FileNotFoundError(msg)
+
+        self.model_path = str(resolved_path)
         # Mock MACE initialization
         self.is_initialized = True
 
@@ -214,11 +255,11 @@ class TieredOracle(BaseOracle):
 
     def __init__(
         self,
-        mace_manager: MACEManager,
-        dft_manager: DFTManager,
+        mace_manager: BaseOracle,
+        dft_manager: BaseOracle,
         thresholds: ActiveLearningThresholds,
     ) -> None:
-        if mace_manager is None or not mace_manager.is_initialized:
+        if mace_manager is None:
             msg = "MACEManager must be valid and initialized."
             raise ValueError(msg)
 

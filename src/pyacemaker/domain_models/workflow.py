@@ -1,3 +1,7 @@
+from pathlib import Path
+from typing import Any
+
+from ase import Atoms
 from pydantic import BaseModel, ConfigDict, Field, PositiveInt, model_validator
 
 from pyacemaker.domain_models.defaults import (
@@ -79,6 +83,20 @@ class CutoutConfig(BaseModel):
             msg = "buffer_radius must be non-negative"
             raise ValueError(msg)
         return self
+
+
+class PolicyContext(BaseModel):
+    """Configuration context for policy generation to avoid long method signatures."""
+    model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid")
+
+    base_structure: Atoms
+    config: Any # StructureConfig is imported locally or Any to avoid circular imports
+    n_structures: int = 1
+    engine: Any | None = None
+    potential: str | Path | None = None
+    thresholds: ActiveLearningThresholds | None = None
+    cutout_config: CutoutConfig | None = None
+    loop_strategy: "LoopStrategyConfig | None" = None
 
 
 class LoopStrategyConfig(BaseModel):

@@ -98,8 +98,14 @@ class StructureGenerator(BaseGenerator):
             else:
                 base_supercell = base_structure.repeat(self.config.supercell_size)  # type: ignore[no-untyped-call]
 
+            from pyacemaker.domain_models.workflow import PolicyContext
+            ctx = PolicyContext(
+                base_structure=base_supercell,
+                config=self.config,
+                n_structures=n_candidates
+            )
             count = 0
-            policy_iter = policy.generate(base_supercell, self.config, n_structures=n_candidates)
+            policy_iter = policy.generate(ctx)
 
             # Verify it's an iterator to enforce streaming contract at runtime
             if not isinstance(policy_iter, Iterator):
@@ -141,6 +147,15 @@ class StructureGenerator(BaseGenerator):
         strategy = self.config.local_generation_strategy
         policy = PolicyFactory.get_local_policy(strategy)
 
+        from pyacemaker.domain_models.workflow import PolicyContext
+
+        ctx = PolicyContext(
+            base_structure=base_structure,
+            config=self.config,
+            n_structures=n_candidates,
+            **kwargs
+        )
+
         # Generate using policy
         # Pass kwargs (e.g. engine) to allow advanced policies like MD Micro Burst
-        yield from policy.generate(base_structure, self.config, n_structures=n_candidates, **kwargs)
+        yield from policy.generate(ctx)

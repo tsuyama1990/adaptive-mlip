@@ -47,6 +47,19 @@ def _mock_lammps_module(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setitem(sys.modules, "lammps", MagicMock())
 
 
+@pytest.fixture(autouse=True)
+def patch_process_pool() -> Generator[None, None, None]:
+    """
+    Replaces ProcessPoolExecutor with ThreadPoolExecutor globally during testing.
+    This prevents PicklingErrors when passing MagicMock objects into the executor
+    during Pytest execution.
+    """
+    import concurrent.futures
+    from unittest.mock import patch
+    with patch('concurrent.futures.ProcessPoolExecutor', new=concurrent.futures.ThreadPoolExecutor):
+        yield
+
+
 @pytest.fixture
 def dummy_pseudopotentials_dir() -> Generator[Path, None, None]:
     """Provides a temporary directory with dummy pseudopotential files that cleans itself up."""
@@ -222,6 +235,8 @@ class MockCalculator:
             # Simulate SCF failure
             msg = "Convergence not achieved"
             raise RuntimeError(msg)
+
+        import numpy as np
 
         self.results = {
             "energy": self.test_energy,
