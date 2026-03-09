@@ -101,6 +101,14 @@ DEFAULT_MD_HYBRID_ZBL_INNER = 2.0
 DEFAULT_MD_HYBRID_ZBL_OUTER = 2.5
 MAX_MD_PRESSURE = 1.0e6
 MAX_MD_DURATION = 1.0e6  # ps
+MAX_MD_STEPS = 1000000000
+DEFAULT_RESUME_N_STEPS = 1000
+
+# EON Defaults
+MAX_EON_TEMPERATURE = 10000.0
+
+# Workflow Distillation Defaults
+DEFAULT_DISTILLATION_SAMPLING_STRUCTURES = 1000
 
 # MC Defaults
 DEFAULT_MC_SEED = 12345
@@ -115,8 +123,28 @@ DEFAULT_VALIDATION_ELASTIC_STEPS = 5
 # Security constants
 # Audit fix: Expanded list of dangerous characters
 DANGEROUS_PATH_CHARS: Final[set[str]] = {
-    ";", "&", "|", "`", "$", "(", ")", "<", ">", "\n", "\r", "\t", "?",
-    "*", "[", "]", "{", "}", "'", '"', "!", "#",
+    ";",
+    "&",
+    "|",
+    "`",
+    "$",
+    "(",
+    ")",
+    "<",
+    ">",
+    "\n",
+    "\r",
+    "\t",
+    "?",
+    "*",
+    "[",
+    "]",
+    "{",
+    "}",
+    "'",
+    '"',
+    "!",
+    "#",
 }
 
 # RAM Disk logic

@@ -30,6 +30,7 @@ dev = [
     "pytest",
     "pytest-cov",
     "types-pyyaml>=6.0.12.20250915",
+    "marimo>=0.20.4",
 ]
 
 [tool.ruff]
@@ -98,6 +99,7 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = ["S101"]  # Allow assert in tests
+"tutorials/**/*.py" = ["N803", "N807", "S101"]
 
 [tool.ruff.lint.mccabe]
 max-complexity = 10  # Exceeding this prompts function splitting (prevent AI long functions)
@@ -106,11 +108,12 @@ max-complexity = 10  # Exceeding this prompts function splitting (prevent AI lon
 suppress-dummy-args = true  # Arguments starting with _ do not require type hints
 
 [tool.pytest.ini_options]
+addopts = "--cov=dev_src --cov=src --cov-report=term-missing"
 testpaths = ["tests"]
 pythonpath = ["src"]
 
 [tool.mypy]
 strict = true
 ignore_missing_imports = true
-exclude = ["build/"]
+exclude = ["build/", "tutorials/", "tests/"]
 plugins = ["pydantic.mypy"]

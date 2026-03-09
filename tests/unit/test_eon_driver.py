@@ -24,6 +24,7 @@ class MockProcessRunner(ProcessRunner):
         mock_process.stderr = self.stderr
         if self.return_code != 0 and kwargs.get("check"):
             import subprocess
+
             raise subprocess.CalledProcessError(self.return_code, cmd, self.stdout, self.stderr)
         return mock_process
 
@@ -39,7 +40,7 @@ def test_eon_generate_config(mock_potential_path):
         potential_path=mock_potential_path,
         temperature=500.0,
         random_seed=12345,
-        eon_executable="eonclient"
+        eon_executable="eonclient",
     )
     wrapper = EONWrapper(config)
 
@@ -64,6 +65,7 @@ def test_eon_generate_config(mock_potential_path):
 
         # Verify file permissions (0o600 for config)
         import stat
+
         st = output_path.stat()
         assert stat.S_IMODE(st.st_mode) == 0o600
 
@@ -82,6 +84,7 @@ def test_eon_generate_driver_script(mock_potential_path):
         # Check if file is executable (0o700)
         import os
         import stat
+
         assert os.access(driver_path, os.X_OK)
         st = driver_path.stat()
         assert stat.S_IMODE(st.st_mode) == 0o700
@@ -96,7 +99,7 @@ def test_eon_run_command(mock_potential_path):
     config = EONConfig(
         potential_path=mock_potential_path,
         mpi_command="mpirun -np 4",
-        eon_executable=safe_executable
+        eon_executable=safe_executable,
     )
     runner = MockProcessRunner()
     wrapper = EONWrapper(config, runner=runner)
@@ -130,6 +133,7 @@ def test_eon_run_not_found(mock_potential_path):
         with pytest.raises(RuntimeError) as excinfo:
             wrapper.run(Path(tmp_dir))
         assert "EON executable not found" in str(excinfo.value)
+
 
 def test_eon_file_write_failure(mock_potential_path):
     config = EONConfig(potential_path=mock_potential_path)

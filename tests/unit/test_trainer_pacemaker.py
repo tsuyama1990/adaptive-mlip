@@ -23,7 +23,7 @@ def config() -> TrainingConfig:
         elements=["H"],
         seed=123,
         max_iterations=500,
-        batch_size=20
+        batch_size=20,
     )
 
 
@@ -60,14 +60,15 @@ def test_train_element_detection_scanning(
     atoms2 = Atoms("FePt", positions=[[0, 0, 0], [1, 1, 1]])
     write(data_path, [atoms1, atoms2])
 
-    with patch("pyacemaker.core.trainer.run_command") as mock_run, patch(
-        "pyacemaker.core.trainer.dump_yaml"
-    ) as mock_dump:
+    with (
+        patch("pyacemaker.core.trainer.run_command") as mock_run,
+        patch("pyacemaker.core.trainer.dump_yaml") as mock_dump,
+    ):
         # Create dummy output so file check passes
         (data_path.parent / "test_pot.yace").touch()
 
         # Update config to force detection (clear elements)
-        trainer.config.elements = [] # Assuming empty list triggers detection or None?
+        trainer.config.elements = []  # Assuming empty list triggers detection or None?
         # Check config_generator logic: if self.config.elements: return sorted...
         # So we need to set it to empty list or None.
         # Pydantic model might enforce list. Let's check TrainingConfig.
@@ -107,9 +108,7 @@ def test_train_process_fail_util(
     write(data_path, Atoms("H"))
 
     with patch("pyacemaker.core.trainer.run_command") as mock_run:
-        mock_run.side_effect = subprocess.CalledProcessError(
-            1, "cmd", stderr="error"
-        )
+        mock_run.side_effect = subprocess.CalledProcessError(1, "cmd", stderr="error")
 
         with pytest.raises(TrainerError, match="Training failed"):
             trainer.train(data_path)
@@ -125,8 +124,9 @@ def test_train_initial_potential(
     initial_pot = tmp_path / "init.yace"
     initial_pot.touch()
 
-    with patch("pyacemaker.core.trainer.run_command") as mock_run, patch(
-        "pyacemaker.core.trainer.dump_yaml"
+    with (
+        patch("pyacemaker.core.trainer.run_command") as mock_run,
+        patch("pyacemaker.core.trainer.dump_yaml"),
     ):
         # Create dummy output
         (data_path.parent / "test_pot.yace").touch()

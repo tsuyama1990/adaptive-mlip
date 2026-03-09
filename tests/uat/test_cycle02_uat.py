@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Any
 from unittest.mock import patch
 
 import pytest
@@ -29,13 +30,46 @@ def uat_dft_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> DFTConfig
     )
 
 
-def test_uat_02_01_single_point_calculation(uat_dft_config: DFTConfig, monkeypatch: pytest.MonkeyPatch) -> None:
+
+
+class DummyFuture:
+    def __init__(self, result_value: Any, exception: Any = None) -> None:
+        self._result_value = result_value
+        self._exception = exception
+
+    def result(self, timeout: float | None = None) -> Any:
+        return self._result_value, self._exception
+
+
+class DummyExecutor:
+    def __init__(self, max_workers: int) -> None:
+        pass
+
+    def __enter__(self) -> "DummyExecutor":
+        return self
+
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+        pass
+
+    def submit(self, fn: Any, *args: Any, **kwargs: Any) -> DummyFuture:
+        try:
+            res, exc = fn(*args, **kwargs)
+            return DummyFuture(res, exc)
+        except Exception as e:
+            return DummyFuture(None, e)
+
+def test_uat_02_01_single_point_calculation(
+    uat_dft_config: DFTConfig, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """
     Scenario 02-01: Single Point Calculation.
     Verify that the system can run a simple DFT calculation (mocked).
     """
+    monkeypatch.setattr("concurrent.futures.ProcessPoolExecutor", DummyExecutor)
     # 1. Preparation: H2O molecule
-    h2o = Atoms("H2O", positions=[[0, 0, 0], [0, 0, 0.96], [0, 0.96, 0]], cell=[10, 10, 10], pbc=True)
+    h2o = Atoms(
+        "H2O", positions=[[0, 0, 0], [0, 0, 0.96], [0, 0.96, 0]], cell=[10, 10, 10], pbc=True
+    )
 
     # 2. Action: Run DFTManager with mocked driver
     # We patch QEDriver but we also need to ensure the driver instance returned
@@ -48,8 +82,8 @@ def test_uat_02_01_single_point_calculation(uat_dft_config: DFTConfig, monkeypat
         mock_driver_instance = MockDriverClass.return_value
         # Mock get_calculator to return a MockCalculator instance with H2O energy
         # Accept **kwargs to handle 'directory' argument
-        mock_driver_instance.get_calculator.side_effect = lambda atoms, config, **kwargs: MockCalculator(
-            fail_count=0, test_energy=TEST_ENERGY_H2O
+        mock_driver_instance.get_calculator.side_effect = lambda atoms, config, **kwargs: (
+            MockCalculator(fail_count=0, test_energy=TEST_ENERGY_H2O)
         )
 
         manager = DFTManager(uat_dft_config)
@@ -63,13 +97,18 @@ def test_uat_02_01_single_point_calculation(uat_dft_config: DFTConfig, monkeypat
         assert result.get_forces().shape == (3, 3)  # type: ignore[no-untyped-call]
 
 
-def test_uat_02_02_self_healing(uat_dft_config: DFTConfig, caplog: pytest.LogCaptureFixture) -> None:
+def test_uat_02_02_self_healing(
+    uat_dft_config: DFTConfig, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """
     Scenario 02-02: Self-Healing Test.
     Verify that the system recovers from a simulated SCF convergence failure.
     """
+    monkeypatch.setattr("concurrent.futures.ProcessPoolExecutor", DummyExecutor)
     # 1. Preparation
-    h2o = Atoms("H2O", positions=[[0, 0, 0], [0, 0, 0.96], [0, 0.96, 0]], cell=[10, 10, 10], pbc=True)
+    h2o = Atoms(
+        "H2O", positions=[[0, 0, 0], [0, 0, 0.96], [0, 0.96, 0]], cell=[10, 10, 10], pbc=True
+    )
 
     # 2. Action: Run DFTManager with failure
     with patch("pyacemaker.core.oracle.QEDriver") as MockDriverClass:

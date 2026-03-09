@@ -7,6 +7,7 @@ from pyacemaker.core.base import BaseTrainer
 from pyacemaker.core.config_generator import PacemakerConfigGenerator
 from pyacemaker.core.exceptions import TrainerError
 from pyacemaker.domain_models.training import TrainingConfig
+from pyacemaker.domain_models.workflow import LoopStrategyConfig
 from pyacemaker.utils.io import dump_yaml
 from pyacemaker.utils.process import run_command
 
@@ -21,10 +22,29 @@ class PacemakerTrainer(BaseTrainer):
         self.config = config
         self.config_generator = PacemakerConfigGenerator(config)
 
-    def train(
+    def get_replay_buffer(self, size: int) -> list[Any]:
+        """
+        Fetches up to `size` past data points to retain for training.
+        This prevents catastrophic forgetting.
+        """
+        return []  # Mock replay buffer retrieval for now
+
+    def incremental_train(
         self,
-        training_data_path: str | Path,
-        initial_potential: str | Path | None = None
+        new_data_path: str | Path,
+        strategy_config: LoopStrategyConfig,
+        initial_potential: str | Path | None = None,
+    ) -> Any:
+        """
+        Mixes a replay buffer with the new active learning data and runs incremental delta learning.
+        """
+        # In a real implementation this would merge replay buffer with the new dataset
+        # Here we just delegate to train
+        _replay_buffer = self.get_replay_buffer(strategy_config.replay_buffer_size)
+        return self.train(new_data_path, initial_potential)
+
+    def train(
+        self, training_data_path: str | Path, initial_potential: str | Path | None = None
     ) -> Any:
         """
         Trains a potential using the provided training data file.
@@ -58,6 +78,19 @@ class PacemakerTrainer(BaseTrainer):
 
         # Generate configuration
         pacemaker_config = self.config_generator.generate(str(data_path), str(potential_path))
+
+        # Security: Schema validation and content sanitization for YAML
+        if not isinstance(pacemaker_config, dict):
+            msg = "Generated Pacemaker config is not a valid dictionary."
+            raise TrainerError(msg)
+
+        import re
+
+        for key, val in pacemaker_config.items():
+            if isinstance(val, str) and re.search(r"(\bexec\b|\bsystem\b|\bos\.|;|\||>|<|&)", val):
+                msg = f"Malicious content detected in configuration value for key '{key}'"
+                raise TrainerError(msg)
+
         dump_yaml(pacemaker_config, input_yaml_path)
 
         # Run pace_train
@@ -103,3 +136,14 @@ class PacemakerTrainer(BaseTrainer):
             raise TrainerError(msg)
 
 
+class FinetuneManager:
+    """
+    Manager to briefly train the final readout layers of the MACE foundation model.
+    """
+
+    def finetune(self, dataset_path: str | Path) -> str:
+        """
+        Mock finetuning logic for the awakened MACE model.
+        Returns the path to the awakened model.
+        """
+        return "awakened_mace_model.model"

@@ -19,12 +19,12 @@ def mock_config(
     mock_dft_config: Any,
     mock_training_config: Any,
     mock_md_config: Any,
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch
+    dummy_pseudopotentials_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> PyAceConfig:
-    monkeypatch.chdir(tmp_path)
+    monkeypatch.chdir(dummy_pseudopotentials_dir)
     # Create required pseudo file used in shared fixture
-    create_dummy_pseudopotentials(tmp_path, ["Fe"])
+    create_dummy_pseudopotentials(dummy_pseudopotentials_dir, ["Fe"])
 
     # Update DFT config to use the created file and match element
     mock_dft_config.pseudopotentials = {"Fe": "Fe.UPF"}
@@ -47,7 +47,9 @@ def test_module_factory_create_modules(mock_config: PyAceConfig) -> None:
     # But QEDriver might check other things.
     # Let's patch DFTManager anyway to isolate Factory test.
     with patch("pyacemaker.factory.DFTManager") as MockDFTManager:
-        gen, oracle, trainer, engine, active_set, validator = ModuleFactory.create_modules(mock_config)
+        gen, oracle, trainer, engine, active_set, validator = ModuleFactory.create_modules(
+            mock_config
+        )
 
         assert isinstance(gen, StructureGenerator)
         assert isinstance(trainer, PacemakerTrainer)

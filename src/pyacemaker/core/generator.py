@@ -8,7 +8,7 @@ from pyacemaker.core.exceptions import GeneratorError
 from pyacemaker.core.m3gnet_wrapper import M3GNetWrapper
 from pyacemaker.core.policy_factory import PolicyFactory
 from pyacemaker.domain_models.constants import ERR_GEN_BASE_FAIL, ERR_GEN_NCAND_NEG
-from pyacemaker.domain_models.structure import StructureConfig
+from pyacemaker.domain_models.structure import PolicyContext, StructureConfig
 
 
 class StructureGenerator(BaseGenerator):
@@ -81,7 +81,9 @@ class StructureGenerator(BaseGenerator):
             try:
                 base_structure = self.m3gnet.predict_structure(composition)
             except Exception as e:
-                raise GeneratorError(ERR_GEN_BASE_FAIL.format(composition=composition, error=e)) from e
+                raise GeneratorError(
+                    ERR_GEN_BASE_FAIL.format(composition=composition, error=e)
+                ) from e
 
             # Generate the base supercell template once.
             # We must materialize the base supercell to apply perturbations (rattle/strain).
@@ -101,10 +103,10 @@ class StructureGenerator(BaseGenerator):
 
             # Verify it's an iterator to enforce streaming contract at runtime
             if not isinstance(policy_iter, Iterator):
-                 # Convert iterable to iterator if needed
-                 iter_policy = iter(policy_iter)
+                # Convert iterable to iterator if needed
+                iter_policy = iter(policy_iter)
             else:
-                 iter_policy = policy_iter
+                iter_policy = policy_iter
 
             for structure in iter_policy:
                 if count >= n_candidates:
@@ -116,7 +118,9 @@ class StructureGenerator(BaseGenerator):
 
         yield from lazy_policy_stream()
 
-    def generate_local(self, base_structure: Atoms, n_candidates: int, **kwargs: Any) -> Iterator[Atoms]:
+    def generate_local(
+        self, base_structure: Atoms, n_candidates: int, **kwargs: Any
+    ) -> Iterator[Atoms]:
         """
         Generates candidate structures by perturbing a base structure.
         Used in OTF loops to explore the local neighborhood of a high-uncertainty configuration.
@@ -137,6 +141,16 @@ class StructureGenerator(BaseGenerator):
         strategy = self.config.local_generation_strategy
         policy = PolicyFactory.get_local_policy(strategy)
 
+        context = PolicyContext(
+            engine=kwargs.get("engine"),
+            potential=kwargs.get("potential"),
+            thresholds=kwargs.get("thresholds"),
+            cutout_config=kwargs.get("cutout_config"),
+            loop_strategy=kwargs.get("loop_strategy"),
+        )
+
         # Generate using policy
         # Pass kwargs (e.g. engine) to allow advanced policies like MD Micro Burst
-        yield from policy.generate(base_structure, self.config, n_structures=n_candidates, **kwargs)
+        yield from policy.generate(
+            base_structure, self.config, n_structures=n_candidates, context=context
+        )

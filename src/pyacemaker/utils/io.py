@@ -1,7 +1,7 @@
-import json
 import logging
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 import numpy as np
 import yaml
@@ -25,13 +25,16 @@ def load_yaml(filepath: Path) -> dict[str, Any]:
         Dictionary containing configuration.
     """
     if not filepath.exists():
-        raise FileNotFoundError(f"Configuration file not found: {filepath}")
+        msg = f"Configuration file not found: {filepath}"
+        raise FileNotFoundError(msg)
 
     with filepath.open("r") as f:
         return yaml.safe_load(f) or {}
 
+
 # Alias for backward compatibility
 load_config = load_yaml
+
 
 def detect_elements(data_path: Path, max_frames: int = 10) -> list[str]:
     """
@@ -44,19 +47,21 @@ def detect_elements(data_path: Path, max_frames: int = 10) -> list[str]:
     Returns:
         List of chemical symbols (sorted alphabetically).
     """
-    symbols = set()
+    symbols: set[str] = set()
     try:
         # Optimization: Use iread to peek. Stop if we have 'enough' frames or symbols stabilize?
         # Difficult to know if symbols stabilize. Just read max_frames.
         gen = iread(str(data_path), index=f":{max_frames}")
         for atoms in gen:
             if isinstance(atoms, Atoms):
-                new_syms = set(atoms.get_chemical_symbols())
+                new_syms = set(atoms.get_chemical_symbols())  # type: ignore[no-untyped-call]
                 # If we found new symbols, update.
                 if not new_syms.issubset(symbols):
                     symbols.update(new_syms)
     except Exception:
-        logger.warning(f"Could not fully read {data_path} to detect elements. Elements detected so far: {symbols}")
+        logger.warning(
+            f"Could not fully read {data_path} to detect elements. Elements detected so far: {symbols}"
+        )
 
     return sorted(symbols)
 
@@ -77,15 +82,13 @@ def _get_atomic_mass(symbol: str) -> float:
     """Helper to get atomic mass with caching."""
     if symbol not in _ATOMIC_MASSES_CACHE:
         from ase.data import atomic_masses, atomic_numbers
+
         _ATOMIC_MASSES_CACHE[symbol] = atomic_masses[atomic_numbers[symbol]]
     return _ATOMIC_MASSES_CACHE[symbol]
 
 
 def write_lammps_streaming(
-    fileobj: Any,
-    atoms: Atoms,
-    species: list[str],
-    atom_style: str = "atomic"
+    fileobj: Any, atoms: Atoms, species: list[str], atom_style: str = "atomic"
 ) -> None:
     """
     Writes a single frame in LAMMPS data format to an open file object.
@@ -105,9 +108,10 @@ def write_lammps_streaming(
     fileobj.write(f"{len(species)} atom types\n\n")
 
     # 2. Box
-    cell = atoms.get_cell()
+    cell = atoms.get_cell()  # type: ignore[no-untyped-call]
     if not np.allclose(cell, np.diag(np.diag(cell))):
-        raise ValueError("Streaming write currently only supports orthogonal cells")
+        msg = "Streaming write currently only supports orthogonal cells"
+        raise ValueError(msg)
 
     xlo, xhi = 0.0, cell[0, 0]
     ylo, yhi = 0.0, cell[1, 1]
@@ -137,8 +141,8 @@ def write_lammps_streaming(
     # Use direct array access and iterators to avoid creating large intermediate lists/arrays if possible.
     # But atoms.get_positions() returns a copy anyway.
 
-    pos = atoms.get_positions() # (N, 3)
-    symbols = atoms.get_chemical_symbols() # List of strings (N)
+    pos = atoms.get_positions()  # type: ignore[no-untyped-call] # (N, 3)
+    symbols = atoms.get_chemical_symbols()  # type: ignore[no-untyped-call] # List of strings (N)
 
     # Generator for lines to keep memory usage O(1) per line (after pos array overhead)
     # This avoids creating a huge string buffer or list of strings.
@@ -148,10 +152,11 @@ def write_lammps_streaming(
             try:
                 t = type_map[s]
             except KeyError:
-                 raise KeyError(f"Symbol {s} not in provided species list: {species}")
+                msg = f"Symbol {s} not in provided species list: {species}"
+                raise KeyError(msg) from None
 
             # 1-based index
-            yield f"{i+1} {t} {pos[i, 0]:.6f} {pos[i, 1]:.6f} {pos[i, 2]:.6f}\n"
+            yield f"{i + 1} {t} {pos[i, 0]:.6f} {pos[i, 1]:.6f} {pos[i, 2]:.6f}\n"
 
     fileobj.writelines(line_generator())
 

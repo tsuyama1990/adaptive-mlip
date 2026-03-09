@@ -63,7 +63,9 @@ workflow:
         assert excinfo.value.code == 0
 
 
-def test_scenario_01_02_guardrails_check_temp(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_scenario_01_02_guardrails_check_temp(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """
     Scenario 01-02: "Guardrails Check" (Temperature)
     Objective: Verify that the system rejects invalid physical parameters (negative temperature).
@@ -78,11 +80,14 @@ def test_scenario_01_02_guardrails_check_temp(tmp_path: Path, monkeypatch: pytes
     # 2. Action & 3. Expectation
     # Pydantic raises ValidationError
     from pydantic import ValidationError
+
     with pytest.raises(ValidationError):
         PyAceConfig(**config_dict)
 
 
-def test_scenario_01_02_guardrails_check_cutoff(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_scenario_01_02_guardrails_check_cutoff(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """
     Scenario 01-02: "Guardrails Check" (Cutoff)
     Objective: Verify that the system rejects invalid physical parameters (negative cutoff).
@@ -92,5 +97,6 @@ def test_scenario_01_02_guardrails_check_cutoff(tmp_path: Path, monkeypatch: pyt
 
     config_dict = create_test_config_dict(training={"cutoff_radius": -1.0})
     from pydantic import ValidationError
+
     with pytest.raises(ValidationError):
         PyAceConfig(**config_dict)

@@ -1,5 +1,6 @@
-from pathlib import Path
 import tempfile
+from pathlib import Path
+
 import pytest
 
 from pyacemaker.core.validator import LammpsInputValidator
@@ -16,12 +17,14 @@ class TestLammpsInputValidator:
 
     def test_validate_structure_empty(self):
         from ase import Atoms
+
         atoms = Atoms()
         with pytest.raises(ValueError, match="Structure is empty"):
             LammpsInputValidator.validate_structure(atoms)
 
     def test_validate_structure_zero_volume(self):
         from ase import Atoms
+
         # Zero volume cell
         atoms = Atoms("H", positions=[[0, 0, 0]], cell=[0, 0, 0], pbc=True)
         # Matches error from exception handling block
@@ -57,8 +60,8 @@ class TestLammpsInputValidator:
             with tempfile.NamedTemporaryFile() as f:
                 # This file exists in temp, should be valid
                 LammpsInputValidator.validate_potential(f.name)
-        except Exception:
-            pass
+        except Exception as e:
+            pytest.fail(f"Unexpected exception: {e}")
 
     def test_validate_potential_symlink_traversal(self, tmp_path):
         """Test symlink resolving to outside (should fail)."""
@@ -77,12 +80,14 @@ class TestLammpsInputValidator:
         # /etc/hosts is not in /tmp, not in CWD.
         # So it should raise ValueError from validate_path_safe
 
-        # Updated match string to be broad enough to catch "Path traversal detected" OR "outside allowed"
-        with pytest.raises(ValueError, match="Path traversal detected"):
+        # Updated match string to be broad enough to catch "Path traversal detected" OR "outside allowed" OR "Symlink path"
+        with pytest.raises(
+            ValueError, match="Symlink path traversal|Path traversal detected|outside allowed"
+        ):
             LammpsInputValidator.validate_potential(symlink)
 
     def test_validate_potential_symlink_internal(self, tmp_path, monkeypatch):
-        """Test symlink resolving to inside (should pass)."""
+        """Test symlink resolving to inside (should fail as symlinks are wholly blocked by the security patch)."""
         monkeypatch.chdir(tmp_path)
         real_file = tmp_path / "real.yace"
         real_file.touch()
@@ -90,5 +95,5 @@ class TestLammpsInputValidator:
         symlink = tmp_path / "link.yace"
         symlink.symlink_to(real_file)
 
-        valid = LammpsInputValidator.validate_potential(symlink)
-        assert valid == real_file.resolve()
+        with pytest.raises(ValueError, match="Symlink path traversal"):
+            LammpsInputValidator.validate_potential(symlink)

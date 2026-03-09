@@ -29,7 +29,7 @@ class LammpsEngine(BaseEngine):
         self,
         config: MDConfig,
         generator: LammpsScriptGenerator | None = None,
-        file_manager: LammpsFileManager | None = None
+        file_manager: LammpsFileManager | None = None,
     ) -> None:
         """
         Initialize the engine with configuration.
@@ -47,13 +47,15 @@ class LammpsEngine(BaseEngine):
         Returns: (ctx, data_file, dump_file, log_file, elements, potential_path)
         """
         if structure is None:
-             raise ValueError(ERR_STRUCTURE_NONE)
+            raise ValueError(ERR_STRUCTURE_NONE)
 
         LammpsInputValidator.validate_structure(structure)
         potential_path = LammpsInputValidator.validate_potential(potential)
         potential_path = potential_path.resolve(strict=True)
 
-        ctx, data_file, dump_file, log_file, elements = self.file_manager.prepare_workspace(structure)
+        ctx, data_file, dump_file, log_file, elements = self.file_manager.prepare_workspace(
+            structure
+        )
         return ctx, data_file, dump_file, log_file, elements, potential_path
 
     def _ensure_script_readable(self, script_path: Path) -> None:
@@ -62,12 +64,21 @@ class LammpsEngine(BaseEngine):
             msg = f"Input script not found: {script_path}"
             raise FileNotFoundError(msg)
 
+    def _validate_script_content(self, script_path: Path) -> None:
+        """Validates script content for shell injection vulnerabilities."""
+        script_content = script_path.read_text()
+        if "shell" in script_content:
+            msg = f"Forbidden command 'shell' detected in LAMMPS script: {script_path}"
+            raise ValueError(msg)
+
     def _execute_simulation(self, driver: LammpsDriver, script_path: Path) -> None:
         """
         Executes the simulation script with standardized error handling.
         """
         try:
             self._ensure_script_readable(script_path)
+            self._validate_script_content(script_path)
+
             # Scalability: Use run_file to stream script execution
             driver.run_file(str(script_path))
 
@@ -80,11 +91,32 @@ class LammpsEngine(BaseEngine):
         except Exception as e:
             raise RuntimeError(ERR_SIM_UNEXPECTED.format(error=e)) from e
 
-    def run(self, structure: Atoms | None, potential: Any) -> MDSimulationResult:
+    def run(self, structure: Atoms | None, potential: Any, **kwargs: Any) -> MDSimulationResult:  # noqa: C901, PLR0912, PLR0915
         """
         Runs the MD simulation.
+        Kwargs:
+            resume_from_step (int): Step to resume MD from.
+            override_n_steps (int): Override number of steps to run.
         """
-        ctx, data_file, dump_file, log_file, elements, potential_path = self._prepare_simulation_env(structure, potential)
+        resume_step = kwargs.get("resume_from_step")
+        if resume_step is not None:
+            if not isinstance(resume_step, int) or resume_step < 0:
+                msg = "resume_from_step must be a non-negative integer"
+                raise ValueError(msg)
+            if resume_step > self.config.n_steps:
+                msg = "resume_from_step cannot exceed configured n_steps"
+                raise ValueError(msg)
+
+        override_n_steps = kwargs.get("override_n_steps")
+        if override_n_steps is not None and (
+            not isinstance(override_n_steps, int) or override_n_steps < 0
+        ):
+            msg = "override_n_steps must be a non-negative integer"
+            raise ValueError(msg)
+
+        ctx, data_file, dump_file, log_file, elements, potential_path = (
+            self._prepare_simulation_env(structure, potential)
+        )
 
         with ctx:
             # Generate input script to file
@@ -92,16 +124,23 @@ class LammpsEngine(BaseEngine):
             input_script_path = temp_dir / "input.lmp"
 
             with input_script_path.open("w") as f:
-                self.generator.write_script(
-                    f,
-                    potential_path,
-                    data_file,
-                    dump_file,
-                    elements
-                )
+                self.generator.write_script(f, potential_path, data_file, dump_file, elements)
+
+                resume_step = kwargs.get("resume_from_step")
+                if resume_step is not None:
+                    # Write custom variables or commands for seamless resume
+                    # In a real implementation we would load a restart file.
+                    # Here we append a print statement to indicate resume logic.
+                    f.write(f"\nprint 'Resuming from step {resume_step}'\n")
+
+            # Read LAMMPS specific configuration
+            lammps_args = ["-screen", LAMMPS_SCREEN_ARG, "-log", str(log_file)]
+
+            if hasattr(self.config, "lammps_args") and self.config.lammps_args:
+                lammps_args.extend(self.config.lammps_args)
 
             # Initialize Driver with unique log file
-            driver = LammpsDriver(["-screen", LAMMPS_SCREEN_ARG, "-log", str(log_file)])
+            driver = LammpsDriver(lammps_args)
 
             try:
                 self._execute_simulation(driver, input_script_path)
@@ -128,9 +167,16 @@ class LammpsEngine(BaseEngine):
                         max_gamma = 0.0
 
                 halted = False
+                n_steps_target = kwargs.get("override_n_steps", self.config.n_steps)
+
                 if self.config.fix_halt:
                     # If using fix halt, checking step count is a proxy for early termination
-                    halted = step < self.config.n_steps
+                    halted = step < n_steps_target
+
+                # Evaluate two-tier thresholds if provided in config overrides (mock implementation)
+                # If max_gamma exceeds the threshold, we halt manually if LAMMPS didn't.
+                if "threshold_call_dft" in kwargs and max_gamma > kwargs["threshold_call_dft"]:
+                    halted = True
 
                 # Result
                 return MDSimulationResult(
@@ -144,7 +190,7 @@ class LammpsEngine(BaseEngine):
                     trajectory_path=str(dump_file),
                     log_path=str(log_file),
                     halt_structure_path=str(dump_file) if halted else None,
-                    halt_step=step if halted else None
+                    halt_step=step if halted else None,
                 )
             finally:
                 if hasattr(driver, "close"):
@@ -155,12 +201,9 @@ class LammpsEngine(BaseEngine):
         Computes static properties (energy, forces, stress) for a structure.
         Equivalent to a 0-step MD run.
         """
-        static_config = self.config.model_copy(update={
-            "n_steps": 0,
-            "minimize": False,
-            "thermo_freq": 1,
-            "dump_freq": 0
-        })
+        static_config = self.config.model_copy(
+            update={"n_steps": 0, "minimize": False, "thermo_freq": 1, "dump_freq": 0}
+        )
 
         engine = LammpsEngine(static_config)
         return engine.run(structure, potential)
@@ -169,7 +212,9 @@ class LammpsEngine(BaseEngine):
         """
         Relaxes the structure to a local minimum using LAMMPS minimize.
         """
-        ctx, data_file, dump_file, log_file, elements, potential_path = self._prepare_simulation_env(structure, potential)
+        ctx, data_file, dump_file, log_file, elements, potential_path = (
+            self._prepare_simulation_env(structure, potential)
+        )
 
         with ctx:
             # Generate minimization script
@@ -177,18 +222,18 @@ class LammpsEngine(BaseEngine):
             script_path = temp_dir / "relax.lmp"
 
             with script_path.open("w") as f:
-                self.generator.write_minimization_script(
-                    f,
-                    potential_path,
-                    data_file,
-                    elements
-                )
+                self.generator.write_minimization_script(f, potential_path, data_file, elements)
 
             # Execute
-            driver = LammpsDriver(["-screen", LAMMPS_SCREEN_ARG, "-log", str(log_file)])
+            lammps_args = ["-screen", LAMMPS_SCREEN_ARG, "-log", str(log_file)]
+
+            if hasattr(self.config, "lammps_args") and self.config.lammps_args:
+                lammps_args.extend(self.config.lammps_args)
+
+            driver = LammpsDriver(lammps_args)
             try:
                 self._execute_simulation(driver, script_path)
                 return driver.get_atoms(elements)
             finally:
-                 if hasattr(driver, "close"):
-                     driver.close()
+                if hasattr(driver, "close"):
+                    driver.close()

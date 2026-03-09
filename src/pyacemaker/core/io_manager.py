@@ -23,7 +23,9 @@ class LammpsFileManager:
     def __init__(self, config: MDConfig) -> None:
         self.config = config
 
-    def prepare_workspace(self, structure: Atoms | str | Path) -> tuple[Any, Path, Path, Path, list[str]]:
+    def prepare_workspace(
+        self, structure: Atoms | str | Path
+    ) -> tuple[Any, Path, Path, Path, list[str]]:
         """
         Creates temporary directory and writes structure file.
 
@@ -54,6 +56,7 @@ class LammpsFileManager:
             if isinstance(structure, (str, Path)):
                 # Load only the first frame to minimize memory usage
                 from ase.io import iread
+
                 try:
                     atoms_iter = iread(str(structure))
                     first_frame = next(atoms_iter)
@@ -72,22 +75,32 @@ class LammpsFileManager:
                 elements = get_species_order(structure)
                 self._write_structure_memory(structure, data_file, elements)
 
-            return temp_dir_ctx, data_file, dump_file, log_file, elements
-
         except Exception:
             # Clean up if setup fails
             temp_dir_ctx.cleanup()
             raise
+        else:
+            return temp_dir_ctx, data_file, dump_file, log_file, elements
 
-    def _write_structure_memory(self, structure: Atoms, output_path: Path, elements: list[str]) -> None:
-        """Writes structure to disk using streaming writer if possible."""
+    def _write_structure_memory(
+        self, structure: Atoms, output_path: Path, elements: list[str]
+    ) -> None:
+        """Writes structure to disk using streaming writer if possible with atomic transactions."""
+        import os
+
+        # Create a temporary file path next to the target output path
+        temp_path = output_path.with_name(f".{output_path.name}.tmp")
+
         try:
             # Memory Safety Fix: Always attempt streaming first if atom_style allows
             streaming_success = False
             if self.config.atom_style == "atomic":
                 try:
-                    with output_path.open("w") as f:
+                    with temp_path.open("w") as f:
                         write_lammps_streaming(f, structure, elements)
+
+                        f.flush()
+                        os.fsync(f.fileno())
                     streaming_success = True
                     logger.debug("Successfully wrote LAMMPS data file using streaming.")
                 except ValueError as e:
@@ -95,9 +108,34 @@ class LammpsFileManager:
 
             if not streaming_success:
                 if len(structure) > 1000000:
-                    logger.warning("Falling back to ASE write for large structure (%d atoms). Memory usage may be high.", len(structure))
-                write(str(output_path), structure, format="lammps-data", specorder=elements, atom_style=self.config.atom_style.value)
+                    logger.warning(
+                        "Falling back to ASE write for large structure (%d atoms). Memory usage may be high.",
+                        len(structure),
+                    )
+                write(
+                    str(temp_path),
+                    structure,
+                    format="lammps-data",
+                    specorder=elements,
+                    atom_style=self.config.atom_style.value,
+                )
 
-        except Exception as e:
+            def _raise_error() -> None:
+                msg = f"Temporary file {temp_path} is missing or empty before finalizing."
+                raise ValueError(msg)  # noqa: TRY301
+
+            # Atomic rename validation
+            if not temp_path.exists() or temp_path.stat().st_size == 0:
+                _raise_error()
+
+            temp_path.replace(output_path)
+
+        except (ValueError, OSError, RuntimeError) as e:
+            # Rollback
+            import contextlib
+
+            if temp_path.exists():
+                with contextlib.suppress(OSError):
+                    temp_path.unlink()
             msg = f"Failed to write LAMMPS data file: {e}"
             raise RuntimeError(msg) from e

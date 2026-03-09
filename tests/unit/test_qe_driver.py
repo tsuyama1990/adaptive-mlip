@@ -12,9 +12,9 @@ from tests.conftest import create_dummy_pseudopotentials
 
 
 @pytest.fixture
-def mock_dft_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> DFTConfig:
-    monkeypatch.chdir(tmp_path)
-    create_dummy_pseudopotentials(tmp_path, ["H"])
+def mock_dft_config(dummy_pseudopotentials_dir: Path, monkeypatch: pytest.MonkeyPatch) -> DFTConfig:
+    monkeypatch.chdir(dummy_pseudopotentials_dir)
+    create_dummy_pseudopotentials(dummy_pseudopotentials_dir, ["H"])
 
     return DFTConfig(
         code="pw.x",
@@ -33,7 +33,7 @@ def mock_dft_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> DFTConfi
     ("pbc", "expected_factor"),
     [
         ([True, True, True], 1.0),
-        ([False, False, False], 0.0), # Factor 0.0 implies result is 1 (max(1, 0))
+        ([False, False, False], 0.0),  # Factor 0.0 implies result is 1 (max(1, 0))
         ([True, True, False], 1.0),
     ],
 )
@@ -64,6 +64,7 @@ def test_qe_driver_kpoints_parametrized(
 
         assert kpts == tuple(expected_kpts)
 
+
 def test_qe_driver_kpoints_zero_length(mock_dft_config: DFTConfig) -> None:
     """Test k-point generation with zero-length cells (should default to 1)."""
     # Cell with zero volume or very small dimensions
@@ -78,6 +79,7 @@ def test_qe_driver_kpoints_zero_length(mock_dft_config: DFTConfig) -> None:
         # Implementation uses mask (lengths >= 1e-3). So should be 1.
         assert kpts == (1, 1, 1)
 
+
 def test_qe_driver_invalid_input(mock_dft_config: DFTConfig) -> None:
     """Test validation of invalid inputs."""
     driver = QEDriver()
@@ -87,7 +89,7 @@ def test_qe_driver_invalid_input(mock_dft_config: DFTConfig) -> None:
     mock_dft_config.encut = -10.0
     with pytest.raises(ValueError, match="Energy cutoff must be positive"):
         driver.get_calculator(atoms, mock_dft_config)
-    mock_dft_config.encut = 500.0 # Reset
+    mock_dft_config.encut = 500.0  # Reset
 
     # Negative K-point density
     mock_dft_config.kpoints_density = -0.04
@@ -101,6 +103,21 @@ def test_qe_driver_invalid_input(mock_dft_config: DFTConfig) -> None:
     mock_dft_config.pseudopotentials = {"InvalidElement": "file.upf"}
     with pytest.raises(ValueError, match="Invalid chemical symbol"):
         driver.get_calculator(atoms, mock_dft_config)
+
+    from pydantic import ValidationError
+
+    # Empty pseudopotential dict - should fail validation at DFTConfig level
+    with pytest.raises(ValidationError):
+        driver.get_calculator(
+            atoms,
+            DFTConfig(
+                pseudopotentials={},
+                code="pw.x",
+                encut=100.0,
+                kpoints_density=0.04,
+                functional="PBE",
+            ),
+        )
 
 
 def test_qe_driver_parameters(mock_dft_config: DFTConfig) -> None:
@@ -136,11 +153,14 @@ def test_qe_driver_parameters(mock_dft_config: DFTConfig) -> None:
         pseudos = kwargs.get("pseudopotentials")
         assert pseudos == {"H": "H.UPF"}
 
-def test_qe_driver_directory_argument(mock_dft_config: DFTConfig, tmp_path: Path) -> None:
+
+def test_qe_driver_directory_argument(
+    mock_dft_config: DFTConfig, dummy_pseudopotentials_dir: Path
+) -> None:
     """Test that directory argument is passed to Espresso."""
     atoms = Atoms("H", cell=[10, 10, 10], pbc=True)
     driver = QEDriver()
-    test_dir = str(tmp_path / "test_dir")
+    test_dir = str(dummy_pseudopotentials_dir / "test_dir")
 
     with patch("pyacemaker.interfaces.qe_driver.Espresso") as MockEspresso:
         driver.get_calculator(atoms, mock_dft_config, directory=test_dir)

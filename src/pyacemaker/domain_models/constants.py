@@ -48,6 +48,17 @@ from .defaults import (
     RECIPROCAL_FACTOR,
 )
 
+# Strategy Constants
+STRATEGY_RATTLE_STDEV_INCREASE_FACTOR: Final[float] = 1.1
+STRATEGY_RATTLE_STDEV_DECREASE_FACTOR: Final[float] = 0.95
+STRATEGY_RATTLE_STDEV_MAX: Final[float] = 0.5
+STRATEGY_RATTLE_STDEV_MIN: Final[float] = 0.05
+
+# Policy Constants
+POLICY_MICROBURST_N_STEPS: Final[int] = 100
+POLICY_MICROBURST_NOISE_STDEV: Final[float] = 0.1
+POLICY_NORMALMODE_NOISE_STDEV: Final[float] = 0.05
+
 # Scenario Constants
 SCENARIO_NAME_FEPT_MGO: Final[str] = "fept_mgo"
 FILE_EXT_XYZ: Final[str] = "xyz"

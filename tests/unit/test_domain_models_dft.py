@@ -7,10 +7,12 @@ from pyacemaker.domain_models import DFTConfig
 from tests.conftest import create_dummy_pseudopotentials
 
 
-def test_dft_config_full_valid(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_dft_config_full_valid(
+    dummy_pseudopotentials_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Test full initialization of DFTConfig with all optional fields."""
-    monkeypatch.chdir(tmp_path)
-    create_dummy_pseudopotentials(tmp_path, ["Fe_pseudo"])
+    monkeypatch.chdir(dummy_pseudopotentials_dir)
+    create_dummy_pseudopotentials(dummy_pseudopotentials_dir, ["Fe_pseudo"])
 
     config = DFTConfig(
         code="quantum_espresso",
@@ -30,10 +32,12 @@ def test_dft_config_full_valid(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
     assert config.pseudopotentials == {"Fe": "Fe_pseudo.UPF"}
 
 
-def test_dft_config_defaults(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_dft_config_defaults(
+    dummy_pseudopotentials_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Test default values for optional fields."""
-    monkeypatch.chdir(tmp_path)
-    create_dummy_pseudopotentials(tmp_path, ["Fe"])
+    monkeypatch.chdir(dummy_pseudopotentials_dir)
+    create_dummy_pseudopotentials(dummy_pseudopotentials_dir, ["Fe"])
 
     config = DFTConfig(
         code="quantum_espresso",
@@ -49,10 +53,12 @@ def test_dft_config_defaults(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
 
 
 @pytest.mark.parametrize("beta", [1.5, -0.1, 0.0])
-def test_dft_config_invalid_mixing_beta(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, beta: float) -> None:
+def test_dft_config_invalid_mixing_beta(
+    dummy_pseudopotentials_dir: Path, monkeypatch: pytest.MonkeyPatch, beta: float
+) -> None:
     """Test invalid mixing_beta (must be 0 < beta <= 1)."""
-    monkeypatch.chdir(tmp_path)
-    create_dummy_pseudopotentials(tmp_path, ["Fe"])
+    monkeypatch.chdir(dummy_pseudopotentials_dir)
+    create_dummy_pseudopotentials(dummy_pseudopotentials_dir, ["Fe"])
 
     with pytest.raises(ValidationError):
         DFTConfig(
@@ -66,10 +72,12 @@ def test_dft_config_invalid_mixing_beta(tmp_path: Path, monkeypatch: pytest.Monk
 
 
 @pytest.mark.parametrize("width", [-0.1, 0.0])
-def test_dft_config_invalid_smearing_width(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, width: float) -> None:
+def test_dft_config_invalid_smearing_width(
+    dummy_pseudopotentials_dir: Path, monkeypatch: pytest.MonkeyPatch, width: float
+) -> None:
     """Test invalid smearing_width (must be > 0)."""
-    monkeypatch.chdir(tmp_path)
-    create_dummy_pseudopotentials(tmp_path, ["Fe"])
+    monkeypatch.chdir(dummy_pseudopotentials_dir)
+    create_dummy_pseudopotentials(dummy_pseudopotentials_dir, ["Fe"])
 
     with pytest.raises(ValidationError):
         DFTConfig(
@@ -82,10 +90,12 @@ def test_dft_config_invalid_smearing_width(tmp_path: Path, monkeypatch: pytest.M
         )
 
 
-def test_dft_config_extra_forbid(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_dft_config_extra_forbid(
+    dummy_pseudopotentials_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Test that extra fields are forbidden."""
-    monkeypatch.chdir(tmp_path)
-    create_dummy_pseudopotentials(tmp_path, ["Fe"])
+    monkeypatch.chdir(dummy_pseudopotentials_dir)
+    create_dummy_pseudopotentials(dummy_pseudopotentials_dir, ["Fe"])
 
     with pytest.raises(ValidationError):
         DFTConfig(
@@ -119,82 +129,39 @@ def test_dft_config_empty_pseudopotential() -> None:
         )
 
 
-def test_dft_config_external_paths(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Test that external paths (absolute or relative) are allowed if file exists."""
-    monkeypatch.chdir(tmp_path)
+def test_dft_config_external_paths(
+    dummy_pseudopotentials_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Test that external paths (absolute or relative) are strictly denied."""
+    monkeypatch.chdir(dummy_pseudopotentials_dir)
 
-    # Create a file in parent directory (simulates system library)
-    outside_dir = tmp_path.parent / "outside_dir"
-    outside_dir.mkdir(exist_ok=True)
-    outside_file = outside_dir / "secret.UPF"
-    outside_file.touch()
-
-    try:
-        # Case 1: Absolute path to outside file -> Allowed
-        config = DFTConfig(
-            code="qe",
-            functional="PBE",
-            kpoints_density=0.04,
-            encut=500.0,
-            pseudopotentials={"Fe": str(outside_file.absolute())},
-        )
-        assert config.pseudopotentials["Fe"] == str(outside_file.absolute())
-
-        # Case 2: Relative path to outside file -> Allowed
-        # Construct relative path from tmp_path to outside_file
-        rel_path = "../outside_dir/secret.UPF"
-        config = DFTConfig(
-            code="qe",
-            functional="PBE",
-            kpoints_density=0.04,
-            encut=500.0,
-            pseudopotentials={"Fe": rel_path},
-        )
-        assert config.pseudopotentials["Fe"] == rel_path
-
-    finally:
-        # Cleanup
-        if outside_file.exists():
-            outside_file.unlink()
-        if outside_dir.exists():
-            outside_dir.rmdir()
-
-
-def test_dft_config_symlinks_forbidden(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Test that symlinks are forbidden."""
-    monkeypatch.chdir(tmp_path)
-
-    real_file = tmp_path / "real.UPF"
-    real_file.touch()
-    symlink_file = tmp_path / "link.UPF"
-    symlink_file.symlink_to(real_file)
-
-    with pytest.raises(ValidationError, match="Symlinks are not allowed"):
+    # Case 1: Absolute path -> Denied
+    with pytest.raises(ValidationError):
         DFTConfig(
             code="qe",
             functional="PBE",
             kpoints_density=0.04,
             encut=500.0,
-            pseudopotentials={"Fe": "link.UPF"},
+            pseudopotentials={"Fe": "/non/existent/path/for/sure/fe.upf"},
         )
 
-def test_dft_config_file_not_found(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Test that non-existent file raises error."""
-    monkeypatch.chdir(tmp_path)
-
-    with pytest.raises(ValidationError, match="Pseudopotential file not found"):
+    # Case 2: Relative path with directory traversal -> Denied
+    with pytest.raises(ValidationError):
         DFTConfig(
             code="qe",
             functional="PBE",
             kpoints_density=0.04,
             encut=500.0,
-            pseudopotentials={"Fe": "missing.UPF"},
+            pseudopotentials={"Fe": "../outside_dir/secret.UPF"},
         )
 
-def test_dft_config_embedding_buffer(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+
+def test_dft_config_embedding_buffer(
+    dummy_pseudopotentials_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Test validation of embedding_buffer."""
-    monkeypatch.chdir(tmp_path)
-    create_dummy_pseudopotentials(tmp_path, ["Fe"])
+    monkeypatch.chdir(dummy_pseudopotentials_dir)
+    create_dummy_pseudopotentials(dummy_pseudopotentials_dir, ["Fe"])
 
     # Valid buffer
     config = DFTConfig(

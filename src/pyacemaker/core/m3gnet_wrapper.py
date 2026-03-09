@@ -19,6 +19,13 @@ class M3GNetWrapper:
         Raises:
             RuntimeError: If prediction fails after retries.
         """
+        # Validate composition string ensuring no injected shells or unsafe characters exist
+        import re
+
+        if not re.match(r"^[A-Za-z0-9]+$", composition):
+            msg = f"Invalid composition string format: {composition}"
+            raise ValueError(msg)
+
         # Simulated retry logic with exponential backoff could go here
         # For now, we mock the call.
         try:
@@ -32,7 +39,7 @@ class M3GNetWrapper:
 
         # Simple Mock logic
         if composition == "FePt":
-             return Atoms(
+            return Atoms(
                 "FePt",
                 positions=[[0, 0, 0], [1.9, 1.9, 1.9]],
                 cell=[3.8, 3.8, 3.8],
@@ -43,5 +50,5 @@ class M3GNetWrapper:
         try:
             return bulk(composition)
         except Exception:
-             # Very simple fallback
-             return Atoms(composition, cell=[5.0, 5.0, 5.0], pbc=True)
+            # Very simple fallback
+            return Atoms(composition, cell=[5.0, 5.0, 5.0], pbc=True)

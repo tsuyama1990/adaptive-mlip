@@ -7,6 +7,8 @@ from typing import Self
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from pyacemaker.utils.path import validate_path_safe
+
 
 class LoopStatus(StrEnum):
     RUNNING = "RUNNING"
@@ -26,55 +28,63 @@ class LoopState(BaseModel):
     def validate_potential_path(cls, v: Path | None) -> Path | None:
         """Ensures that if a potential path is set, it exists, is a file, and is safe."""
         if v is not None:
-            # Resolve to absolute path to prevent traversal/ambiguity
-            try:
-                path = Path(v).resolve(strict=True)
-            except (FileNotFoundError, RuntimeError) as e:
-                # strict=True raises FileNotFoundError if it doesn't exist
+            path = validate_path_safe(v)
+            if not path.exists():
                 msg = f"Potential path does not exist or is invalid: {v}"
-                raise ValueError(msg) from e
+                raise ValueError(msg)
 
             if not path.is_file():
                 msg = f"Potential path is not a file: {path}"
                 raise ValueError(msg)
 
-            # Security: Ensure path is within safe boundaries
-            try:
-                cwd = Path.cwd().resolve()
-                if not path.is_relative_to(cwd):
-                    # Exception: Allow /tmp or temp directories for testing/runtime
-                    temp_dir = Path(tempfile.gettempdir()).resolve()
-                    if not path.is_relative_to(temp_dir):
-                         _raise_traversal_error(path, cwd)
-            except ValueError as e:
-                # is_relative_to raises ValueError if not relative
-                _raise_traversal_error(path, cwd, e)
-
             return path
         return v
 
     def save(self, path: Path) -> None:
-        """Saves the state to a JSON file using atomic write and streaming."""
+        """Saves the state to a JSON file using atomic write, streaming, and file locking."""
         path = path.resolve()
         directory = path.parent
         directory.mkdir(parents=True, exist_ok=True)
 
-        # Use a temporary file in the same directory to ensure atomic move
-        with tempfile.NamedTemporaryFile("w", dir=directory, delete=False) as tmp_file:
-            json.dump(self.model_dump(mode="json"), tmp_file, indent=2)
+        # Ensure we have cross-platform exclusive access to the state file
+        lock_path = path.with_suffix(".lock")
 
-            # Ensure data is flushed to disk
-            tmp_file.flush()
-            os.fsync(tmp_file.fileno())
-            tmp_path_str = tmp_file.name
+        import sys
 
-        tmp_path = Path(tmp_path_str)
-        try:
-            tmp_path.replace(path)
-        except OSError:
-            # Clean up temp file if replace fails
-            tmp_path.unlink(missing_ok=True)
-            raise
+        is_windows = sys.platform == "win32"
+        if is_windows:
+            import msvcrt
+        else:
+            import fcntl
+
+        with lock_path.open("w") as lock_file:
+            try:
+                if is_windows:
+                    msvcrt.locking(lock_file.fileno(), msvcrt.LK_LOCK, 1)  # type: ignore[attr-defined]
+                else:
+                    fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+
+                # Use a temporary file in the same directory to ensure atomic move
+                with tempfile.NamedTemporaryFile("w", dir=directory, delete=False) as tmp_file:
+                    json.dump(self.model_dump(mode="json"), tmp_file, indent=2)
+
+                    # Ensure data is flushed to disk
+                    tmp_file.flush()
+                    os.fsync(tmp_file.fileno())
+                    tmp_path_str = tmp_file.name
+
+                tmp_path = Path(tmp_path_str)
+                try:
+                    tmp_path.replace(path)
+                except OSError:
+                    # Clean up temp file if replace fails
+                    tmp_path.unlink(missing_ok=True)
+                    raise
+            finally:
+                if is_windows:
+                    msvcrt.locking(lock_file.fileno(), msvcrt.LK_UNLCK, 1)  # type: ignore[attr-defined]
+                else:
+                    fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
 
     @classmethod
     def load(cls, path: Path) -> Self:
@@ -90,10 +100,3 @@ class LoopState(BaseModel):
         except (json.JSONDecodeError, ValueError) as e:
             msg = f"Failed to load loop state from {path}: {e}"
             raise ValueError(msg) from e
-
-
-def _raise_traversal_error(path: Path, cwd: Path, cause: Exception | None = None) -> None:
-    msg = f"Potential path {path} is outside the project directory {cwd}"
-    if cause:
-        raise ValueError(msg) from cause
-    raise ValueError(msg)

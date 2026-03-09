@@ -1,8 +1,9 @@
-from enum import Enum
+import os
+from enum import StrEnum
 from pathlib import Path
 
-from pydantic import BaseModel, ConfigDict, Field, PositiveFloat, PositiveInt, model_validator
 import numpy as np
+from pydantic import BaseModel, ConfigDict, Field, PositiveFloat, PositiveInt, model_validator
 
 from pyacemaker.domain_models.constants import (
     DEFAULT_MC_SEED,
@@ -27,8 +28,8 @@ from pyacemaker.domain_models.defaults import (
     DEFAULT_MD_TDAMP_FACTOR,
     DEFAULT_MD_THERMO_FREQ,
     DEFAULT_OTF_UNCERTAINTY_THRESHOLD,
+    MAX_MD_STEPS,
 )
-import os
 
 
 def _get_default_temp_dir() -> str | None:
@@ -39,7 +40,7 @@ def _get_default_temp_dir() -> str | None:
     return None
 
 
-class AtomStyle(str, Enum):
+class AtomStyle(StrEnum):
     ATOMIC = "atomic"
     CHARGE = "charge"
     FULL = "full"
@@ -55,6 +56,13 @@ class HybridParams(BaseModel):
         DEFAULT_MD_HYBRID_ZBL_OUTER, description="Outer cutoff radius for ZBL potential (Angstrom)"
     )
 
+    @model_validator(mode="after")
+    def validate_zbl_cutoffs(self) -> "HybridParams":
+        if self.zbl_cut_inner >= self.zbl_cut_outer:
+            msg = "zbl_cut_inner must be strictly less than zbl_cut_outer"
+            raise ValueError(msg)
+        return self
+
 
 class MDRampingConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -66,6 +74,13 @@ class MDRampingConfig(BaseModel):
 
     @model_validator(mode="after")
     def validate_ramping(self) -> "MDRampingConfig":
+        if (
+            self.temp_start is not None
+            and self.temp_end is not None
+            and self.temp_start > self.temp_end
+        ):
+            msg = "temp_start must be less than or equal to temp_end"
+            raise ValueError(msg)
         return self
 
 
@@ -84,7 +99,7 @@ class MDSimulationResult(BaseModel):
     forces: list[list[float]] = Field(..., description="Forces on atoms in the final frame")
     stress: list[float] = Field(
         default_factory=lambda: [0.0] * 6,
-        description="Stress tensor (Voigt: xx, yy, zz, yz, xz, xy) in Bar"
+        description="Stress tensor (Voigt: xx, yy, zz, yz, xz, xy) in Bar",
     )
     halted: bool = Field(..., description="Whether the simulation was halted early")
     max_gamma: float = Field(..., description="Maximum extrapolation grade observed")
@@ -101,20 +116,25 @@ class MDSimulationResult(BaseModel):
     def validate_physical_values(self) -> "MDSimulationResult":
         # Validate energy is finite
         if not np.isfinite(self.energy):
-            raise ValueError("Energy must be a finite number")
+            msg = "Energy must be a finite number"
+            raise ValueError(msg)
 
         # Validate forces shape and values
         for f in self.forces:
             if len(f) != 3:
-                raise ValueError("Forces must be 3D vectors (list of 3 floats)")
+                msg = "Forces must be 3D vectors (list of 3 floats)"
+                raise ValueError(msg)
             if not np.isfinite(f).all():
-                raise ValueError("Forces must contain finite numbers")
+                msg = "Forces must contain finite numbers"
+                raise ValueError(msg)
 
         # Validate stress
         if len(self.stress) != 6:
-             raise ValueError("Stress must be a 6-element list (Voigt notation)")
+            msg = "Stress must be a 6-element list (Voigt notation)"
+            raise ValueError(msg)
         if not np.isfinite(self.stress).all():
-             raise ValueError("Stress must contain finite numbers")
+            msg = "Stress must contain finite numbers"
+            raise ValueError(msg)
 
         return self
 
@@ -123,13 +143,16 @@ class MDConfig(BaseModel):
     """
     Configuration for Molecular Dynamics simulations.
     """
+
     model_config = ConfigDict(extra="forbid")
 
     # Basic Physics
     temperature: float = Field(..., ge=0.0, description="Simulation temperature in Kelvin")
-    pressure: float = Field(..., ge=0.0, le=MAX_MD_PRESSURE, description="Simulation pressure in Bar")
+    pressure: float = Field(
+        ..., ge=0.0, le=MAX_MD_PRESSURE, description="Simulation pressure in Bar"
+    )
     timestep: PositiveFloat = Field(..., gt=0.0, le=10.0, description="Timestep in ps")
-    n_steps: int = Field(..., gt=0, le=1000000000, description="Number of MD steps")
+    n_steps: int = Field(..., gt=0, le=MAX_MD_STEPS, description="Number of MD steps")
 
     # Output Control
     thermo_freq: PositiveInt = Field(
@@ -142,9 +165,7 @@ class MDConfig(BaseModel):
     neighbor_skin: PositiveFloat = Field(
         DEFAULT_MD_NEIGHBOR_SKIN, description="Neighbor list skin distance (Angstrom)"
     )
-    atom_style: AtomStyle = Field(
-        AtomStyle(DEFAULT_MD_ATOM_STYLE), description="LAMMPS atom style"
-    )
+    atom_style: AtomStyle = Field(AtomStyle(DEFAULT_MD_ATOM_STYLE), description="LAMMPS atom style")
 
     # Configurable LAMMPS Parameters (No Hardcoding)
     velocity_seed: int = Field(
@@ -166,10 +187,12 @@ class MDConfig(BaseModel):
     # Advanced Settings
     temp_dir: str | None = Field(
         default_factory=_get_default_temp_dir,
-        description="Directory for temporary files (e.g., /dev/shm for RAM disk)"
+        description="Directory for temporary files (e.g., /dev/shm for RAM disk)",
     )
     tdamp_factor: float = Field(
-        DEFAULT_MD_TDAMP_FACTOR, gt=0.0, description="Temperature damping factor (multiplies timestep)"
+        DEFAULT_MD_TDAMP_FACTOR,
+        gt=0.0,
+        description="Temperature damping factor (multiplies timestep)",
     )
     pdamp_factor: float = Field(
         DEFAULT_MD_PDAMP_FACTOR, gt=0.0, description="Pressure damping factor (multiplies timestep)"
@@ -184,19 +207,17 @@ class MDConfig(BaseModel):
     )
 
     # Spec Section 3.4 (Hybrid Potential & OTF)
-    hybrid_potential: bool = Field(
-        False, description="Use hybrid potential (ACE + LJ/ZBL)"
-    )
+    hybrid_potential: bool = Field(False, description="Use hybrid potential (ACE + LJ/ZBL)")
     hybrid_params: HybridParams = Field(
         default_factory=HybridParams, description="Parameters for hybrid potential baseline"
     )
 
     # Spec Section 3.4 (OTF)
-    fix_halt: bool = Field(
-        False, description="Enable OTF halting based on uncertainty"
-    )
+    fix_halt: bool = Field(False, description="Enable OTF halting based on uncertainty")
     uncertainty_threshold: float = Field(
-        DEFAULT_OTF_UNCERTAINTY_THRESHOLD, gt=0.0, description="Gamma threshold for halting simulation"
+        DEFAULT_OTF_UNCERTAINTY_THRESHOLD,
+        gt=0.0,
+        description="Gamma threshold for halting simulation",
     )
     check_interval: int = Field(
         DEFAULT_MD_CHECK_INTERVAL, gt=0, description="Step interval for uncertainty check"
@@ -210,13 +231,14 @@ class MDConfig(BaseModel):
     def validate_simulation_physics(self) -> "MDConfig":
         total_time = self.n_steps * self.timestep
         if total_time > MAX_MD_DURATION:
-             pass
+            pass
         return self
 
     @model_validator(mode="after")
     def validate_otf_settings(self) -> "MDConfig":
         if self.fix_halt and self.check_interval <= 0:
-             raise ValueError("check_interval must be positive when fix_halt is enabled.")
+            msg = "check_interval must be positive when fix_halt is enabled."
+            raise ValueError(msg)
         return self
 
     @model_validator(mode="after")
@@ -224,14 +246,17 @@ class MDConfig(BaseModel):
         if self.temp_dir:
             p = Path(self.temp_dir)
             if not p.exists() or not os.access(p, os.W_OK):
-                raise ValueError(f"Temporary directory {p} does not exist or is not writable.")
+                msg = f"Temporary directory {p} does not exist or is not writable."
+                raise ValueError(msg)
         return self
 
     @model_validator(mode="after")
     def validate_default_forces(self) -> "MDConfig":
         for f in self.default_forces:
             if len(f) != 3:
-                raise ValueError("Default forces must be a list of 3D vectors (list of 3 floats)")
+                msg = "Default forces must be a list of 3D vectors (list of 3 floats)"
+                raise ValueError(msg)
             if not all(isinstance(x, (int, float)) for x in f):
-                 raise ValueError("Default forces elements must be numeric")
+                msg = "Default forces elements must be numeric"
+                raise ValueError(msg)
         return self

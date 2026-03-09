@@ -1,15 +1,166 @@
 import numpy as np
 from ase import Atoms
+from ase.constraints import FixAtoms
 from ase.neighborlist import neighbor_list
+from ase.optimize import LBFGS
 
+from pyacemaker.domain_models.workflow import CutoutConfig
 from pyacemaker.utils.embedding import embed_cluster
 
 
+def _pre_relax_buffer(cluster: Atoms) -> Atoms:
+    """
+    Relaxes the buffer region (force_weight == 0.0) while keeping the core fixed.
+    """
+    # Create a copy to prevent modifying the original incorrectly
+    cluster_copy = cluster.copy()  # type: ignore[no-untyped-call]
+
+    # Identify core atoms
+    weights = cluster_copy.get_array("force_weight")
+    core_indices = np.where(weights == 1.0)[0]
+
+    # Set constraints to fix core atoms
+    constraint = FixAtoms(indices=core_indices)  # type: ignore[no-untyped-call]
+    cluster_copy.set_constraint(constraint)
+
+    # Apply a mock calculator for the relaxation if one is not attached
+    if cluster_copy.calc is None:
+        from ase.calculators.lj import LennardJones
+
+        cluster_copy.calc = LennardJones()  # type: ignore[no-untyped-call]
+
+    # Relax the buffer region
+    import os
+    from pathlib import Path
+
+    with Path(os.devnull).open("w") as devnull:
+        opt = LBFGS(cluster_copy, logfile=devnull)
+        opt.run(fmax=0.05, steps=50)  # type: ignore[no-untyped-call]
+
+    return cluster_copy  # type: ignore[no-any-return]
+
+
+def _passivate_surface(cluster: Atoms, element: str = "H") -> Atoms:
+    """
+    Passivates the surface of the cluster by adding dummy atoms (e.g. H) to undercoordinated atoms.
+    """
+    cluster_copy = cluster.copy()  # type: ignore[no-untyped-call]
+
+    # We will just do a simple distance-based passivation mock implementation
+    # Find outer atoms (in the buffer region) that have fewer neighbors
+    i_indices, _j_indices = neighbor_list("ij", cluster_copy, cutoff=2.5)  # type: ignore[no-untyped-call]
+
+    weights = cluster_copy.get_array("force_weight")
+    buffer_indices = np.where(weights == 0.0)[0]
+
+    new_atoms = []
+
+    for idx in buffer_indices:
+        # Number of neighbors for this atom
+        n_neighbors = np.sum(i_indices == idx)
+        # Mock logic: if an atom has fewer than 4 neighbors, add a passivating element
+        if n_neighbors < 4:
+            # We add a dummy atom in a random direction (just for structure generation mock)
+            # In a real scenario, this would follow bonding angles.
+            pos = cluster_copy.positions[idx]
+            offset = np.random.randn(3)
+            offset = offset / np.linalg.norm(offset) * 1.0  # 1.0 Angstrom bond length
+            new_pos = pos + offset
+
+            new_atoms.append(Atoms(element, positions=[new_pos]))
+
+    if new_atoms:
+        for new_atom in new_atoms:
+            cluster_copy += new_atom
+
+        # Update force_weight array to include the new passivated atoms (with weight 0.0)
+        new_weights = np.append(weights, np.zeros(len(new_atoms)))
+        cluster_copy.set_array("force_weight", new_weights)
+
+    return cluster_copy  # type: ignore[no-any-return]
+
+
+def extract_intelligent_cluster(
+    structure: Atoms, target_atoms: list[int], config: CutoutConfig
+) -> Atoms:
+    """
+    Extracts an intelligent local cluster around multiple target atoms,
+    relaxing the buffer and passivating the surface.
+    """
+    if not target_atoms:
+        return structure.copy()  # type: ignore[no-untyped-call, no-any-return]
+
+    total_cutoff = config.core_radius + config.buffer_radius
+
+    # We will compute the distances from all atoms to all target atoms
+    # Use ASE's neighbor_list for each target atom
+
+    i_indices, j_indices, D_vectors = neighbor_list("ijD", structure, cutoff=total_cutoff)  # type: ignore[no-untyped-call]
+
+    mask = np.isin(i_indices, target_atoms)
+
+    neighbors_indices = j_indices[mask]
+    vectors = D_vectors[mask]
+    source_indices = i_indices[mask]
+
+    # We need a unique set of atoms to include in the cluster
+    unique_cluster_indices = set(target_atoms)
+    unique_cluster_indices.update(neighbors_indices)
+
+    cluster_indices = list(unique_cluster_indices)
+    cluster_indices.sort()  # Ensure deterministic order
+
+    # Mapping from original structure index to cluster index
+    idx_map = {orig_idx: new_idx for new_idx, orig_idx in enumerate(cluster_indices)}
+
+    # Now we assign weights
+    weights = np.zeros(len(cluster_indices))
+
+    # Core atoms are distance <= config.core_radius from ANY target atom
+    distances = np.linalg.norm(vectors, axis=1)
+
+    for target_idx in target_atoms:
+        weights[idx_map[target_idx]] = 1.0
+
+    for i, (_src_idx, neighbor_idx) in enumerate(
+        zip(source_indices, neighbors_indices, strict=False)
+    ):
+        if distances[i] <= config.core_radius + 1e-6:
+            weights[idx_map[neighbor_idx]] = 1.0
+
+    # Create the cluster atoms
+    cluster_positions = structure.positions[cluster_indices]
+
+    # Center the cluster roughly around the mean of target atoms to avoid breaking
+    target_positions = structure.positions[target_atoms]
+    center_pos = np.mean(target_positions, axis=0)
+
+    cluster_positions = cluster_positions - center_pos
+
+    all_symbols = np.array(structure.get_chemical_symbols())  # type: ignore[no-untyped-call]
+    cluster_symbols = all_symbols[cluster_indices]
+
+    cluster = Atoms(symbols=cluster_symbols, positions=cluster_positions, pbc=False)
+
+    cluster.new_array("force_weight", weights)  # type: ignore[no-untyped-call]
+
+    if structure.has("c_gamma"):  # type: ignore[no-untyped-call]
+        original_c_gamma = structure.get_array("c_gamma")  # type: ignore[no-untyped-call]
+        cluster_c_gamma = original_c_gamma[cluster_indices]
+        cluster.new_array("c_gamma", cluster_c_gamma)  # type: ignore[no-untyped-call]
+
+    if config.enable_pre_relaxation:
+        cluster = _pre_relax_buffer(cluster)
+
+    if config.enable_passivation:
+        cluster = _passivate_surface(cluster, element=config.passivation_element)
+
+    # Finally, embed the cluster into a cell
+    return embed_cluster(cluster, buffer=5.0)
+
+
 def extract_local_region(
-    structure: Atoms,
-    center_index: int,
-    radius: float,
-    buffer: float
+    structure: Atoms, center_index: int, radius: float, buffer: float
 ) -> Atoms:
     """
     Extracts a local cluster around a specific atom from a structure.
@@ -37,10 +188,10 @@ def extract_local_region(
     # For very large structures, this is significantly faster than O(N^2) pairwise calculation.
     # returns i (center indices), j (neighbor indices), D (distance vectors)
     # D is vector from atom i to atom j
-    i_indices, j_indices, D_vectors = neighbor_list('ijD', structure, cutoff=total_cutoff)  # type: ignore[no-untyped-call]
+    i_indices, j_indices, D_vectors = neighbor_list("ijD", structure, cutoff=total_cutoff)  # type: ignore[no-untyped-call]
 
     # Filter for our center atom
-    mask = (i_indices == center_index)
+    mask = i_indices == center_index
     neighbors_indices = j_indices[mask]
     vectors = D_vectors[mask]
 
@@ -100,11 +251,7 @@ def extract_local_region(
 
     # Create Atoms object
     # pbc=False initially, embed_cluster will handle boxing
-    cluster = Atoms(
-        symbols=cluster_symbols,
-        positions=cluster_positions,
-        pbc=False
-    )
+    cluster = Atoms(symbols=cluster_symbols, positions=cluster_positions, pbc=False)
 
     # Store weights in arrays
     # 'force_weight' is standard for Pacemaker
