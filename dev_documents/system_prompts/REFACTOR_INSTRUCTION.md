@@ -8,6 +8,7 @@ The initial implementation followed a waterfall specification, but pragmatic dev
 ## 1. Architectural Analysis (Review & Compare)
 - **Review**: Analyze the current Class design, Code design, and `domain_models` package (or directory).
 - **Compare**: Check these against the initial vision in `SPEC.md` and `SYSTEM_ARCHITECTURE.md` (in context files).
+    - **Focus**: Your primary priority is verifying and optimizing the architecture for **Cycle {{cycle_id}}**, but you **MUST also carefully observe `ALL_SPEC.md` for other cycles** to ensure consistency and prevent architectural conflicts with current/future features.
 - **Decision**: Identify discrepancies.
     - If the discrepancy exists because the implementation is *sloppy*, fix the implementation to match the Spec.
     - If the discrepancy exists because the implementation found a *superior, more pragmatic design*, **Prioritize the Code's Design**. Do not blindly revert to an inferior Spec.
