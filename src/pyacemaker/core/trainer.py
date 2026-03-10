@@ -53,7 +53,7 @@ class PacemakerTrainer(BaseTrainer):
             # Fail gracefully, return an empty buffer if reading fails
             return []
 
-    def incremental_train(
+    def incremental_train(  # noqa: PLR0915
         self,
         new_data_path: str | Path,
         strategy_config: LoopStrategyConfig,
@@ -81,56 +81,62 @@ class PacemakerTrainer(BaseTrainer):
 
         combined_iter = itertools.chain(replay_buffer, new_data_iter)
 
-        # Create a named pipe
-        tmpdir = tempfile.mkdtemp()
-        fifo_path = Path(tmpdir) / "stream.extxyz"
-        os.mkfifo(fifo_path)
+        import contextlib
+        import logging
 
-        # Write to the pipe in a background thread so we don't block
-        def _writer() -> None:
+        from collections.abc import Iterator
+
+        @contextlib.contextmanager
+        def create_named_pipe() -> Iterator[Path]:
+            tmpdir = tempfile.mkdtemp()
+            fifo_path = Path(tmpdir) / "stream.extxyz"
             try:
-                chunk_size = 100
-                with fifo_path.open("w") as f_out:
-                    while True:
-                        chunk = list(itertools.islice(combined_iter, chunk_size))
-                        if not chunk:
-                            break
-                        # Write the chunk directly to the open file object
-                        write(f_out, chunk, format="extxyz")
-            except Exception:
-                import logging
-
-                logging.getLogger(__name__).exception("Error writing to pipe")
-            # When the with block exits, f_out is closed, sending EOF to pace_train.
-
-        writer_event = threading.Event()
-
-        def _sync_writer() -> None:
-            try:
-                _writer()
+                os.mkfifo(fifo_path)
+                yield fifo_path
             finally:
-                writer_event.set()
-
-        writer_thread = threading.Thread(target=_sync_writer, daemon=True)
-        writer_thread.start()
-
-        try:
-            return self.train(fifo_path, initial_potential)
-        finally:
-            # If train failed before opening the pipe, the writer thread will be blocked forever.
-            # We open it for reading non-blocking to unblock the writer thread and let it exit.
-            if not writer_event.is_set():
-                import contextlib
-
                 with contextlib.suppress(OSError):
-                    os.open(fifo_path, os.O_RDONLY | os.O_NONBLOCK)
-            writer_event.wait(timeout=5.0)
-            # Cleanup pipe and temp dir
+                    fifo_path.unlink(missing_ok=True)
+                with contextlib.suppress(OSError):
+                    Path(tmpdir).rmdir()
+
+        with create_named_pipe() as fifo_path:
+            # Write to the pipe in a background thread so we don't block
+            def _writer() -> None:
+                try:
+                    chunk_size = 100
+                    with fifo_path.open("w") as f_out:
+                        while True:
+                            chunk = list(itertools.islice(combined_iter, chunk_size))
+                            if not chunk:
+                                break
+                            # Write the chunk directly to the open file object
+                            write(f_out, chunk, format="extxyz")
+                except OSError as e:
+                    logging.getLogger(__name__).debug(f"Pipe writing terminated: {e}")
+                except Exception:
+                    logging.getLogger(__name__).exception("Error writing to pipe")
+                # When the with block exits, f_out is closed, sending EOF to pace_train.
+
+            writer_event = threading.Event()
+
+            def _sync_writer() -> None:
+                try:
+                    _writer()
+                finally:
+                    writer_event.set()
+
+            writer_thread = threading.Thread(target=_sync_writer, daemon=True)
+            writer_thread.start()
+
             try:
-                fifo_path.unlink(missing_ok=True)
-                Path(tmpdir).rmdir()
-            except OSError:
-                pass
+                return self.train(fifo_path, initial_potential)
+            finally:
+                # If train failed before opening the pipe, the writer thread will be blocked forever.
+                # We open it for reading non-blocking to unblock the writer thread and let it exit.
+                if not writer_event.is_set():
+                    with contextlib.suppress(OSError):
+                        os.open(fifo_path, os.O_RDONLY | os.O_NONBLOCK)
+                writer_thread.join(timeout=5.0)
 
     def train(
         self, training_data_path: str | Path, initial_potential: str | Path | None = None

@@ -16,10 +16,10 @@ def test_validate_path_safe_traversal():
 
 
 def test_validate_path_safe_dangerous_chars():
-    with pytest.raises(ValueError, match="Path contains invalid characters"):
+    with pytest.raises(ValueError, match="Path contains invalid characters|shell metacharacters"):
         validate_path_safe(Path("file;rm"))
 
-    with pytest.raises(ValueError, match="Path contains invalid characters"):
+    with pytest.raises(ValueError, match="Path contains invalid characters|shell metacharacters"):
         validate_path_safe(Path("file|pipe"))
 
     with pytest.raises(ValueError, match="Path contains invalid characters"):
