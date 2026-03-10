@@ -72,15 +72,17 @@ class LammpsScriptGenerator:
         params = self.config.hybrid_params
 
         # Validate numerical params strictly
-        if not isinstance(params.zbl_cut_inner, (int, float)) or not isinstance(params.zbl_cut_outer, (int, float)):
-             msg = "ZBL cutoffs must be numerical"
-             raise TypeError(msg)
+        if not isinstance(params.zbl_cut_inner, (int, float)) or not isinstance(
+            params.zbl_cut_outer, (int, float)
+        ):
+            msg = "ZBL cutoffs must be numerical"
+            raise TypeError(msg)
         if params.zbl_cut_inner < 0 or params.zbl_cut_outer < 0:
-             msg = "ZBL cutoffs must be positive"
-             raise ValueError(msg)
+            msg = "ZBL cutoffs must be positive"
+            raise ValueError(msg)
         if params.zbl_cut_inner >= params.zbl_cut_outer:
-             msg = "zbl_cut_inner must be less than zbl_cut_outer"
-             raise ValueError(msg)
+            msg = "zbl_cut_inner must be less than zbl_cut_outer"
+            raise ValueError(msg)
 
         buffer.write(
             f"pair_style hybrid/overlay pace zbl {float(params.zbl_cut_inner)} {float(params.zbl_cut_outer)}\n"
@@ -131,12 +133,28 @@ class LammpsScriptGenerator:
 
         # Integration of fix python/invoke for Master-Slave inversion requirement
         # Define a fully complete inline python function to prevent LAMMPS C++ parser crashes.
-        # In a real implementation this would trigger Orchestrator events, but for functional correctness
-        # it MUST be properly formatted and syntactically valid within LAMMPS.
-        python_block = """python invoke_evaluator invoke here \"\"\"
+        python_block = f"""python invoke_evaluator invoke here \"\"\"
 def invoke_evaluator():
-    # Placeholder for Python callback in Master-Slave inversion
-    pass
+    import lammps
+
+    # Connect to the running LAMMPS instance
+    lmp = lammps.lammps(ptr=lammps.get_ptr())
+
+    try:
+        max_g = float(lmp.extract_variable("max_g"))
+    except Exception:
+        max_g = 0.0
+
+    # In Master-Slave inversion, the C++ LAMMPS loop pauses actively running iterations
+    # by invoking the orchestrator pipeline over an IPC mechanism or file signal when thresholds are crossed.
+    if max_g > {self.config.uncertainty_threshold}:
+        # Signal Orchestrator to Halt and Process the uncertainty via file
+        import os
+        with open("HALT_SIGNAL.txt", "w") as f:
+            f.write(str(max_g))
+
+        # Halt LAMMPS natively
+        lmp.command("quit")
 \"\"\"
 """
         buffer.write(python_block)

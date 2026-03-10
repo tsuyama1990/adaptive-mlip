@@ -31,11 +31,12 @@ def validate_path_safe(path: Path) -> Path:  # noqa: C901
         raise ValueError(msg)
 
     import re
+
     # Additional strict shell metacharacter rejection just in case
     # This prevents shell injection vulnerabilities through maliciously crafted paths
     if re.search(r"[;&\|`$<>(\n)(\r)]", s):
-         msg = f"Path contains shell metacharacters: {path}"
-         raise ValueError(msg)
+        msg = f"Path contains shell metacharacters: {path}"
+        raise ValueError(msg)
 
     # Ensure filename doesn't start with dash (flag injection)
     if path.name.startswith("-"):

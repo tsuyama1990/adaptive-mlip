@@ -1,7 +1,6 @@
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-
-from dataclasses import dataclass
 
 from ase import Atoms
 
@@ -29,6 +28,7 @@ class SimulationEnvCtx:
     elements: list[str]
     potential_path: Path
 
+
 class LammpsEngine(BaseEngine):
     """
     MD Engine using LAMMPS.
@@ -46,14 +46,13 @@ class LammpsEngine(BaseEngine):
         Allows dependency injection for generator and file manager.
         """
         import logging
+
         self.logger = logging.getLogger(__name__)
         self.config = config
         self.generator = generator or LammpsScriptGenerator(config)
         self.file_manager = file_manager or LammpsFileManager(config)
 
-    def _prepare_simulation_env(
-        self, structure: Atoms | None, potential: Any
-    ) -> SimulationEnvCtx:
+    def _prepare_simulation_env(self, structure: Atoms | None, potential: Any) -> SimulationEnvCtx:
         """
         Prepares the simulation environment: validation, paths, and files.
         """
@@ -73,7 +72,7 @@ class LammpsEngine(BaseEngine):
             dump_file=dump_file,
             log_file=log_file,
             elements=elements,
-            potential_path=potential_path
+            potential_path=potential_path,
         )
 
     def _ensure_script_readable(self, script_path: Path) -> None:
@@ -85,12 +84,20 @@ class LammpsEngine(BaseEngine):
     def _validate_script_content(self, script_path: Path) -> None:
         """Validates script content for shell injection vulnerabilities."""
         import re
+
         script_content = script_path.read_text()
 
         # Explicit blocklist for shell metacharacters and execution commands
         dangerous_patterns = [
-            r"shell\s+", r"system\s+", r"exec\s+", r"print\s+.*`",
-            r"\|", r";", r"&&", r"\|\|", r"\$\("
+            r"shell\s+",
+            r"system\s+",
+            r"exec\s+",
+            r"print\s+.*`",
+            r"\|",
+            r";",
+            r"&&",
+            r"\|\|",
+            r"\$\(",
         ]
 
         for pattern in dangerous_patterns:
@@ -137,7 +144,9 @@ class LammpsEngine(BaseEngine):
         return resume_step, override_n_steps
 
     def _generate_script(self, env_ctx: "SimulationEnvCtx", resume_step: int | None) -> Path:
-        temp_dir = Path(env_ctx.ctx.name) if hasattr(env_ctx.ctx, "name") else env_ctx.data_file.parent
+        temp_dir = (
+            Path(env_ctx.ctx.name) if hasattr(env_ctx.ctx, "name") else env_ctx.data_file.parent
+        )
         input_script_path = temp_dir / "input.lmp"
 
         restart_file = temp_dir / "restart.out"
@@ -160,7 +169,9 @@ class LammpsEngine(BaseEngine):
 
         return input_script_path
 
-    def _parse_results(self, driver: LammpsDriver, dump_file: Path, kwargs: dict[str, Any]) -> MDSimulationResult:
+    def _parse_results(
+        self, driver: LammpsDriver, dump_file: Path, kwargs: dict[str, Any]
+    ) -> MDSimulationResult:
         try:
             energy = driver.extract_variable("pe")
             temperature = driver.extract_variable("temp")
@@ -188,7 +199,16 @@ class LammpsEngine(BaseEngine):
             # If using fix halt, checking step count is a proxy for early termination
             halted = step < n_steps_target
 
-        if "threshold_call_dft" in kwargs and max_gamma > kwargs["threshold_call_dft"]:
+        # For actual two-tier threshold implementations, check if threshold object was strictly provided
+        # or if the config itself contains the active threshold.
+        # Fallback safely without relying on mocks.
+        threshold_to_check = None
+        if "threshold_call_dft" in kwargs:
+            threshold_to_check = kwargs["threshold_call_dft"]
+        elif hasattr(self.config, "uncertainty_threshold"):
+            threshold_to_check = self.config.uncertainty_threshold
+
+        if threshold_to_check is not None and max_gamma > threshold_to_check:
             halted = True
 
         return MDSimulationResult(
@@ -303,11 +323,15 @@ class LammpsEngine(BaseEngine):
 
         with env_ctx.ctx:
             # Generate minimization script
-            temp_dir = Path(env_ctx.ctx.name) if hasattr(env_ctx.ctx, "name") else env_ctx.data_file.parent
+            temp_dir = (
+                Path(env_ctx.ctx.name) if hasattr(env_ctx.ctx, "name") else env_ctx.data_file.parent
+            )
             script_path = temp_dir / "relax.lmp"
 
             with script_path.open("w") as f:
-                self.generator.write_minimization_script(f, env_ctx.potential_path, env_ctx.data_file, env_ctx.elements)
+                self.generator.write_minimization_script(
+                    f, env_ctx.potential_path, env_ctx.data_file, env_ctx.elements
+                )
 
             # Execute
             lammps_args = ["-screen", LAMMPS_SCREEN_ARG, "-log", str(env_ctx.log_file)]

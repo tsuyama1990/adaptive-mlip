@@ -104,7 +104,13 @@ def test_scenario_phase3_cutout() -> None:
     # MACE mock is between 0.01 and 0.1, so likely some > 0.02. Let's just pass target_atoms = [0]
     target_atoms = [0]
 
-    cluster = extract_intelligent_cluster(atoms, target_atoms, config)
+    # Ensure we patch MACE for this test so it doesn't fail due to missing MACE dependency.
+    with patch("pyacemaker.utils.extraction.LBFGS"):
+         import sys
+         sys.modules['mace'] = MagicMock()
+         sys.modules['mace.calculators'] = MagicMock()
+         sys.modules['mace.calculators'].mace_mp = MagicMock()
+         cluster = extract_intelligent_cluster(atoms, target_atoms, config)
 
     # Check physical repair
     weights = cluster.get_array("force_weight")
