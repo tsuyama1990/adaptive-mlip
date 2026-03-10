@@ -27,7 +27,29 @@ class PacemakerTrainer(BaseTrainer):
         Fetches up to `size` past data points to retain for training.
         This prevents catastrophic forgetting.
         """
-        return []  # Mock replay buffer retrieval for now
+        import random
+
+        from ase.io import iread
+
+        from pyacemaker.domain_models.defaults import DEFAULT_DATA_DIR
+
+        history_file = Path(DEFAULT_DATA_DIR) / "training_history.extxyz"
+        if not history_file.exists():
+            return []
+
+        # Read history iteratively, stream to list
+        try:
+            history = list(iread(str(history_file)))
+        except Exception as e:
+            msg = f"Failed to read training history from {history_file}: {e}"
+            raise TrainerError(msg) from e
+
+        if not history:
+            return []
+
+        # Sample up to `size` items
+        sample_size = min(size, len(history))
+        return random.sample(history, sample_size)
 
     def incremental_train(
         self,
@@ -141,9 +163,49 @@ class FinetuneManager:
     Manager to briefly train the final readout layers of the MACE foundation model.
     """
 
+    def __init__(self, config: TrainingConfig | None = None) -> None:
+        self.config = config
+
     def finetune(self, dataset_path: str | Path) -> str:
         """
-        Mock finetuning logic for the awakened MACE model.
-        Returns the path to the awakened model.
+        Briefly trains the final readout layers of the MACE foundation model.
         """
-        return "awakened_mace_model.model"
+        dataset_path = Path(dataset_path).resolve()
+        if not dataset_path.exists():
+            msg = f"Dataset for finetuning not found: {dataset_path}"
+            raise FileNotFoundError(msg)
+
+        if not shutil.which("python"):
+            msg = "Python executable not found in PATH."
+            raise RuntimeError(msg)
+
+        output_model = dataset_path.parent / "awakened_mace_model.model"
+
+        epochs = str(self.config.mace_finetune_epochs) if self.config else "5"
+
+        # Finetune using MACE CLI
+        cmd = [
+            "python",
+            "-m",
+            "mace.cli.finetune",
+            "--train_file",
+            str(dataset_path),
+            "--model",
+            str(output_model),
+            "--epochs",
+            epochs,
+        ]
+
+        try:
+            run_command(cmd)
+        except Exception:
+            # If MACE is not installed or finetune fails, we just raise an error
+            # as the instruction says no mocks
+            msg = f"Failed to run MACE finetuning command: {' '.join(cmd)}"
+            raise RuntimeError(msg) from None
+
+        if not output_model.exists():
+            msg = f"Finetuned model was not created at {output_model}"
+            raise RuntimeError(msg)
+
+        return str(output_model)

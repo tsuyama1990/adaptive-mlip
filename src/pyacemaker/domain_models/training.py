@@ -112,6 +112,9 @@ class TrainingConfig(BaseModel):
         None, description="Target number of structures for active set", gt=0
     )
 
+    # MACE Fine-tuning Settings
+    mace_finetune_epochs: int = Field(5, description="Number of epochs for MACE fine-tuning", gt=0)
+
     @model_validator(mode="after")
     def validate_active_set_size(self) -> "TrainingConfig":
         """Ensures active_set_size is set if active_set_optimization is enabled."""

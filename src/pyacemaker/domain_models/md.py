@@ -184,6 +184,17 @@ class MDConfig(BaseModel):
         DEFAULT_MD_MINIMIZE_FTOL, description="Force tolerance for minimization"
     )
 
+    # Seamless Resume Settings
+    langevin_seed: int = Field(
+        48279, description="Random seed for Langevin thermostat during soft start"
+    )
+    langevin_damping: float = Field(
+        100.0, description="Damping factor for Langevin thermostat (fs)"
+    )
+    soft_start_steps: int = Field(
+        10, description="Number of steps to apply soft start Langevin thermostat when resuming"
+    )
+
     # Advanced Settings
     temp_dir: str | None = Field(
         default_factory=_get_default_temp_dir,

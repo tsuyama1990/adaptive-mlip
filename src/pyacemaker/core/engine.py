@@ -128,10 +128,17 @@ class LammpsEngine(BaseEngine):
 
                 resume_step = kwargs.get("resume_from_step")
                 if resume_step is not None:
-                    # Write custom variables or commands for seamless resume
-                    # In a real implementation we would load a restart file.
-                    # Here we append a print statement to indicate resume logic.
+                    # Write commands for seamless resume
                     f.write(f"\nprint 'Resuming from step {resume_step}'\n")
+                    f.write(f"read_restart {data_file.parent}/restart.{resume_step}.lmp\n")
+
+                    # Apply a Langevin thermostat for a soft start to damp energy spikes
+                    f.write(
+                        f"fix soft_start all langevin {self.config.temperature} "
+                        f"{self.config.temperature} {self.config.langevin_damping} {self.config.langevin_seed}\n"
+                    )
+                    f.write(f"run {self.config.soft_start_steps}\n")
+                    f.write("unfix soft_start\n")
 
             # Read LAMMPS specific configuration
             lammps_args = ["-screen", LAMMPS_SCREEN_ARG, "-log", str(log_file)]

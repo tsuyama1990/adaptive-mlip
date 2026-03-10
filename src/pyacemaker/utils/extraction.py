@@ -55,16 +55,25 @@ def _passivate_surface(cluster: Atoms, element: str = "H") -> Atoms:
 
     new_atoms = []
 
+    # Center of mass calculation for deterministic outward vector
+    com = cluster_copy.get_center_of_mass()
+
     for idx in buffer_indices:
         # Number of neighbors for this atom
         n_neighbors = np.sum(i_indices == idx)
-        # Mock logic: if an atom has fewer than 4 neighbors, add a passivating element
+        # Add a passivating element to under-coordinated atoms
         if n_neighbors < 4:
-            # We add a dummy atom in a random direction (just for structure generation mock)
-            # In a real scenario, this would follow bonding angles.
             pos = cluster_copy.positions[idx]
-            offset = np.random.randn(3)
-            offset = offset / np.linalg.norm(offset) * 1.0  # 1.0 Angstrom bond length
+
+            # Use deterministic direction: outward from center of mass
+            direction = pos - com
+            norm = float(np.linalg.norm(direction))
+            if norm < 1e-6:
+                # Fallback to a fixed direction if the atom is exactly at CoM
+                direction = np.array([1.0, 0.0, 0.0])
+                norm = 1.0
+
+            offset = (direction / norm) * 1.0  # 1.0 Angstrom bond length
             new_pos = pos + offset
 
             new_atoms.append(Atoms(element, positions=[new_pos]))
