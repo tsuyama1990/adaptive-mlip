@@ -7,7 +7,7 @@ from ase.calculators.lammpsrun import LAMMPS
 from pydantic import BaseModel, Field, ValidationError
 
 class PaceDriverConfig(BaseModel):
-    potential_path: str = Field(..., pattern=r"^[a-zA-Z0-9_\\-\\.\\/]+$", description="Path to the potential file")
+    potential_path: str = Field(..., pattern=r"^[^;&|`$<>]+$", description="Path to the potential file")
 
 def read_input():
     try:

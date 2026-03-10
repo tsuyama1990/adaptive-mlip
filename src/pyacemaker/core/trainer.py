@@ -77,12 +77,27 @@ class PacemakerTrainer(BaseTrainer):
                 logging.getLogger(__name__).exception("Error writing to pipe")
             # When the with block exits, f_out is closed, sending EOF to pace_train.
 
-        writer_thread = threading.Thread(target=_writer, daemon=True)
+        writer_event = threading.Event()
+
+        def _sync_writer() -> None:
+            try:
+                _writer()
+            finally:
+                writer_event.set()
+
+        writer_thread = threading.Thread(target=_sync_writer, daemon=True)
         writer_thread.start()
 
         try:
             return self.train(fifo_path, initial_potential)
         finally:
+            # If train failed before opening the pipe, the writer thread will be blocked forever.
+            # We open it for reading non-blocking to unblock the writer thread and let it exit.
+            if not writer_event.is_set():
+                import contextlib
+                with contextlib.suppress(OSError):
+                    os.open(fifo_path, os.O_RDONLY | os.O_NONBLOCK)
+            writer_event.wait(timeout=5.0)
             # Cleanup pipe and temp dir
             try:
                 fifo_path.unlink(missing_ok=True)
@@ -193,17 +208,21 @@ class FinetuneManager:
         Finetunes the awakened MACE model using the provided dataset.
         Returns the path to the awakened model.
         """
+        import os
+        import shutil
         import subprocess
 
         from pyacemaker.utils.process import run_command
 
+        mace_train_cmd = "mace_run_train"
+        if not shutil.which(mace_train_cmd):
+            msg = f"Executable '{mace_train_cmd}' not found in PATH."
+            raise TrainerError(msg)
+
         output_model = "awakened_mace_model.model"
 
         # Read foundation model from env or use default
-        import os
-
         foundation_model = os.environ.get("MACE_FOUNDATION_MODEL", "mace-mp-0-medium")
-        mace_train_cmd = "mace_run_train"
 
         cmd = [
             mace_train_cmd,
