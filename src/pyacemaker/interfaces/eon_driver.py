@@ -6,8 +6,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from pyacemaker.domain_models.constants import PACE_DRIVER_TEMPLATE
 from pyacemaker.domain_models.eon import EONConfig
+from pyacemaker.interfaces.pace_driver_template import PACE_DRIVER_TEMPLATE
 from pyacemaker.interfaces.process import ProcessRunner, SubprocessRunner
 from pyacemaker.utils.path import validate_path_safe
 

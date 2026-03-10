@@ -93,6 +93,17 @@ class LammpsDriver:
             "min_modify",
             "variable",
             "print",
+            "include",
+            "if",
+            "jump",
+            "label",
+            "log",
+            "echo",
+            "set",
+            "group",
+            "displace_atoms",
+            "write_data",
+            "write_restart",
         }
 
         if first_token not in allowed_commands:

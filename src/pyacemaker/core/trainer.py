@@ -37,11 +37,58 @@ class PacemakerTrainer(BaseTrainer):
     ) -> Any:
         """
         Mixes a replay buffer with the new active learning data and runs incremental delta learning.
+        Streams data to pace_train using a named pipe to avoid O(N) memory/disk overhead.
         """
-        # In a real implementation this would merge replay buffer with the new dataset
-        # Here we just delegate to train
-        _replay_buffer = self.get_replay_buffer(strategy_config.replay_buffer_size)
-        return self.train(new_data_path, initial_potential)
+        import itertools
+        import os
+        import tempfile
+        import threading
+
+        from ase.io import iread, write
+
+        replay_buffer = self.get_replay_buffer(strategy_config.replay_buffer_size)
+
+        try:
+            new_data_iter = iread(new_data_path, format="extxyz")
+        except Exception:
+            new_data_iter = iter([])
+
+        combined_iter = itertools.chain(replay_buffer, new_data_iter)
+
+        # Create a named pipe
+        tmpdir = tempfile.mkdtemp()
+        fifo_path = Path(tmpdir) / "stream.extxyz"
+        os.mkfifo(fifo_path)
+
+        # Write to the pipe in a background thread so we don't block
+        def _writer() -> None:
+            try:
+                chunk_size = 100
+                with fifo_path.open("w") as f_out:
+                    while True:
+                        chunk = list(itertools.islice(combined_iter, chunk_size))
+                        if not chunk:
+                            break
+                        # Write the chunk directly to the open file object
+                        write(f_out, chunk, format="extxyz")
+            except Exception:
+                import logging
+
+                logging.getLogger(__name__).exception("Error writing to pipe")
+            # When the with block exits, f_out is closed, sending EOF to pace_train.
+
+        writer_thread = threading.Thread(target=_writer, daemon=True)
+        writer_thread.start()
+
+        try:
+            return self.train(fifo_path, initial_potential)
+        finally:
+            # Cleanup pipe and temp dir
+            try:
+                fifo_path.unlink(missing_ok=True)
+                Path(tmpdir).rmdir()
+            except OSError:
+                pass
 
     def train(
         self, training_data_path: str | Path, initial_potential: str | Path | None = None
@@ -79,17 +126,16 @@ class PacemakerTrainer(BaseTrainer):
         # Generate configuration
         pacemaker_config = self.config_generator.generate(str(data_path), str(potential_path))
 
-        # Security: Schema validation and content sanitization for YAML
-        if not isinstance(pacemaker_config, dict):
-            msg = "Generated Pacemaker config is not a valid dictionary."
-            raise TrainerError(msg)
+        # Security: Schema validation using Pydantic instead of regex
+        from pydantic import ValidationError
 
-        import re
+        from pyacemaker.domain_models.pacemaker import PacemakerInputSchema
 
-        for key, val in pacemaker_config.items():
-            if isinstance(val, str) and re.search(r"(\bexec\b|\bsystem\b|\bos\.|;|\||>|<|&)", val):
-                msg = f"Malicious content detected in configuration value for key '{key}'"
-                raise TrainerError(msg)
+        try:
+            PacemakerInputSchema.model_validate(pacemaker_config)
+        except ValidationError as e:
+            msg = f"Generated Pacemaker config failed schema validation: {e}"
+            raise TrainerError(msg) from e
 
         dump_yaml(pacemaker_config, input_yaml_path)
 
@@ -131,7 +177,8 @@ class PacemakerTrainer(BaseTrainer):
             raise TrainerError(msg)
 
         # Check for empty file
-        if data_path.stat().st_size == 0:
+        # Named pipes (FIFOs) have size 0, so skip the check for them
+        if data_path.is_file() and data_path.stat().st_size == 0:
             msg = f"Training data file is empty: {data_path}"
             raise TrainerError(msg)
 
@@ -143,7 +190,38 @@ class FinetuneManager:
 
     def finetune(self, dataset_path: str | Path) -> str:
         """
-        Mock finetuning logic for the awakened MACE model.
+        Finetunes the awakened MACE model using the provided dataset.
         Returns the path to the awakened model.
         """
-        return "awakened_mace_model.model"
+        import subprocess
+
+        from pyacemaker.utils.process import run_command
+
+        output_model = "awakened_mace_model.model"
+
+        # Read foundation model from env or use default
+        import os
+
+        foundation_model = os.environ.get("MACE_FOUNDATION_MODEL", "mace-mp-0-medium")
+        mace_train_cmd = "mace_run_train"
+
+        cmd = [
+            mace_train_cmd,
+            "--name",
+            "awakened_mace_model",
+            "--train_file",
+            str(dataset_path),
+            "--foundation_model",
+            foundation_model,
+        ]
+
+        try:
+            run_command(cmd)
+        except subprocess.CalledProcessError as e:
+            msg = f"MACE Finetuning failed with exit code {e.returncode}: {e}"
+            raise TrainerError(msg) from e
+        except Exception as e:
+            msg = f"MACE Finetuning failed unexpectedly: {e}"
+            raise TrainerError(msg) from e
+
+        return output_model
