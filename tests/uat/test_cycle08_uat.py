@@ -38,7 +38,10 @@ def test_scenario_phase1_distillation() -> None:
             f.write("dummy")
 
         import pyacemaker.domain_models.defaults
-        with patch.object(pyacemaker.domain_models.defaults, "DEFAULT_POTENTIALS_DIR", str(pot_dir.resolve())):
+
+        with patch.object(
+            pyacemaker.domain_models.defaults, "DEFAULT_POTENTIALS_DIR", str(pot_dir.resolve())
+        ):
             mace_manager = MACEManager(str(model_file))
 
         atoms1 = Atoms("Fe", cell=[2, 2, 2], pbc=True)
@@ -74,7 +77,10 @@ def test_scenario_phase3_cutout() -> None:
             f.write("dummy")
 
         import pyacemaker.domain_models.defaults
-        with patch.object(pyacemaker.domain_models.defaults, "DEFAULT_POTENTIALS_DIR", str(pot_dir.resolve())):
+
+        with patch.object(
+            pyacemaker.domain_models.defaults, "DEFAULT_POTENTIALS_DIR", str(pot_dir.resolve())
+        ):
             mace_manager = MACEManager(str(model_file))
     dft_manager = MagicMock(spec=DFTManager)
 
@@ -118,7 +124,11 @@ def test_scenario_phase4_resume(mock_driver: MagicMock, tmp_path: Path) -> None:
     # 1. Finetune MACE
     finetune_mgr = FinetuneManager()
     from unittest.mock import patch
-    with patch("pyacemaker.utils.process.subprocess.run") as mock_run, patch("shutil.which") as mock_which:
+
+    with (
+        patch("pyacemaker.utils.process.subprocess.run") as mock_run,
+        patch("shutil.which") as mock_which,
+    ):
         mock_which.return_value = "/bin/mace_run_train"
         mock_run.return_value.returncode = 0
         dataset_path = tmp_path / "dataset.xyz"
@@ -187,6 +197,7 @@ def test_scenario_phase4_resume(mock_driver: MagicMock, tmp_path: Path) -> None:
 
     # We patch Path.exists only inside LammpsEngine.run
     original_exists = Path.exists
+
     def fake_exists(self):
         if self.name == "restart.out":
             return True
@@ -195,6 +206,7 @@ def test_scenario_phase4_resume(mock_driver: MagicMock, tmp_path: Path) -> None:
     with patch.object(Path, "exists", fake_exists):
         # We also need to patch resolve to return self if it's the fake restart file
         original_resolve = Path.resolve
+
         def fake_resolve(self, strict=False):
             if self.name == "restart.out":
                 # For validation, ensure it looks like a valid path within tmp

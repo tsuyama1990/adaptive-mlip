@@ -29,9 +29,13 @@ def _pre_relax_buffer(cluster: Atoms) -> Atoms:
         # without it, but we primarily use it to satisfy the specific MACE pre-relaxation spec.
         try:
             from mace.calculators import mace_mp
-            cluster_copy.calc = mace_mp(model="small", dispersion=False, default_dtype="float64", device='cpu')
+
+            cluster_copy.calc = mace_mp(
+                model="small", dispersion=False, default_dtype="float64", device="cpu"
+            )
         except ImportError:
             from ase.calculators.lj import LennardJones
+
             cluster_copy.calc = LennardJones()  # type: ignore[no-untyped-call]
 
     # Relax the buffer region
@@ -44,8 +48,9 @@ def _pre_relax_buffer(cluster: Atoms) -> Atoms:
         try:
             opt = LBFGS(cluster_copy, logfile=devnull)
             opt.run(fmax=0.05, steps=50)  # type: ignore[no-untyped-call]
-        except Exception:
-            pass # Suppress failures from mocked calculators or environments missing models during tests
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).debug(f"Pre-relaxation failed or skipped: {e}")
 
     return cluster_copy  # type: ignore[no-any-return]
 

@@ -10,6 +10,7 @@ def driver():
     with patch("pyacemaker.interfaces.lammps_driver.lammps"):
         return LammpsDriver()
 
+
 def test_validate_command_safe(driver):
     """Test safe commands pass validation."""
     safe_cmds = [
@@ -26,6 +27,7 @@ def test_validate_command_safe(driver):
     for cmd in safe_cmds:
         driver._validate_command(cmd)
 
+
 def test_validate_command_unsafe_chars(driver):
     """Test commands with unsafe characters fail."""
     unsafe_cmds = [
@@ -41,6 +43,7 @@ def test_validate_command_unsafe_chars(driver):
         ):
             driver._validate_command(cmd)
 
+
 def test_validate_command_unrecognized(driver):
     """Test commands not in whitelist fail."""
     unsafe_cmds = [
@@ -51,6 +54,7 @@ def test_validate_command_unrecognized(driver):
     for cmd in unsafe_cmds:
         with pytest.raises(ValueError, match="forbidden or unrecognized command"):
             driver._validate_command(cmd)
+
 
 def test_validate_command_shell_token(driver):
     """Test explicit shell token rejection."""

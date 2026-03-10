@@ -117,7 +117,9 @@ def invoke_evaluator():
 \"\"\"
 """
         buffer.write(python_block)
-        buffer.write(f"fix invoke_check all python/invoke {self.config.check_interval} post_force invoke_evaluator\n")
+        buffer.write(
+            f"fix invoke_check all python/invoke {self.config.check_interval} post_force invoke_evaluator\n"
+        )
 
     def _gen_mc(self, buffer: TextIO, elements: list[str]) -> None:
         """Generates Monte Carlo atom swapping commands."""
@@ -145,7 +147,9 @@ def invoke_evaluator():
             f"{temp} ke no types {types_str}\n"
         )
 
-    def _gen_execution(self, buffer: TextIO, elements: list[str], restart_file: Path | None = None) -> None:
+    def _gen_execution(
+        self, buffer: TextIO, elements: list[str], restart_file: Path | None = None
+    ) -> None:
         """Generates minimization and MD run commands."""
         if self.config.minimize and not restart_file:
             buffer.write(

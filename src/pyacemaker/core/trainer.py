@@ -27,7 +27,6 @@ class PacemakerTrainer(BaseTrainer):
         Fetches up to `size` past data points to retain for training.
         This prevents catastrophic forgetting.
         """
-        import collections
         from ase.io import iread
 
         if not data_path:
@@ -71,7 +70,9 @@ class PacemakerTrainer(BaseTrainer):
 
         from ase.io import iread, write
 
-        replay_buffer = self.get_replay_buffer(strategy_config.replay_buffer_size, data_path=new_data_path)
+        replay_buffer = self.get_replay_buffer(
+            strategy_config.replay_buffer_size, data_path=new_data_path
+        )
 
         try:
             new_data_iter = iread(new_data_path, format="extxyz")
@@ -120,6 +121,7 @@ class PacemakerTrainer(BaseTrainer):
             # We open it for reading non-blocking to unblock the writer thread and let it exit.
             if not writer_event.is_set():
                 import contextlib
+
                 with contextlib.suppress(OSError):
                     os.open(fifo_path, os.O_RDONLY | os.O_NONBLOCK)
             writer_event.wait(timeout=5.0)

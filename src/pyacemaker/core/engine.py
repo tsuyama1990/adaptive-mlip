@@ -128,11 +128,18 @@ class LammpsEngine(BaseEngine):
             if not restart_file.exists():
                 restart_file = data_file.parent / "restart.out"
 
-            actual_restart_file = restart_file if (resume_step is not None and restart_file.exists()) else None
+            actual_restart_file = (
+                restart_file if (resume_step is not None and restart_file.exists()) else None
+            )
 
             with input_script_path.open("w") as f:
                 self.generator.write_script(
-                    f, potential_path, data_file, dump_file, elements, restart_file=actual_restart_file
+                    f,
+                    potential_path,
+                    data_file,
+                    dump_file,
+                    elements,
+                    restart_file=actual_restart_file,
                 )
 
             # Read LAMMPS specific configuration
