@@ -6,90 +6,66 @@
 
 **Next-Generation Adaptive Machine Learning Interatomic Potentials Orchestrator.**
 
-## Overview
+## 1. Overview
 
-**PyAceMaker** is an advanced orchestration platform designed to automate the construction of robust Machine Learning Interatomic Potentials (MLIPs). It orchestrates the entire active learning loop with a "Hierarchical Distillation" architecture to solve the critical challenges of long-timescale molecular dynamics simulations. PyAceMaker seamlessly pauses MD without losing time-continuity, repairs extracted clusters by auto-passivating dangling bonds, filters thermal noise using a two-tier uncertainty system, and incrementally updates potentials to prevent catastrophic forgetting.
+**PyAceMaker** is an advanced orchestration platform designed to automate the construction of robust Machine Learning Interatomic Potentials (MLIPs). It orchestrates the entire active learning loop with a "Hierarchical Distillation" architecture to solve the critical challenges of long-timescale molecular dynamics simulations. By seamlessly pausing MD without losing time-continuity, intelligently extracting and passivating clusters, and employing O(1) incremental delta learning, PyAceMaker allows massive scale HPC simulations to overcome catastrophic forgetting and quantum divergence.
 
-## Key Features
+## 2. Key Features
 
-*   **Zero-Shot Distillation:** Generate robust baseline potentials using combinatorial structures and MACE foundation models without initial expensive DFT calls.
-*   **Two-Tier Uncertainty Thresholding:** Differentiates between harmless thermal noise and true physical events, avoiding unnecessary pauses.
-*   **Intelligent Cutout & Auto-Passivation:** Safely extracts the epicenter of uncertainty and automatically passivates dangling bonds (e.g., adding fractional hydrogen) ensuring safe and reliable DFT calculations.
-*   **Seamless MD Resume:** Features Master-Slave inversion allowing LAMMPS to resume exactly from the halted step (preserving time, coordinates, and velocities) rather than resetting the MD loop.
-*   **Incremental Delta Learning:** Mixes newly generated surrogate data with a replay buffer of past interactions to rapidly update potentials, mitigating O(N) computational bottlenecks and catastrophic forgetting.
+*   **Zero-Shot Baseline Distillation:** Automatically generate foundational baseline potentials from a combinatorial structure pool using base foundation models like MACE, drastically reducing initial DFT cost.
+*   **Two-Tier Uncertainty Thresholding:** Differentiates between harmless thermal noise and true physical events, avoiding unnecessary pauses and retraining cycles.
+*   **Intelligent Cutout & Auto-Passivation:** Safely extracts the epicenter of uncertainty and automatically passivates dangling bonds (e.g., adding fractional hydrogen) and pre-relaxes the buffer zone to ensure safe and reliable DFT calculations.
+*   **Seamless MD Resume via Master-Slave Inversion:** LAMMPS retains internal state memory when uncertainty hits, allowing simulations to resume exactly from the halted step (preserving time, coordinates, and velocities) rather than resetting the MD loop.
+*   **Incremental Delta Learning:** Mitigates O(N) computational bottlenecks and catastrophic forgetting by mixing newly generated surrogate data with a localized replay buffer to rapidly update potentials.
 
-## Architecture Overview
+## 3. Architecture Overview
 
-PyAceMaker employs a state-machine driven orchestration model using modern software design patterns. It integrates a foundational MACE oracle alongside Quantum Espresso to filter uncertainty, validating learned configurations across several stages from local fine-tuning up to full scale, O(1) complex MD resumption.
+PyAceMaker employs a state-machine driven orchestration model using modern software design patterns. It strictly decouples the MD engine, uncertainty evaluators, tiered oracles (MACE and DFT), and incremental trainers to ensure maximum scalability and parallelization.
 
 ```mermaid
 graph TD
-    %% Subsystems
-    subgraph Config & Schema
-        CFG[Workflow Config]
+    subgraph LAMMPS Engine Layer
+        MD[LAMMPS C++ Loop]
+        INVOKE[fix python/invoke]
+        MD -->|Yield Context| INVOKE
     end
 
-    subgraph Core Orchestrator
-        ORCH[Main Orchestrator]
-        STATE[State Manager / SQLite]
-    end
-
-    subgraph Phase 1: Distillation
-        P1_GEN[Combinatorial Generator]
-        P1_DIR[ActiveSet Selector]
-        P1_ORACLE[MACEManager Oracle]
-        P1_TRAIN[Pacemaker Trainer]
-    end
-
-    subgraph Phase 2: Validation
-        P2_VAL[Validator Subsystem]
-        P2_PHONON[Phonon / Elastic]
-        P2_MINIMD[Miniature MD Test]
-    end
-
-    subgraph Phase 3 & 4: Active Learning Loop
-        LAMMPS[LammpsEngine C++ Loop]
+    subgraph Evaluation Layer
         EVAL[Two-Tier Evaluator]
         CUTOUT[Intelligent Cutout]
         PASSIVATE[Auto Passivation]
-        DFT[DFTManager / QEDriver]
-        SURR[Surrogate Generator]
-        DELTA[Incremental Trainer]
+        INVOKE -->|Pass Uncertainty| EVAL
+        EVAL -->|Thermal Noise| MD
+        EVAL -->|True Anomaly| CUTOUT
+        CUTOUT --> PASSIVATE
     end
 
-    %% Flow Phase 1
-    CFG --> ORCH
-    ORCH --> P1_GEN
-    P1_GEN -- Structure Pool --> P1_DIR
-    P1_DIR -- Reduced Set --> P1_ORACLE
-    P1_ORACLE -- Confident Data --> P1_TRAIN
-    P1_TRAIN -- base.yace --> P2_VAL
+    subgraph Tiered Oracle Layer
+        ORACLE[TieredOracle]
+        MACE[MACEManager Foundation Model]
+        DFT[DFTManager / Quantum Espresso]
+        PASSIVATE --> ORACLE
+        ORACLE -->|Pre-Relax Buffer| MACE
+        MACE --> ORACLE
+        ORACLE -->|Ground Truth Force| DFT
+    end
 
-    %% Flow Phase 2
-    P2_VAL --> P2_PHONON
-    P2_VAL --> P2_MINIMD
-    P2_MINIMD -- Success --> LAMMPS
-    P2_MINIMD -- Fail --> P1_GEN
+    subgraph Training Layer
+        AWAKEN[Finetune MACE]
+        SURR[Surrogate Generator]
+        TRAIN[Pacemaker Incremental Trainer]
+        DB[(SQLite Replay Buffer)]
 
-    %% Flow Phase 3 & 4
-    LAMMPS -- Halt Signal --> EVAL
-    EVAL -- Thermal Noise --> LAMMPS
-    EVAL -- True Event --> CUTOUT
-    CUTOUT -- Buffer Relax --> P1_ORACLE
-    CUTOUT --> PASSIVATE
-    PASSIVATE -- Clean Cluster --> DFT
-    DFT -- Ground Truth --> SURR
-    SURR -- Awakened MACE --> P1_ORACLE
-    SURR -- Large Dataset --> DELTA
-    DELTA -- Replay Buffer --> DELTA
-    DELTA -- updated.yace --> LAMMPS
-
-    %% Storage
-    ORCH --> STATE
-    DELTA --> STATE
+        DFT --> AWAKEN
+        AWAKEN --> SURR
+        SURR --> TRAIN
+        DB -->|Sample| TRAIN
+        TRAIN -->|Updated Potential| MD
+        TRAIN -->|Commit History| DB
+    end
 ```
 
-## Requirements
+## 4. Requirements
 
 *   **Python**: 3.11+
 *   **Package Manager**: `uv`
@@ -97,7 +73,7 @@ graph TD
 *   **MLIP Trainer**: Pacemaker (`pace_train`, `pace_activeset` executables in PATH)
 *   **MD Engine**: LAMMPS Python Interface (`lammps` package, with `USER-PACE` support)
 
-## Installation
+## 5. Installation & Setup
 
 ```bash
 git clone https://github.com/your-org/pyacemaker.git
@@ -105,14 +81,14 @@ cd pyacemaker
 uv sync
 ```
 
-## Usage
+## 6. Usage
 
-PyAceMaker uses a `config.yaml` to dictate execution (LoopStrategy, Cutouts, etc). You can explore the full capabilities through our interactive tutorial.
+PyAceMaker uses strict `config.yaml` Pydantic schemas to dictate execution.
 
 ### Run Interactive Tutorial
 View and execute the user scenarios in a notebook interface:
 ```bash
-uv run marimo edit tutorials/UAT_AND_TUTORIAL.py
+uv run python tutorials/UAT_AND_TUTORIAL.py
 ```
 
 ### Production Execution
@@ -124,13 +100,14 @@ uv run pyacemaker --config config.yaml --dry-run
 uv run pyacemaker --config config.yaml
 ```
 
-## Development Workflow
+## 7. Development Workflow
 
-Active development emphasizes robust testing and code quality:
+Active development follows a strictly phased 6-cycle approach emphasizing robust testing and code quality:
 
 *   **Run Linter/Formatter:**
     ```bash
     uv run ruff check .
+    uv run ruff format .
     ```
 
 *   **Run Type Checking:**
@@ -141,21 +118,20 @@ Active development emphasizes robust testing and code quality:
 *   **Run Tests:**
     Execute the unit, integration, and E2E test suites with `pytest`.
     ```bash
-    uv run pytest
+    uv run pytest tests/
     ```
 
-## Project Structure
+## 8. Project Structure
 
 ```text
 src/pyacemaker/
-├── core/               # Execution orchestration (Engine, Trainer, Oracle, Validation)
-├── domain_models/      # Pydantic data schemas, workflows, and strict configuration constraints
-├── interfaces/         # External compute driver adapters (LAMMPS, QE, Pacemaker)
-├── scenarios/          # Complex "Grand Challenge" specialized workflow overrides
-├── utils/              # Tools for cluster extraction, passivation, geometry embeddings
+├── core/               # Execution orchestration (Engine, Trainer, Oracle, Evaluation)
+├── domain_models/      # Pydantic data schemas and active learning configuration constraints
+├── interfaces/         # External compute driver adapters (LAMMPS, QE, Pacemaker, MACE)
+├── utils/              # Tools for intelligent cluster extraction, passivation, geometry embeddings
 └── main.py             # CLI application entrypoint
 ```
 
-## License
+## 9. License
 
 This project is licensed under the MIT License.
