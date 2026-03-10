@@ -82,16 +82,15 @@ def test_dft_manager_self_healing(
 
     def mock_run_calculator_process(
         driver: Any, atoms_to_calc: Atoms, config: DFTConfig, calc_dir: str
-    ) -> tuple[Any, Exception | None]:
+    ) -> tuple[dict[str, Any] | None, Exception | None]:
         nonlocal call_count
         call_count += 1
         if call_count == 1:
             return None, RuntimeError("First attempt failed")
         # Second attempt succeeds
-        calc = MockCalculator(fail_count=0)
-        atoms_to_calc.calc = calc
-        atoms_to_calc.get_potential_energy()  # type: ignore[no-untyped-call]
-        return calc, None
+        import numpy as np
+        results = {"energy": TEST_ENERGY_GENERIC, "forces": np.zeros((1, 3)), "stress": None}
+        return results, None
 
     monkeypatch.setattr(
         "pyacemaker.core.oracle._run_calculator_process", mock_run_calculator_process

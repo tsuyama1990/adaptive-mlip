@@ -186,7 +186,14 @@ def test_scenario_phase4_resume(mock_driver: MagicMock, tmp_path: Path) -> None:
     Scenario 4: Hierarchical Fine-Tuning and Seamless Resume
     """
     # 1. Finetune MACE
-    finetune_mgr = FinetuneManager()
+    f_config = TrainingConfig(
+        potential_type="mace",
+        cutoff_radius=5.0,
+        max_basis_size=2,
+        output_filename="awakened_mace_model.model",
+        elements=["Fe", "Pt"],
+    )
+    finetune_mgr = FinetuneManager(f_config)
     dataset_path = tmp_path / "dataset.xyz"
     dataset_path.write_text("Dummy coordinates data")
     awakened_model_path = finetune_mgr.finetune(dataset_path)
@@ -208,8 +215,13 @@ def test_scenario_phase4_resume(mock_driver: MagicMock, tmp_path: Path) -> None:
     trainer = PacemakerTrainer(t_config)
     strategy = LoopStrategyConfig(replay_buffer_size=100)
 
-    with patch.object(trainer, "train") as mock_train:
+    with (
+        patch.object(trainer, "train") as mock_train,
+        patch("ase.io.read") as mock_read,
+        patch("ase.io.write") as mock_write
+    ):
         mock_train.return_value = tmp_path / "test_pot.yace"
+        mock_read.return_value = [Atoms("Fe")]
         new_pot = trainer.incremental_train(dataset_path, strategy, initial_potential="init.yace")
         assert new_pot == tmp_path / "test_pot.yace"
         mock_train.assert_called_once()

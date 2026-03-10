@@ -378,7 +378,7 @@ class Orchestrator:
             # 1. Awaken MACE (Finetune MACE)
             # In a real scenario we'd use the clean DFT data obtained from labeling S0.
             # Here we just show the integration point.
-            _finetune_manager = FinetuneManager()
+            _finetune_manager = FinetuneManager(config=self.config.training)
             # The finetune manager would train on the DFT data
             self.logger.info("MACE model awakened (finetuned) using new DFT data.")
 
