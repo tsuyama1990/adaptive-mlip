@@ -131,6 +131,12 @@ def test_orchestrator_refinement_logic(tmp_path: Path) -> None:
     atoms.new_array("c_gamma", np.array([0.1, 10.0]))  # type: ignore[no-untyped-call]
     write(halt_path, atoms, format="extxyz")
 
+    # Add dummy value for missing property in unit test mock config
+    from pyacemaker.domain_models.workflow import ActiveLearningThresholds
+    orch.config.workflow.loop_strategy.thresholds = ActiveLearningThresholds(
+        threshold_call_dft=0.05, threshold_add_train=0.02
+    )
+
     # 4. Inject Fakes
     orch.generator = FakeGenerator()
     orch.active_set_selector = FakeActiveSetSelector()

@@ -123,15 +123,17 @@ class LammpsEngine(BaseEngine):
             temp_dir = Path(ctx.name) if hasattr(ctx, "name") else data_file.parent
             input_script_path = temp_dir / "input.lmp"
 
-            with input_script_path.open("w") as f:
-                self.generator.write_script(f, potential_path, data_file, dump_file, elements)
+            # Check for existing restart file from a previous halt
+            restart_file = temp_dir / "restart.out"
+            if not restart_file.exists():
+                restart_file = data_file.parent / "restart.out"
 
-                resume_step = kwargs.get("resume_from_step")
-                if resume_step is not None:
-                    # Write custom variables or commands for seamless resume
-                    # In a real implementation we would load a restart file.
-                    # Here we append a print statement to indicate resume logic.
-                    f.write(f"\nprint 'Resuming from step {resume_step}'\n")
+            actual_restart_file = restart_file if (resume_step is not None and restart_file.exists()) else None
+
+            with input_script_path.open("w") as f:
+                self.generator.write_script(
+                    f, potential_path, data_file, dump_file, elements, restart_file=actual_restart_file
+                )
 
             # Read LAMMPS specific configuration
             lammps_args = ["-screen", LAMMPS_SCREEN_ARG, "-log", str(log_file)]

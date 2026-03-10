@@ -280,18 +280,23 @@ class Orchestrator:
             self.logger.warning("Failed to get initial structure.")
             return None
 
-    def _get_max_gamma_atom_index(self, structure: Atoms) -> int:
-        """Finds the index of the atom with the maximum gamma value."""
+    def _get_epicenter_atoms(self, structure: Atoms) -> list[int]:
+        """Finds indices of all atoms exceeding the add_train threshold (Two-Tier Evaluation)."""
         if "c_gamma" in structure.arrays:
             gammas = structure.get_array("c_gamma")  # type: ignore[no-untyped-call]
-            return int(np.argmax(gammas))
+            threshold = self.config.workflow.loop_strategy.thresholds.threshold_add_train
+            indices = np.where(gammas > threshold)[0].tolist()
+            if indices:
+                return indices
+            # Fallback to max gamma if none strictly exceed the threshold but a halt occurred
+            return [int(np.argmax(gammas))]
 
         self.logger.warning("c_gamma not found in structure arrays. Using atom 0 as center.")
-        return 0
+        return [0]
 
     def _extract_cluster(self, halt_structure_path: str) -> Atoms | None:
         """
-        Loads the halt structure and extracts the local cluster around the highest uncertainty atom.
+        Loads the halt structure and extracts the local cluster around the highest uncertainty atoms.
         Utilizes intelligent extraction with core/buffer weighting, pre-relaxation, and auto-passivation.
         """
         try:
@@ -299,9 +304,8 @@ class Orchestrator:
             if isinstance(halt_structure, list):
                 halt_structure = halt_structure[-1]
 
-            # Find center atom (max gamma)
-            center_idx = self._get_max_gamma_atom_index(halt_structure)
-            target_atoms = [center_idx]
+            # Find epicenter atoms using threshold_add_train logic
+            target_atoms = self._get_epicenter_atoms(halt_structure)
 
             # Extract intelligent local cluster (S0)
             return extract_intelligent_cluster(
@@ -446,7 +450,10 @@ class Orchestrator:
 
         if self.engine:
             # Prepare arguments for fix python/invoke integration
-            run_kwargs: dict[str, Any] = {"use_fix_invoke": True}
+            run_kwargs: dict[str, Any] = {
+                "use_fix_invoke": True,
+                "threshold_call_dft": self.config.workflow.loop_strategy.thresholds.threshold_call_dft
+            }
 
             # Extract resume step from structure if it was a halt structure from previous iteration
             if hasattr(initial_structure, "info") and "halt_step" in initial_structure.info:
@@ -468,7 +475,6 @@ class Orchestrator:
             except Exception:
                 msg = "MD Simulation crashed. Orchestrator process survived."
                 self.logger.exception(msg)
-                # In a real implementation we would load a read_restart fallback here
                 return None
 
         return None

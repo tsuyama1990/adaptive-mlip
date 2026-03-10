@@ -1,6 +1,9 @@
 from unittest.mock import patch
+
 import pytest
+
 from pyacemaker.interfaces.lammps_driver import LammpsDriver
+
 
 @pytest.fixture
 def driver():
