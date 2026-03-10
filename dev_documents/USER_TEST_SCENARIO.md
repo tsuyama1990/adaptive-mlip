@@ -48,7 +48,7 @@ AND the system has identified an epicenter atom index
 WHEN the extract_intelligent_cluster utility is invoked
 THEN it should extract a cluster based on the configured core_radius and buffer_radius
 AND it should assign force_weight=1.0 to the core atoms and 0.0 to the buffer atoms
-AND it should apply a pre-relaxation to the buffer atoms while keeping the core fixed
+AND it should apply a pre-relaxation to the buffer atoms using the specified Mock or MACE calculator while keeping the core fixed via ase.constraints.FixAtoms
 AND it should automatically append passivation elements (e.g., 'H') to any undercoordinated surface atoms
 ```
 
@@ -58,6 +58,7 @@ GIVEN a halted MD simulation that stopped at step 15000 due to uncertainty
 AND the Orchestrator has successfully completed the Incremental Update phase
 WHEN the Orchestrator commands the LammpsEngine to continue the simulation
 THEN the LammpsEngine should launch a script containing a resume_from_step: 15000 directive
+AND it should inject a 'fix langevin' command for the initial soft-start steps
 AND the resulting LAMMPS log should show the simulation continuing from step 15000 rather than step 0
 AND the velocity distribution should remain consistent with the pre-halt state
 ```
@@ -67,17 +68,17 @@ AND the velocity distribution should remain consistent with the pre-halt state
 To provide users with an engaging, interactive, and reproducible way to verify these scenarios, the entire UAT suite will be consolidated into a single executable tutorial.
 
 ### 3.1 Tutorial Strategy
-The tutorial strategy employs a Mock Mode approach. Since running actual MACE neural networks and Quantum Espresso DFT calculations requires significant hardware (GPUs, HPC clusters) and hours of compute time, the tutorial will leverage the robust mock implementations already present in the pyacemaker.core.oracle module. This allows any user to execute the full orchestration pipeline—from zero-shot distillation to intelligent cutout and seamless resume—on a standard laptop in seconds.
+The tutorial strategy employs a Mock Mode approach. Since running actual MACE neural networks and Quantum Espresso DFT calculations requires significant hardware (GPUs, HPC clusters) and hours of compute time, the tutorial will leverage the robust mock implementations (like `FakeLammpsDriver` and `FakePacemakerBinary`) already planned in the `pyacemaker.core` tests. This allows any user to execute the full orchestration pipeline—from zero-shot distillation to intelligent cutout and seamless resume—on a standard laptop in seconds, completely independent of external binaries.
 
 ### 3.2 Tutorial Plan
 We will create a **SINGLE** Marimo Python notebook file located at `tutorials/UAT_AND_TUTORIAL.py`.
 
 This file will be structured as a step-by-step interactive guide:
-1. Environment Setup: Defines the mock configurations and sets up temporary directories to prevent filesystem pollution.
+1. Environment Setup: Defines the mock configurations and sets up temporary directories (`tempfile.TemporaryDirectory`) to prevent filesystem pollution.
 2. Scenario 01 (Zero-Shot): Triggers the Orchestrator's cold start and prints the logs showing MACE filtering.
-3. Scenario 02 (Noise Rejection): Simulates an MD result with a short uncertainty spike and verifies the Orchestrator ignores it.
-4. Scenario 03 (Cutout & Passivation): Manually invokes extract_intelligent_cluster on a dummy defective lattice and renders the resulting .xyz data to visualize the core, buffer, and newly added passivation atoms.
-5. Scenario 04 (Seamless Resume): Runs a mocked loop iteration that forces a halt, performs an update, and prints the generated LAMMPS script to prove the resume_from_step logic is correctly injected.
+3. Scenario 02 (Noise Rejection): Simulates an MD result with a short uncertainty spike and verifies the Orchestrator ignores it using the `TieredOracle`.
+4. Scenario 03 (Cutout & Passivation): Manually invokes `extract_intelligent_cluster` on a dummy defective lattice and renders the resulting .xyz data to visualize the core, buffer, and newly added passivation atoms.
+5. Scenario 04 (Seamless Resume): Runs a mocked loop iteration that forces a halt, performs an update, and prints the generated LAMMPS script to prove the `resume_from_step` and `fix langevin` logic is correctly injected.
 
 ### 3.3 Tutorial Validation
-The file `tutorials/UAT_AND_TUTORIAL.py` must be written as a valid Python script compatible with marimo. It will be strictly typed and linted according to the pyproject.toml standards. Validation of the tutorial consists of executing it natively (`uv run python tutorials/UAT_AND_TUTORIAL.py`) to ensure all assertions pass and logs are generated correctly, providing a flawless out-of-the-box user experience.
+The file `tutorials/UAT_AND_TUTORIAL.py` must be written as a valid Python script compatible with marimo. It will be strictly typed and linted according to the pyproject.toml standards (excluding specific name rules where explicitly ignored). Validation of the tutorial consists of executing it natively (`uv run python tutorials/UAT_AND_TUTORIAL.py`) to ensure all assertions pass and logs are generated correctly, providing a flawless out-of-the-box user experience.
