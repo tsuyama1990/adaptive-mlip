@@ -24,72 +24,57 @@ PyAceMaker employs a state-machine driven orchestration model using modern softw
 
 ```mermaid
 graph TD
-    %% Subsystems
-    subgraph Config & Schema
-        CFG[Workflow Config]
-    end
+    %% Config and State
+    CFG[Pydantic Config]
+    STATE[(State DB / Files)]
 
-    subgraph Core Orchestrator
-        ORCH[Main Orchestrator]
-        STATE[State Manager / SQLite]
-    end
+    %% Orchestrator
+    ORCH[Orchestrator]
 
-    subgraph Phase 1: Distillation
-        P1_GEN[Combinatorial Generator]
-        P1_DIR[ActiveSet Selector]
-        P1_ORACLE[MACEManager Oracle]
-        P1_TRAIN[Pacemaker Trainer]
-    end
+    %% Generators
+    GEN[Structure Generator]
+    ACT[Active Set Selector]
 
-    subgraph Phase 2: Validation
-        P2_VAL[Validator Subsystem]
-        P2_PHONON[Phonon / Elastic]
-        P2_MINIMD[Miniature MD Test]
-    end
-
-    subgraph Phase 3 & 4: Active Learning Loop
-        LAMMPS[LammpsEngine C++ Loop]
-        EVAL[Two-Tier Evaluator]
-        CUTOUT[Intelligent Cutout]
-        PASSIVATE[Auto Passivation]
+    %% Oracles
+    subgraph Oracles
+        MACE[MACEManager]
+        TIER[TieredOracle]
         DFT[DFTManager / QEDriver]
-        SURR[Surrogate Generator]
-        DELTA[Incremental Trainer]
     end
 
-    %% Flow Phase 1
+    %% Training
+    TRAIN[PacemakerTrainer]
+    FINE[FinetuneManager]
+
+    %% MD Engine
+    ENG[LammpsEngine]
+    VAL[Validator]
+
+    %% Utilities
+    CUT[Intelligent Cutout & Passivation]
+
+    %% Phase 1
     CFG --> ORCH
-    ORCH --> P1_GEN
-    P1_GEN -- Structure Pool --> P1_DIR
-    P1_DIR -- Reduced Set --> P1_ORACLE
-    P1_ORACLE -- Confident Data --> P1_TRAIN
-    P1_TRAIN -- base.yace --> P2_VAL
+    ORCH --> GEN
+    GEN --> ACT
+    ACT --> MACE
+    MACE -- Confident Data --> TRAIN
+    TRAIN -- Base Potential --> VAL
 
-    %% Flow Phase 2
-    P2_VAL --> P2_PHONON
-    P2_VAL --> P2_MINIMD
-    P2_MINIMD -- Success --> LAMMPS
-    P2_MINIMD -- Fail --> P1_GEN
+    %% Phase 3 & 4 (Active Loop)
+    VAL -- Pass --> ENG
+    ENG -- Uncertainty Halt --> TIER
+    TIER -- High Uncertainty --> CUT
+    CUT -- Safe Cluster --> DFT
+    DFT -- Ground Truth --> FINE
+    FINE -- Awakened MACE --> MACE
+    MACE -- Surrogate Data --> TRAIN
+    TRAIN -- Incremental Update --> ENG
 
-    %% Flow Phase 3 & 4
-    LAMMPS -- Halt Signal --> EVAL
-    EVAL -- Thermal Noise --> LAMMPS
-    EVAL -- True Event --> CUTOUT
-    CUTOUT -- Buffer Relax --> P1_ORACLE
-    CUTOUT --> PASSIVATE
-    PASSIVATE -- Clean Cluster --> DFT
-    DFT -- Ground Truth --> SURR
-    SURR -- Awakened MACE --> P1_ORACLE
-    SURR -- Large Dataset --> DELTA
-    DELTA -- Replay Buffer --> DELTA
-    DELTA -- updated.yace --> LAMMPS
-
-    %% Storage
     ORCH --> STATE
-    DELTA --> STATE
 ```
 
-## Requirements
+## Prerequisites
 
 *   **Python**: 3.11+
 *   **Package Manager**: `uv`
@@ -97,12 +82,22 @@ graph TD
 *   **MLIP Trainer**: Pacemaker (`pace_train`, `pace_activeset` executables in PATH)
 *   **MD Engine**: LAMMPS Python Interface (`lammps` package, with `USER-PACE` support)
 
-## Installation
+## Installation & Setup
 
+1. Clone the repository and navigate to the root directory:
 ```bash
 git clone https://github.com/your-org/pyacemaker.git
 cd pyacemaker
+```
+
+2. Initialize the project using `uv` to install all dependencies:
+```bash
 uv sync
+```
+
+3. Set up your environment variables (if applicable):
+```bash
+cp .env.example .env
 ```
 
 ## Usage
@@ -126,22 +121,29 @@ uv run pyacemaker --config config.yaml
 
 ## Development Workflow
 
-Active development emphasizes robust testing and code quality:
+Active development emphasizes robust testing and code quality based on the specified cycles:
 
-*   **Run Linter/Formatter:**
+*   **Run Tests:**
+    Execute the unit, integration, and E2E test suites with `pytest` utilizing `uv` to ensure proper environment resolution.
+    ```bash
+    uv run pytest tests/
+    ```
+
+*   **Run Linter:**
+    Strict rules (e.g. cyclomatic complexity, explicit types) are enforced.
     ```bash
     uv run ruff check .
     ```
 
-*   **Run Type Checking:**
+*   **Run Formatter:**
     ```bash
-    uv run mypy src/ tests/
+    uv run ruff format .
     ```
 
-*   **Run Tests:**
-    Execute the unit, integration, and E2E test suites with `pytest`.
+*   **Run Type Checking:**
+    Strict type checking on the source code.
     ```bash
-    uv run pytest
+    uv run mypy src/
     ```
 
 ## Project Structure
