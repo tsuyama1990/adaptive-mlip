@@ -40,7 +40,10 @@ class LammpsDriver:
 
     def _validate_command(self, cmd: str) -> None:
         """Validates a single command against security rules."""
-        if not self.SAFE_CMD_PATTERN.match(cmd):
+        import re
+
+        # Check for dangerous shell metacharacters anywhere in the command
+        if re.search(r"[;&|`$<>\n\r]", cmd):
             msg = f"Command contains forbidden characters: {cmd}"
             raise ValueError(msg)
 
@@ -93,6 +96,17 @@ class LammpsDriver:
             "min_modify",
             "variable",
             "print",
+            "include",
+            "if",
+            "jump",
+            "label",
+            "log",
+            "echo",
+            "set",
+            "group",
+            "displace_atoms",
+            "write_data",
+            "write_restart",
         }
 
         if first_token not in allowed_commands:
@@ -145,24 +159,33 @@ class LammpsDriver:
         # If we use lammps.file(), we bypass _validate_command unless we pre-scan.
         # Pre-scanning line by line is O(N) IO but O(1) memory.
 
-        # Security: Read the entire file into memory to avoid TOCTOU attacks
-        # Validate all content atomically before executing anything.
-        content = path.read_text(encoding="utf-8")
+        # Security: Process the file line by line to maintain O(1) memory overhead.
+        # Ensure we parse and validate each line incrementally, considering continuations.
+        with path.open("r", encoding="utf-8") as file:
+            accumulated_cmd = ""
+            for line in file:
+                line_stripped = line.strip()
+                if not line_stripped or line_stripped.startswith("#"):
+                    continue
 
-        commands_to_execute = []
-        for line in content.splitlines():
-            cmd = line.strip()
-            if cmd.startswith("#"):
-                continue
-            if cmd:
-                cmd = cmd.split("#")[0].strip()
-                if cmd:
-                    self._validate_command(cmd)
-                    commands_to_execute.append(cmd)
+                # Strip trailing comments
+                cmd_part = line_stripped.split("#")[0].strip()
+                if not cmd_part:
+                    continue
 
-        # If we reach here, all commands are valid and atomic. Execute them.
-        for cmd in commands_to_execute:
-            self.lmp.command(cmd)
+                if cmd_part.endswith("&"):
+                    # Accumulate line without the '&'
+                    accumulated_cmd += cmd_part[:-1] + " "
+                else:
+                    accumulated_cmd += cmd_part
+                    self._validate_command(accumulated_cmd)
+                    self.lmp.command(accumulated_cmd)
+                    accumulated_cmd = ""
+
+            # If the file ended with a continuation, execute it
+            if accumulated_cmd.strip():
+                self._validate_command(accumulated_cmd)
+                self.lmp.command(accumulated_cmd)
 
     def extract_variable(self, name: str) -> float:
         """

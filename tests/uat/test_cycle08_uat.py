@@ -115,9 +115,13 @@ def test_scenario_phase4_resume(mock_driver: MagicMock, tmp_path: Path) -> None:
     """
     # 1. Finetune MACE
     finetune_mgr = FinetuneManager()
-    dataset_path = tmp_path / "dataset.xyz"
-    dataset_path.touch()
-    awakened_model = finetune_mgr.finetune(dataset_path)
+    from unittest.mock import patch
+    with patch("pyacemaker.utils.process.subprocess.run") as mock_run, patch("shutil.which") as mock_which:
+        mock_which.return_value = "/bin/mace_run_train"
+        mock_run.return_value.returncode = 0
+        dataset_path = tmp_path / "dataset.xyz"
+        dataset_path.touch()
+        awakened_model = finetune_mgr.finetune(dataset_path)
     assert awakened_model == "awakened_mace_model.model"
 
     # 2. ACE Incremental Update
