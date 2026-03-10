@@ -27,7 +27,15 @@ class LammpsScriptGenerator:
             self._atomic_numbers_cache[symbol] = atomic_numbers[symbol]
         return self._atomic_numbers_cache[symbol]
 
-    def _quote(self, path: str) -> str:
+    def _validate_elements(self, elements: list[str]) -> list[str]:
+        """Validates element symbols against known atomic numbers to prevent injection."""
+        for el in elements:
+            if el not in atomic_numbers:
+                msg = f"Invalid element symbol: {el}"
+                raise ValueError(msg)
+        return elements
+
+    def _quote(self, path: str, require_exists: bool = False) -> str:
         """
         Quotes a path for LAMMPS script safety after validation.
         Uses caching to avoid redundant validation calls.
@@ -35,18 +43,21 @@ class LammpsScriptGenerator:
         # Sanitize input path
         # Note: path must be string for lru_cache
         safe_path = validate_path_safe(Path(path))
-        if not safe_path.exists() and not safe_path.parent.exists():
-            msg = f"Path {safe_path} is invalid or has an invalid parent directory."
+
+        # Ensure the path itself exists for reading (potentials)
+        if require_exists and not safe_path.exists():
+            msg = f"Path {safe_path} does not exist."
             raise ValueError(msg)
 
         # Use shlex.quote for shell safety
-        return shlex.quote(str(safe_path))
+        return shlex.quote(str(safe_path.resolve()))
 
     def _gen_potential_pure(
         self, buffer: TextIO, potential_path: Path, elements: list[str]
     ) -> None:
         """Generates pure PACE potential commands."""
-        species_str = " ".join(elements)
+        valid_elements = self._validate_elements(elements)
+        species_str = " ".join(valid_elements)
         quoted_pot = self._quote(str(potential_path))
         buffer.write("pair_style pace\n")
         buffer.write(f"pair_coeff * * pace {quoted_pot} {species_str}\n")
@@ -55,12 +66,26 @@ class LammpsScriptGenerator:
         self, buffer: TextIO, potential_path: Path, elements: list[str]
     ) -> None:
         """Generates hybrid PACE + ZBL potential commands."""
-        species_str = " ".join(elements)
+        valid_elements = self._validate_elements(elements)
+        species_str = " ".join(valid_elements)
         quoted_pot = self._quote(str(potential_path))
         params = self.config.hybrid_params
 
+        # Validate numerical params strictly
+        if not isinstance(params.zbl_cut_inner, (int, float)) or not isinstance(
+            params.zbl_cut_outer, (int, float)
+        ):
+            msg = "ZBL cutoffs must be numerical"
+            raise TypeError(msg)
+        if params.zbl_cut_inner < 0 or params.zbl_cut_outer < 0:
+            msg = "ZBL cutoffs must be positive"
+            raise ValueError(msg)
+        if params.zbl_cut_inner >= params.zbl_cut_outer:
+            msg = "zbl_cut_inner must be less than zbl_cut_outer"
+            raise ValueError(msg)
+
         buffer.write(
-            f"pair_style hybrid/overlay pace zbl {params.zbl_cut_inner} {params.zbl_cut_outer}\n"
+            f"pair_style hybrid/overlay pace zbl {float(params.zbl_cut_inner)} {float(params.zbl_cut_outer)}\n"
         )
         buffer.write(f"pair_coeff * * pace {quoted_pot} {species_str}\n")
 
@@ -108,16 +133,34 @@ class LammpsScriptGenerator:
 
         # Integration of fix python/invoke for Master-Slave inversion requirement
         # Define a fully complete inline python function to prevent LAMMPS C++ parser crashes.
-        # In a real implementation this would trigger Orchestrator events, but for functional correctness
-        # it MUST be properly formatted and syntactically valid within LAMMPS.
-        python_block = """python invoke_evaluator invoke here \"\"\"
+        python_block = f"""python invoke_evaluator invoke here \"\"\"
 def invoke_evaluator():
-    # Placeholder for Python callback in Master-Slave inversion
-    pass
+    import lammps
+
+    # Connect to the running LAMMPS instance
+    lmp = lammps.lammps(ptr=lammps.get_ptr())
+
+    try:
+        max_g = float(lmp.extract_variable("max_g"))
+    except Exception:
+        max_g = 0.0
+
+    # In Master-Slave inversion, the C++ LAMMPS loop pauses actively running iterations
+    # by invoking the orchestrator pipeline over an IPC mechanism or file signal when thresholds are crossed.
+    if max_g > {self.config.uncertainty_threshold}:
+        # Signal Orchestrator to Halt and Process the uncertainty via file
+        import os
+        with open("HALT_SIGNAL.txt", "w") as f:
+            f.write(str(max_g))
+
+        # Halt LAMMPS natively
+        lmp.command("quit")
 \"\"\"
 """
         buffer.write(python_block)
-        buffer.write(f"fix invoke_check all python/invoke {self.config.check_interval} post_force invoke_evaluator\n")
+        buffer.write(
+            f"fix invoke_check all python/invoke {self.config.check_interval} post_force invoke_evaluator\n"
+        )
 
     def _gen_mc(self, buffer: TextIO, elements: list[str]) -> None:
         """Generates Monte Carlo atom swapping commands."""
@@ -145,7 +188,9 @@ def invoke_evaluator():
             f"{temp} ke no types {types_str}\n"
         )
 
-    def _gen_execution(self, buffer: TextIO, elements: list[str], restart_file: Path | None = None) -> None:
+    def _gen_execution(
+        self, buffer: TextIO, elements: list[str], restart_file: Path | None = None
+    ) -> None:
         """Generates minimization and MD run commands."""
         if self.config.minimize and not restart_file:
             buffer.write(

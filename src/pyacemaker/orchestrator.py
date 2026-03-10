@@ -287,7 +287,7 @@ class Orchestrator:
             threshold = self.config.workflow.loop_strategy.thresholds.threshold_add_train
             indices = np.where(gammas > threshold)[0].tolist()
             if indices:
-                return indices
+                return [int(x) for x in indices]
             # Fallback to max gamma if none strictly exceed the threshold but a halt occurred
             return [int(np.argmax(gammas))]
 
@@ -452,7 +452,7 @@ class Orchestrator:
             # Prepare arguments for fix python/invoke integration
             run_kwargs: dict[str, Any] = {
                 "use_fix_invoke": True,
-                "threshold_call_dft": self.config.workflow.loop_strategy.thresholds.threshold_call_dft
+                "threshold_call_dft": self.config.workflow.loop_strategy.thresholds.threshold_call_dft,
             }
 
             # Extract resume step from structure if it was a halt structure from previous iteration

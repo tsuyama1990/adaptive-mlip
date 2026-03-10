@@ -133,6 +133,7 @@ def test_orchestrator_refinement_logic(tmp_path: Path) -> None:
 
     # Add dummy value for missing property in unit test mock config
     from pyacemaker.domain_models.workflow import ActiveLearningThresholds
+
     orch.config.workflow.loop_strategy.thresholds = ActiveLearningThresholds(
         threshold_call_dft=0.05, threshold_add_train=0.02
     )
