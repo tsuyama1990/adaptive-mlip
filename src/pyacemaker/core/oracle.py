@@ -53,13 +53,13 @@ class DFTManager(BaseOracle):
         relative to the dataset size. It does not materialize the input iterator into a list.
     """
 
-    def __init__(self, config: DFTConfig, driver: QEDriver | None = None) -> None:
+    def __init__(self, config: DFTConfig, driver: Any | None = None) -> None:
         """
         Initializes the DFTManager.
 
         Args:
             config: DFT configuration.
-            driver: Optional QEDriver instance (for dependency injection).
+            driver: Optional Driver instance (for dependency injection).
                     If None, a new QEDriver is created.
         """
         self.config = config

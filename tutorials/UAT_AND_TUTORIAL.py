@@ -1,3 +1,5 @@
+from typing import Any
+
 import marimo
 
 __generated_with = "0.1.0"
@@ -5,11 +7,12 @@ app = marimo.App(width="medium")
 
 
 @app.cell
-def __():
+def __() -> Any:
     import logging
     import sys
+    from collections.abc import Iterator
     from pathlib import Path
-    from typing import Any, Iterator
+    from typing import Any
 
     # Add src to python path to allow imports
     sys.path.append(str(Path(__file__).parent.parent / "src"))
@@ -17,7 +20,6 @@ def __():
     import marimo as mo
     import numpy as np
     from ase import Atoms
-    from pydantic import Field
 
     from pyacemaker.core.base import BaseOracle
     from pyacemaker.core.engine import LammpsEngine
@@ -32,20 +34,29 @@ def __():
     from pyacemaker.domain_models.workflow import ActiveLearningThresholds, WorkflowConfig
     from pyacemaker.utils.extraction import extract_intelligent_cluster
 
-    # ruff: noqa: N803
-
     # Define Fakes for the workflow
     class FakeMACEManager(BaseOracle):
-        def __init__(self, model_path: str = "fake"):
+        def __init__(self, model_path: str = "fake", seed: int = 42) -> None:
             self.model_path = model_path
+            self.rng = np.random.default_rng(seed)
 
         def compute(self, structures: Iterator[Atoms], batch_size: int = 10) -> Iterator[Atoms]:
             for atoms in structures:
                 atoms_copy = atoms.copy()
-                energy = -10.0 * len(atoms_copy)
-                forces = np.zeros((len(atoms_copy), 3))
-                # For Phase 1, make it confident (low uncertainty)
-                c_gamma = np.random.uniform(0.01, 0.04, size=len(atoms_copy))
+                # Simulate energy based on elements and coordinates to make it more realistic
+                masses = sum(atoms_copy.get_masses())
+                energy = -1.5 * masses
+
+                # Simulate forces pointing towards origin for a stable fake structure
+                positions = atoms_copy.get_positions()
+                forces = -0.1 * positions
+
+                # Simulate uncertainty based on distance from origin (further = more uncertain)
+                distances = np.linalg.norm(positions, axis=1)
+                # Base uncertainty + distance penalty + some random noise
+                c_gamma = (
+                    0.01 + 0.005 * distances + self.rng.uniform(0.0, 0.02, size=len(atoms_copy))
+                )
 
                 atoms_copy.calc = None
                 atoms_copy.info["energy"] = energy
@@ -54,9 +65,35 @@ def __():
                 yield atoms_copy
 
     class FakePacemakerTrainer(PacemakerTrainer):
-        def train(self, config: TrainingConfig) -> Path:
-            output_file = Path("base.yace")
-            output_file.touch()
+        def train(
+            self, training_data_path: str | Path, initial_potential: str | Path | None = None
+        ) -> Path:
+            config = self.config
+            # Validate input
+            if not config.elements:
+                msg = "Elements must be specified for training."
+                raise ValueError(msg)
+            if config.cutoff_radius <= 0:
+                msg = "Cutoff radius must be positive."
+                raise ValueError(msg)
+
+            # Simulate actual training processing by taking a tiny bit of time
+            import time
+
+            time.sleep(0.05)
+
+            # Create a valid output file that looks like a potential
+            output_file = (
+                Path(config.output_filename)
+                if hasattr(config, "output_filename") and config.output_filename
+                else Path("base.yace")
+            )
+
+            with output_file.open("w") as f:
+                f.write(f"Fake ACE Potential for elements: {', '.join(config.elements)}\n")
+                f.write(f"Cutoff: {config.cutoff_radius}\n")
+                f.write(f"Max Basis Size: {config.max_basis_size}\n")
+
             return output_file
 
     class FakeQEDriver:
@@ -94,20 +131,20 @@ def __():
 
 
 @app.cell
-def __(
-    DFTConfig,
-    FakeMACEManager,
-    FakePacemakerTrainer,
-    FakeQEDriver,
-    MDConfig,
-    Path,
-    PyAceConfig,
-    StructureConfig,
-    TieredOracle,
-    TrainingConfig,
-    WorkflowConfig,
-    mo,
-):
+def __uat01(
+    DFTConfig: Any,
+    FakeMACEManager: Any,
+    FakePacemakerTrainer: Any,
+    FakeQEDriver: Any,
+    MDConfig: Any,
+    Path: Any,
+    PyAceConfig: Any,
+    StructureConfig: Any,
+    TieredOracle: Any,
+    TrainingConfig: Any,
+    WorkflowConfig: Any,
+    mo: Any,
+) -> Any:
     with mo.status.spinner(title="Running UAT-01: Zero-Shot Distillation"):
         # UAT-01
         # Create a PyAceConfig with distillation enabled
@@ -147,7 +184,7 @@ def __(
 
         # In a real run, TieredOracle would be injected, but we just verify the flow here
         trainer = FakePacemakerTrainer(config=config_yaml.training)
-        base_pot = trainer.train(config_yaml.training)
+        base_pot = trainer.train("dummy_data.extxyz")
 
         # Verify DFT was not called
         assert FakeQEDriver.call_count == 0, "DFT should not be called in Zero-Shot Distillation"
@@ -166,9 +203,8 @@ def __(
 
 
 @app.cell
-def __(uat01_result):
-    uat01_result
-    return
+def __uat01_display(uat01_result: Any) -> Any:
+    _ = uat01_result
 
 
 if __name__ == "__main__":
