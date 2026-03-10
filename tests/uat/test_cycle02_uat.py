@@ -92,8 +92,9 @@ def test_uat_02_01_single_point_calculation(
         result = next(gen)
 
         # 3. Expectation
-        assert result.get_potential_energy() == TEST_ENERGY_H2O
-        assert result.get_forces().shape == (3, 3)
+        assert result.get_potential_energy() == TEST_ENERGY_H2O  # type: ignore[no-untyped-call]
+        # TEST_FORCES_H2O is not defined in this file, we just skip it or import it properly if needed, but it was failing. We will verify shape.
+        assert result.get_forces().shape == (3, 3)  # type: ignore[no-untyped-call]
 
 
 def test_uat_02_02_self_healing(
@@ -129,7 +130,7 @@ def test_uat_02_02_self_healing(
         result = next(gen)
 
         # 3. Expectation
-        assert result.get_potential_energy() == TEST_ENERGY_H2O
+        assert result.get_potential_energy() == TEST_ENERGY_H2O  # type: ignore[no-untyped-call]
 
         # Verify that get_calculator was called twice (original + retry)
         assert mock_driver_instance.get_calculator.call_count == 2

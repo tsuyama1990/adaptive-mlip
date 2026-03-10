@@ -87,12 +87,10 @@ class DFTManager(BaseOracle):
 
     def _compute_generator(self, structures: Iterator[Atoms], batch_size: int) -> Iterator[Atoms]:
         """Internal generator for streaming computations processing one-by-one without batch lists."""
-        for i, atoms in enumerate(structures):
-            with tempfile.TemporaryDirectory() as work_dir:
+        for _i, atoms in enumerate(structures):
+            with tempfile.TemporaryDirectory(dir=Path.cwd()) as work_dir:
                 work_path = Path(work_dir)
-                calc_dir = work_path / f"calc_{i}"
-                calc_dir.mkdir()
-                yield self._process_structure(atoms, str(calc_dir))
+                yield self._process_structure(atoms, str(work_path))
 
     def _process_structure(self, atoms: Atoms, calc_dir: str) -> Atoms:
         """
@@ -159,13 +157,21 @@ class DFTManager(BaseOracle):
             else:
                 strategy_name = "Initial"
 
+            # Create a completely clean isolated subdirectory for each attempt to prevent cross-process data leakage
+            attempt_dir = Path(calc_dir) / f"attempt_{i}"
+            attempt_dir.mkdir(parents=True, exist_ok=True)
+
             try:
                 # Architecture: Add explicit execution timeout for DFT manager to prevent hangs
                 import concurrent.futures
 
                 with concurrent.futures.ProcessPoolExecutor(max_workers=1) as executor:
                     future = executor.submit(
-                        _run_calculator_process, self.driver, atoms, current_config, calc_dir
+                        _run_calculator_process,
+                        self.driver,
+                        atoms,
+                        current_config,
+                        str(attempt_dir),
                     )
                     # Set a hard limit of 3600 seconds per self-healing attempt
                     calc, exception = future.result(timeout=3600)
@@ -220,9 +226,12 @@ class MACEManager(BaseOracle):
         # This prevents traversal attacks (e.g., passing "../../../etc/passwd").
         allowed_dir = Path(DEFAULT_POTENTIALS_DIR).resolve()
 
-        # Proceed with containment check
-        if not canonical_path.is_relative_to(allowed_dir):
-            msg = f"MACE model path {canonical_path} is outside allowed directory {allowed_dir}"
+        # Security: Proceed with strict canonical path comparison
+        # Using os.path.commonpath prevents prefix traversal vulnerabilities
+        # (e.g. /data/model_hacked vs /data/model)
+        canonical_allowed_str = os.path.realpath(str(allowed_dir))
+        if os.path.commonpath([canonical_allowed_str, canonical_path_str]) != canonical_allowed_str:
+            msg = f"MACE model path {canonical_path_str} is outside allowed directory {canonical_allowed_str}"
             raise ValueError(msg)
 
         # We will use `os.path.realpath` as explicitly instructed by the audit.

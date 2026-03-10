@@ -65,11 +65,11 @@ def test_dft_manager_compute_success(mock_dft_config: DFTConfig) -> None:
     generator = manager.compute(iter([atoms]))
     result = next(generator)
 
-    assert result.get_potential_energy() == TEST_ENERGY_GENERIC
+    assert result.get_potential_energy() == TEST_ENERGY_GENERIC  # type: ignore[no-untyped-call]
 
     # ProcessPoolExecutor copies state, so we can't easily assert on fake_driver call_count
     # Verify generator returned the correctly calculated atoms object instead.
-    assert result.get_potential_energy() == TEST_ENERGY_GENERIC
+    assert result.get_potential_energy() == TEST_ENERGY_GENERIC  # type: ignore[no-untyped-call]
 
 
 def test_dft_manager_self_healing(
@@ -131,7 +131,7 @@ def test_dft_manager_self_healing(
     gen = manager.compute(iter([atoms]))
     result = next(gen)
 
-    assert result.get_potential_energy() == TEST_ENERGY_GENERIC
+    assert result.get_potential_energy() == TEST_ENERGY_GENERIC  # type: ignore[no-untyped-call]
 
 
 def test_dft_manager_fatal_error(
@@ -345,11 +345,11 @@ def test_dft_manager_invalid_input(mock_dft_config: DFTConfig) -> None:
 
     # Check that it raises TypeError immediately upon calling compute (before next)
     with pytest.raises(TypeError, match="Oracle failed to create iterator"):
-        manager.compute(atoms_list)
+        manager.compute(atoms_list)  # type: ignore[arg-type]
 
     # Explicitly check None
     with pytest.raises(TypeError, match="Oracle failed to create iterator"):
-        manager.compute(None)
+        manager.compute(None)  # type: ignore[arg-type]
 
 
 def test_dft_manager_empty_iterator(mock_dft_config: DFTConfig) -> None:

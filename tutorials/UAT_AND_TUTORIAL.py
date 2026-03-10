@@ -42,7 +42,7 @@ def __() -> Any:
 
         def compute(self, structures: Iterator[Atoms], batch_size: int = 10) -> Iterator[Atoms]:
             for atoms in structures:
-                atoms_copy = atoms.copy()
+                atoms_copy = atoms.copy()  # type: ignore[no-untyped-call]
                 # Simulate energy based on elements and coordinates to make it more realistic
                 masses = sum(atoms_copy.get_masses())
                 energy = -1.5 * masses
@@ -103,7 +103,7 @@ def __() -> Any:
             FakeQEDriver.call_count += 1
             from ase.calculators.lj import LennardJones
 
-            return LennardJones()
+            return LennardJones()  # type: ignore[no-untyped-call]
 
     return (
         ActiveLearningThresholds,

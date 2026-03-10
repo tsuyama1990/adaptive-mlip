@@ -97,12 +97,12 @@ src/pyacemaker/core/io_manager.py               74     30    59%   58-71, 78-81,
 src/pyacemaker/core/lammps_generator.py        132     19    86%   39-40, 114-130, 138, 157-164
 src/pyacemaker/core/loop.py                     70      6    91%   56, 63, 79-82, 85
 src/pyacemaker/core/m3gnet_wrapper.py           20      4    80%   26-27, 33-35
-src/pyacemaker/core/oracle.py                  150     17    89%   180-185, 225-226, 230-231, 233-234, 242, 280-281, 284-285, 293, 320
+src/pyacemaker/core/oracle.py                  151     17    89%   182-187, 230-231, 235-236, 238-239, 247, 285-286, 289-290, 298, 325
 src/pyacemaker/core/policy.py                  110     28    75%   30-31, 81-106, 134-136, 148, 161-164, 190, 197
 src/pyacemaker/core/policy_factory.py           31      7    77%   47, 53-54, 58-59, 86-87
 src/pyacemaker/core/report.py                   12      1    92%   85
 src/pyacemaker/core/state_manager.py            34      2    94%   37-38
-src/pyacemaker/core/trainer.py                  81     15    81%   84-85, 91-92, 112-115, 118-119, 126-127, 130-131, 153-154
+src/pyacemaker/core/trainer.py                 102     27    74%   85-86, 108-112, 121-123, 131-133, 146-149, 152-153, 160-161, 164-165, 189-191, 194-195
 src/pyacemaker/core/validator.py                68      7    90%   63, 68, 75-76, 79, 113, 150
 src/pyacemaker/domain_models/__init__.py        11      0   100%
 src/pyacemaker/domain_models/config.py          22      0   100%
@@ -140,7 +140,7 @@ src/pyacemaker/utils/phonons.py                 51      2    96%   51, 69
 src/pyacemaker/utils/process.py                 32      6    81%   76-83
 src/pyacemaker/utils/structure.py                6      2    67%   19-20
 --------------------------------------------------------------------------
-TOTAL                                         3047    444    85%
-======================= 253 passed, 3 warnings in 3.27s ========================
+TOTAL                                         3069    456    85%
+======================= 253 passed, 3 warnings in 3.46s ========================
 /app/.venv/lib/python3.12/site-packages/coverage/inorout.py:561: CoverageWarning: Module dev_src was never imported. (module-not-imported); see https://coverage.readthedocs.io/en/7.13.4/messages.html#warning-module-not-imported
   self.warn(f"Module {pkg} was never imported.", slug="module-not-imported")

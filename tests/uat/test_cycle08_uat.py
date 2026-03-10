@@ -58,12 +58,10 @@ def test_scenario_phase1_distillation() -> None:
         selector = ActiveSetSelector()
 
         # We patch the shell call in `select` rather than actual execution because we only test UAT flow
-        with patch.object(selector, 'select') as mock_select:
+        with patch.object(selector, "select") as mock_select:
             mock_select.return_value = iter(raw_structures[:10])
             selected_structures_iter = selector.select(
-                candidates=raw_structures,
-                potential_path="dummy.yace",
-                n_select=10
+                candidates=raw_structures, potential_path="dummy.yace", n_select=10
             )
             selected_structures = list(selected_structures_iter)
 
@@ -78,7 +76,7 @@ def test_scenario_phase1_distillation() -> None:
         for atoms in results:
             assert "energy" in atoms.info
             assert "forces" in atoms.arrays
-            c_gamma = atoms.get_array("c_gamma")
+            c_gamma = atoms.get_array("c_gamma")  # type: ignore[no-untyped-call]
             if np.max(c_gamma) <= config.distillation.uncertainty_threshold:
                 high_confidence_structures.append(atoms)
 
@@ -97,7 +95,7 @@ def test_scenario_phase1_distillation() -> None:
         with patch.object(trainer, "train") as mock_train:
             mock_train.return_value = pot_dir / "base.yace"
             # In a real pipeline, the structures would be written to extxyz and passed to trainer
-            base_pot = trainer.train(t_config)
+            base_pot = trainer.train("dummy_data.extxyz")
             assert str(base_pot).endswith("base.yace")
             mock_train.assert_called_once()
 
@@ -148,17 +146,17 @@ def test_scenario_phase3_cutout() -> None:
     )
 
     # Let atom 0 be the highly uncertain one
-    atoms.new_array("c_gamma", np.array([0.08, 0.01, 0.01, 0.01]))
+    atoms.new_array("c_gamma", np.array([0.08, 0.01, 0.01, 0.01]))  # type: ignore[no-untyped-call]
 
     # Identify target atoms
-    c_gamma = atoms.get_array("c_gamma")
+    c_gamma = atoms.get_array("c_gamma")  # type: ignore[no-untyped-call]
     target_atoms = np.where(c_gamma > thresholds.threshold_add_train)[0].tolist()
     assert target_atoms == [0]
 
     cluster = extract_intelligent_cluster(atoms, target_atoms, config)
 
     # Check physical repair logic accurately identified core vs buffer
-    weights = cluster.get_array("force_weight")
+    weights = cluster.get_array("force_weight")  # type: ignore[no-untyped-call]
 
     # With target=0 at [0,0,0], core_radius=3.0, buffer_radius=2.0
     # Atom 1 [1.5,0,0] is distance 1.5 (<=3.0) -> core (weight 1.0)
@@ -166,15 +164,15 @@ def test_scenario_phase3_cutout() -> None:
     # Atom 3 [6.0,0,0] is distance 6.0 (>5.0) -> excluded
 
     # We should have 3 Fe atoms in the cluster
-    assert len([s for s in cluster.get_chemical_symbols() if s == "Fe"]) == 3
+    assert len([s for s in cluster.get_chemical_symbols() if s == "Fe"]) == 3  # type: ignore[no-untyped-call]
 
     # Check weights: indices might be reordered, but we expect two 1.0s and one 0.0 for Fe atoms
-    fe_weights = [weights[i] for i, s in enumerate(cluster.get_chemical_symbols()) if s == "Fe"]
+    fe_weights = [weights[i] for i, s in enumerate(cluster.get_chemical_symbols()) if s == "Fe"]  # type: ignore[no-untyped-call]
     assert fe_weights.count(1.0) == 2
     assert fe_weights.count(0.0) == 1
 
     # Check passivation logic - H atoms should be added to buffer atoms lacking neighbors
-    symbols = cluster.get_chemical_symbols()
+    symbols = cluster.get_chemical_symbols()  # type: ignore[no-untyped-call]
     assert "H" in symbols
     # The exact formula depends on random elements in the generation and ASE's grouping (e.g., Fe3H, HFe3, etc.)
     # We just ensure both Fe and H are present in expected general quantities.

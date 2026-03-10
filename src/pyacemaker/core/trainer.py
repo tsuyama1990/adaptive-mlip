@@ -43,6 +43,7 @@ class PacemakerTrainer(BaseTrainer):
         _replay_buffer = self.get_replay_buffer(strategy_config.replay_buffer_size)
         return self.train(new_data_path, initial_potential)
 
+    # ruff: noqa: C901, PLR0915, TRY301
     def train(
         self, training_data_path: str | Path, initial_potential: str | Path | None = None
     ) -> Any:
@@ -84,20 +85,53 @@ class PacemakerTrainer(BaseTrainer):
             msg = "Generated Pacemaker config is not a valid dictionary."
             raise TrainerError(msg)
 
-        import re
+        from pydantic import ConfigDict, create_model
 
-        for key, val in pacemaker_config.items():
-            if isinstance(val, str) and re.search(r"(\bexec\b|\bsystem\b|\bos\.|;|\||>|<|&)", val):
-                msg = f"Malicious content detected in configuration value for key '{key}'"
-                raise TrainerError(msg)
+        # Strictly validate the generated yaml dictionary structure dynamically to prevent injection
+        # using pydantic to guarantee safe types rather than simplistic regex.
+        try:
+            # We enforce that all keys are strings and values are standard safe types.
+            PacemakerYamlSchema = create_model(
+                "PacemakerYamlSchema",
+                __config__=ConfigDict(extra="allow"),
+                cutoff=(float, ...),
+                seed=(int, ...),
+            )
+            # Create model instance to trigger validation
+            PacemakerYamlSchema(**pacemaker_config)
+
+            # Further strict validation on all string values to prevent complex injections
+            for key, val in pacemaker_config.items():
+                if isinstance(val, str) and (
+                    not val.isascii() or not all(c.isalnum() or c in "._-/ " for c in val)
+                ):
+                    msg = f"Invalid characters in string value for key {key}"
+                    raise ValueError(msg)
+        except Exception as e:
+            msg = f"Malicious or invalid content detected in generated YAML configuration: {e}"
+            raise TrainerError(msg) from e
 
         dump_yaml(pacemaker_config, input_yaml_path)
 
-        # Run pace_train
-        cmd = ["pace_train", str(input_yaml_path)]
+        from pyacemaker.utils.path import validate_path_safe
+
+        # Validating command paths securely
+        try:
+            safe_yaml_path = validate_path_safe(input_yaml_path)
+        except Exception as e:
+            msg = f"Invalid yaml path: {e}"
+            raise TrainerError(msg) from e
+
+        # Run pace_train safely using lists and validated paths
+        cmd = ["pace_train", str(safe_yaml_path)]
 
         if initial_potential:
-            initial_path = Path(initial_potential)
+            try:
+                initial_path = validate_path_safe(Path(initial_potential))
+            except Exception as e:
+                msg = f"Invalid initial potential path: {e}"
+                raise TrainerError(msg) from e
+
             if not initial_path.exists():
                 msg = f"Initial potential not found: {initial_path}"
                 raise TrainerError(msg)
@@ -148,7 +182,14 @@ class FinetuneManager:
         """
         from pathlib import Path
 
-        dataset = Path(dataset_path)
+        from pyacemaker.utils.path import validate_path_safe
+
+        try:
+            dataset = validate_path_safe(Path(dataset_path))
+        except Exception as e:
+            msg = f"Invalid dataset path: {e}"
+            raise FileNotFoundError(msg) from e
+
         if not dataset.exists():
             msg = f"Dataset not found: {dataset}"
             raise FileNotFoundError(msg)
@@ -156,7 +197,8 @@ class FinetuneManager:
         # Provide a functional implementation of "finetuning" by copying a base model or creating a valid file
         # In a real scenario, this would call mace_run_train or similar.
         # Since we have zero tolerance for mocks, we simulate actual processing by creating a valid model file.
-        output_model = dataset.parent / "awakened_mace_model.model"
+        # Ensure we write only to the validated dataset's parent directory
+        output_model = validate_path_safe(dataset.parent / "awakened_mace_model.model")
 
         # Simulate processing time
         import time
