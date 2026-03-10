@@ -22,8 +22,8 @@ logger = logging.getLogger(__name__)
 
 def _run_calculator_process(
     driver: Any, atoms: Atoms, config: DFTConfig, calc_dir: str
-) -> tuple[Any, Exception | None]:
-    """Top-level helper to run a single calculation attempt. Returns calculator and any exception for ProcessPoolExecutor."""
+) -> tuple[dict[str, Any] | None, Exception | None]:
+    """Top-level helper to run a single calculation attempt. Returns serialized results and any exception for ProcessPoolExecutor."""
     try:
         # Create new calculator for clean state
         # Use provided temporary directory to prevent file collisions and race conditions
@@ -31,17 +31,20 @@ def _run_calculator_process(
         atoms.calc = calc
 
         # Trigger actual calculation
-        atoms.get_potential_energy()  # type: ignore[no-untyped-call]
-        atoms.get_forces()  # type: ignore[no-untyped-call]
+        energy = atoms.get_potential_energy()  # type: ignore[no-untyped-call]
+        forces = atoms.get_forces()  # type: ignore[no-untyped-call]
 
         # Try to get stress (optional)
+        stress = None
         with contextlib.suppress(PropertyNotImplementedError, RuntimeError):
-            atoms.get_stress()  # type: ignore[no-untyped-call]
+            stress = atoms.get_stress()  # type: ignore[no-untyped-call]
+
+        results = {"energy": energy, "forces": forces, "stress": stress}
 
     except Exception as e:
         return None, e
     else:
-        return calc, None
+        return results, None
 
 
 class DFTManager(BaseOracle):
@@ -53,13 +56,13 @@ class DFTManager(BaseOracle):
         relative to the dataset size. It does not materialize the input iterator into a list.
     """
 
-    def __init__(self, config: DFTConfig, driver: QEDriver | None = None) -> None:
+    def __init__(self, config: DFTConfig, driver: Any | None = None) -> None:
         """
         Initializes the DFTManager.
 
         Args:
             config: DFT configuration.
-            driver: Optional QEDriver instance (for dependency injection).
+            driver: Optional Driver instance (for dependency injection).
                     If None, a new QEDriver is created.
         """
         self.config = config
@@ -87,12 +90,10 @@ class DFTManager(BaseOracle):
 
     def _compute_generator(self, structures: Iterator[Atoms], batch_size: int) -> Iterator[Atoms]:
         """Internal generator for streaming computations processing one-by-one without batch lists."""
-        for i, atoms in enumerate(structures):
-            with tempfile.TemporaryDirectory() as work_dir:
+        for _i, atoms in enumerate(structures):
+            with tempfile.TemporaryDirectory(dir=Path.cwd()) as work_dir:
                 work_path = Path(work_dir)
-                calc_dir = work_path / f"calc_{i}"
-                calc_dir.mkdir()
-                yield self._process_structure(atoms, str(calc_dir))
+                yield self._process_structure(atoms, str(work_path))
 
     def _process_structure(self, atoms: Atoms, calc_dir: str) -> Atoms:
         """
@@ -159,22 +160,39 @@ class DFTManager(BaseOracle):
             else:
                 strategy_name = "Initial"
 
+            # Create a completely clean isolated subdirectory for each attempt to prevent cross-process data leakage
+            attempt_dir = Path(calc_dir) / f"attempt_{i}"
+            attempt_dir.mkdir(parents=True, exist_ok=True)
+
             try:
                 # Architecture: Add explicit execution timeout for DFT manager to prevent hangs
                 import concurrent.futures
 
                 with concurrent.futures.ProcessPoolExecutor(max_workers=1) as executor:
                     future = executor.submit(
-                        _run_calculator_process, self.driver, atoms, current_config, calc_dir
+                        _run_calculator_process,
+                        self.driver,
+                        atoms,
+                        current_config,
+                        str(attempt_dir),
                     )
                     # Set a hard limit of 3600 seconds per self-healing attempt
-                    calc, exception = future.result(timeout=3600)
+                    results, exception = future.result(timeout=3600)
 
                     if exception:
                         self._handle_exception(exception)
 
                     # Apply results from subprocess back to the atoms object in main process
-                    atoms.calc = calc
+                    # Architecture: We use SinglePointCalculator to avoid sharing stateful calculators across process boundaries
+                    from ase.calculators.singlepoint import SinglePointCalculator
+
+                    if results:
+                        calc_kwargs = {"energy": results["energy"], "forces": results["forces"]}
+                        if results.get("stress") is not None:
+                            calc_kwargs["stress"] = results["stress"]
+
+                        calc = SinglePointCalculator(atoms, **calc_kwargs)  # type: ignore[no-untyped-call]
+                        atoms.calc = calc
 
             except concurrent.futures.TimeoutError as e:
                 last_error = e
@@ -201,15 +219,15 @@ class DFTManager(BaseOracle):
         raise OracleError(ERR_ORACLE_FAILED.format(error=last_error)) from last_error
 
 
-class MACEManager(BaseOracle):
-    """
-    Wrapper for MACE foundation model inferences.
-    Provides energy, forces, and uncertainty estimation.
-    """
+from typing import Protocol
 
-    def __init__(self, model_path: str) -> None:
+class ModelLoaderProtocol(Protocol):
+    def load(self, model_path: str) -> Any:
+        ...
+
+class DefaultMACELoader:
+    def load(self, model_path: str) -> Any:
         import os
-
         from pyacemaker.domain_models.defaults import DEFAULT_POTENTIALS_DIR
 
         # Canonicalize the path using os.path.realpath to safely unpack symlinks and avoid TOCTOU
@@ -217,15 +235,15 @@ class MACEManager(BaseOracle):
         canonical_path = Path(canonical_path_str)
 
         # Verify containment: ensure the path falls inside the accepted allowed_base_dir.
-        # This prevents traversal attacks (e.g., passing "../../../etc/passwd").
         allowed_dir = Path(DEFAULT_POTENTIALS_DIR).resolve()
 
-        # Proceed with containment check
-        if not canonical_path.is_relative_to(allowed_dir):
+        # Security: Proceed with strict canonical path comparison using relative_to
+        try:
+            canonical_path.relative_to(allowed_dir)
+        except ValueError as e:
             msg = f"MACE model path {canonical_path} is outside allowed directory {allowed_dir}"
-            raise ValueError(msg)
+            raise ValueError(msg) from e
 
-        # We will use `os.path.realpath` as explicitly instructed by the audit.
         if not canonical_path.exists():
             msg = f"MACE model path does not exist: {canonical_path}"
             raise FileNotFoundError(msg)
@@ -233,8 +251,18 @@ class MACEManager(BaseOracle):
             msg = f"MACE model path must be a file: {canonical_path}"
             raise ValueError(msg)
 
-        self.model_path = str(canonical_path)
-        # Mock MACE initialization
+        return str(canonical_path)
+
+
+class MACEManager(BaseOracle):
+    """
+    Wrapper for MACE foundation model inferences.
+    Provides energy, forces, and uncertainty estimation.
+    """
+
+    def __init__(self, model_path: str, loader: ModelLoaderProtocol | None = None) -> None:
+        self.loader = loader or DefaultMACELoader()
+        self.model_path = self.loader.load(model_path)
         self.is_initialized = True
 
     def compute(self, structures: Iterator[Atoms], batch_size: int = 10) -> Iterator[Atoms]:
@@ -272,20 +300,20 @@ class TieredOracle(BaseOracle):
 
     def __init__(
         self,
-        mace_manager: BaseOracle,
-        dft_manager: BaseOracle,
+        primary_oracle: BaseOracle,
+        fallback_oracle: BaseOracle,
         thresholds: ActiveLearningThresholds,
     ) -> None:
-        if mace_manager is None:
-            msg = "MACEManager must be provided."
+        if primary_oracle is None:
+            msg = "Primary oracle must be provided."
             raise ValueError(msg)
 
-        if dft_manager is None:
-            msg = "DFTManager cannot be None."
+        if fallback_oracle is None:
+            msg = "Fallback oracle cannot be None."
             raise ValueError(msg)
 
-        self.mace = mace_manager
-        self.dft = dft_manager
+        self.primary = primary_oracle
+        self.fallback = fallback_oracle
         self.thresholds = thresholds
 
     def compute(self, structures: Iterator[Atoms], batch_size: int = 10) -> Iterator[Atoms]:
@@ -296,25 +324,32 @@ class TieredOracle(BaseOracle):
 
     def _compute_generator(self, structures: Iterator[Atoms], batch_size: int) -> Iterator[Atoms]:
         for atoms in structures:
-            # First query MACE
-            mace_result = next(self.mace.compute(iter([atoms])))
+            # First query Primary Oracle (e.g. MACE)
+            primary_result = next(self.primary.compute(iter([atoms])))
 
-            # Evaluate uncertainty
-            c_gamma = mace_result.get_array("c_gamma")  # type: ignore[no-untyped-call]
-            max_uncertainty = np.max(c_gamma)
+            # Evaluate uncertainty if available
+            try:
+                c_gamma = primary_result.get_array("c_gamma")  # type: ignore[no-untyped-call]
+                max_uncertainty = np.max(c_gamma)
+            except KeyError:
+                # If the primary oracle doesn't provide uncertainty, assume it's confident
+                # or defer entirely to fallback strategy. For now, assume safe.
+                max_uncertainty = 0.0
+                c_gamma = None
 
             if max_uncertainty > self.thresholds.threshold_call_dft:
-                # Fallback to DFT
+                # Fallback to Secondary Oracle (e.g. DFT)
                 logger.info(
-                    f"Uncertainty {max_uncertainty:.4f} > {self.thresholds.threshold_call_dft}. Falling back to DFT."
+                    f"Uncertainty {max_uncertainty:.4f} > {self.thresholds.threshold_call_dft}. Falling back to secondary oracle."
                 )
 
-                # Only pass the atoms exceeding the add_train threshold to DFT?
-                # For now, evaluate the whole structure as per fallback logic.
-                dft_result = next(self.dft.compute(iter([atoms])))
+                # Evaluate the whole structure as per fallback logic.
+                fallback_result = next(self.fallback.compute(iter([atoms])))
 
                 # We should retain the c_gamma array for active learning tracking
-                dft_result.set_array("c_gamma", c_gamma)  # type: ignore[no-untyped-call]
-                yield dft_result
+                if c_gamma is not None:
+                    fallback_result.set_array("c_gamma", c_gamma)  # type: ignore[no-untyped-call]
+
+                yield fallback_result
             else:
-                yield mace_result
+                yield primary_result
