@@ -95,6 +95,7 @@ DEFAULT_MD_NEIGHBOR_SKIN = 2.0
 DEFAULT_MD_ATOM_STYLE = "atomic"
 DEFAULT_MD_TDAMP_FACTOR = 100.0
 DEFAULT_MD_PDAMP_FACTOR = 1000.0
+DEFAULT_MD_BASE_ENERGY = -100.0
 DEFAULT_MD_CHECK_INTERVAL = 10
 DEFAULT_MD_HYBRID_ZBL_INNER = 2.0
 DEFAULT_MD_HYBRID_ZBL_OUTER = 2.5
@@ -194,6 +195,7 @@ ERR_VAL_STRUCT_VOL_FAIL = "Failed to compute structure volume: {error}"
 ERR_VAL_STRUCT_ZERO_VOL = "Structure has near-zero or negative volume."
 ERR_VAL_STRUCT_NAN_POS = "Structure contains non-finite atomic positions."
 ERR_VAL_STRUCT_UNKNOWN_SYM = "Structure contains unknown chemical symbol: {symbol}"
+ERR_VAL_STRUCT_DUMMY_ELEM = "Structure contains dummy element: {symbol} (Z=0)"
 
 # DFT
 RECIPROCAL_FACTOR = 2.0 * 3.141592653589793  # 2*PI approx

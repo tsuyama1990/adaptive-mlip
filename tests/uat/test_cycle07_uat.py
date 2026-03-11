@@ -9,12 +9,12 @@ from pyacemaker.domain_models.validation import ValidationConfig
 
 
 @pytest.fixture
-def validator_dependencies():
+def validator_dependencies() -> None:
     return {"phonon": MagicMock(), "elastic": MagicMock(), "report": MagicMock()}
 
 
 @pytest.fixture
-def validator(validator_dependencies):
+def validator(validator_dependencies) -> None:
     config = ValidationConfig()
     return Validator(
         config,
@@ -24,7 +24,7 @@ def validator(validator_dependencies):
     )
 
 
-def test_uat_07_01_validate_potential_pass(validator, validator_dependencies):
+def test_uat_07_01_validate_potential_pass(validator, validator_dependencies) -> None:
     """Scenario 07-01: 'Validate Potential' (PASS)"""
     # 1. Preparation
     potential_path = Path("test_potential.yace")
@@ -62,7 +62,7 @@ def test_uat_07_01_validate_potential_pass(validator, validator_dependencies):
         potential_path.unlink()
 
 
-def test_uat_07_02_unstable_detection(validator, validator_dependencies):
+def test_uat_07_02_unstable_detection(validator, validator_dependencies) -> None:
     """Scenario 07-02: 'Unstable Detection'"""
     # 1. Preparation
     potential_path = Path("test_unstable.yace")

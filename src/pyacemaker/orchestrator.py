@@ -485,9 +485,9 @@ class Orchestrator:
                             return Path(res)
                         # if it's a fake or other object just return it
                         return res  # type: ignore
-                except TypeError:
-                    # In tests where trainer is a MagicMock, TypeError might be thrown if signature doesn't match
-                    pass
+                except TypeError as e:
+                    # Log error instead of silently passing
+                    self.logger.warning(f"TypeError during incremental_train: {e}. Falling back to standard train.")
 
             # Fallback to standard train
             return self._train(paths, initial_potential=potential_path)
@@ -585,8 +585,7 @@ class Orchestrator:
             self.logger.info(f"MD Halted at step {result.n_steps}. Triggering refinement.")
             new_potential = self._refine_potential(result, deployed_potential, paths)
             if new_potential:
-                # Mock objects used in testing bypass exists() safely by raising/returning truthy
-                # but we should handle it more robustly
+                # Fallback check for fake test objects or string paths
                 exists = True
                 import contextlib
 

@@ -4,25 +4,25 @@ from unittest.mock import MagicMock, patch
 import pytest
 from ase import Atoms
 
-from pyacemaker.core.validator import Validator
+from pyacemaker.core.validator import LammpsInputValidator, Validator
 from pyacemaker.domain_models.validation import ValidationConfig, ValidationResult
 
 
 class TestValidator:
     @pytest.fixture
-    def mock_phonon_calc(self):
+    def mock_phonon_calc(self) -> MagicMock:
         return MagicMock()
 
     @pytest.fixture
-    def mock_elastic_calc(self):
+    def mock_elastic_calc(self) -> MagicMock:
         return MagicMock()
 
     @pytest.fixture
-    def mock_report_gen(self):
+    def mock_report_gen(self) -> MagicMock:
         return MagicMock()
 
     @pytest.fixture
-    def validator(self, mock_phonon_calc, mock_elastic_calc, mock_report_gen):
+    def validator(self, mock_phonon_calc: MagicMock, mock_elastic_calc: MagicMock, mock_report_gen: MagicMock) -> Validator:
         config = ValidationConfig()
         # Assuming Validator takes instances of calculators and report generator
         return Validator(
@@ -32,7 +32,7 @@ class TestValidator:
             report_generator=mock_report_gen,
         )
 
-    def test_validate_pass(self, validator, mock_phonon_calc, mock_elastic_calc, mock_report_gen):
+    def test_validate_pass(self, validator: Validator, mock_phonon_calc: MagicMock, mock_elastic_calc: MagicMock, mock_report_gen: MagicMock) -> None:
         mock_phonon_calc.check_stability.return_value = (True, "base64_phonon")
         mock_elastic_calc.calculate_properties.return_value = (
             True,
@@ -61,7 +61,7 @@ class TestValidator:
         mock_report_gen.generate.assert_called_once()
         mock_report_gen.save.assert_called_once()
 
-    def test_validate_fail_phonon(self, validator, mock_phonon_calc, mock_elastic_calc):
+    def test_validate_fail_phonon(self, validator: Validator, mock_phonon_calc: MagicMock, mock_elastic_calc: MagicMock) -> None:
         mock_phonon_calc.check_stability.return_value = (False, "base64_phonon_unstable")
         mock_elastic_calc.calculate_properties.return_value = (
             True,
@@ -81,7 +81,7 @@ class TestValidator:
         assert result.phonon_stable is False
         assert result.elastic_stable is True
 
-    def test_relax_structure(self, validator, mock_elastic_calc):
+    def test_relax_structure(self, validator: Validator, mock_elastic_calc: MagicMock) -> None:
         structure = MagicMock()
         pot_path = Path("pot.yace")
 
@@ -94,3 +94,14 @@ class TestValidator:
 
         assert relaxed == "relaxed_structure"
         mock_engine.relax.assert_called_once_with(structure, pot_path)
+
+    def test_validate_structure_invalid_element(self) -> None:
+        """Test rejection of structure with invalid chemical symbol (dummy X)."""
+        # 'X' is in atomic_numbers but Z=0
+        # Need pbc and cell for get_volume() check to pass first if we want to hit the element check.
+        # Or let volume check fail? But volume check raises "Failed to compute structure volume"
+        # We want to test element check specifically.
+        # So we provide a valid cell.
+        structure = Atoms("X", positions=[[0, 0, 0]], cell=[10, 10, 10], pbc=True)
+        with pytest.raises(ValueError, match="dummy element"):
+            LammpsInputValidator.validate_structure(structure)

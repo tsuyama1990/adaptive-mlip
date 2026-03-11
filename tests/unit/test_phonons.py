@@ -11,7 +11,7 @@ from pyacemaker.utils.phonons import PhononCalculator
 
 class TestPhononCalculator:
     @pytest.fixture
-    def mock_engine(self):
+    def mock_engine(self) -> None:
         engine = MagicMock(spec=BaseEngine)
         result = MagicMock()
         result.forces = [[0.0, 0.0, 0.0]]
@@ -19,13 +19,13 @@ class TestPhononCalculator:
         return engine
 
     @pytest.fixture
-    def calculator(self, mock_engine):
+    def calculator(self, mock_engine) -> None:
         return PhononCalculator(
             engine=mock_engine, supercell_matrix=[2, 2, 2], displacement=0.01, imaginary_tol=-0.05
         )
 
     @patch("pyacemaker.utils.phonons.Phonopy")
-    def test_check_stability_stable(self, mock_phonopy_cls, calculator):
+    def test_check_stability_stable(self, mock_phonopy_cls, calculator) -> None:
         mock_phonopy = mock_phonopy_cls.return_value
 
         # Mock band structure frequencies
@@ -49,7 +49,7 @@ class TestPhononCalculator:
         assert isinstance(plot, str)
 
     @patch("pyacemaker.utils.phonons.Phonopy")
-    def test_check_stability_unstable(self, mock_phonopy_cls, calculator):
+    def test_check_stability_unstable(self, mock_phonopy_cls, calculator) -> None:
         mock_phonopy = mock_phonopy_cls.return_value
 
         # Mock imaginary frequencies (negative values)

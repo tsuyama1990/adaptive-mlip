@@ -10,6 +10,7 @@ from pyacemaker.domain_models.constants import (
     ERR_VAL_POT_NONE,
     ERR_VAL_POT_NOT_FILE,
     ERR_VAL_REQ_STRUCT,
+    ERR_VAL_STRUCT_DUMMY_ELEM,
     ERR_VAL_STRUCT_EMPTY,
     ERR_VAL_STRUCT_NAN_POS,
     ERR_VAL_STRUCT_NONE,
@@ -31,7 +32,7 @@ class LammpsInputValidator:
     """
 
     @staticmethod
-    def validate_structure(structure: Atoms) -> None:
+    def validate_structure(structure: Atoms) -> None:  # noqa: C901
         """
         Validates the atomic structure.
 
@@ -76,6 +77,8 @@ class LammpsInputValidator:
 
             if s not in atomic_numbers:
                 raise ValueError(ERR_VAL_STRUCT_UNKNOWN_SYM.format(symbol=s))
+            if atomic_numbers[s] == 0:
+                raise ValueError(ERR_VAL_STRUCT_DUMMY_ELEM.format(symbol=s))
 
     @staticmethod
     def validate_potential(potential: str | Path) -> Path:
