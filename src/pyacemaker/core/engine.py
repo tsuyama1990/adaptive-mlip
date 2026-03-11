@@ -91,14 +91,20 @@ class LammpsEngine(BaseEngine):
         except Exception as e:
             raise RuntimeError(ERR_SIM_UNEXPECTED.format(error=e)) from e
 
-    def run(self, structure: Atoms | None, potential: Any, **kwargs: Any) -> MDSimulationResult:  # noqa: C901, PLR0912, PLR0915
+    # ruff: noqa: C901, PLR0912, PLR0915
+    def run(
+        self,
+        structure: Atoms | None,
+        potential: Any,
+        use_fix_invoke: bool = False,
+        resume_from_step: int | None = None,
+        override_n_steps: int | None = None,
+        **kwargs: Any,
+    ) -> MDSimulationResult:
         """
         Runs the MD simulation.
-        Kwargs:
-            resume_from_step (int): Step to resume MD from.
-            override_n_steps (int): Override number of steps to run.
         """
-        resume_step = kwargs.get("resume_from_step")
+        resume_step = resume_from_step
         if resume_step is not None:
             if not isinstance(resume_step, int) or resume_step < 0:
                 msg = "resume_from_step must be a non-negative integer"
@@ -107,7 +113,7 @@ class LammpsEngine(BaseEngine):
                 msg = "resume_from_step cannot exceed configured n_steps"
                 raise ValueError(msg)
 
-        override_n_steps = kwargs.get("override_n_steps")
+        # override_n_steps handled by kwargs
         if override_n_steps is not None and (
             not isinstance(override_n_steps, int) or override_n_steps < 0
         ):
@@ -126,7 +132,7 @@ class LammpsEngine(BaseEngine):
             with input_script_path.open("w") as f:
                 self.generator.write_script(f, potential_path, data_file, dump_file, elements)
 
-                resume_step = kwargs.get("resume_from_step")
+                resume_step = resume_from_step
                 if resume_step is not None:
                     # Write custom variables or commands for seamless resume
                     # In a real implementation we would load a restart file.
@@ -167,7 +173,9 @@ class LammpsEngine(BaseEngine):
                         max_gamma = 0.0
 
                 halted = False
-                n_steps_target = kwargs.get("override_n_steps", self.config.n_steps)
+                n_steps_target = (
+                    override_n_steps if override_n_steps is not None else self.config.n_steps
+                )
 
                 if self.config.fix_halt:
                     # If using fix halt, checking step count is a proxy for early termination

@@ -1,12 +1,12 @@
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
-from unittest.mock import MagicMock, Mock
+from unittest.mock import Mock
 
 import pytest
 from ase import Atoms
 
-from pyacemaker.core.base import BaseEngine, BaseGenerator, BaseOracle, BaseTrainer
+from pyacemaker.core.base import BaseEngine, BaseGenerator, BaseOracle
 from pyacemaker.core.exceptions import OrchestratorError
 from pyacemaker.domain_models import (
     DFTConfig,
@@ -26,6 +26,7 @@ from pyacemaker.domain_models.defaults import (
 )
 from pyacemaker.factory import ModuleFactory
 from pyacemaker.orchestrator import Orchestrator
+from tests.conftest import FakeActiveSetSelector, FakeTrainer, FakeValidator
 
 
 # Concrete Fakes for testing
@@ -53,23 +54,6 @@ class FakeOracle(BaseOracle):
         for atoms in structures:
             atoms.info["energy"] = -10.0
             yield atoms
-
-
-class FakeTrainer(BaseTrainer):
-    def __init__(self, output_dir: Path) -> None:
-        self.output_dir = output_dir
-
-    def train(
-        self, training_data_path: str | Path, initial_potential: str | Path | None = None
-    ) -> Any:
-        path = Path(training_data_path)
-        if not path.exists():
-            msg = "Training data file missing"
-            raise RuntimeError(msg)
-
-        pot_path = self.output_dir / "fake_potential.yace"
-        pot_path.touch()
-        return pot_path
 
 
 class FakeEngine(BaseEngine):
@@ -136,15 +120,16 @@ def test_integration_workflow_complete(
 ) -> None:
     """Comprehensive integration test for the full active learning loop."""
     config = mock_config.model_copy()
+    config.workflow.distillation.enable = False
 
     def mock_create_modules(cfg: PyAceConfig) -> tuple[Any, Any, Any, Any, Any, Any]:
         return (
             FakeGenerator(elements=cfg.structure.elements),
             FakeOracle(),
-            FakeTrainer(output_dir=tmp_path),
+            FakeTrainer(tmp_path / "generation_000.yace"),
             FakeEngine(),
-            MagicMock(),
-            MagicMock(),
+            FakeActiveSetSelector(),
+            FakeValidator(),
         )
 
     monkeypatch.setattr(ModuleFactory, "create_modules", mock_create_modules)
@@ -219,8 +204,8 @@ def test_orchestrator_directory_creation_error(mock_config: PyAceConfig, monkeyp
             FakeOracle(),
             FakeTrainer(Path()),
             FakeEngine(),
-            MagicMock(),
-            MagicMock(),
+            FakeActiveSetSelector(),
+            FakeValidator(),
         )
 
     monkeypatch.setattr(ModuleFactory, "create_modules", mock_create_modules)
@@ -239,7 +224,7 @@ def test_orchestrator_error_handling_generator(mock_config: PyAceConfig, monkeyp
     mock_gen.generate.side_effect = RuntimeError("Generator failed")
 
     def mock_create_modules(cfg: PyAceConfig) -> tuple[Any, Any, Any, Any, Any, Any]:
-        return mock_gen, MagicMock(), MagicMock(), MagicMock(), MagicMock(), MagicMock()
+        return mock_gen, FakeActiveSetSelector(), FakeActiveSetSelector(), FakeActiveSetSelector(), FakeActiveSetSelector(), FakeActiveSetSelector()
 
     monkeypatch.setattr(ModuleFactory, "create_modules", mock_create_modules)
 
@@ -260,10 +245,10 @@ def test_orchestrator_error_handling_oracle_stream(
         return (
             FakeGenerator(elements=cfg.structure.elements),
             FailingOracle(),
-            MagicMock(),
-            MagicMock(),
-            MagicMock(),
-            MagicMock(),
+            FakeActiveSetSelector(),
+            FakeActiveSetSelector(),
+            FakeActiveSetSelector(),
+            FakeValidator(),
         )
 
     monkeypatch.setattr(ModuleFactory, "create_modules", mock_create_modules)

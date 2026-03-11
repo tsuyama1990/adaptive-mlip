@@ -32,7 +32,7 @@ class LammpsInputValidator:
     """
 
     @staticmethod
-    def validate_structure(structure: Any) -> None:  # noqa: C901
+    def validate_structure(structure: Atoms) -> None:  # noqa: C901
         """
         Validates the atomic structure.
 
@@ -81,7 +81,7 @@ class LammpsInputValidator:
                 raise ValueError(ERR_VAL_STRUCT_DUMMY_ELEM.format(symbol=s))
 
     @staticmethod
-    def validate_potential(potential: Any) -> Path:
+    def validate_potential(potential: str | Path) -> Path:
         """
         Validates the potential path.
         Ensures path exists, is a file, and is within allowed directories using secure validation.
@@ -140,6 +140,55 @@ class Validator:
         engine = self.elastic_calc.engine
         return engine.relax(structure, potential_path)
 
+    def _calculate_eos(self, structure: Atoms, potential_path: Path) -> str:
+        """
+        Calculates Equation of State (EOS) by varying volume and computing energy.
+        Returns a base64 encoded plot of the EOS fit.
+        """
+        import base64
+        import io
+
+        import matplotlib.pyplot as plt
+        import numpy as np
+        from ase.eos import EquationOfState
+
+        volumes = []
+        energies = []
+
+        engine = self.elastic_calc.engine
+        base_cell = structure.get_cell()  # type: ignore[no-untyped-call]
+
+        # Strain from -5% to +5% volume
+        strains = np.linspace(-0.05, 0.05, 7)
+        for eps in strains:
+            atoms = structure.copy()  # type: ignore[no-untyped-call]
+            # Isotropic volume scaling
+            scale_factor = (1.0 + eps) ** (1.0 / 3.0)
+            cell = base_cell * scale_factor
+            atoms.set_cell(cell, scale_atoms=True)
+
+            result = engine.compute_static_properties(atoms, potential_path)
+            volumes.append(atoms.get_volume())
+            energies.append(result.energy)
+
+        # Fit EOS (Birch-Murnaghan)
+        try:
+            eos = EquationOfState(volumes, energies, eos="birchmurnaghan")  # type: ignore[no-untyped-call]
+            v0, e0, B = eos.fit()  # type: ignore[no-untyped-call]
+
+            # Plot
+            fig = plt.figure(figsize=(6, 4))
+            ax = fig.add_subplot(111)
+            eos.plot(ax=ax)  # type: ignore[no-untyped-call]
+
+            buf = io.BytesIO()
+            plt.tight_layout()
+            plt.savefig(buf, format="png")
+            plt.close(fig)
+            return base64.b64encode(buf.getvalue()).decode("utf-8")
+        except Exception:
+            return ""
+
     def validate(
         self, potential_path: Path, output_path: Path, structure: Atoms | None = None
     ) -> ValidationResult:
@@ -165,12 +214,15 @@ class Validator:
             relaxed_structure, potential_path
         )
 
+        # Equation of State (EOS) Check
+        eos_plot = self._calculate_eos(relaxed_structure, potential_path)
+
         result = ValidationResult(
             phonon_stable=phonon_stable,
             elastic_stable=elastic_stable,
             c_ij=c_ij,
             bulk_modulus=B,
-            plots={"phonon": phonon_plot, "elastic": elastic_plot},
+            plots={"phonon": phonon_plot, "elastic": elastic_plot, "eos": eos_plot},
             report_path=str(output_path),
         )
 

@@ -128,6 +128,17 @@ class BaseTrainer(ABC):
     """
 
     @abstractmethod
+    def incremental_train(
+        self,
+        new_data_path: str | Path,
+        strategy_config: Any,
+        initial_potential: str | Path | None = None,
+    ) -> Any:
+        """
+        Mixes a replay buffer with the new active learning data and runs incremental delta learning.
+        """
+
+    @abstractmethod
     def train(
         self, training_data_path: str | Path, initial_potential: str | Path | None = None
     ) -> Any:
@@ -166,7 +177,15 @@ class BaseEngine(ABC):
     """
 
     @abstractmethod
-    def run(self, structure: Atoms | None, potential: Any) -> MDSimulationResult:
+    def run(
+        self,
+        structure: Atoms | None,
+        potential: Any,
+        use_fix_invoke: bool = False,
+        resume_from_step: int | None = None,
+        override_n_steps: int | None = None,
+        **kwargs: Any,
+    ) -> MDSimulationResult:
         """
         Runs a simulation using the given structure and potential.
 

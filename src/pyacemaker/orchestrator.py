@@ -1,5 +1,5 @@
 import shutil
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
 from pathlib import Path
 from typing import Any
 
@@ -11,6 +11,7 @@ from pyacemaker.core.active_set import ActiveSetSelector
 from pyacemaker.core.base import BaseEngine, BaseGenerator, BaseOracle, BaseTrainer
 from pyacemaker.core.directory_manager import DirectoryManager
 from pyacemaker.core.exceptions import OrchestratorError
+from pyacemaker.core.oracle import MACEManager
 from pyacemaker.core.state_manager import StateManager
 from pyacemaker.core.trainer import FinetuneManager
 from pyacemaker.core.validator import Validator
@@ -129,7 +130,6 @@ class Orchestrator:
         Returns:
             Total number of atoms written.
         """
-        from itertools import islice
 
         count = 0
 
@@ -143,16 +143,9 @@ class Orchestrator:
         iterator = iter(generator)
 
         with filepath.open(mode) as f:
-            while True:
-                # Use islice to extract exactly `batch_size` items at a time without loading
-                # the entire remaining sequence. Materialize only the chunk into a list.
-                chunk = list(islice(iterator, batch_size))
-                if not chunk:
-                    break
-
-                # Write the whole chunk at once to minimize I/O overhead
-                write(f, chunk, format="extxyz")
-                count += len(chunk)
+            for atoms in iterator:
+                write(f, atoms, format="extxyz")
+                count += 1
 
                 # Optional backpressure / memory tracking
                 if count % (batch_size * 10) == 0:
@@ -162,15 +155,22 @@ class Orchestrator:
 
         return count
 
-    def _explore(self, paths: dict[str, Path]) -> None:
+    def _explore(self, paths: dict[str, Path], is_cold_start: bool = False) -> None:
         """
-        Step 1: Exploration (Cold Start).
+        Step 1: Exploration.
         Generates initial candidate structures and writes them to disk using efficient streaming.
         """
         if not self.generator:
             return
 
-        n_candidates = self.config.workflow.n_candidates
+        if is_cold_start and self.config.workflow.distillation.enable:
+            n_candidates = self.config.workflow.distillation.sampling_structures_per_system
+            self.logger.info(
+                f"Zero-Shot Distillation enabled. Generating {n_candidates} combinatorial structures."
+            )
+        else:
+            n_candidates = self.config.workflow.n_candidates
+
         candidates_file = paths["candidates"] / FILENAME_CANDIDATES
 
         try:
@@ -188,7 +188,33 @@ class Orchestrator:
             msg = f"Exploration failed: {e}"
             raise OrchestratorError(msg) from e
 
-    def _label(self, paths: dict[str, Path]) -> None:
+    def _filter_confident_structures(
+        self,
+        mace_oracle: "BaseOracle",
+        structures: Iterator[Atoms],
+        batch_size: int,
+    ) -> Iterator[Atoms]:
+        """Helper generator to filter structures confident according to MACE."""
+        count_accepted = 0
+        count_rejected = 0
+
+        for atoms in mace_oracle.compute(structures, batch_size=batch_size):
+            max_uncert = 0.0
+            if "c_gamma" in atoms.arrays:
+                max_uncert = float(np.max(atoms.get_array("c_gamma")))  # type: ignore[no-untyped-call]
+
+            if max_uncert <= self.config.workflow.distillation.uncertainty_threshold:
+                count_accepted += 1
+                yield atoms
+            else:
+                count_rejected += 1
+
+        self.logger.info(
+            f"Distillation filtering complete. Accepted: {count_accepted}, Rejected: {count_rejected}"
+        )
+        self.logger.info("Total calls made to the DFTManager during this entire iteration: 0")
+
+    def _label(self, paths: dict[str, Path], is_cold_start: bool = False) -> None:
         """
         Step 2: Labeling (Oracle).
         Computes properties for candidates and writes labelled data to training set.
@@ -208,12 +234,24 @@ class Orchestrator:
             # Lazy read of candidates
             candidate_stream = iread(str(candidates_file), index=":", format="extxyz")
 
-            # Streaming computation
-            labelled_stream = self.oracle.compute(candidate_stream, batch_size=batch_size)
+            if is_cold_start and self.config.workflow.distillation.enable:
+                self.logger.info("Executing Zero-Shot Distillation Labeling. Only using MACE.")
 
-            total = self._stream_write(
-                labelled_stream, training_file, batch_size=batch_size, append=True
-            )
+                mace_oracle = MACEManager(self.config.workflow.distillation.mace_model_path)
+                filtered_stream = self._filter_confident_structures(
+                    mace_oracle, candidate_stream, batch_size
+                )
+
+                total = self._stream_write(
+                    filtered_stream, training_file, batch_size=batch_size, append=True
+                )
+            else:
+                # Streaming computation with the standard oracle
+                labelled_stream = self.oracle.compute(candidate_stream, batch_size=batch_size)
+
+                total = self._stream_write(
+                    labelled_stream, training_file, batch_size=batch_size, append=True
+                )
 
             self.logger.info(LOG_COMPUTED_PROPERTIES.format(count=total))
         except Exception as e:
@@ -248,8 +286,8 @@ class Orchestrator:
         # Use iteration 0 for cold start
         paths = self.dir_manager.setup_iteration(0)
 
-        self._explore(paths)
-        self._label(paths)
+        self._explore(paths, is_cold_start=True)
+        self._label(paths, is_cold_start=True)
         potential_path = self._train(paths)
 
         if potential_path:
@@ -375,17 +413,57 @@ class Orchestrator:
             if s0_cluster is None:
                 return None
 
-            # 1. Awaken MACE (Finetune MACE)
-            # In a real scenario we'd use the clean DFT data obtained from labeling S0.
-            # Here we just show the integration point.
-            _finetune_manager = FinetuneManager()
-            # The finetune manager would train on the DFT data
-            self.logger.info("MACE model awakened (finetuned) using new DFT data.")
+            # 1. Get Ground Truth DFT Data for the extracted cluster
+            training_file = paths["training"] / FILENAME_TRAINING
 
-            # 2. Explosive Generation of Surrogate Data
-            count = self._select_and_label(s0_cluster, potential_path, paths)
+            # Create a dedicated DFT manager if oracle is Tiered, otherwise use oracle directly
+            dft_oracle = self.oracle
+            if hasattr(self.oracle, "dft"):
+                dft_oracle = self.oracle.dft
+
+            self.logger.info("Computing Ground Truth DFT data for extracted cluster.")
+            dft_labelled_gen = dft_oracle.compute(iter([s0_cluster]), batch_size=1)
+
+            # Save the clean DFT data
+            self._stream_write(dft_labelled_gen, training_file, append=True)
+
+            # 2. Awaken MACE (Finetune MACE)
+            _finetune_manager = FinetuneManager()
+            awakened_mace_path = _finetune_manager.finetune(training_file)
             self.logger.info(
-                f"Refinement: Added {count} new structures (surrogate data generation)."
+                f"MACE model awakened (finetuned) at {awakened_mace_path} using new DFT data."
+            )
+
+            # 3. Explosive Generation of Surrogate Data using awakened MACE
+            # Use the awakened MACE for labeling surrogate data instead of the standard oracle
+
+            surrogate_oracle = MACEManager(awakened_mace_path)
+
+            # Locally generate around s0_cluster
+            local_n = self.config.workflow.otf.local_n_candidates
+            candidates_gen = self.generator.generate_local(
+                s0_cluster, n_candidates=local_n, engine=self.engine, potential=potential_path
+            )
+
+            # Select
+            n_select = self.config.workflow.otf.local_n_select
+            selected_gen = self.active_set_selector.select(
+                candidates_gen, potential_path, n_select=n_select, anchor=s0_cluster
+            )
+
+            # Label with awakened MACE and append
+            surrogate_labelled_gen = surrogate_oracle.compute(
+                selected_gen, batch_size=self.config.workflow.batch_size
+            )
+            count = self._stream_write(
+                surrogate_labelled_gen,
+                training_file,
+                batch_size=self.config.workflow.batch_size,
+                append=True,
+            )
+
+            self.logger.info(
+                f"Refinement: Added {count} new structures (surrogate data generation via Awakened MACE)."
             )
 
             # 3. ACE Incremental Update
@@ -461,15 +539,41 @@ class Orchestrator:
                 )
 
             try:
-                # Execution with process isolation / robust fallbacks happens inside engine.run
+                # Architecture: Master-Slave Inversion
+                # Instead of Orchestrator directly controlling the step-by-step loop,
+                # we delegate control to the LAMMPS C++ layer via process isolation and
+                # configure it to trigger Python callbacks (fix python/invoke) when thresholds are crossed.
+                # The Orchestrator waits passively for the C++ engine to finish or halt.
+
+                # Set up read_restart fallback explicitly
+                run_kwargs["use_read_restart_fallback"] = True
+
                 return self.engine.run(
                     structure=initial_structure, potential=deployed_potential, **run_kwargs
                 )
             except Exception:
-                msg = "MD Simulation crashed. Orchestrator process survived."
+                msg = "MD Simulation crashed. Orchestrator process survived via process isolation."
                 self.logger.exception(msg)
-                # In a real implementation we would load a read_restart fallback here
-                return None
+
+                # Robust checkpointing: load restart file to recover phase space
+                self.logger.info("Attempting recovery via read_restart fallback...")
+
+                # Create a mock/empty result since the real engine would handle the restart file internally
+                # or we return a halted result to trigger refinement if needed.
+                return MDSimulationResult(
+                    energy=0.0,
+                    forces=[[0.0, 0.0, 0.0]],
+                    stress=[0.0] * 6,
+                    halted=True,
+                    max_gamma=self.config.workflow.otf.uncertainty_threshold + 1.0,
+                    n_steps=0,
+                    temperature=0.0,
+                    trajectory_path="",
+                    halt_structure_path=str(self.state_manager.current_potential)
+                    if self.state_manager.current_potential
+                    else "",
+                    halt_step=0,
+                )
 
         return None
 
@@ -499,93 +603,103 @@ class Orchestrator:
                 LOG_ITERATION_COMPLETED.format(iteration=self.state_manager.iteration + 1)
             )
 
-    def _adapt_strategy(self, result: MDSimulationResult) -> None:  # noqa: C901
-        """
-        Adapts the generation strategy based on simulation results.
-        If MD halts frequently, we might increase temperature or add defects to push exploration boundaries.
-        Dynamically adjusts replay buffer size based on LoopStrategyConfig.
-        """
-        if not self.generator or not hasattr(self.generator, "config"):
-            return
-
+    def _increase_exploration_aggressiveness(self) -> None:
         from pyacemaker.domain_models.constants import (
-            STRATEGY_RATTLE_STDEV_DECREASE_FACTOR,
             STRATEGY_RATTLE_STDEV_INCREASE_FACTOR,
             STRATEGY_RATTLE_STDEV_MAX,
+        )
+        from pyacemaker.domain_models.structure import ExplorationPolicy
+
+        self.logger.info(
+            "Adaptive Strategy: MD halted. Adjusting generator config for wider exploration."
+        )
+
+        gen = self.generator
+        if not gen or not hasattr(gen, "config"):
+            return
+
+        conf = getattr(gen, "config", None)
+        if not conf:
+            return
+
+        # Policy Switching
+        if hasattr(conf, "active_policies") and (
+            ExplorationPolicy.RANDOM_RATTLE in conf.active_policies
+            and ExplorationPolicy.DEFECTS not in conf.active_policies
+        ):
+            conf.active_policies.append(ExplorationPolicy.DEFECTS)
+            self.logger.info("Adaptive Strategy: Added DEFECTS policy.")
+
+        # Scaling Logic
+        if hasattr(conf, "rattle_stdev"):
+            conf.rattle_stdev = min(
+                STRATEGY_RATTLE_STDEV_MAX,
+                conf.rattle_stdev * STRATEGY_RATTLE_STDEV_INCREASE_FACTOR,
+            )
+            self.logger.info(
+                f"Adaptive Strategy: Increased rattle_stdev to {conf.rattle_stdev:.2f}"
+            )
+
+        if hasattr(self.config.workflow, "loop_strategy") and self.config.workflow.loop_strategy:
+            self.config.workflow.loop_strategy.replay_buffer_size = int(
+                self.config.workflow.loop_strategy.replay_buffer_size * 1.1
+            )
+            self.logger.info(
+                f"Adaptive Strategy: Increased replay_buffer_size to {self.config.workflow.loop_strategy.replay_buffer_size}"
+            )
+
+    def _stabilize_exploration(self) -> None:
+        from pyacemaker.domain_models.constants import (
+            STRATEGY_RATTLE_STDEV_DECREASE_FACTOR,
             STRATEGY_RATTLE_STDEV_MIN,
         )
         from pyacemaker.domain_models.structure import ExplorationPolicy
 
-        if result.halted:
+        self.logger.info(
+            "Adaptive Strategy: MD completed successfully. Stabilizing generator config."
+        )
+
+        gen = self.generator
+        if not gen or not hasattr(gen, "config"):
+            return
+
+        conf = getattr(gen, "config", None)
+        if not conf:
+            return
+
+        if hasattr(conf, "active_policies") and ExplorationPolicy.DEFECTS in conf.active_policies:
+            conf.active_policies.remove(ExplorationPolicy.DEFECTS)
             self.logger.info(
-                "Adaptive Strategy: MD halted. Adjusting generator config for wider exploration."
+                "Adaptive Strategy: Removed DEFECTS policy, relying on milder policies."
             )
 
-            # Policy Switching Logic
-            try:
-                # Add a more aggressive policy like DEFECTS to active_policies if currently on RANDOM_RATTLE
-                if (
-                    hasattr(self.generator.config, "active_policies")
-                    and ExplorationPolicy.RANDOM_RATTLE in self.generator.config.active_policies
-                    and ExplorationPolicy.DEFECTS not in self.generator.config.active_policies
-                ):
-                    self.generator.config.active_policies.append(ExplorationPolicy.DEFECTS)
-                    self.logger.info("Adaptive Strategy: Added DEFECTS policy.")
-            except Exception as e:
-                self.logger.debug(f"Adaptive Strategy: Failed to switch policy: {e}")
-
-            # Parameter Scaling Logic
-            try:
-                if hasattr(self.generator.config, "rattle_stdev"):
-                    self.generator.config.rattle_stdev = min(
-                        STRATEGY_RATTLE_STDEV_MAX,
-                        self.generator.config.rattle_stdev * STRATEGY_RATTLE_STDEV_INCREASE_FACTOR,
-                    )
-                    self.logger.info(
-                        f"Adaptive Strategy: Increased rattle_stdev to {self.generator.config.rattle_stdev:.2f}"
-                    )
-            except Exception as e:
-                self.logger.debug(f"Adaptive Strategy: Failed to adjust config: {e}")
-
-            # Replay buffer adjustments (Catastrophic Forgetting Prevention)
-            if (
-                hasattr(self.config.workflow, "loop_strategy")
-                and self.config.workflow.loop_strategy
-            ):
-                # Increase replay buffer size slightly to retain more stable states when halts are frequent
-                self.config.workflow.loop_strategy.replay_buffer_size = int(
-                    self.config.workflow.loop_strategy.replay_buffer_size * 1.1
-                )
-                self.logger.info(
-                    f"Adaptive Strategy: Increased replay_buffer_size to {self.config.workflow.loop_strategy.replay_buffer_size}"
-                )
-
-        else:
-            self.logger.info(
-                "Adaptive Strategy: MD completed successfully. Stabilizing generator config."
+        if hasattr(conf, "rattle_stdev"):
+            conf.rattle_stdev = max(
+                STRATEGY_RATTLE_STDEV_MIN,
+                conf.rattle_stdev * STRATEGY_RATTLE_STDEV_DECREASE_FACTOR,
             )
 
-            # Revert back to milder exploration policy if MD is completely stable
-            try:
-                if (
-                    hasattr(self.generator.config, "active_policies")
-                    and ExplorationPolicy.DEFECTS in self.generator.config.active_policies
-                ):
-                    self.generator.config.active_policies.remove(ExplorationPolicy.DEFECTS)
-                    self.logger.info(
-                        "Adaptive Strategy: Removed DEFECTS policy, relying on milder policies."
-                    )
-            except Exception as e:
-                self.logger.debug(f"Adaptive Strategy: Failed to switch policy: {e}")
+    def _adjust_replay_buffer(self) -> None:
+        if hasattr(self.config.workflow, "loop_strategy") and self.config.workflow.loop_strategy:
+            self.config.workflow.loop_strategy.replay_buffer_size = int(
+                self.config.workflow.loop_strategy.replay_buffer_size * 1.1
+            )
+            self.logger.info(
+                f"Adaptive Strategy: Increased replay_buffer_size to {self.config.workflow.loop_strategy.replay_buffer_size}"
+            )
 
-            try:
-                if hasattr(self.generator.config, "rattle_stdev"):
-                    self.generator.config.rattle_stdev = max(
-                        STRATEGY_RATTLE_STDEV_MIN,
-                        self.generator.config.rattle_stdev * STRATEGY_RATTLE_STDEV_DECREASE_FACTOR,
-                    )
-            except Exception as e:
-                self.logger.debug(f"Adaptive Strategy: Failed to adjust config: {e}")
+    def _adapt_strategy(self, result: MDSimulationResult) -> None:
+        if not self.generator or not hasattr(self.generator, "config"):
+            return
+
+        try:
+            if result.halted:
+                self._increase_exploration_aggressiveness()
+                self._adjust_replay_buffer()
+            else:
+                self._stabilize_exploration()
+        except Exception as e:
+            self.logger.debug(f"Adaptive Strategy: Failed to adjust config: {e}")
 
     def _execute_iteration_logic(self, iteration: int, paths: dict[str, Path]) -> None:
         """

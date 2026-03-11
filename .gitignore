@@ -213,3 +213,14 @@ dev_documents/project_state.json
 dev_documents/project_state_local.json
 .DS_Store
 .env.local
+# Additional explicitly required artifacts
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+.env
+.env.local
+.venv/
+.DS_Store

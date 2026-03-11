@@ -13,9 +13,10 @@ from pyacemaker.domain_models import PyAceConfig
 from pyacemaker.domain_models.md import MDSimulationResult
 from pyacemaker.domain_models.structure import StructureConfig
 from pyacemaker.orchestrator import Orchestrator
+from tests.conftest import FakeActiveSetSelector
 
 
-class FakeGenerator(BaseGenerator):
+class FakeGenerator(BaseGenerator):  # type: ignore[misc]
     def __init__(self, elements: list[str] | None = None) -> None:
         self.elements = elements or ["H"]
 
@@ -97,12 +98,15 @@ def orchestrator(mock_config: PyAceConfig, tmp_path: Path) -> Orchestrator:
         orch.oracle = MagicMock()
         orch.trainer = MagicMock()
         orch.engine = MagicMock()
-        orch.active_set_selector = MagicMock()
+        orch.active_set_selector = FakeActiveSetSelector()
 
         return orch
 
 
 def test_cold_start(orchestrator: Orchestrator, tmp_path: Path) -> None:
+    # Override default config for this specific test
+    orchestrator.config.workflow.distillation.enable = False
+
     # Inject loop_state
     if not hasattr(orchestrator, "loop_state"):
         # We can't set read-only loop_state property directly, set it via state_manager
@@ -184,14 +188,14 @@ def test_run_loop_iteration_halt(orchestrator: Orchestrator, tmp_path: Path) -> 
 
     # Type assertions for mypy
     assert isinstance(orchestrator.engine, MagicMock)
-    assert isinstance(orchestrator.active_set_selector, MagicMock)
+    assert isinstance(orchestrator.active_set_selector, FakeActiveSetSelector)
     assert isinstance(orchestrator.oracle, MagicMock)
     assert isinstance(orchestrator.trainer, MagicMock)
 
     orchestrator.engine.run.return_value = result
 
     # Mock refinement
-    orchestrator.active_set_selector.select.return_value = iter([Atoms("Fe")])
+    # Use actual fake return logic if needed
     orchestrator.oracle.compute.return_value = iter([Atoms("Fe")])
     refined_pot = tmp_path / "refined.yace"
     refined_pot.touch()
