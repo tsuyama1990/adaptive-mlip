@@ -142,6 +142,7 @@ def test_scenario_06_01_active_learning_campaign(uat_config: PyAceConfig, tmp_pa
         )
 
         # Run Orchestrator
+        uat_config.workflow.distillation.enable = False
         orch = Orchestrator(uat_config)
         orch.run()
 
@@ -202,6 +203,7 @@ def test_scenario_06_02_resume_capability(uat_config: PyAceConfig, tmp_path: Pat
         mock_engine.run.return_value = res2
 
         # Run
+        uat_config.workflow.distillation.enable = False
         orch = Orchestrator(uat_config)
         orch.run()
 

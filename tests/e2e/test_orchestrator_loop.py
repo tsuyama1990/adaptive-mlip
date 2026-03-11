@@ -103,6 +103,9 @@ def orchestrator(mock_config: PyAceConfig, tmp_path: Path) -> Orchestrator:
 
 
 def test_cold_start(orchestrator: Orchestrator, tmp_path: Path) -> None:
+    # Override default config for this specific test
+    orchestrator.config.workflow.distillation.enable = False
+
     # Inject loop_state
     if not hasattr(orchestrator, "loop_state"):
         # We can't set read-only loop_state property directly, set it via state_manager

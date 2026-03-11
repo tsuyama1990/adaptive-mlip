@@ -1,5 +1,5 @@
 import shutil
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
 from pathlib import Path
 from typing import Any
 
@@ -162,15 +162,22 @@ class Orchestrator:
 
         return count
 
-    def _explore(self, paths: dict[str, Path]) -> None:
+    def _explore(self, paths: dict[str, Path], is_cold_start: bool = False) -> None:
         """
-        Step 1: Exploration (Cold Start).
+        Step 1: Exploration.
         Generates initial candidate structures and writes them to disk using efficient streaming.
         """
         if not self.generator:
             return
 
-        n_candidates = self.config.workflow.n_candidates
+        if is_cold_start and self.config.workflow.distillation.enable:
+            n_candidates = self.config.workflow.distillation.sampling_structures_per_system
+            self.logger.info(
+                f"Zero-Shot Distillation enabled. Generating {n_candidates} combinatorial structures."
+            )
+        else:
+            n_candidates = self.config.workflow.n_candidates
+
         candidates_file = paths["candidates"] / FILENAME_CANDIDATES
 
         try:
@@ -188,7 +195,7 @@ class Orchestrator:
             msg = f"Exploration failed: {e}"
             raise OrchestratorError(msg) from e
 
-    def _label(self, paths: dict[str, Path]) -> None:
+    def _label(self, paths: dict[str, Path], is_cold_start: bool = False) -> None:
         """
         Step 2: Labeling (Oracle).
         Computes properties for candidates and writes labelled data to training set.
@@ -208,12 +215,48 @@ class Orchestrator:
             # Lazy read of candidates
             candidate_stream = iread(str(candidates_file), index=":", format="extxyz")
 
-            # Streaming computation
-            labelled_stream = self.oracle.compute(candidate_stream, batch_size=batch_size)
+            if is_cold_start and self.config.workflow.distillation.enable:
+                self.logger.info("Executing Zero-Shot Distillation Labeling. Only using MACE.")
 
-            total = self._stream_write(
-                labelled_stream, training_file, batch_size=batch_size, append=True
-            )
+                # Import MACEManager locally to avoid circular dependencies if any
+                from pyacemaker.core.oracle import MACEManager
+
+                mace_oracle = MACEManager(self.config.workflow.distillation.mace_model_path)
+
+                def filter_confident_structures(structures: Iterator[Atoms]) -> Iterator[Atoms]:
+                    count_accepted = 0
+                    count_rejected = 0
+
+                    for atoms in mace_oracle.compute(structures, batch_size=batch_size):
+                        max_uncert = 0.0
+                        if "c_gamma" in atoms.arrays:
+                            max_uncert = float(np.max(atoms.get_array("c_gamma"))) # type: ignore[no-untyped-call]
+
+                        if max_uncert <= self.config.workflow.distillation.uncertainty_threshold:
+                            count_accepted += 1
+                            yield atoms
+                        else:
+                            count_rejected += 1
+
+                    self.logger.info(
+                        f"Distillation filtering complete. Accepted: {count_accepted}, Rejected: {count_rejected}"
+                    )
+                    self.logger.info(
+                        "Total calls made to the DFTManager during this entire iteration: 0"
+                    )
+
+                filtered_stream = filter_confident_structures(candidate_stream)
+
+                total = self._stream_write(
+                    filtered_stream, training_file, batch_size=batch_size, append=True
+                )
+            else:
+                # Streaming computation with the standard oracle
+                labelled_stream = self.oracle.compute(candidate_stream, batch_size=batch_size)
+
+                total = self._stream_write(
+                    labelled_stream, training_file, batch_size=batch_size, append=True
+                )
 
             self.logger.info(LOG_COMPUTED_PROPERTIES.format(count=total))
         except Exception as e:
@@ -248,8 +291,8 @@ class Orchestrator:
         # Use iteration 0 for cold start
         paths = self.dir_manager.setup_iteration(0)
 
-        self._explore(paths)
-        self._label(paths)
+        self._explore(paths, is_cold_start=True)
+        self._label(paths, is_cold_start=True)
         potential_path = self._train(paths)
 
         if potential_path:

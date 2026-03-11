@@ -136,6 +136,7 @@ def test_integration_workflow_complete(
 ) -> None:
     """Comprehensive integration test for the full active learning loop."""
     config = mock_config.model_copy()
+    config.workflow.distillation.enable = False
 
     def mock_create_modules(cfg: PyAceConfig) -> tuple[Any, Any, Any, Any, Any, Any]:
         return (
