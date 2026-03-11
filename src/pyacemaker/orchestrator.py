@@ -529,7 +529,12 @@ class Orchestrator:
                     and ExplorationPolicy.RANDOM_RATTLE in self.generator.config.active_policies
                     and ExplorationPolicy.DEFECTS not in self.generator.config.active_policies
                 ):
-                    self.generator.config.active_policies.append(ExplorationPolicy.DEFECTS)
+                    # Need to use model_copy since pydantic models might be strictly validated or immutable
+                    new_policies = list(self.generator.config.active_policies)
+                    new_policies.append(ExplorationPolicy.DEFECTS)
+                    self.generator.config = self.generator.config.model_copy(
+                        update={"active_policies": new_policies}
+                    )
                     self.logger.info("Adaptive Strategy: Added DEFECTS policy.")
             except Exception as e:
                 self.logger.debug(f"Adaptive Strategy: Failed to switch policy: {e}")
@@ -537,9 +542,12 @@ class Orchestrator:
             # Parameter Scaling Logic
             try:
                 if hasattr(self.generator.config, "rattle_stdev"):
-                    self.generator.config.rattle_stdev = min(
+                    new_stdev = min(
                         STRATEGY_RATTLE_STDEV_MAX,
                         self.generator.config.rattle_stdev * STRATEGY_RATTLE_STDEV_INCREASE_FACTOR,
+                    )
+                    self.generator.config = self.generator.config.model_copy(
+                        update={"rattle_stdev": new_stdev}
                     )
                     self.logger.info(
                         f"Adaptive Strategy: Increased rattle_stdev to {self.generator.config.rattle_stdev:.2f}"
@@ -571,7 +579,11 @@ class Orchestrator:
                     hasattr(self.generator.config, "active_policies")
                     and ExplorationPolicy.DEFECTS in self.generator.config.active_policies
                 ):
-                    self.generator.config.active_policies.remove(ExplorationPolicy.DEFECTS)
+                    new_policies = list(self.generator.config.active_policies)
+                    new_policies.remove(ExplorationPolicy.DEFECTS)
+                    self.generator.config = self.generator.config.model_copy(
+                        update={"active_policies": new_policies}
+                    )
                     self.logger.info(
                         "Adaptive Strategy: Removed DEFECTS policy, relying on milder policies."
                     )
@@ -580,9 +592,12 @@ class Orchestrator:
 
             try:
                 if hasattr(self.generator.config, "rattle_stdev"):
-                    self.generator.config.rattle_stdev = max(
+                    new_stdev = max(
                         STRATEGY_RATTLE_STDEV_MIN,
                         self.generator.config.rattle_stdev * STRATEGY_RATTLE_STDEV_DECREASE_FACTOR,
+                    )
+                    self.generator.config = self.generator.config.model_copy(
+                        update={"rattle_stdev": new_stdev}
                     )
             except Exception as e:
                 self.logger.debug(f"Adaptive Strategy: Failed to adjust config: {e}")

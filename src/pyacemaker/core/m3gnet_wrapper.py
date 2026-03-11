@@ -6,7 +6,8 @@ from pyacemaker.domain_models.constants import ERR_M3GNET_PRED_FAIL
 class M3GNetWrapper:
     """
     Wrapper for M3GNet structure prediction.
-    Currently uses a mock implementation (ase.build.bulk) for 'cold start'.
+    Constructs an initial structure for 'cold start' using ASE building tools
+    and relaxes it using a foundation model if available.
     """
 
     def predict_structure(self, composition: str) -> Atoms:
@@ -26,29 +27,81 @@ class M3GNetWrapper:
             msg = f"Invalid composition string format: {composition}"
             raise ValueError(msg)
 
-        # Simulated retry logic with exponential backoff could go here
-        # For now, we mock the call.
         try:
-            return self._mock_predict(composition)
+            return self._predict(composition)
         except Exception as e:
-            # In real impl, we would retry
             raise RuntimeError(ERR_M3GNET_PRED_FAIL.format(composition=composition)) from e
 
-    def _mock_predict(self, composition: str) -> Atoms:
+    def _predict(self, composition: str) -> Atoms:
+        from ase import Atoms
         from ase.build import bulk
 
-        # Simple Mock logic
+        # For known simple structures, use proper ASE bulk generation.
+        # This provides a realistic starting point rather than a mock.
         if composition == "FePt":
-            return Atoms(
+            # For L1_0 FePt
+            atoms = Atoms(
                 "FePt",
-                positions=[[0, 0, 0], [1.9, 1.9, 1.9]],
-                cell=[3.8, 3.8, 3.8],
+                scaled_positions=[[0, 0, 0], [0.5, 0.5, 0.5]],
+                cell=[2.7, 2.7, 3.8],
                 pbc=True,
             )
+        else:
+            try:
+                atoms = bulk(composition)
+            except Exception:
+                # Basic fallback: construct a simple cubic structure from formula
+                from ase.symbols import string2symbols
 
-        # Fallback to bulk or simple cubic
+                symbols = string2symbols(composition)
+                n_atoms = len(symbols)
+
+                # Create a simple cubic cell with reasonable spacing
+                spacing = 2.5
+                cell_dim = spacing * (n_atoms ** (1 / 3))
+
+                # Distribute randomly or simply on a line for fallback
+                positions = []
+                for i in range(n_atoms):
+                    positions.append(
+                        [i * spacing % cell_dim, (i * spacing / cell_dim) * spacing % cell_dim, 0]
+                    )
+
+                atoms = Atoms(
+                    symbols=symbols,
+                    positions=positions,
+                    cell=[cell_dim, cell_dim, cell_dim],
+                    pbc=True,
+                )
+
+        # Attempt to relax the structure using a foundation model to find a real local minimum
         try:
-            return bulk(composition)
-        except Exception:
-            # Very simple fallback
-            return Atoms(composition, cell=[5.0, 5.0, 5.0], pbc=True)
+            import os
+            from pathlib import Path
+
+            import torch
+            from ase.optimize import LBFGS
+            from mace.calculators import mace_mp
+
+            # Initialize MACE calculator
+            calc = mace_mp(
+                model="medium",
+                dispersion=False,
+                default_dtype="float64",
+                device="cuda" if torch.cuda.is_available() else "cpu",
+            )
+            atoms.calc = calc
+
+            with Path(os.devnull).open("w") as devnull:
+                opt = LBFGS(atoms, logfile=devnull)
+                opt.run(fmax=0.05, steps=100)  # type: ignore[no-untyped-call]
+        except ImportError:
+            # Fallback to unrelaxed if MACE isn't available
+            pass
+        except Exception as e:
+            # Ignore relaxation errors and return unrelaxed starting point
+            import logging
+
+            logging.getLogger(__name__).debug(f"Pre-relaxation failed: {e}")
+
+        return atoms

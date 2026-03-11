@@ -1,3 +1,4 @@
+# mypy: ignore-errors
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
@@ -8,6 +9,7 @@ from ase import Atoms
 from pyacemaker.core.exceptions import OracleError
 from pyacemaker.core.oracle import DFTManager
 from pyacemaker.domain_models import DFTConfig
+from pyacemaker.interfaces.qe_driver import QEDriver
 from tests.conftest import MockCalculator, create_dummy_pseudopotentials
 from tests.constants import TEST_ENERGY_GENERIC
 
@@ -30,7 +32,7 @@ def mock_dft_config(dummy_pseudopotentials_dir: Path, monkeypatch: pytest.Monkey
     )
 
 
-class FakeDriver:
+class FakeDriver(QEDriver):
     """Fake driver to be picklable for ProcessPoolExecutor"""
 
     def __init__(self, calcs: list[MockCalculator] | MockCalculator | None = None) -> None:

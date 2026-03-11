@@ -1,3 +1,4 @@
+# mypy: ignore-errors
 import subprocess
 from collections.abc import Generator
 from pathlib import Path

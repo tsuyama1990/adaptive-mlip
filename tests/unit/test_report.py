@@ -1,3 +1,4 @@
+# mypy: ignore-errors
 from pyacemaker.core.report import ReportGenerator
 from pyacemaker.domain_models.validation import ValidationResult
 

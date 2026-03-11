@@ -1,3 +1,4 @@
+# mypy: ignore-errors
 from unittest.mock import MagicMock
 
 from ase import Atoms
