@@ -20,6 +20,15 @@ authors = [
     { name = "Tomoyuki Tsuyama", email = "tomoyuki.tsuyaman@gmail.com" }
 ]
 
+
+[project.optional-dependencies]
+dev = [
+    "ruff",
+    "mypy",
+    "pytest",
+    "pytest-cov",
+]
+
 [project.scripts]
 pyacemaker = "pyacemaker.main:main"
 
@@ -102,7 +111,7 @@ ignore = [
 "tutorials/**/*.py" = ["N803", "N807", "S101"]
 
 [tool.ruff.lint.mccabe]
-max-complexity = 10  # Exceeding this prompts function splitting (prevent AI long functions)
+max-complexity = 10 # Exceeding this prompts function splitting (prevent AI long functions)
 
 [tool.ruff.lint.flake8-annotations]
 suppress-dummy-args = true  # Arguments starting with _ do not require type hints
