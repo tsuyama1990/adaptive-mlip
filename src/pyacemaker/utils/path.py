@@ -52,13 +52,17 @@ def validate_path_safe(path: Path) -> Path:  # noqa: C901
             # Combine resolved parent with filename
             resolved = resolved_parent / path.name
         else:
-            # If even parent doesn't exist, this is likely unsafe or too deep
-            # Fallback to loose resolve but we will check containment
-            resolved = path.resolve(strict=False)
+            # If even parent doesn't exist, this is likely unsafe or too deep.
+            # Reject resolving completely to prevent TOCTOU and fake containment.
+            pass
 
     except Exception as e:
         msg = f"Invalid path resolution: {path}"
         raise ValueError(msg) from e
+
+    if not path.exists() and not path.parent.exists():
+        msg = f"Parent directory does not exist: {path.parent}"
+        raise ValueError(msg)
 
     base_dir = Path.cwd().resolve()
 

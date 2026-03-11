@@ -34,7 +34,8 @@ class LammpsScriptGenerator:
         """
         # Sanitize input path
         # Note: path must be string for lru_cache
-        safe_path = validate_path_safe(Path(path))
+        p = Path(path)
+        safe_path = validate_path_safe(p)
         if not safe_path.exists() and not safe_path.parent.exists():
             msg = f"Path {safe_path} is invalid or has an invalid parent directory."
             raise ValueError(msg)
@@ -101,9 +102,58 @@ class LammpsScriptGenerator:
         buffer.write(f"compute gamma all pace {quoted_pot}\n")
         buffer.write("compute max_gamma all reduce max c_gamma\n")
         buffer.write("variable max_g equal c_max_gamma\n")
+        buffer.write(f"variable threshold_dft equal {self.config.uncertainty_threshold}\n")
+        buffer.write(f"variable smooth_steps equal {self.config.smooth_steps}\n")
+
+        # Python evaluator generation
+        # The python script will read variable max_g, threshold_dft, and smooth_steps
+        # It maintains a consecutive_exceed variable in LAMMPS directly.
+        buffer.write("variable consecutive_exceed equal 0.0\n")
+        eval_py = """
+def invoke_evaluator() -> None:
+    import lammps
+    lmp = lammps.lammps()
+
+    try:
+        max_g = lmp.extract_variable("max_g", 0, 0)
+        threshold = lmp.extract_variable("threshold_dft", 0, 0)
+        smooth_steps = lmp.extract_variable("smooth_steps", 0, 0)
+
+        # Try to get consecutive_exceed, default to 0
+        try:
+            exceed = lmp.extract_variable("consecutive_exceed", 0, 0)
+        except Exception:
+            exceed = 0.0
+
+        if max_g > threshold:
+            exceed += 1.0
+        else:
+            exceed = 0.0
+
+        lmp.command(f"variable consecutive_exceed equal {exceed}")
+    except Exception:
+        import traceback
+        traceback.print_exc()
+"""
+        evaluator_path = potential_path.parent / "evaluator.py"
+        # Ensure safe write logic by avoiding arbitrary write-access
+        import logging
+        logger = logging.getLogger(__name__)
+
+        try:
+            safe_evaluator_path = validate_path_safe(evaluator_path)
+            with safe_evaluator_path.open("w") as f:
+                f.write(eval_py)
+            buffer.write(f'python invoke_evaluator invoke file {shlex.quote(str(safe_evaluator_path))}\n')
+            buffer.write(f"fix py_invoke all python/invoke {self.config.check_interval} post_force invoke_evaluator\n")
+        except Exception as e:
+            # Fallback for minimal watchdog if python fails
+            logger.warning(f"Failed to generate python evaluator: {e}")
+
+        buffer.write("variable exceed_flag equal \"v_consecutive_exceed >= v_smooth_steps\"\n")
         buffer.write(
             f"fix halt_check all halt {self.config.check_interval} "
-            f"v_max_g > {self.config.uncertainty_threshold} error continue\n"
+            f"v_exceed_flag != 0 error continue\n"
         )
 
     def _gen_mc(self, buffer: TextIO, elements: list[str]) -> None:

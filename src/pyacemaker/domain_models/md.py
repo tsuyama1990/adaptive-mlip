@@ -234,6 +234,9 @@ class MDConfig(BaseModel):
     check_interval: int = Field(
         DEFAULT_MD_CHECK_INTERVAL, gt=0, description="Step interval for uncertainty check"
     )
+    smooth_steps: int = Field(
+        3, gt=0, description="Number of consecutive steps exceeding threshold required to halt"
+    )
 
     # Spec Section 3.1: Ramping and MC
     ramping: MDRampingConfig | None = Field(None, description="Configuration for T/P ramping")

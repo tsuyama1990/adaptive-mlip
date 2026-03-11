@@ -115,14 +115,20 @@ class PacemakerTrainer(BaseTrainer):
 
         import re
 
+        from pyacemaker.domain_models.constants import MALICIOUS_SHELL_PATTERN
+        from pyacemaker.utils.path import validate_path_safe
+
         for key, val in pacemaker_config.items():
             if isinstance(val, str) and re.search(
-                r"(\bexec\b|\bsystem\b|\bos\.|;|\||&|<|>|`|\$\(|\$\{)", val
+                MALICIOUS_SHELL_PATTERN, val
             ):
                 msg = f"Malicious content detected in configuration value for key '{key}'"
                 raise TrainerError(msg)
 
-        dump_yaml(pacemaker_config, input_yaml_path)
+        # Validate input config path
+        safe_input_yaml_path = validate_path_safe(input_yaml_path)
+
+        dump_yaml(pacemaker_config, safe_input_yaml_path)
 
         # Run pace_train
         cmd = (
@@ -130,10 +136,10 @@ class PacemakerTrainer(BaseTrainer):
             if self.config.pace_train_command
             else ["pace_train"]
         )
-        cmd.append(str(input_yaml_path))
+        cmd.append(str(safe_input_yaml_path))
 
         if initial_potential:
-            initial_path = Path(initial_potential)
+            initial_path = validate_path_safe(Path(initial_potential))
             if not initial_path.exists():
                 msg = f"Initial potential not found: {initial_path}"
                 raise TrainerError(msg)
@@ -184,9 +190,11 @@ class FinetuneManager:
         """
         Briefly trains the final readout layers of the MACE foundation model.
         """
-        dataset_path = Path(dataset_path).resolve()
-        if not dataset_path.exists():
-            msg = f"Dataset for finetuning not found: {dataset_path}"
+        from pyacemaker.utils.path import validate_path_safe
+
+        safe_dataset_path = validate_path_safe(Path(dataset_path))
+        if not safe_dataset_path.exists():
+            msg = f"Dataset for finetuning not found: {safe_dataset_path}"
             raise FileNotFoundError(msg)
 
         mace_finetune_cmd = (
@@ -199,7 +207,7 @@ class FinetuneManager:
             msg = f"Executable '{mace_finetune_cmd[0]}' not found in PATH."
             raise RuntimeError(msg)
 
-        output_model = dataset_path.parent / "awakened_mace_model.model"
+        safe_output_model = validate_path_safe(safe_dataset_path.parent / "awakened_mace_model.model")
 
         epochs = str(self.config.mace_finetune_epochs) if self.config else "5"
 
@@ -208,9 +216,9 @@ class FinetuneManager:
         cmd.extend(
             [
                 "--train_file",
-                str(dataset_path),
+                str(safe_dataset_path),
                 "--model",
-                str(output_model),
+                str(safe_output_model),
                 "--epochs",
                 epochs,
             ]
@@ -224,8 +232,8 @@ class FinetuneManager:
             msg = f"Failed to run MACE finetuning command: {' '.join(cmd)}"
             raise RuntimeError(msg) from None
 
-        if not output_model.exists():
-            msg = f"Finetuned model was not created at {output_model}"
+        if not safe_output_model.exists():
+            msg = f"Finetuned model was not created at {safe_output_model}"
             raise RuntimeError(msg)
 
-        return str(output_model)
+        return str(safe_output_model)
