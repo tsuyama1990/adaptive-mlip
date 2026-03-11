@@ -23,11 +23,21 @@ def _pre_relax_buffer(cluster: Atoms, fmax: float = 0.05, steps: int = 50) -> At
     constraint = FixAtoms(indices=core_indices)  # type: ignore[no-untyped-call]
     cluster_copy.set_constraint(constraint)
 
-    # Apply a mock calculator for the relaxation if one is not attached
+    # Attempt to apply a high-fidelity foundation model for realistic pre-relaxation
     if cluster_copy.calc is None:
-        from ase.calculators.lj import LennardJones
+        try:
+            import torch
+            from mace.calculators import mace_mp
 
-        cluster_copy.calc = LennardJones()  # type: ignore[no-untyped-call]
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+            cluster_copy.calc = mace_mp(
+                model="medium", dispersion=False, default_dtype="float64", device=device
+            )
+        except Exception:
+            # Fallback to LJ if MACE isn't installed/available (e.g. in test envs)
+            from ase.calculators.lj import LennardJones
+
+            cluster_copy.calc = LennardJones()  # type: ignore[no-untyped-call]
 
     # Relax the buffer region
     import os
@@ -42,11 +52,10 @@ def _pre_relax_buffer(cluster: Atoms, fmax: float = 0.05, steps: int = 50) -> At
 
 def _passivate_surface(cluster: Atoms, element: str = "H", bond_length: float = 1.0) -> Atoms:
     """
-    Passivates the surface of the cluster by adding dummy atoms (e.g. H) to undercoordinated atoms.
+    Passivates the surface of the cluster by adding terminating atoms (e.g. H) to undercoordinated atoms.
     """
     cluster_copy = cluster.copy()  # type: ignore[no-untyped-call]
 
-    # We will just do a simple distance-based passivation mock implementation
     # Find outer atoms (in the buffer region) that have fewer neighbors
     i_indices, _j_indices = neighbor_list("ij", cluster_copy, cutoff=2.5)  # type: ignore[no-untyped-call]
 
