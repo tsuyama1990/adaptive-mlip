@@ -1,12 +1,34 @@
+# ruff: noqa: E402
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
-from unittest.mock import MagicMock, Mock
+from unittest.mock import Mock
 
-import pytest
 from ase import Atoms
 
-from pyacemaker.core.base import BaseEngine, BaseGenerator, BaseOracle, BaseTrainer
+from pyacemaker.core.base import BaseOracle
+
+
+class FakeActiveSetSelector:
+    def select(self, candidates, potential, n_select, anchor=None):
+        return candidates
+
+class FakeValidator:
+    def validate(self, potential_path, report_path, structure):
+        from pyacemaker.domain_models.validation import ValidationResult
+        return ValidationResult(
+            phonon_stable=True,
+            elastic_stable=True,
+            c_ij={"C11": 100, "C12": 50, "C44": 50},
+            bulk_modulus=100.0,
+            plots={},
+            report_path=str(report_path)
+        )
+
+
+import pytest
+
+from pyacemaker.core.base import BaseEngine, BaseGenerator, BaseTrainer
 from pyacemaker.core.exceptions import OrchestratorError
 from pyacemaker.domain_models import (
     DFTConfig,
@@ -144,8 +166,8 @@ def test_integration_workflow_complete(
             FakeOracle(),
             FakeTrainer(output_dir=tmp_path),
             FakeEngine(),
-            MagicMock(),
-            MagicMock(),
+            FakeActiveSetSelector(),
+            FakeValidator(),
         )
 
     monkeypatch.setattr(ModuleFactory, "create_modules", mock_create_modules)
@@ -220,8 +242,8 @@ def test_orchestrator_directory_creation_error(mock_config: PyAceConfig, monkeyp
             FakeOracle(),
             FakeTrainer(Path()),
             FakeEngine(),
-            MagicMock(),
-            MagicMock(),
+            FakeActiveSetSelector(),
+            FakeValidator(),
         )
 
     monkeypatch.setattr(ModuleFactory, "create_modules", mock_create_modules)
@@ -240,7 +262,7 @@ def test_orchestrator_error_handling_generator(mock_config: PyAceConfig, monkeyp
     mock_gen.generate.side_effect = RuntimeError("Generator failed")
 
     def mock_create_modules(cfg: PyAceConfig) -> tuple[Any, Any, Any, Any, Any, Any]:
-        return mock_gen, MagicMock(), MagicMock(), MagicMock(), MagicMock(), MagicMock()
+        return mock_gen, FakeActiveSetSelector(), FakeActiveSetSelector(), FakeActiveSetSelector(), FakeActiveSetSelector(), FakeActiveSetSelector()
 
     monkeypatch.setattr(ModuleFactory, "create_modules", mock_create_modules)
 
@@ -261,10 +283,10 @@ def test_orchestrator_error_handling_oracle_stream(
         return (
             FakeGenerator(elements=cfg.structure.elements),
             FailingOracle(),
-            MagicMock(),
-            MagicMock(),
-            MagicMock(),
-            MagicMock(),
+            FakeActiveSetSelector(),
+            FakeActiveSetSelector(),
+            FakeActiveSetSelector(),
+            FakeValidator(),
         )
 
     monkeypatch.setattr(ModuleFactory, "create_modules", mock_create_modules)

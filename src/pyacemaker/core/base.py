@@ -128,6 +128,17 @@ class BaseTrainer(ABC):
     """
 
     @abstractmethod
+    def incremental_train(
+        self,
+        new_data_path: str | Path,
+        strategy_config: Any,
+        initial_potential: str | Path | None = None,
+    ) -> Any:
+        """
+        Mixes a replay buffer with the new active learning data and runs incremental delta learning.
+        """
+
+    @abstractmethod
     def train(
         self, training_data_path: str | Path, initial_potential: str | Path | None = None
     ) -> Any:

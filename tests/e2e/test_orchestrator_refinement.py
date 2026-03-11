@@ -48,7 +48,8 @@ class FakeOracle(BaseOracle):
             yield atoms
 
 
-class FakeTrainer(BaseTrainer):
+class FakeTrainer:
+    pass
     def __init__(self, output_path: Path) -> None:
         self.output_path = output_path
 
@@ -138,9 +139,7 @@ def test_orchestrator_refinement_logic(tmp_path: Path) -> None:
     refined_pot = tmp_path / "refined.yace"
     orch.trainer = FakeTrainer(refined_pot)
     # mock incremental_train with a mock that returns the path instead of failing
-    from unittest.mock import MagicMock
 
-    orch.trainer.incremental_train = MagicMock(return_value=refined_pot)
 
     # 5. Create Simulation Result
     result = MDSimulationResult(

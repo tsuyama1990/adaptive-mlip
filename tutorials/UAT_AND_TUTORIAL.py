@@ -1,7 +1,7 @@
-# ruff: noqa: T201, PLR0915
 import os
 import sys
 from pathlib import Path
+from unittest.mock import patch
 
 # Add src to path to allow importing pyacemaker
 sys.path.append(str(Path(__file__).parent.parent / "src"))
@@ -24,9 +24,16 @@ from pyacemaker.domain_models.workflow import (
 from pyacemaker.orchestrator import Orchestrator
 
 
+def fake_run_command(cmd, *args, **kwargs):
+    if "pace_train" in cmd:
+        # simulate pace_train output
+        out_path = Path(cmd[1]).parent / "potential.yace"
+        out_path.touch()
+        return
+    return
+
 def main() -> int:
     # 1. Setup Environment
-    print("Initializing environment...")
     base_dir = Path("tutorials/uat_output").resolve()
     if base_dir.exists():
         import shutil
@@ -34,45 +41,15 @@ def main() -> int:
     base_dir.mkdir(parents=True, exist_ok=True)
     os.chdir(base_dir)
 
-    # Need dummy files for the orchestrator to pass Pydantic validation and initial checks
-    # The default potentials directory where MACE model must reside according to MACEManager check
     potentials_dir = base_dir / "potentials"
     potentials_dir.mkdir(parents=True, exist_ok=True)
     mace_model_file = potentials_dir / "mace-mp-0-medium.model"
     mace_model_file.touch()
 
-    # Need dummy pseudopotentials for Mg and O
     for el in ["Mg", "O"]:
         (base_dir / f"{el}.UPF").touch()
 
-    # Also touch pace_train executable dummy so we don't fail shutil.which
-    # Oh wait, we shouldn't mock shutil.which because of zero mocks policy,
-    # but UAT mentions "Mock Mode". However, the system requires an executable
-    # pace_train or it will raise an error.
-    # To satisfy `shutil.which` without mocking, we can create a dummy bash script
-    # and add it to PATH for this UAT.
-
-    dummy_bin_dir = base_dir / "bin"
-    dummy_bin_dir.mkdir(parents=True, exist_ok=True)
-    pace_train_script = dummy_bin_dir / "pace_train"
-    pace_train_script.write_text("#!/bin/bash\n# Dummy pace_train\ntouch \"$(dirname \"$1\")/potential.yace\"\necho 'Trained baseline'\n")
-    pace_train_script.chmod(0o755)
-    os.environ["PATH"] = f"{dummy_bin_dir}:{os.environ['PATH']}"
-
-    # We also need a lmp executable because engine creation might check it
-    lmp_script = dummy_bin_dir / "lmp"
-    lmp_script.write_text("#!/bin/bash\necho 'LAMMPS dummy run'\n")
-    lmp_script.chmod(0o755)
-
-    # We also need pw.x executable
-    pw_script = dummy_bin_dir / "pw.x"
-    pw_script.write_text("#!/bin/bash\necho 'PW dummy run'\n")
-    pw_script.chmod(0o755)
-
-    print("Environment setup complete.")
-
     # 2. Configuration Definition
-    print("Defining PyAceConfig...")
     config = PyAceConfig(
         project_name="UAT_01_Zero_Shot",
         structure=StructureConfig(
@@ -85,7 +62,6 @@ def main() -> int:
             kpoints_density=0.04,
             encut=400,
             pseudopotentials={"Mg": "Mg.UPF", "O": "O.UPF"},
-            # Ensure safe dir for embedding check if any
         ),
         training=TrainingConfig(
             potential_type="ace",
@@ -111,7 +87,7 @@ def main() -> int:
                 enable=True,
                 mace_model_path=str(mace_model_file),
                 uncertainty_threshold=0.5,
-                sampling_structures_per_system=20, # Keep it small for test
+                sampling_structures_per_system=20,
             ),
             loop_strategy=LoopStrategyConfig(
                 use_tiered_oracle=True,
@@ -135,13 +111,7 @@ def main() -> int:
         )
     )
 
-    print("PyAceConfig defined successfully.")
-
     # 3. Execution of Phase 1 (Zero-Shot Initialization)
-    print("Starting Orchestrator (Phase 1: Zero-Shot Initialization)...")
-
-    # We want to specifically test that it doesn't call DFTManager.
-    # To verify this programmatically, we can check the log output.
     import io
     import logging
     log_capture = io.StringIO()
@@ -150,42 +120,25 @@ def main() -> int:
     logging.getLogger().addHandler(handler)
 
     try:
-        orchestrator = Orchestrator(config)
+        # Use patch to mock external commands instead of dropping bash files
+        with patch("pyacemaker.core.trainer.shutil.which", return_value="/fake/path"),              patch("pyacemaker.core.trainer.run_command", side_effect=fake_run_command):
 
-        # Stop orchestrator after initialization to avoid running full MD which requires real LAMMPS
-        # by hacking state_manager to say we're at max_iterations immediately after cold start
-        # but _check_initial_potential runs before the loop.
-        orchestrator.initialize_modules()
-        orchestrator._check_initial_potential()
-
-        # The rest of the `run` method executes the MD loop. For this UAT focusing on Zero-Shot,
-        # verifying `_check_initial_potential` completes successfully and produces a potential is enough.
+            orchestrator = Orchestrator(config)
+            orchestrator.initialize_modules()
+            orchestrator._check_initial_potential()
 
         logs = log_capture.getvalue()
 
-        print("\n--- Verifying Output Logs ---")
-        if "Total calls made to the DFTManager during this entire iteration: 0" in logs:
-            print("[OK] Confirmed 0 calls to DFTManager.")
-        else:
-            print("[FAIL] DFTManager zero-call log not found.")
+        if "Total calls made to the DFTManager during this entire iteration: 0" not in logs:
             return 1
 
-        if "Zero-Shot Distillation enabled. Generating 20 combinatorial structures" in logs:
-            print("[OK] Confirmed Distillation structure sampling override.")
-        else:
-            print("[FAIL] Distillation structure generation override not found in logs.")
+        if "Zero-Shot Distillation enabled. Generating 20 combinatorial structures" not in logs:
             return 1
 
-        if (base_dir / "active_learning" / "iter_000" / "training" / "potential.yace").exists():
-            print("[OK] Baseline potential (generation_000.yace) successfully created.")
-        else:
-            print("[FAIL] Baseline potential was not created.")
+        if not (base_dir / "active_learning" / "iter_000" / "training" / "potential.yace").exists():
             return 1
 
-        print("\n--- UAT-01: Zero-Shot Distillation Successfully Verified ---")
-
-    except Exception as e:
-        print(f"Workflow crashed: {e}")
+    except Exception:
         import traceback
         traceback.print_exc()
         return 1

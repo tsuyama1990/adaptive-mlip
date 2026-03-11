@@ -1,7 +1,27 @@
+# ruff: noqa: E402
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
+
+from pyacemaker.domain_models.validation import ValidationResult
+
+
+class FakeActiveSetSelector:
+    def select(self, candidates, potential, n_select, anchor=None):
+        return candidates
+
+class FakeValidator:
+    def validate(self, potential_path, report_path, structure):
+        return ValidationResult(
+            phonon_stable=True,
+            elastic_stable=True,
+            c_ij={"C11": 100, "C12": 50, "C44": 50},
+            bulk_modulus=100.0,
+            plots={},
+            report_path=str(report_path)
+        )
+
 
 import pytest
 from ase import Atoms
@@ -97,7 +117,7 @@ def orchestrator(mock_config: PyAceConfig, tmp_path: Path) -> Orchestrator:
         orch.oracle = MagicMock()
         orch.trainer = MagicMock()
         orch.engine = MagicMock()
-        orch.active_set_selector = MagicMock()
+        orch.active_set_selector = FakeActiveSetSelector()
 
         return orch
 
@@ -187,14 +207,14 @@ def test_run_loop_iteration_halt(orchestrator: Orchestrator, tmp_path: Path) -> 
 
     # Type assertions for mypy
     assert isinstance(orchestrator.engine, MagicMock)
-    assert isinstance(orchestrator.active_set_selector, MagicMock)
+    assert isinstance(orchestrator.active_set_selector, FakeActiveSetSelector)
     assert isinstance(orchestrator.oracle, MagicMock)
     assert isinstance(orchestrator.trainer, MagicMock)
 
     orchestrator.engine.run.return_value = result
 
     # Mock refinement
-    orchestrator.active_set_selector.select.return_value = iter([Atoms("Fe")])
+    # Use actual fake return logic if needed
     orchestrator.oracle.compute.return_value = iter([Atoms("Fe")])
     refined_pot = tmp_path / "refined.yace"
     refined_pot.touch()

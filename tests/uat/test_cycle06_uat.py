@@ -65,7 +65,10 @@ def test_scenario_06_01_active_learning_campaign(uat_config: PyAceConfig, tmp_pa
     """
     with (
         patch("pyacemaker.orchestrator.setup_logger"),
-        patch("pyacemaker.factory.ModuleFactory.create_modules") as mock_factory,
+        patch("pyacemaker.factory.ModuleFactory.create_modules") as mock_factory, \
+            patch("pyacemaker.orchestrator.FinetuneManager"), \
+            patch("pyacemaker.core.oracle.MACEManager"), \
+            patch("pyacemaker.orchestrator.extract_intelligent_cluster", return_value=Atoms("Fe")),
     ):
         # Mock modules
         mock_gen = MagicMock()
@@ -130,6 +133,7 @@ def test_scenario_06_01_active_learning_campaign(uat_config: PyAceConfig, tmp_pa
 
         # We also mock incremental_train since that's what's called now for refinements
         mock_trainer.incremental_train = MagicMock(return_value=pot2)
+        mock_trainer.train = MagicMock(return_value=pot2)
 
         # Add dummy cutout config that tests fail because of missing config
         from pyacemaker.domain_models.workflow import CutoutConfig
@@ -172,7 +176,10 @@ def test_scenario_06_02_resume_capability(uat_config: PyAceConfig, tmp_path: Pat
 
     with (
         patch("pyacemaker.orchestrator.setup_logger"),
-        patch("pyacemaker.factory.ModuleFactory.create_modules") as mock_factory,
+        patch("pyacemaker.factory.ModuleFactory.create_modules") as mock_factory, \
+            patch("pyacemaker.orchestrator.FinetuneManager"), \
+            patch("pyacemaker.core.oracle.MACEManager"), \
+            patch("pyacemaker.orchestrator.extract_intelligent_cluster", return_value=Atoms("Fe")),
     ):
         mock_gen = MagicMock()
         mock_oracle = MagicMock()
