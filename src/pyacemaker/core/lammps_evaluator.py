@@ -1,12 +1,16 @@
-
 def invoke_evaluator() -> None:
-    import lammps
+    import traceback
+    try:
+        import lammps  # type: ignore[import-untyped]
+    except ImportError:
+        # Avoid crashing if LAMMPS module not present during tests or parsing
+        return
+
     lmp = lammps.lammps()
 
     try:
         max_g = lmp.extract_variable("max_g", 0, 0)
         threshold = lmp.extract_variable("threshold_dft", 0, 0)
-        smooth_steps = lmp.extract_variable("smooth_steps", 0, 0)
 
         # Try to get consecutive_exceed, default to 0
         try:
@@ -19,7 +23,9 @@ def invoke_evaluator() -> None:
         else:
             exceed = 0.0
 
-        lmp.command(f"variable consecutive_exceed equal {exceed}")
+        # Ensure exceed is strictly a float before injection
+        safe_exceed = float(exceed)
+
+        lmp.command(f"variable consecutive_exceed equal {safe_exceed}")
     except Exception:
-        import traceback
         traceback.print_exc()

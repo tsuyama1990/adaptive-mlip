@@ -122,7 +122,7 @@ DEFAULT_VALIDATION_ELASTIC_STEPS = 5
 
 # Security constants
 # Regex for detecting malicious shell code injections
-MALICIOUS_SHELL_PATTERN: Final[str] = r"(\bexec\b|\bsystem\b|\bos\.|;|\||&|<|>|`|\$\(|\$\{)"
+MALICIOUS_SHELL_PATTERN: Final[str] = r"(\bexec\b|\beval\b|\bsystem\b|\bos\.|subprocess|;|\||&|<|>|`|\$\(|\$\{|\n|\r|\\|\\0)"
 
 # Audit fix: Expanded list of dangerous characters
 DANGEROUS_PATH_CHARS: Final[set[str]] = {
@@ -148,6 +148,9 @@ DANGEROUS_PATH_CHARS: Final[set[str]] = {
     '"',
     "!",
     "#",
+    "\\",
+    "\0",
+    "%00"
 }
 
 # RAM Disk logic

@@ -108,7 +108,7 @@ tests/unit/test_oracle.py::test_dft_manager_embedding
 tests/unit/test_oracle_streaming.py::test_dft_manager_streaming_behavior
 tests/unit/test_oracle_streaming.py::test_dft_manager_streaming_behavior
 tests/unit/test_oracle_streaming.py::test_dft_manager_streaming_behavior
-  /home/jules/.pyenv/versions/3.12.12/lib/python3.12/multiprocessing/popen_fork.py:66: DeprecationWarning: This process (pid=9346) is multi-threaded, use of fork() may lead to deadlocks in the child.
+  /home/jules/.pyenv/versions/3.12.12/lib/python3.12/multiprocessing/popen_fork.py:66: DeprecationWarning: This process (pid=15338) is multi-threaded, use of fork() may lead to deadlocks in the child.
     self.pid = os.fork()
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
@@ -127,7 +127,8 @@ src/pyacemaker/core/engine.py                  131     31    76%   49, 63-64, 77
 src/pyacemaker/core/exceptions.py                8      0   100%
 src/pyacemaker/core/generator.py                53     11    79%   36-39, 59, 62, 97, 107, 113, 115, 138
 src/pyacemaker/core/io_manager.py               74     30    59%   58-71, 78-81, 106-107, 110-115, 124-125, 129, 133-141
-src/pyacemaker/core/lammps_generator.py        149     21    86%   40-41, 149-151, 164-180, 188, 207-214
+src/pyacemaker/core/lammps_evaluator.py         21     20     5%   2-31
+src/pyacemaker/core/lammps_generator.py        150     22    85%   43-44, 51-52, 127, 146-162, 170, 189-196
 src/pyacemaker/core/loop.py                     70      6    91%   56, 63, 79-82, 85
 src/pyacemaker/core/m3gnet_wrapper.py           46     19    59%   27-28, 32-33, 52-70, 98-105
 src/pyacemaker/core/oracle.py                  173     41    76%   143-144, 194-199, 235-237, 245-246, 249-250, 268-271, 274-306, 322-323, 326-327, 335, 362
@@ -135,7 +136,7 @@ src/pyacemaker/core/policy.py                  114     33    71%   29-30, 80-109
 src/pyacemaker/core/policy_factory.py           31      7    77%   47, 53-54, 58-59, 86-87
 src/pyacemaker/core/report.py                   12      1    92%   85
 src/pyacemaker/core/state_manager.py            34      2    94%   37-38
-src/pyacemaker/core/trainer.py                 117     35    70%   41-56, 113-114, 125-126, 154-157, 160-161, 168-169, 172-173, 197-198, 207-208, 229-233, 236-237
+src/pyacemaker/core/trainer.py                 117     35    70%   41-56, 113-114, 125-126, 155-158, 161-162, 169-170, 173-174, 198-199, 208-209, 231-235, 238-239
 src/pyacemaker/core/validator.py                68      7    90%   63, 68, 75-76, 79, 113, 150
 src/pyacemaker/domain_models/__init__.py        11      0   100%
 src/pyacemaker/domain_models/config.py          22      0   100%
@@ -167,13 +168,13 @@ src/pyacemaker/utils/elastic.py                 80     52    35%   34-35, 46-137
 src/pyacemaker/utils/embedding.py               36      6    83%   41-42, 49-50, 61-62
 src/pyacemaker/utils/extraction.py             118     19    84%   36-40, 72-88, 91-96, 109
 src/pyacemaker/utils/io.py                      73      0   100%
-src/pyacemaker/utils/path.py                    41      6    85%   57-61, 64-65
+src/pyacemaker/utils/path.py                    43      5    88%   38-40, 55-56
 src/pyacemaker/utils/perturbations.py           43      1    98%   77
 src/pyacemaker/utils/phonons.py                 51      2    96%   51, 69
 src/pyacemaker/utils/process.py                 32      6    81%   76-83
 src/pyacemaker/utils/structure.py                6      2    67%   19-20
 --------------------------------------------------------------------------
-TOTAL                                         3197    539    83%
-====================== 253 passed, 224 warnings in 23.96s ======================
+TOTAL                                         3221    559    83%
+====================== 253 passed, 224 warnings in 19.92s ======================
 /app/.venv/lib/python3.12/site-packages/coverage/inorout.py:561: CoverageWarning: Module dev_src was never imported. (module-not-imported); see https://coverage.readthedocs.io/en/7.13.4/messages.html#warning-module-not-imported
   self.warn(f"Module {pkg} was never imported.", slug="module-not-imported")

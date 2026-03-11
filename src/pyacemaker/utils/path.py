@@ -19,11 +19,40 @@ def validate_path_safe(path: Path) -> Path:  # noqa: C901
         ValueError: If the path contains dangerous characters, traversal attempts,
                     or resolves outside allowed directories (CWD, temp, /dev/shm).
     """
-    s = str(path)
+    import os
+    import urllib.parse
+
+    # Decode to catch encoded traversals like %2E%2E
+    s = urllib.parse.unquote(str(path))
 
     # Check for dangerous patterns in string representation BEFORE resolve
-    if ".." in s:
+    if ".." in s or "\\.." in s or "/.." in s:
         msg = f"Path traversal attempt detected (parent directory reference): {path}"
+        raise ValueError(msg)
+
+    # Resolve first to avoid TOCTOU on existence/symlink checks.
+    # realpath resolves symlinks.
+    try:
+        resolved_str = os.path.realpath(path)
+        resolved = Path(resolved_str)
+    except Exception as e:
+        msg = f"Invalid path resolution: {path}"
+        raise ValueError(msg) from e
+
+    # Prevent symlink traversal attacks
+    if path.is_symlink():
+        msg = f"Symlink path traversal attacks detected: {path}"
+        raise ValueError(msg)
+
+    # Verify it resolves correctly
+    if not resolved.exists() and not resolved.parent.exists():
+        msg = f"Parent directory does not exist: {resolved.parent}"
+        raise ValueError(msg)
+
+    # Re-check the fully resolved string for bad patterns
+    resolved_s = urllib.parse.unquote(str(resolved))
+    if ".." in resolved_s or "\\.." in resolved_s or "/.." in resolved_s:
+        msg = f"Path traversal attempt detected in resolved path: {resolved}"
         raise ValueError(msg)
 
     if any(c in s for c in DANGEROUS_PATH_CHARS):
@@ -33,35 +62,6 @@ def validate_path_safe(path: Path) -> Path:  # noqa: C901
     # Ensure filename doesn't start with dash (flag injection)
     if path.name.startswith("-"):
         msg = f"Filename cannot start with '-': {path.name}"
-        raise ValueError(msg)
-
-    # Prevent symlink traversal attacks BEFORE resolution
-    if path.is_symlink():
-        msg = f"Symlink path traversal attacks detected: {path}"
-        raise ValueError(msg)
-
-    try:
-        # Canonicalize path.
-        # Enforce strict=True if the path exists to catch symlink attacks immediately.
-        # If it doesn't exist (e.g. output file), we must resolve based on parent.
-        if path.exists():
-            resolved = path.resolve(strict=True)
-        # For non-existent files, check parent
-        elif path.parent.exists():
-            resolved_parent = path.parent.resolve(strict=True)
-            # Combine resolved parent with filename
-            resolved = resolved_parent / path.name
-        else:
-            # If even parent doesn't exist, this is likely unsafe or too deep.
-            # Reject resolving completely to prevent TOCTOU and fake containment.
-            pass
-
-    except Exception as e:
-        msg = f"Invalid path resolution: {path}"
-        raise ValueError(msg) from e
-
-    if not path.exists() and not path.parent.exists():
-        msg = f"Parent directory does not exist: {path.parent}"
         raise ValueError(msg)
 
     base_dir = Path.cwd().resolve()

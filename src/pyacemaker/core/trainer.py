@@ -130,7 +130,8 @@ class PacemakerTrainer(BaseTrainer):
 
         dump_yaml(pacemaker_config, safe_input_yaml_path)
 
-        # Run pace_train
+        # Run pace_train safely
+        # Note: shell=False in run_command avoids needing shlex.quote for list items
         cmd = (
             self.config.pace_train_command.copy()
             if self.config.pace_train_command
@@ -209,9 +210,10 @@ class FinetuneManager:
 
         safe_output_model = validate_path_safe(safe_dataset_path.parent / "awakened_mace_model.model")
 
-        epochs = str(self.config.mace_finetune_epochs) if self.config else "5"
+        epochs = str(int(self.config.mace_finetune_epochs)) if self.config else "5"
 
         # Finetune using configured MACE CLI
+        # Note: shell=False in run_command avoids needing shlex.quote for list items
         cmd = mace_finetune_cmd.copy()
         cmd.extend(
             [

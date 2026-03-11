@@ -1,4 +1,3 @@
-import shlex
 from pathlib import Path
 from typing import TextIO
 
@@ -32,6 +31,10 @@ class LammpsScriptGenerator:
         Quotes a path for LAMMPS script safety after validation.
         Uses caching to avoid redundant validation calls.
         """
+        import re
+
+        from pyacemaker.domain_models.constants import LAMMPS_SAFE_CMD_PATTERN
+
         # Sanitize input path
         # Note: path must be string for lru_cache
         p = Path(path)
@@ -40,8 +43,16 @@ class LammpsScriptGenerator:
             msg = f"Path {safe_path} is invalid or has an invalid parent directory."
             raise ValueError(msg)
 
-        # Use shlex.quote for shell safety
-        return shlex.quote(str(safe_path))
+        path_str = str(safe_path)
+
+        # In LAMMPS, quotes are mostly evaluated internally and not shell interpreted
+        # A safest approach is to ensure the path conforms strictly to safe characters
+        if not re.match(LAMMPS_SAFE_CMD_PATTERN, path_str):
+            msg = f"Path '{path_str}' contains characters not allowed in LAMMPS inputs."
+            raise ValueError(msg)
+
+        # We return it in double quotes specifically for LAMMPS
+        return f'"{path_str}"'
 
     def _gen_potential_pure(
         self, buffer: TextIO, potential_path: Path, elements: list[str]
@@ -105,50 +116,22 @@ class LammpsScriptGenerator:
         buffer.write(f"variable threshold_dft equal {self.config.uncertainty_threshold}\n")
         buffer.write(f"variable smooth_steps equal {self.config.smooth_steps}\n")
 
-        # Python evaluator generation
-        # The python script will read variable max_g, threshold_dft, and smooth_steps
-        # It maintains a consecutive_exceed variable in LAMMPS directly.
+        # Python evaluator referencing static module
         buffer.write("variable consecutive_exceed equal 0.0\n")
-        eval_py = """
-def invoke_evaluator() -> None:
-    import lammps
-    lmp = lammps.lammps()
 
-    try:
-        max_g = lmp.extract_variable("max_g", 0, 0)
-        threshold = lmp.extract_variable("threshold_dft", 0, 0)
-        smooth_steps = lmp.extract_variable("smooth_steps", 0, 0)
+        # Get absolute path to static lammps_evaluator.py
+        import pyacemaker.core.lammps_evaluator
 
-        # Try to get consecutive_exceed, default to 0
-        try:
-            exceed = lmp.extract_variable("consecutive_exceed", 0, 0)
-        except Exception:
-            exceed = 0.0
+        mod_file = pyacemaker.core.lammps_evaluator.__file__
+        if not mod_file:
+            msg = "Could not find static lammps_evaluator.py module path"
+            raise RuntimeError(msg)
 
-        if max_g > threshold:
-            exceed += 1.0
-        else:
-            exceed = 0.0
+        evaluator_path = Path(mod_file).resolve()
 
-        lmp.command(f"variable consecutive_exceed equal {exceed}")
-    except Exception:
-        import traceback
-        traceback.print_exc()
-"""
-        evaluator_path = potential_path.parent / "evaluator.py"
-        # Ensure safe write logic by avoiding arbitrary write-access
-        import logging
-        logger = logging.getLogger(__name__)
-
-        try:
-            safe_evaluator_path = validate_path_safe(evaluator_path)
-            with safe_evaluator_path.open("w") as f:
-                f.write(eval_py)
-            buffer.write(f'python invoke_evaluator invoke file {shlex.quote(str(safe_evaluator_path))}\n')
-            buffer.write(f"fix py_invoke all python/invoke {self.config.check_interval} post_force invoke_evaluator\n")
-        except Exception as e:
-            # Fallback for minimal watchdog if python fails
-            logger.warning(f"Failed to generate python evaluator: {e}")
+        quoted_evaluator_path = self._quote(str(evaluator_path))
+        buffer.write(f'python invoke_evaluator invoke file {quoted_evaluator_path}\n')
+        buffer.write(f"fix py_invoke all python/invoke {self.config.check_interval} post_force invoke_evaluator\n")
 
         buffer.write("variable exceed_flag equal \"v_consecutive_exceed >= v_smooth_steps\"\n")
         buffer.write(
