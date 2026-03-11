@@ -64,9 +64,31 @@ class PacemakerTrainer(BaseTrainer):
         """
         Mixes a replay buffer with the new active learning data and runs incremental delta learning.
         """
-        # In a real implementation this would merge replay buffer with the new dataset
-        # Here we just delegate to train
-        _replay_buffer = self.get_replay_buffer(strategy_config.replay_buffer_size)
+        from ase.io import iread, write
+
+        new_data_path_resolved = Path(new_data_path).resolve()
+        self._validate_training_data(new_data_path_resolved)
+
+        replay_buffer = self.get_replay_buffer(strategy_config.replay_buffer_size)
+
+        if replay_buffer:
+            # Create a combined dataset file
+            combined_data_path = new_data_path_resolved.parent / "incremental_combined.extxyz"
+
+            # Stream the new data and replay buffer into the combined file
+            def combined_stream() -> Any:
+                yield from replay_buffer
+                yield from iread(str(new_data_path_resolved))
+
+            try:
+                write(combined_data_path, combined_stream(), format="extxyz")
+            except Exception as e:
+                msg = f"Failed to merge replay buffer and new training data: {e}"
+                raise TrainerError(msg) from e
+
+            # Train using the combined dataset
+            return self.train(str(combined_data_path), initial_potential)
+
         return self.train(new_data_path, initial_potential)
 
     def train(

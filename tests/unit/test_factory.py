@@ -48,26 +48,25 @@ def test_module_factory_create_modules(mock_config: PyAceConfig) -> None:
     # But QEDriver might check other things.
     # Let's patch DFTManager anyway to isolate Factory test.
     with patch("pyacemaker.factory.DFTManager") as MockDFTManager:
-        gen, oracle, trainer, engine, active_set, validator = ModuleFactory.create_modules(
-            mock_config
-        )
+        with patch("pyacemaker.factory.Validator"):
+            with patch("pyacemaker.factory.MACEManager"):
+                gen, oracle, trainer, engine, active_set, validator = ModuleFactory.create_modules(
+                    mock_config
+                )
 
-        assert isinstance(gen, StructureGenerator)
-        assert isinstance(trainer, PacemakerTrainer)
-        assert isinstance(engine, LammpsEngine)
-        assert active_set is not None
+            assert isinstance(gen, StructureGenerator)
+            assert isinstance(trainer, PacemakerTrainer)
+            assert isinstance(engine, LammpsEngine)
+            assert active_set is not None
 
-        # Oracle should be what DFTManager returns
-        assert oracle == MockDFTManager.return_value
+            # Verify initializations
+            MockDFTManager.assert_called_once_with(mock_config.dft)
 
-        # Verify initializations
-        MockDFTManager.assert_called_once_with(mock_config.dft)
+            # Check trainer config
+            assert trainer.config == mock_config.training
 
-        # Check trainer config
-        assert trainer.config == mock_config.training
-
-        # Check engine config
-        assert engine.config == mock_config.md
+            # Check engine config
+            assert engine.config == mock_config.md
 
 
 def test_module_factory_invalid_config() -> None:

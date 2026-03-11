@@ -70,7 +70,7 @@ def test_lammps_engine_run(mock_md_config: MDConfig, mock_driver: Any, tmp_path:
     assert len(script_content) == 1
     script = script_content[0]
 
-    assert "fix halt" in script
+    assert "fix python_invoke" in script
     assert "read_data" in script
 
 
