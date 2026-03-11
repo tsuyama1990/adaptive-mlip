@@ -92,7 +92,7 @@ src/pyacemaker/core/active_set.py               71     10    86%   46-47, 60-61,
 src/pyacemaker/core/base.py                     30      0   100%
 src/pyacemaker/core/config_generator.py         36      3    92%   56-58
 src/pyacemaker/core/directory_manager.py        20      0   100%
-src/pyacemaker/core/engine.py                  124     29    77%   50, 64-65, 71-72, 86, 88, 91-92, 104-105, 107-108, 114-115, 147, 162-167, 173-174, 186, 211-216, 238
+src/pyacemaker/core/engine.py                  126     29    77%   50, 64-65, 78-79, 93, 95, 98-99, 111-112, 114-115, 121-122, 154, 169-174, 180-181, 193, 218-223, 245
 src/pyacemaker/core/exceptions.py                8      0   100%
 src/pyacemaker/core/generator.py                53     11    79%   36-39, 59, 62, 97, 107, 113, 115, 138
 src/pyacemaker/core/io_manager.py               74     30    59%   58-71, 78-81, 106-107, 110-115, 124-125, 129, 133-141
@@ -104,7 +104,7 @@ src/pyacemaker/core/policy.py                  110     28    75%   30-31, 81-106
 src/pyacemaker/core/policy_factory.py           31      7    77%   47, 53-54, 58-59, 86-87
 src/pyacemaker/core/report.py                   12      1    92%   85
 src/pyacemaker/core/state_manager.py            34      2    94%   37-38
-src/pyacemaker/core/trainer.py                 105     31    70%   41-52, 106-107, 113-114, 134-137, 140-141, 148-149, 152-153, 175-176, 179-180, 201-205, 208-209
+src/pyacemaker/core/trainer.py                 105     31    70%   41-52, 106-107, 115-116, 136-139, 142-143, 150-151, 154-155, 177-178, 181-182, 203-207, 210-211
 src/pyacemaker/core/validator.py                68      7    90%   63, 68, 75-76, 79, 113, 150
 src/pyacemaker/domain_models/__init__.py        11      0   100%
 src/pyacemaker/domain_models/config.py          22      0   100%
@@ -118,7 +118,7 @@ src/pyacemaker/domain_models/scenario.py         7      0   100%
 src/pyacemaker/domain_models/structure.py       71      4    94%   97-98, 116-117
 src/pyacemaker/domain_models/training.py        47      0   100%
 src/pyacemaker/domain_models/validation.py      17      0   100%
-src/pyacemaker/domain_models/workflow.py        58      4    93%   76-77, 79-80
+src/pyacemaker/domain_models/workflow.py        60      4    93%   78-79, 81-82
 src/pyacemaker/factory.py                       32      3    91%   82-84
 src/pyacemaker/interfaces/__init__.py            5      0   100%
 src/pyacemaker/interfaces/eon_driver.py         74     12    84%   86, 133-142, 158, 162
@@ -142,5 +142,5 @@ src/pyacemaker/utils/phonons.py                 51      2    96%   51, 69
 src/pyacemaker/utils/process.py                 32      6    81%   76-83
 src/pyacemaker/utils/structure.py                6      2    67%   19-20
 --------------------------------------------------------------------------
-TOTAL                                         3092    498    84%
-======================= 253 passed, 3 warnings in 3.39s ========================
+TOTAL                                         3096    498    84%
+======================= 253 passed, 3 warnings in 3.16s ========================

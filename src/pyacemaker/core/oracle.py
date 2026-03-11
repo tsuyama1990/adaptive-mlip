@@ -87,9 +87,9 @@ class DFTManager(BaseOracle):
 
     def _compute_generator(self, structures: Iterator[Atoms], batch_size: int) -> Iterator[Atoms]:
         """Internal generator for streaming computations processing one-by-one without batch lists."""
-        for i, atoms in enumerate(structures):
-            with tempfile.TemporaryDirectory() as work_dir:
-                work_path = Path(work_dir)
+        with tempfile.TemporaryDirectory() as work_dir:
+            work_path = Path(work_dir)
+            for i, atoms in enumerate(structures):
                 calc_dir = work_path / f"calc_{i}"
                 calc_dir.mkdir()
                 yield self._process_structure(atoms, str(calc_dir))
@@ -222,15 +222,15 @@ class MACEManager(BaseOracle):
 
         # Proceed with containment check
         if not canonical_path.is_relative_to(allowed_dir):
-            msg = f"MACE model path {canonical_path} is outside allowed directory {allowed_dir}"
+            msg = "Invalid MACE model path."
             raise ValueError(msg)
 
         # We will use `os.path.realpath` as explicitly instructed by the audit.
         if not canonical_path.exists():
-            msg = f"MACE model path does not exist: {canonical_path}"
+            msg = "MACE model path does not exist."
             raise FileNotFoundError(msg)
         if not canonical_path.is_file():
-            msg = f"MACE model path must be a file: {canonical_path}"
+            msg = "MACE model path must be a file."
             raise ValueError(msg)
 
         self.model_path = str(canonical_path)

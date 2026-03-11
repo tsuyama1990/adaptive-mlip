@@ -69,6 +69,8 @@ class CutoutConfig(BaseModel):
     enable_pre_relaxation: bool = True
     enable_passivation: bool = True
     passivation_element: str = "H"
+    pre_relax_fmax: float = Field(0.05, description="Force tolerance for pre-relaxation")
+    pre_relax_steps: int = Field(50, description="Maximum steps for pre-relaxation")
 
     @model_validator(mode="after")
     def validate_radii(self) -> "CutoutConfig":

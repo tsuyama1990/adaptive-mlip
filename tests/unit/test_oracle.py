@@ -59,13 +59,13 @@ def test_dft_manager_compute_success(mock_dft_config: DFTConfig) -> None:
     fake_driver = FakeDriver()
 
     # Inject fake driver
-    manager = DFTManager(mock_dft_config, driver=fake_driver)  # type: ignore[arg-type]
+    manager = DFTManager(mock_dft_config, driver=fake_driver)
 
     # Verify generator behavior with next() instead of list()
     generator = manager.compute(iter([atoms]))
     result = next(generator)
 
-    assert result.get_potential_energy() == TEST_ENERGY_GENERIC  # type: ignore[no-untyped-call]
+    assert result.get_potential_energy() == TEST_ENERGY_GENERIC
 
     # ProcessPoolExecutor copies state, so we can't easily assert on fake_driver call_count
     # Verify generator returned the correctly calculated atoms object instead.
@@ -92,6 +92,7 @@ def test_dft_manager_self_healing(
             return self._result_value, self._exception
 
     class DummyExecutor:
+        call_count: int = 0
         def __init__(self, max_workers: int) -> None:
             # We track the call count at the class level because DummyExecutor is instantiated fresh each loop
             pass
@@ -110,7 +111,7 @@ def test_dft_manager_self_healing(
             calc = MockCalculator(fail_count=0)
             atoms = args[1]
             atoms.calc = calc
-            atoms.get_potential_energy()  # type: ignore[no-untyped-call]
+            atoms.get_potential_energy()
             return DummyFuture(calc, None)
 
     DummyExecutor.call_count = 0
@@ -118,12 +119,12 @@ def test_dft_manager_self_healing(
     monkeypatch.setattr("concurrent.futures.ProcessPoolExecutor", DummyExecutor)
 
     fake_driver = FakeDriver()
-    manager = DFTManager(mock_dft_config, driver=fake_driver)  # type: ignore[arg-type]
+    manager = DFTManager(mock_dft_config, driver=fake_driver)
 
     gen = manager.compute(iter([atoms]))
     result = next(gen)
 
-    assert result.get_potential_energy() == TEST_ENERGY_GENERIC  # type: ignore[no-untyped-call]
+    assert result.get_potential_energy() == TEST_ENERGY_GENERIC
 
 
 def test_dft_manager_fatal_error(
@@ -160,7 +161,7 @@ def test_dft_manager_fatal_error(
 
     fake_driver = FakeDriver(calcs=MockCalculator(fail_count=100))
 
-    manager = DFTManager(mock_dft_config, driver=fake_driver)  # type: ignore[arg-type]
+    manager = DFTManager(mock_dft_config, driver=fake_driver)
 
     # Now raises OracleError
     # Use next() to trigger execution
@@ -209,7 +210,7 @@ def test_dft_manager_setup_error(
 
     fake_driver = FakeDriver(calcs=MockCalculator(setup_error=True))
 
-    manager = DFTManager(mock_dft_config, driver=fake_driver)  # type: ignore[arg-type]
+    manager = DFTManager(mock_dft_config, driver=fake_driver)
 
     gen = manager.compute(iter([atoms]))
     with pytest.raises(OracleError, match="Oracle calculation failed"):
@@ -259,11 +260,11 @@ def test_dft_manager_invalid_input(mock_dft_config: DFTConfig) -> None:
 
     # Check that it raises TypeError immediately upon calling compute (before next)
     with pytest.raises(TypeError, match="Oracle failed to create iterator"):
-        manager.compute(atoms_list)  # type: ignore[arg-type]
+        manager.compute(atoms_list)
 
     # Explicitly check None
     with pytest.raises(TypeError, match="Oracle failed to create iterator"):
-        manager.compute(None)  # type: ignore[arg-type]
+        manager.compute(None)
 
 
 def test_dft_manager_empty_iterator(mock_dft_config: DFTConfig) -> None:
@@ -298,7 +299,7 @@ def test_dft_manager_embedding(mock_dft_config: DFTConfig, monkeypatch: pytest.M
     # Mock Driver
     fake_driver = FakeDriver(calcs=MockCalculator(fail_count=0))
 
-    manager = DFTManager(mock_dft_config, driver=fake_driver)  # type: ignore[arg-type]
+    manager = DFTManager(mock_dft_config, driver=fake_driver)
 
     atoms = Atoms("H", positions=[[0, 0, 0]])
     # Must be iterator

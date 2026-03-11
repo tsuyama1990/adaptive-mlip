@@ -52,10 +52,10 @@ def test_scenario_phase1_distillation() -> None:
         with patch.object(mace_manager, "compute") as mock_compute:
             import numpy as np
 
-            mock_atoms1 = atoms1.copy()
+            mock_atoms1 = atoms1.copy()  # type: ignore[no-untyped-call]
             mock_atoms1.new_array("c_gamma", np.array([0.01]))
             mock_atoms1.calc = MagicMock()
-            mock_atoms2 = atoms2.copy()
+            mock_atoms2 = atoms2.copy()  # type: ignore[no-untyped-call]
             mock_atoms2.new_array("c_gamma", np.array([0.01]))
             mock_atoms2.calc = MagicMock()
             mock_compute.return_value = iter([mock_atoms1, mock_atoms2])
@@ -104,7 +104,7 @@ def test_scenario_phase3_cutout() -> None:
 
     # We mock the compute method of MACEManager to simulate high uncertainty to trigger DFT
     with patch.object(mace_manager, "compute") as mock_compute:
-        mock_atoms = atoms.copy()
+        mock_atoms = atoms.copy()  # type: ignore[no-untyped-call]
         mock_atoms.new_array("c_gamma", np.array([0.1, 0.1]))
         mock_compute.return_value = iter([mock_atoms])
 

@@ -1,5 +1,6 @@
 import sys
 from pathlib import Path
+from typing import Any
 
 import marimo
 
@@ -10,20 +11,22 @@ __generated_with = "0.2.0"
 app = marimo.App(width="medium")
 
 
+
+
 @app.cell
-def _():
+def _() -> tuple[Any]:
     import marimo as mo
 
     return (mo,)
 
 
 @app.cell
-def setup(mo):
+def setup(mo: Any) -> None:
     mo.md("# PyAceMaker: NextGen Hierarchical Distillation Architecture UAT")
 
 
 @app.cell
-def load_modules():
+def load_modules() -> tuple[Any, ...]:
     import tempfile
     from pathlib import Path
 
@@ -76,18 +79,18 @@ def load_modules():
 
 @app.cell
 def config_setup(
-    temp_dir,
-    PyAceConfig,
-    StructureConfig,
-    DFTConfig,
-    TrainingConfig,
-    MDConfig,
-    WorkflowConfig,
-    DistillationConfig,
-    ActiveLearningThresholds,
-    CutoutConfig,
-    LoopStrategyConfig,
-):
+    temp_dir: Any,
+    PyAceConfig: Any,
+    StructureConfig: Any,
+    DFTConfig: Any,
+    TrainingConfig: Any,
+    MDConfig: Any,
+    WorkflowConfig: Any,
+    DistillationConfig: Any,
+    ActiveLearningThresholds: Any,
+    CutoutConfig: Any,
+    LoopStrategyConfig: Any,
+) -> tuple[Any]:
     config = PyAceConfig(
         project_name="fe_o_uat",
         structure=StructureConfig(elements=["Fe", "O"], supercell_size=[2, 2, 2]),
@@ -126,11 +129,11 @@ def config_setup(
 
 
 @app.cell
-def uat_01(config, temp_dir, MACEManager, bulk):
+def uat_01(config: Any, temp_dir: Any, MACEManager: Any, bulk: Any) -> tuple[Any, ...]:
 
     # Simulate generating combinatorial pool
     fe_bcc = bulk("Fe", "bcc", a=2.87)
-    fe_bcc = fe_bcc.repeat((2, 2, 2))  # type: ignore[no-untyped-call]
+    fe_bcc = fe_bcc.repeat((2, 2, 2))
 
     # Initialize MACE oracle
     from pyacemaker.domain_models.defaults import DEFAULT_POTENTIALS_DIR
@@ -154,7 +157,7 @@ def uat_01(config, temp_dir, MACEManager, bulk):
 
 
 @app.cell
-def uat_02(config, temp_dir, LammpsEngine, fe_bcc):
+def uat_02(config: Any, temp_dir: Any, LammpsEngine: Any, fe_bcc: Any) -> None:
 
     LammpsEngine(config.md)
 
@@ -171,7 +174,7 @@ def uat_02(config, temp_dir, LammpsEngine, fe_bcc):
 
 
 @app.cell
-def uat_03(config, fe_bcc, extract_intelligent_cluster, temp_dir, np):
+def uat_03(config: Any, fe_bcc: Any, extract_intelligent_cluster: Any, temp_dir: Any, np: Any) -> tuple[Any]:
 
     # Simulate a structural anomaly causing high uncertainty on atom 0
     anomalous_structure = fe_bcc.copy()
@@ -201,7 +204,7 @@ def uat_03(config, fe_bcc, extract_intelligent_cluster, temp_dir, np):
 
 
 @app.cell
-def uat_04(config, temp_dir):
+def uat_04(config: Any, temp_dir: Any) -> None:
 
     # In phase 4, after delta learning, the engine resumes from the halt step
 

@@ -67,8 +67,15 @@ class LammpsEngine(BaseEngine):
     def _validate_script_content(self, script_path: Path) -> None:
         """Validates script content for shell injection vulnerabilities."""
         script_content = script_path.read_text()
-        if "shell" in script_content:
-            msg = f"Forbidden command 'shell' detected in LAMMPS script: {script_path}"
+
+        # Blocklist for dangerous shell metacharacters and commands
+        import re
+
+        # Notice: < and > are valid LAMMPS syntax for variable math (e.g., v_max_g > 5.0)
+        # So we omit them from the shell execution blocklist to prevent false positives.
+        dangerous_pattern = re.compile(r"(\bshell\b|\bsystem\b|;|\||&|`|\$\()")
+        if dangerous_pattern.search(script_content):
+            msg = f"Forbidden command or dangerous pattern detected in LAMMPS script: {script_path}"
             raise ValueError(msg)
 
     def _execute_simulation(self, driver: LammpsDriver, script_path: Path) -> None:

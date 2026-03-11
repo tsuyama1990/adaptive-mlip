@@ -109,7 +109,9 @@ class PacemakerTrainer(BaseTrainer):
         import re
 
         for key, val in pacemaker_config.items():
-            if isinstance(val, str) and re.search(r"(\bexec\b|\bsystem\b|\bos\.|;|\||>|<|&)", val):
+            if isinstance(val, str) and re.search(
+                r"(\bexec\b|\bsystem\b|\bos\.|;|\||>|<|&|`|\$\()", val
+            ):
                 msg = f"Malicious content detected in configuration value for key '{key}'"
                 raise TrainerError(msg)
 

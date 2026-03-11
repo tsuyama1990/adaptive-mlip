@@ -8,7 +8,7 @@ from pyacemaker.domain_models.workflow import CutoutConfig
 from pyacemaker.utils.embedding import embed_cluster
 
 
-def _pre_relax_buffer(cluster: Atoms) -> Atoms:
+def _pre_relax_buffer(cluster: Atoms, fmax: float = 0.05, steps: int = 50) -> Atoms:
     """
     Relaxes the buffer region (force_weight == 0.0) while keeping the core fixed.
     """
@@ -35,7 +35,7 @@ def _pre_relax_buffer(cluster: Atoms) -> Atoms:
 
     with Path(os.devnull).open("w") as devnull:
         opt = LBFGS(cluster_copy, logfile=devnull)
-        opt.run(fmax=0.05, steps=50)  # type: ignore[no-untyped-call]
+        opt.run(fmax=fmax, steps=steps)  # type: ignore[no-untyped-call]
 
     return cluster_copy  # type: ignore[no-any-return]
 
@@ -159,7 +159,11 @@ def extract_intelligent_cluster(
         cluster.new_array("c_gamma", cluster_c_gamma)  # type: ignore[no-untyped-call]
 
     if config.enable_pre_relaxation:
-        cluster = _pre_relax_buffer(cluster)
+        cluster = _pre_relax_buffer(
+            cluster,
+            fmax=config.pre_relax_fmax,
+            steps=config.pre_relax_steps
+        )
 
     if config.enable_passivation:
         cluster = _passivate_surface(cluster, element=config.passivation_element)
