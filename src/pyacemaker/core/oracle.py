@@ -234,7 +234,8 @@ class MACEManager(BaseOracle):
             raise ValueError(msg)
 
         self.model_path = str(canonical_path)
-        # Mock MACE initialization
+        from mace.calculators.mace import MACECalculator
+        self.calc = MACECalculator(model_paths=[self.model_path], device="cpu", default_dtype="float32")
         self.is_initialized = True
 
     def compute(self, structures: Iterator[Atoms], batch_size: int = 10) -> Iterator[Atoms]:
@@ -244,22 +245,28 @@ class MACEManager(BaseOracle):
         return self._compute_generator(structures, batch_size)
 
     def _compute_generator(self, structures: Iterator[Atoms], batch_size: int) -> Iterator[Atoms]:
+        from ase.calculators.singlepoint import SinglePointCalculator
         for atoms in structures:
             atoms_copy = atoms.copy()  # type: ignore[no-untyped-call]
 
-            # Mock MACE predictions
-            energy = -10.0 * len(atoms_copy)
-            forces = np.zeros((len(atoms_copy), 3))
+            atoms_copy.calc = self.calc
 
-            # Mock uncertainty in c_gamma array
-            c_gamma = np.random.uniform(0.01, 0.1, size=len(atoms_copy))
+            energy = atoms_copy.get_potential_energy()
+            forces = atoms_copy.get_forces()
 
-            # In a real implementation we would attach a calculator
-            # Here we just mock setting the arrays and attributes
-            atoms_copy.calc = None
-            atoms_copy.info["energy"] = energy
-            atoms_copy.new_array("forces", forces)
-            atoms_copy.new_array("c_gamma", c_gamma)
+            c_gamma = np.zeros(len(atoms_copy))
+            if hasattr(self.calc, "results") and "node_energy_variance" in self.calc.results:
+                c_gamma = self.calc.results["node_energy_variance"]
+
+            sp_calc = SinglePointCalculator(
+                atoms_copy,
+                energy=energy,
+                forces=forces,
+                free_energy=energy,
+            )
+            atoms_copy.calc = sp_calc
+
+            atoms_copy.new_array("c_gamma", c_gamma)  # type: ignore[no-untyped-call]
 
             yield atoms_copy
 
@@ -300,7 +307,10 @@ class TieredOracle(BaseOracle):
             mace_result = next(self.mace.compute(iter([atoms])))
 
             # Evaluate uncertainty
-            c_gamma = mace_result.get_array("c_gamma")  # type: ignore[no-untyped-call]
+            try:
+                c_gamma = mace_result.get_array("c_gamma")
+            except KeyError:
+                c_gamma = np.array([0.1])  # type: ignore[no-untyped-call]
             max_uncertainty = np.max(c_gamma)
 
             if max_uncertainty > self.thresholds.threshold_call_dft:
