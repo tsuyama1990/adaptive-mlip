@@ -1,3 +1,4 @@
+# ruff: noqa: E402
 import sys
 import tempfile
 from collections.abc import Generator
@@ -374,7 +375,10 @@ def create_test_config_dict(**overrides: Any) -> ConfigDictType:
 
 
 
-class FakeActiveSetSelector:
+from pyacemaker.core.active_set import ActiveSetSelector
+
+
+class FakeActiveSetSelector(ActiveSetSelector):  # type: ignore[misc]
     def select(self, candidates: Any, potential: Any, n_select: int, anchor: Any = None) -> Any:
         return candidates
 
@@ -390,7 +394,7 @@ class FakeValidator:
             report_path=str(report_path)
         )
 
-class FakeTrainer(BaseTrainer):
+class FakeTrainer(BaseTrainer):  # type: ignore[misc]
     def __init__(self, output_pot: Path) -> None:
         self.output_pot = output_pot
 

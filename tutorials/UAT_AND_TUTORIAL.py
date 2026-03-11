@@ -1,6 +1,7 @@
 import os
 import sys
 from pathlib import Path
+from typing import Any
 from unittest.mock import patch
 
 # Add src to path to allow importing pyacemaker
@@ -24,7 +25,7 @@ from pyacemaker.domain_models.workflow import (
 from pyacemaker.orchestrator import Orchestrator
 
 
-def fake_run_command(cmd, *args, **kwargs):
+def fake_run_command(cmd: list[str], *args: Any, **kwargs: Any) -> Any:
     if "pace_train" in cmd:
         # simulate pace_train output
         out_path = Path(cmd[1]).parent / "potential.yace"
@@ -34,11 +35,9 @@ def fake_run_command(cmd, *args, **kwargs):
 
 def main() -> int:
     # 1. Setup Environment
-    base_dir = Path("tutorials/uat_output").resolve()
-    if base_dir.exists():
-        import shutil
-        shutil.rmtree(base_dir)
-    base_dir.mkdir(parents=True, exist_ok=True)
+    import tempfile
+    temp_dir = tempfile.TemporaryDirectory()
+    base_dir = Path(temp_dir.name).resolve()
     os.chdir(base_dir)
 
     potentials_dir = base_dir / "potentials"

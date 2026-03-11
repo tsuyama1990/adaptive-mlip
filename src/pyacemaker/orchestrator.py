@@ -11,6 +11,7 @@ from pyacemaker.core.active_set import ActiveSetSelector
 from pyacemaker.core.base import BaseEngine, BaseGenerator, BaseOracle, BaseTrainer
 from pyacemaker.core.directory_manager import DirectoryManager
 from pyacemaker.core.exceptions import OrchestratorError
+from pyacemaker.core.oracle import MACEManager
 from pyacemaker.core.state_manager import StateManager
 from pyacemaker.core.trainer import FinetuneManager
 from pyacemaker.core.validator import Validator
@@ -236,8 +237,6 @@ class Orchestrator:
             if is_cold_start and self.config.workflow.distillation.enable:
                 self.logger.info("Executing Zero-Shot Distillation Labeling. Only using MACE.")
 
-                from pyacemaker.core.oracle import MACEManager
-
                 mace_oracle = MACEManager(self.config.workflow.distillation.mace_model_path)
                 filtered_stream = self._filter_confident_structures(
                     mace_oracle, candidate_stream, batch_size
@@ -437,7 +436,6 @@ class Orchestrator:
 
             # 3. Explosive Generation of Surrogate Data using awakened MACE
             # Use the awakened MACE for labeling surrogate data instead of the standard oracle
-            from pyacemaker.core.oracle import MACEManager
 
             surrogate_oracle = MACEManager(awakened_mace_path)
 
@@ -680,7 +678,6 @@ class Orchestrator:
                 STRATEGY_RATTLE_STDEV_MIN,
                 conf.rattle_stdev * STRATEGY_RATTLE_STDEV_DECREASE_FACTOR,
             )
-
 
     def _adjust_replay_buffer(self) -> None:
         if hasattr(self.config.workflow, "loop_strategy") and self.config.workflow.loop_strategy:
