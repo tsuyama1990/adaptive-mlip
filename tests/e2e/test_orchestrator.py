@@ -1,34 +1,12 @@
-# ruff: noqa: E402
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 from unittest.mock import Mock
 
+import pytest
 from ase import Atoms
 
-from pyacemaker.core.base import BaseOracle
-
-
-class FakeActiveSetSelector:
-    def select(self, candidates, potential, n_select, anchor=None):
-        return candidates
-
-class FakeValidator:
-    def validate(self, potential_path, report_path, structure):
-        from pyacemaker.domain_models.validation import ValidationResult
-        return ValidationResult(
-            phonon_stable=True,
-            elastic_stable=True,
-            c_ij={"C11": 100, "C12": 50, "C44": 50},
-            bulk_modulus=100.0,
-            plots={},
-            report_path=str(report_path)
-        )
-
-
-import pytest
-
-from pyacemaker.core.base import BaseEngine, BaseGenerator, BaseTrainer
+from pyacemaker.core.base import BaseEngine, BaseGenerator, BaseOracle
 from pyacemaker.core.exceptions import OrchestratorError
 from pyacemaker.domain_models import (
     DFTConfig,
@@ -48,6 +26,7 @@ from pyacemaker.domain_models.defaults import (
 )
 from pyacemaker.factory import ModuleFactory
 from pyacemaker.orchestrator import Orchestrator
+from tests.conftest import FakeActiveSetSelector, FakeTrainer, FakeValidator
 
 
 # Concrete Fakes for testing
@@ -75,23 +54,6 @@ class FakeOracle(BaseOracle):
         for atoms in structures:
             atoms.info["energy"] = -10.0
             yield atoms
-
-
-class FakeTrainer(BaseTrainer):
-    def __init__(self, output_dir: Path) -> None:
-        self.output_dir = output_dir
-
-    def train(
-        self, training_data_path: str | Path, initial_potential: str | Path | None = None
-    ) -> Any:
-        path = Path(training_data_path)
-        if not path.exists():
-            msg = "Training data file missing"
-            raise RuntimeError(msg)
-
-        pot_path = self.output_dir / "fake_potential.yace"
-        pot_path.touch()
-        return pot_path
 
 
 class FakeEngine(BaseEngine):
@@ -164,7 +126,7 @@ def test_integration_workflow_complete(
         return (
             FakeGenerator(elements=cfg.structure.elements),
             FakeOracle(),
-            FakeTrainer(output_dir=tmp_path),
+            FakeTrainer(tmp_path / "generation_000.yace"),
             FakeEngine(),
             FakeActiveSetSelector(),
             FakeValidator(),

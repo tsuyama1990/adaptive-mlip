@@ -563,11 +563,18 @@ class Orchestrator:
                 # Create a mock/empty result since the real engine would handle the restart file internally
                 # or we return a halted result to trigger refinement if needed.
                 return MDSimulationResult(
-                    energy=0.0, forces=[[0.0, 0.0, 0.0]], stress=[0.0]*6,
-                    halted=True, max_gamma=self.config.workflow.otf.uncertainty_threshold + 1.0,
-                    n_steps=0, temperature=0.0, trajectory_path="",
-                    halt_structure_path=str(self.state_manager.current_potential) if self.state_manager.current_potential else "",
-                    halt_step=0
+                    energy=0.0,
+                    forces=[[0.0, 0.0, 0.0]],
+                    stress=[0.0] * 6,
+                    halted=True,
+                    max_gamma=self.config.workflow.otf.uncertainty_threshold + 1.0,
+                    n_steps=0,
+                    temperature=0.0,
+                    trajectory_path="",
+                    halt_structure_path=str(self.state_manager.current_potential)
+                    if self.state_manager.current_potential
+                    else "",
+                    halt_step=0,
                 )
 
         return None
@@ -598,93 +605,104 @@ class Orchestrator:
                 LOG_ITERATION_COMPLETED.format(iteration=self.state_manager.iteration + 1)
             )
 
-    def _adapt_strategy(self, result: MDSimulationResult) -> None:  # noqa: C901
-        """
-        Adapts the generation strategy based on simulation results.
-        If MD halts frequently, we might increase temperature or add defects to push exploration boundaries.
-        Dynamically adjusts replay buffer size based on LoopStrategyConfig.
-        """
-        if not self.generator or not hasattr(self.generator, "config"):
-            return
-
+    def _increase_exploration_aggressiveness(self) -> None:
         from pyacemaker.domain_models.constants import (
-            STRATEGY_RATTLE_STDEV_DECREASE_FACTOR,
             STRATEGY_RATTLE_STDEV_INCREASE_FACTOR,
             STRATEGY_RATTLE_STDEV_MAX,
+        )
+        from pyacemaker.domain_models.structure import ExplorationPolicy
+
+        self.logger.info(
+            "Adaptive Strategy: MD halted. Adjusting generator config for wider exploration."
+        )
+
+        gen = self.generator
+        if not gen or not hasattr(gen, "config"):
+            return
+
+        conf = getattr(gen, "config", None)
+        if not conf:
+            return
+
+        # Policy Switching
+        if hasattr(conf, "active_policies") and (
+            ExplorationPolicy.RANDOM_RATTLE in conf.active_policies
+            and ExplorationPolicy.DEFECTS not in conf.active_policies
+        ):
+            conf.active_policies.append(ExplorationPolicy.DEFECTS)
+            self.logger.info("Adaptive Strategy: Added DEFECTS policy.")
+
+        # Scaling Logic
+        if hasattr(conf, "rattle_stdev"):
+            conf.rattle_stdev = min(
+                STRATEGY_RATTLE_STDEV_MAX,
+                conf.rattle_stdev * STRATEGY_RATTLE_STDEV_INCREASE_FACTOR,
+            )
+            self.logger.info(
+                f"Adaptive Strategy: Increased rattle_stdev to {conf.rattle_stdev:.2f}"
+            )
+
+        if hasattr(self.config.workflow, "loop_strategy") and self.config.workflow.loop_strategy:
+            self.config.workflow.loop_strategy.replay_buffer_size = int(
+                self.config.workflow.loop_strategy.replay_buffer_size * 1.1
+            )
+            self.logger.info(
+                f"Adaptive Strategy: Increased replay_buffer_size to {self.config.workflow.loop_strategy.replay_buffer_size}"
+            )
+
+    def _stabilize_exploration(self) -> None:
+        from pyacemaker.domain_models.constants import (
+            STRATEGY_RATTLE_STDEV_DECREASE_FACTOR,
             STRATEGY_RATTLE_STDEV_MIN,
         )
         from pyacemaker.domain_models.structure import ExplorationPolicy
 
-        if result.halted:
+        self.logger.info(
+            "Adaptive Strategy: MD completed successfully. Stabilizing generator config."
+        )
+
+        gen = self.generator
+        if not gen or not hasattr(gen, "config"):
+            return
+
+        conf = getattr(gen, "config", None)
+        if not conf:
+            return
+
+        if hasattr(conf, "active_policies") and ExplorationPolicy.DEFECTS in conf.active_policies:
+            conf.active_policies.remove(ExplorationPolicy.DEFECTS)
             self.logger.info(
-                "Adaptive Strategy: MD halted. Adjusting generator config for wider exploration."
+                "Adaptive Strategy: Removed DEFECTS policy, relying on milder policies."
             )
 
-            # Policy Switching Logic
-            try:
-                # Add a more aggressive policy like DEFECTS to active_policies if currently on RANDOM_RATTLE
-                if (
-                    hasattr(self.generator.config, "active_policies")
-                    and ExplorationPolicy.RANDOM_RATTLE in self.generator.config.active_policies
-                    and ExplorationPolicy.DEFECTS not in self.generator.config.active_policies
-                ):
-                    self.generator.config.active_policies.append(ExplorationPolicy.DEFECTS)
-                    self.logger.info("Adaptive Strategy: Added DEFECTS policy.")
-            except Exception as e:
-                self.logger.debug(f"Adaptive Strategy: Failed to switch policy: {e}")
-
-            # Parameter Scaling Logic
-            try:
-                if hasattr(self.generator.config, "rattle_stdev"):
-                    self.generator.config.rattle_stdev = min(
-                        STRATEGY_RATTLE_STDEV_MAX,
-                        self.generator.config.rattle_stdev * STRATEGY_RATTLE_STDEV_INCREASE_FACTOR,
-                    )
-                    self.logger.info(
-                        f"Adaptive Strategy: Increased rattle_stdev to {self.generator.config.rattle_stdev:.2f}"
-                    )
-            except Exception as e:
-                self.logger.debug(f"Adaptive Strategy: Failed to adjust config: {e}")
-
-            # Replay buffer adjustments (Catastrophic Forgetting Prevention)
-            if (
-                hasattr(self.config.workflow, "loop_strategy")
-                and self.config.workflow.loop_strategy
-            ):
-                # Increase replay buffer size slightly to retain more stable states when halts are frequent
-                self.config.workflow.loop_strategy.replay_buffer_size = int(
-                    self.config.workflow.loop_strategy.replay_buffer_size * 1.1
-                )
-                self.logger.info(
-                    f"Adaptive Strategy: Increased replay_buffer_size to {self.config.workflow.loop_strategy.replay_buffer_size}"
-                )
-
-        else:
-            self.logger.info(
-                "Adaptive Strategy: MD completed successfully. Stabilizing generator config."
+        if hasattr(conf, "rattle_stdev"):
+            conf.rattle_stdev = max(
+                STRATEGY_RATTLE_STDEV_MIN,
+                conf.rattle_stdev * STRATEGY_RATTLE_STDEV_DECREASE_FACTOR,
             )
 
-            # Revert back to milder exploration policy if MD is completely stable
-            try:
-                if (
-                    hasattr(self.generator.config, "active_policies")
-                    and ExplorationPolicy.DEFECTS in self.generator.config.active_policies
-                ):
-                    self.generator.config.active_policies.remove(ExplorationPolicy.DEFECTS)
-                    self.logger.info(
-                        "Adaptive Strategy: Removed DEFECTS policy, relying on milder policies."
-                    )
-            except Exception as e:
-                self.logger.debug(f"Adaptive Strategy: Failed to switch policy: {e}")
 
-            try:
-                if hasattr(self.generator.config, "rattle_stdev"):
-                    self.generator.config.rattle_stdev = max(
-                        STRATEGY_RATTLE_STDEV_MIN,
-                        self.generator.config.rattle_stdev * STRATEGY_RATTLE_STDEV_DECREASE_FACTOR,
-                    )
-            except Exception as e:
-                self.logger.debug(f"Adaptive Strategy: Failed to adjust config: {e}")
+    def _adjust_replay_buffer(self) -> None:
+        if hasattr(self.config.workflow, "loop_strategy") and self.config.workflow.loop_strategy:
+            self.config.workflow.loop_strategy.replay_buffer_size = int(
+                self.config.workflow.loop_strategy.replay_buffer_size * 1.1
+            )
+            self.logger.info(
+                f"Adaptive Strategy: Increased replay_buffer_size to {self.config.workflow.loop_strategy.replay_buffer_size}"
+            )
+
+    def _adapt_strategy(self, result: MDSimulationResult) -> None:
+        if not self.generator or not hasattr(self.generator, "config"):
+            return
+
+        try:
+            if result.halted:
+                self._increase_exploration_aggressiveness()
+                self._adjust_replay_buffer()
+            else:
+                self._stabilize_exploration()
+        except Exception as e:
+            self.logger.debug(f"Adaptive Strategy: Failed to adjust config: {e}")
 
     def _execute_iteration_logic(self, iteration: int, paths: dict[str, Path]) -> None:
         """

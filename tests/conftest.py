@@ -10,6 +10,7 @@ import pytest
 from ase import Atoms
 from ase.calculators.calculator import Calculator, CalculatorSetupError
 
+from pyacemaker.core.base import BaseTrainer
 from pyacemaker.domain_models import (
     DFTConfig,
     HybridParams,
@@ -366,3 +367,39 @@ def create_test_config_dict(**overrides: Any) -> ConfigDictType:
         raise ValueError(msg) from e
     else:
         return cast(ConfigDictType, model.model_dump())
+
+
+
+
+
+
+
+class FakeActiveSetSelector:
+    def select(self, candidates: Any, potential: Any, n_select: int, anchor: Any = None) -> Any:
+        return candidates
+
+class FakeValidator:
+    def validate(self, potential_path: Path, report_path: Path, structure: Any) -> Any:
+        from pyacemaker.domain_models.validation import ValidationResult
+        return ValidationResult(
+            phonon_stable=True,
+            elastic_stable=True,
+            c_ij={"C11": 100.0, "C12": 50.0, "C44": 50.0},
+            bulk_modulus=100.0,
+            plots={},
+            report_path=str(report_path)
+        )
+
+class FakeTrainer(BaseTrainer):
+    def __init__(self, output_pot: Path) -> None:
+        self.output_pot = output_pot
+
+    def train(self, training_data_path: str | Path, initial_potential: str | Path | None = None) -> Any:
+        self.output_pot.parent.mkdir(parents=True, exist_ok=True)
+        self.output_pot.touch()
+        return self.output_pot
+
+    def incremental_train(self, new_data_path: str | Path, strategy_config: Any, initial_potential: str | Path | None = None) -> Any:
+        self.output_pot.parent.mkdir(parents=True, exist_ok=True)
+        self.output_pot.touch()
+        return self.output_pot

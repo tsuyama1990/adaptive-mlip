@@ -1,27 +1,7 @@
-# ruff: noqa: E402
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
-
-from pyacemaker.domain_models.validation import ValidationResult
-
-
-class FakeActiveSetSelector:
-    def select(self, candidates, potential, n_select, anchor=None):
-        return candidates
-
-class FakeValidator:
-    def validate(self, potential_path, report_path, structure):
-        return ValidationResult(
-            phonon_stable=True,
-            elastic_stable=True,
-            c_ij={"C11": 100, "C12": 50, "C44": 50},
-            bulk_modulus=100.0,
-            plots={},
-            report_path=str(report_path)
-        )
-
 
 import pytest
 from ase import Atoms
@@ -33,6 +13,7 @@ from pyacemaker.domain_models import PyAceConfig
 from pyacemaker.domain_models.md import MDSimulationResult
 from pyacemaker.domain_models.structure import StructureConfig
 from pyacemaker.orchestrator import Orchestrator
+from tests.conftest import FakeActiveSetSelector
 
 
 class FakeGenerator(BaseGenerator):

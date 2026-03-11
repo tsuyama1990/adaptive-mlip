@@ -32,7 +32,7 @@ class LammpsInputValidator:
     """
 
     @staticmethod
-    def validate_structure(structure: Any) -> None:  # noqa: C901
+    def validate_structure(structure: Atoms) -> None:  # noqa: C901
         """
         Validates the atomic structure.
 
@@ -81,7 +81,7 @@ class LammpsInputValidator:
                 raise ValueError(ERR_VAL_STRUCT_DUMMY_ELEM.format(symbol=s))
 
     @staticmethod
-    def validate_potential(potential: Any) -> Path:
+    def validate_potential(potential: str | Path) -> Path:
         """
         Validates the potential path.
         Ensures path exists, is a file, and is within allowed directories using secure validation.
