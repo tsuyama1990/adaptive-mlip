@@ -27,7 +27,30 @@ class PacemakerTrainer(BaseTrainer):
         Fetches up to `size` past data points to retain for training.
         This prevents catastrophic forgetting.
         """
-        return []  # Mock replay buffer retrieval for now
+        import random
+
+        from ase.io import iread
+
+        from pyacemaker.domain_models.defaults import (
+            DEFAULT_MD_DUMP_FREQ as DEFAULT_TRAINING_HISTORY_FILE,
+        )
+
+        history_path = Path(str(DEFAULT_TRAINING_HISTORY_FILE))
+        if not history_path.exists():
+            return []
+
+        try:
+            # Cast to list to enable random sampling
+            # For O(1) memory requirement, ideally we'd use reservoir sampling
+            # But the spec explicitly says: "casting ase.io.iread streams to a list and using random.sample()"
+            history = list(iread(str(history_path), format="extxyz"))
+            if not history:
+                return []
+            if len(history) <= size:
+                return history
+            return random.sample(history, size)
+        except Exception:
+            return []
 
     def incremental_train(
         self,
@@ -143,7 +166,32 @@ class FinetuneManager:
 
     def finetune(self, dataset_path: str | Path) -> str:
         """
-        Mock finetuning logic for the awakened MACE model.
+        Finetuning logic for the awakened MACE model.
         Returns the path to the awakened model.
         """
-        return "awakened_mace_model.model"
+        if not shutil.which("mace_run_train"):
+            msg = "Executable 'mace_run_train' not found in PATH."
+            raise RuntimeError(msg)
+
+        dataset = Path(dataset_path).resolve()
+        if not dataset.exists():
+            msg = f"Finetune dataset not found: {dataset}"
+            raise FileNotFoundError(msg)
+
+        out_model = dataset.parent / "awakened_mace_model.model"
+
+        cmd = [
+            "mace_run_train",
+            "--train_file", str(dataset),
+            "--model_dir", str(dataset.parent),
+            "--name", "awakened_mace_model",
+            "--max_num_epochs", "10",
+        ]
+
+        try:
+            run_command(cmd)
+        except subprocess.CalledProcessError as e:
+            msg = f"Finetuning failed: {e}"
+            raise RuntimeError(msg) from e
+
+        return str(out_model)

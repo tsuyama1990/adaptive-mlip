@@ -90,8 +90,6 @@ class TrainingConfig(BaseModel):
     pacemaker: PacemakerConfig = Field(
         default_factory=PacemakerConfig, description="Detailed Pacemaker configuration"
     )
-
-    # Mocking & Output (Audit Requirement)
     output_filename: str = Field(
         FILENAME_POTENTIAL, description="Filename for the trained potential"
     )
