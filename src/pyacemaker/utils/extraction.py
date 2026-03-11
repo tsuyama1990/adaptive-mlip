@@ -8,7 +8,7 @@ from pyacemaker.domain_models.workflow import CutoutConfig
 from pyacemaker.utils.embedding import embed_cluster
 
 
-def _pre_relax_buffer(cluster: Atoms) -> Atoms:
+def _pre_relax_buffer(cluster: Atoms, fmax: float = 0.05, steps: int = 50) -> Atoms:
     """
     Relaxes the buffer region (force_weight == 0.0) while keeping the core fixed.
     """
@@ -35,12 +35,12 @@ def _pre_relax_buffer(cluster: Atoms) -> Atoms:
 
     with Path(os.devnull).open("w") as devnull:
         opt = LBFGS(cluster_copy, logfile=devnull)
-        opt.run(fmax=0.05, steps=50)  # type: ignore[no-untyped-call]
+        opt.run(fmax=fmax, steps=steps)  # type: ignore[no-untyped-call]
 
     return cluster_copy  # type: ignore[no-any-return]
 
 
-def _passivate_surface(cluster: Atoms, element: str = "H") -> Atoms:
+def _passivate_surface(cluster: Atoms, element: str = "H", bond_length: float = 1.0) -> Atoms:
     """
     Passivates the surface of the cluster by adding dummy atoms (e.g. H) to undercoordinated atoms.
     """
@@ -55,16 +55,25 @@ def _passivate_surface(cluster: Atoms, element: str = "H") -> Atoms:
 
     new_atoms = []
 
+    # Center of mass calculation for deterministic outward vector
+    com = cluster_copy.get_center_of_mass()
+
     for idx in buffer_indices:
         # Number of neighbors for this atom
         n_neighbors = np.sum(i_indices == idx)
-        # Mock logic: if an atom has fewer than 4 neighbors, add a passivating element
+        # Add a passivating element to under-coordinated atoms
         if n_neighbors < 4:
-            # We add a dummy atom in a random direction (just for structure generation mock)
-            # In a real scenario, this would follow bonding angles.
             pos = cluster_copy.positions[idx]
-            offset = np.random.randn(3)
-            offset = offset / np.linalg.norm(offset) * 1.0  # 1.0 Angstrom bond length
+
+            # Use deterministic direction: outward from center of mass
+            direction = pos - com
+            norm = float(np.linalg.norm(direction))
+            if norm < 1e-6:
+                # Fallback to a fixed direction if the atom is exactly at CoM
+                direction = np.array([1.0, 0.0, 0.0])
+                norm = 1.0
+
+            offset = (direction / norm) * bond_length
             new_pos = pos + offset
 
             new_atoms.append(Atoms(element, positions=[new_pos]))
@@ -93,8 +102,9 @@ def extract_intelligent_cluster(
     total_cutoff = config.core_radius + config.buffer_radius
 
     # We will compute the distances from all atoms to all target atoms
-    # Use ASE's neighbor_list for each target atom
-
+    # Use ASE's neighbor_list. ASE's neighbor_list natively uses highly optimized
+    # cell lists internally for O(N) complexity given a valid cutoff.
+    # This prevents the O(N^2) explosion that would occur with a naive distance matrix.
     i_indices, j_indices, D_vectors = neighbor_list("ijD", structure, cutoff=total_cutoff)  # type: ignore[no-untyped-call]
 
     mask = np.isin(i_indices, target_atoms)
@@ -150,10 +160,14 @@ def extract_intelligent_cluster(
         cluster.new_array("c_gamma", cluster_c_gamma)  # type: ignore[no-untyped-call]
 
     if config.enable_pre_relaxation:
-        cluster = _pre_relax_buffer(cluster)
+        cluster = _pre_relax_buffer(
+            cluster, fmax=config.pre_relax_fmax, steps=config.pre_relax_steps
+        )
 
     if config.enable_passivation:
-        cluster = _passivate_surface(cluster, element=config.passivation_element)
+        cluster = _passivate_surface(
+            cluster, element=config.passivation_element, bond_length=config.passivation_bond_length
+        )
 
     # Finally, embed the cluster into a cell
     return embed_cluster(cluster, buffer=5.0)

@@ -27,7 +27,33 @@ class PacemakerTrainer(BaseTrainer):
         Fetches up to `size` past data points to retain for training.
         This prevents catastrophic forgetting.
         """
-        return []  # Mock replay buffer retrieval for now
+        import random
+
+        from ase.io import iread
+
+        from pyacemaker.domain_models.defaults import DEFAULT_DATA_DIR
+
+        history_file = Path(DEFAULT_DATA_DIR) / "training_history.extxyz"
+        if not history_file.exists():
+            return []
+
+        # Use reservoir sampling to maintain O(1) memory
+        reservoir = []
+        try:
+            # We use SystemRandom for cryptographic safety to pass linter, though not strictly required here
+            secure_random = random.SystemRandom()
+            for i, atoms in enumerate(iread(str(history_file))):
+                if i < size:
+                    reservoir.append(atoms)
+                else:
+                    j = secure_random.randint(0, i)
+                    if j < size:
+                        reservoir[j] = atoms
+        except Exception as e:
+            msg = f"Failed to read training history from {history_file}: {e}"
+            raise TrainerError(msg) from e
+
+        return reservoir
 
     def incremental_train(
         self,
@@ -63,9 +89,12 @@ class PacemakerTrainer(BaseTrainer):
         Raises:
             TrainerError: If the training data file does not exist or format is invalid.
         """
-        # Ensure pace_train is installed
-        if not shutil.which("pace_train"):
-            msg = "Executable 'pace_train' not found in PATH."
+        # Ensure pace_train command exists
+        pace_train_exe = (
+            self.config.pace_train_command[0] if self.config.pace_train_command else "pace_train"
+        )
+        if not shutil.which(pace_train_exe):
+            msg = f"Executable '{pace_train_exe}' not found in PATH."
             raise TrainerError(msg)
 
         data_path = Path(training_data_path).resolve()
@@ -87,14 +116,21 @@ class PacemakerTrainer(BaseTrainer):
         import re
 
         for key, val in pacemaker_config.items():
-            if isinstance(val, str) and re.search(r"(\bexec\b|\bsystem\b|\bos\.|;|\||>|<|&)", val):
+            if isinstance(val, str) and re.search(
+                r"(\bexec\b|\bsystem\b|\bos\.|;|\||&|<|>|`|\$\(|\$\{)", val
+            ):
                 msg = f"Malicious content detected in configuration value for key '{key}'"
                 raise TrainerError(msg)
 
         dump_yaml(pacemaker_config, input_yaml_path)
 
         # Run pace_train
-        cmd = ["pace_train", str(input_yaml_path)]
+        cmd = (
+            self.config.pace_train_command.copy()
+            if self.config.pace_train_command
+            else ["pace_train"]
+        )
+        cmd.append(str(input_yaml_path))
 
         if initial_potential:
             initial_path = Path(initial_potential)
@@ -141,9 +177,55 @@ class FinetuneManager:
     Manager to briefly train the final readout layers of the MACE foundation model.
     """
 
+    def __init__(self, config: TrainingConfig | None = None) -> None:
+        self.config = config
+
     def finetune(self, dataset_path: str | Path) -> str:
         """
-        Mock finetuning logic for the awakened MACE model.
-        Returns the path to the awakened model.
+        Briefly trains the final readout layers of the MACE foundation model.
         """
-        return "awakened_mace_model.model"
+        dataset_path = Path(dataset_path).resolve()
+        if not dataset_path.exists():
+            msg = f"Dataset for finetuning not found: {dataset_path}"
+            raise FileNotFoundError(msg)
+
+        mace_finetune_cmd = (
+            self.config.mace_finetune_command
+            if self.config and self.config.mace_finetune_command
+            else ["python", "-m", "mace.cli.finetune"]
+        )
+
+        if not shutil.which(mace_finetune_cmd[0]):
+            msg = f"Executable '{mace_finetune_cmd[0]}' not found in PATH."
+            raise RuntimeError(msg)
+
+        output_model = dataset_path.parent / "awakened_mace_model.model"
+
+        epochs = str(self.config.mace_finetune_epochs) if self.config else "5"
+
+        # Finetune using configured MACE CLI
+        cmd = mace_finetune_cmd.copy()
+        cmd.extend(
+            [
+                "--train_file",
+                str(dataset_path),
+                "--model",
+                str(output_model),
+                "--epochs",
+                epochs,
+            ]
+        )
+
+        try:
+            run_command(cmd)
+        except Exception:
+            # If MACE is not installed or finetune fails, we just raise an error
+            # as the instruction says no mocks
+            msg = f"Failed to run MACE finetuning command: {' '.join(cmd)}"
+            raise RuntimeError(msg) from None
+
+        if not output_model.exists():
+            msg = f"Finetuned model was not created at {output_model}"
+            raise RuntimeError(msg)
+
+        return str(output_model)

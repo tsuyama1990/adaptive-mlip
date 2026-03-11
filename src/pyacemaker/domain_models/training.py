@@ -112,6 +112,16 @@ class TrainingConfig(BaseModel):
         None, description="Target number of structures for active set", gt=0
     )
 
+    # MACE Fine-tuning Settings
+    mace_finetune_epochs: int = Field(5, description="Number of epochs for MACE fine-tuning", gt=0)
+    mace_finetune_command: list[str] = Field(
+        default_factory=lambda: ["python", "-m", "mace.cli.finetune"],
+        description="Command to invoke MACE finetuning",
+    )
+    pace_train_command: list[str] = Field(
+        default_factory=lambda: ["pace_train"], description="Command to invoke Pacemaker training"
+    )
+
     @model_validator(mode="after")
     def validate_active_set_size(self) -> "TrainingConfig":
         """Ensures active_set_size is set if active_set_optimization is enabled."""

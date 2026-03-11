@@ -69,6 +69,11 @@ class CutoutConfig(BaseModel):
     enable_pre_relaxation: bool = True
     enable_passivation: bool = True
     passivation_element: str = "H"
+    passivation_bond_length: float = Field(
+        1.0, description="Bond length for dummy passivation atoms in Angstroms", gt=0.0
+    )
+    pre_relax_fmax: float = Field(0.05, description="Force tolerance for pre-relaxation")
+    pre_relax_steps: int = Field(50, description="Maximum steps for pre-relaxation")
 
     @model_validator(mode="after")
     def validate_radii(self) -> "CutoutConfig":

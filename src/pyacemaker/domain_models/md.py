@@ -168,6 +168,7 @@ class MDConfig(BaseModel):
     atom_style: AtomStyle = Field(AtomStyle(DEFAULT_MD_ATOM_STYLE), description="LAMMPS atom style")
 
     # Configurable LAMMPS Parameters (No Hardcoding)
+    lammps_screen_arg: str = Field("none", description="Argument for the LAMMPS -screen flag")
     velocity_seed: int = Field(
         LAMMPS_VELOCITY_SEED, description="Random seed for velocity initialization"
     )
@@ -182,6 +183,17 @@ class MDConfig(BaseModel):
     )
     minimize_ftol: float = Field(
         DEFAULT_MD_MINIMIZE_FTOL, description="Force tolerance for minimization"
+    )
+
+    # Seamless Resume Settings
+    langevin_seed: int = Field(
+        48279, description="Random seed for Langevin thermostat during soft start"
+    )
+    langevin_damping: float = Field(
+        100.0, description="Damping factor for Langevin thermostat (fs)"
+    )
+    soft_start_steps: int = Field(
+        10, description="Number of steps to apply soft start Langevin thermostat when resuming"
     )
 
     # Advanced Settings

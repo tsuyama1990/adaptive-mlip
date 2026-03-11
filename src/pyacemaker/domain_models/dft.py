@@ -18,6 +18,12 @@ class DFTConfig(BaseModel):
     kpoints_density: PositiveFloat = Field(..., description="K-points density in 1/Angstrom")
     encut: PositiveFloat = Field(..., description="Energy cutoff in eV")
 
+    # Self-healing configurations
+    allowed_diagonalization_methods: list[str] = Field(
+        default_factory=lambda: ["cg", "davidson"],
+        description="Allowed methods for self-healing fallback",
+    )
+
     # Periodic Embedding
     embedding_buffer: float | None = Field(
         None, gt=0.0, description="Vacuum buffer for periodic embedding (Angstrom)"
