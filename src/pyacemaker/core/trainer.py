@@ -137,29 +137,34 @@ class PacemakerTrainer(BaseTrainer):
 
         import re
 
+        from pyacemaker.domain_models.constants import FORBIDDEN_SHELL_PATTERNS
+
         for key, val in pacemaker_config.items():
-            if isinstance(val, str) and re.search(
-                r"(\bexec\b|\bsystem\b|\bos\.|;|\||&|<|>|`|\$\(|\$\{)", val
-            ):
+            if isinstance(val, str) and re.search(FORBIDDEN_SHELL_PATTERNS, val):
                 msg = f"Malicious content detected in configuration value for key '{key}'"
                 raise TrainerError(msg)
 
         dump_yaml(pacemaker_config, input_yaml_path)
 
-        # Run pace_train
+        # Run pace_train safely
         cmd = (
             self.config.pace_train_command.copy()
             if self.config.pace_train_command
             else ["pace_train"]
         )
-        cmd.append(str(input_yaml_path))
+
+        from pyacemaker.utils.path import validate_path_safe
+
+        safe_input_yaml_path = validate_path_safe(input_yaml_path)
+        cmd.append(str(safe_input_yaml_path))
 
         if initial_potential:
             initial_path = Path(initial_potential)
             if not initial_path.exists():
                 msg = f"Initial potential not found: {initial_path}"
                 raise TrainerError(msg)
-            cmd.extend(["--initial_potential", str(initial_path)])
+            safe_initial_path = validate_path_safe(initial_path)
+            cmd.extend(["--initial_potential", str(safe_initial_path)])
 
         try:
             run_command(cmd)
@@ -225,20 +230,27 @@ class FinetuneManager:
 
         epochs = str(self.config.mace_finetune_epochs) if self.config else "5"
 
-        # Finetune using configured MACE CLI
+        # Finetune using configured MACE CLI safely
+        from pyacemaker.utils.path import validate_path_safe
+
+        safe_dataset_path = validate_path_safe(dataset_path)
+        safe_output_model = validate_path_safe(output_model)
+
         cmd = mace_finetune_cmd.copy()
         cmd.extend(
             [
                 "--train_file",
-                str(dataset_path),
+                str(safe_dataset_path),
                 "--model",
-                str(output_model),
+                str(safe_output_model),
                 "--epochs",
                 epochs,
             ]
         )
 
         try:
+            # We enforce check=True internally in run_command or by explicitly using subprocess.run
+            # if run_command does not. However, run_command already raises exceptions.
             run_command(cmd)
         except Exception:
             # If MACE is not installed or finetune fails, we just raise an error

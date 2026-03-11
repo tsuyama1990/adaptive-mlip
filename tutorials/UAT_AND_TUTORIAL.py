@@ -143,7 +143,7 @@ def uat_01(config: Any, temp_dir: Any, MACEManager: Any, bulk: Any) -> tuple[Any
 
     mace = MACEManager(model_path=str(mace_model_path))
     from ase.calculators.lj import LennardJones
-    mace.calc = LennardJones()
+    mace.calc = LennardJones()  # type: ignore[no-untyped-call]
 
     # Process structure (distillation)
     results = list(mace.compute(iter([fe_bcc])))

@@ -11,8 +11,7 @@ from pyacemaker.orchestrator import Orchestrator
 
 @pytest.fixture
 def dummy_orchestrator(mock_config: PyAceConfig) -> Orchestrator:
-    orch = Orchestrator(mock_config)
-    return orch
+    return Orchestrator(mock_config)
 
 
 def test_dummy() -> None:

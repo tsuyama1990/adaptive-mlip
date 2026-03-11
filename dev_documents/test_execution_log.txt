@@ -2,7 +2,6 @@
 platform linux -- Python 3.12.12, pytest-9.0.2, pluggy-1.6.0
 rootdir: /app
 configfile: pyproject.toml
-testpaths: tests
 plugins: cov-7.0.0, anyio-4.12.1
 collected 247 items
 
@@ -108,7 +107,7 @@ tests/unit/test_oracle.py::test_dft_manager_embedding
 tests/unit/test_oracle_streaming.py::test_dft_manager_streaming_behavior
 tests/unit/test_oracle_streaming.py::test_dft_manager_streaming_behavior
 tests/unit/test_oracle_streaming.py::test_dft_manager_streaming_behavior
-  /home/jules/.pyenv/versions/3.12.12/lib/python3.12/multiprocessing/popen_fork.py:66: DeprecationWarning: This process (pid=16166) is multi-threaded, use of fork() may lead to deadlocks in the child.
+  /home/jules/.pyenv/versions/3.12.12/lib/python3.12/multiprocessing/popen_fork.py:66: DeprecationWarning: This process (pid=25255) is multi-threaded, use of fork() may lead to deadlocks in the child.
     self.pid = os.fork()
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
@@ -127,7 +126,7 @@ src/pyacemaker/core/engine.py                       131     31    76%   49, 63-6
 src/pyacemaker/core/exceptions.py                     8      0   100%
 src/pyacemaker/core/generator.py                     53     11    79%   36-39, 59, 62, 97, 107, 113, 115, 138
 src/pyacemaker/core/io_manager.py                    74     30    59%   58-71, 78-81, 106-107, 110-115, 124-125, 129, 133-141
-src/pyacemaker/core/lammps_generator.py             166     19    89%   39-40, 174-190, 198, 217-224
+src/pyacemaker/core/lammps_generator.py             170     19    89%   39-40, 158-174, 182, 201-208
 src/pyacemaker/core/loop.py                          70      7    90%   41, 56, 63, 79-82, 85
 src/pyacemaker/core/m3gnet_wrapper.py                46     19    59%   27-28, 32-33, 52-70, 98-105
 src/pyacemaker/core/oracle.py                       173     41    76%   143-144, 194-199, 235-237, 245-246, 249-250, 268-271, 274-306, 322-323, 326-327, 335, 362
@@ -135,11 +134,11 @@ src/pyacemaker/core/policy.py                       114     33    71%   29-30, 8
 src/pyacemaker/core/policy_factory.py                31      7    77%   47, 53-54, 58-59, 86-87
 src/pyacemaker/core/report.py                        12      1    92%   85
 src/pyacemaker/core/state_manager.py                 34      5    85%   28-30, 37-38
-src/pyacemaker/core/trainer.py                      127     45    65%   41-56, 76-90, 135-136, 144-145, 170-173, 176-177, 184-185, 188-189, 211-212, 221-222, 243-247, 250-251
+src/pyacemaker/core/trainer.py                      134     45    66%   41-56, 76-90, 135-136, 144-145, 175-178, 181-182, 189-190, 193-194, 216-217, 226-227, 255-259, 262-263
 src/pyacemaker/core/validator.py                     68      7    90%   63, 68, 75-76, 79, 113, 150
 src/pyacemaker/domain_models/__init__.py             11      0   100%
 src/pyacemaker/domain_models/config.py               22      0   100%
-src/pyacemaker/domain_models/constants.py            17      0   100%
+src/pyacemaker/domain_models/constants.py            18      0   100%
 src/pyacemaker/domain_models/defaults.py            131      0   100%
 src/pyacemaker/domain_models/dft.py                  37      4    89%   85-86, 93-94
 src/pyacemaker/domain_models/eon.py                  34      4    88%   66-69
@@ -177,7 +176,7 @@ tests/conftest.py                                   133     10    92%   75-77, 1
 tests/constants.py                                    2      0   100%
 tests/e2e/__init__.py                                 0      0   100%
 tests/e2e/test_engine_integration.py                 38      1    97%   18
-tests/e2e/test_orchestrator.py                        9      2    78%   14-15
+tests/e2e/test_orchestrator.py                        8      1    88%   14
 tests/e2e/test_orchestrator_loop.py                 102      6    94%   24, 34-35, 110, 156, 162
 tests/e2e/test_orchestrator_refinement.py            84      4    95%   29, 32, 59-60
 tests/integration/test_pacemaker_integration.py      42      0   100%
@@ -209,7 +208,7 @@ tests/unit/test_engine_halt_step.py                  36      0   100%
 tests/unit/test_engine_relax.py                      49      0   100%
 tests/unit/test_eon_driver.py                        97      0   100%
 tests/unit/test_extraction.py                        24      0   100%
-tests/unit/test_factory.py                           34      0   100%
+tests/unit/test_factory.py                           32      0   100%
 tests/unit/test_generator.py                         64      0   100%
 tests/unit/test_generator_local.py                   31      1    97%   60
 tests/unit/test_io.py                                66      0   100%
@@ -236,7 +235,7 @@ tests/unit/test_trainer_pacemaker.py                 71      0   100%
 tests/unit/test_validator.py                         62      0   100%
 tests/unit/test_validator_security.py                62      6    90%   47, 64-65, 72, 77-78
 -------------------------------------------------------------------------------
-TOTAL                                              6288    629    90%
-====================== 247 passed, 224 warnings in 21.00s ======================
+TOTAL                                              6297    628    90%
+====================== 247 passed, 224 warnings in 28.12s ======================
 /app/.venv/lib/python3.12/site-packages/coverage/report_core.py:113: CoverageWarning: Couldn't parse '/app/_remote_module_non_scriptable': No source for code: '/app/_remote_module_non_scriptable'. (couldnt-parse); see https://coverage.readthedocs.io/en/7.13.4/messages.html#warning-couldnt-parse
   coverage._warn(msg, slug="couldnt-parse")
