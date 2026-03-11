@@ -92,7 +92,7 @@ class LammpsScriptGenerator:
         buffer.write("neigh_modify delay 0 every 1 check yes\n")
         buffer.write(f"timestep {self.config.timestep}\n")
 
-    def _gen_watchdog(self, buffer: TextIO, potential_path: Path) -> None:
+    def _gen_watchdog(self, buffer: TextIO, potential_path: Path, data_file: Path | None = None) -> None:
         """Generates Uncertainty Watchdog commands."""
         if not self.config.fix_halt:
             return
@@ -101,11 +101,55 @@ class LammpsScriptGenerator:
         buffer.write(f"compute gamma all pace {quoted_pot}\n")
         buffer.write("compute max_gamma all reduce max c_gamma\n")
         buffer.write("variable max_g equal c_max_gamma\n")
-        buffer.write(
-            f"fix halt_check all halt {self.config.check_interval} "
-            f"v_max_g > {self.config.uncertainty_threshold} error continue\n"
-        )
 
+        smooth_steps = getattr(self.config, 'smooth_steps', 3)
+        threshold_call_dft = self.config.uncertainty_threshold
+
+        # Secure file-based Python execution (no inline code)
+        evaluator_path = "evaluator.py"
+        if data_file:
+            evaluator_path_obj = data_file.parent / "evaluator.py"
+            evaluator_path = self._quote(str(evaluator_path_obj))
+
+            # Write the static evaluator script directly to the workspace
+            with evaluator_path_obj.open("w") as f:
+                f.write("def invoke_evaluator():\n")
+                f.write("    from lammps import lammps\n")
+                f.write("    lmp = lammps(ptr=lammps.get_lammps_ptr())\n")
+                f.write("    try:\n")
+                f.write("        max_g = float(lmp.extract_variable('max_g', 0, 0))\n")
+                f.write("        threshold = float(lmp.extract_variable('threshold_call_dft', 0, 0))\n")
+                f.write("        smooth_steps = int(lmp.extract_variable('smooth_steps', 0, 0))\n")
+                f.write("    except Exception as e:\n")
+                f.write("        print(f'Evaluator variable extraction failed: {e}')\n")
+                f.write("        return\n")
+                f.write("    \n")
+                f.write("    # Use LAMMPS internal variable for state instead of python sys.globals\n")
+                f.write("    try:\n")
+                f.write("        exceed_count = int(lmp.extract_variable('exceed_count', 0, 0))\n")
+                f.write("    except Exception:\n")
+                f.write("        exceed_count = 0\n")
+                f.write("    \n")
+                f.write("    if max_g > threshold:\n")
+                f.write("        exceed_count += 1\n")
+                f.write("        lmp.command(f'variable exceed_count equal {exceed_count}')\n")
+                f.write("        if exceed_count >= smooth_steps:\n")
+                f.write("            print('True Anomaly Detected, Halting')\n")
+                f.write("            lmp.command('quit')\n")
+                f.write("        else:\n")
+                f.write("            print('Thermal Noise Detected, Ignoring')\n")
+                f.write("    else:\n")
+                f.write("        lmp.command('variable exceed_count equal 0')\n")
+
+        buffer.write(f"variable threshold_call_dft equal {threshold_call_dft}\n")
+        buffer.write(f"variable smooth_steps equal {smooth_steps}\n")
+        buffer.write("variable exceed_count equal 0\n")
+
+        buffer.write(f"python invoke_evaluator invoke {evaluator_path}\n")
+        buffer.write(
+            f"fix python_invoke all python/invoke {self.config.check_interval} "
+            f"post_force invoke_evaluator\n"
+        )
     def _gen_mc(self, buffer: TextIO, elements: list[str]) -> None:
         """Generates Monte Carlo atom swapping commands."""
         if not self.config.mc:
@@ -219,7 +263,7 @@ class LammpsScriptGenerator:
 
         self._gen_potential(buffer, potential_path, elements)
         self._gen_settings(buffer)
-        self._gen_watchdog(buffer, potential_path)
+        self._gen_watchdog(buffer, potential_path, data_file)
 
         # Output setup MUST come before run
         self._gen_output_setup(buffer, dump_file)

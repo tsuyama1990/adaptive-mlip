@@ -68,6 +68,9 @@ FILE_NAME_MGO_SURFACE: Final[str] = "mgo_surface.xyz"
 FILE_NAME_DEPOSITED: Final[str] = "deposited.xyz"
 FILE_NAME_EON_POS: Final[str] = "pos.con"
 
+# Security Constraints
+FORBIDDEN_SHELL_PATTERNS: Final[str] = r"(\bexec\b|\bsystem\b|\bos\.|;|\||&|<|>|`|\$\(|\$\{)"
+
 __all__ = [
     "DANGEROUS_PATH_CHARS",
     "DEFAULT_EON_EXECUTABLE",

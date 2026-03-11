@@ -64,9 +64,31 @@ class PacemakerTrainer(BaseTrainer):
         """
         Mixes a replay buffer with the new active learning data and runs incremental delta learning.
         """
-        # In a real implementation this would merge replay buffer with the new dataset
-        # Here we just delegate to train
-        _replay_buffer = self.get_replay_buffer(strategy_config.replay_buffer_size)
+        from ase.io import iread, write
+
+        new_data_path_resolved = Path(new_data_path).resolve()
+        self._validate_training_data(new_data_path_resolved)
+
+        replay_buffer = self.get_replay_buffer(strategy_config.replay_buffer_size)
+
+        if replay_buffer:
+            # Create a combined dataset file
+            combined_data_path = new_data_path_resolved.parent / "incremental_combined.extxyz"
+
+            # Stream the new data and replay buffer into the combined file
+            def combined_stream() -> Any:
+                yield from replay_buffer
+                yield from iread(str(new_data_path_resolved))
+
+            try:
+                write(combined_data_path, combined_stream(), format="extxyz")
+            except Exception as e:
+                msg = f"Failed to merge replay buffer and new training data: {e}"
+                raise TrainerError(msg) from e
+
+            # Train using the combined dataset
+            return self.train(str(combined_data_path), initial_potential)
+
         return self.train(new_data_path, initial_potential)
 
     def train(
@@ -115,29 +137,34 @@ class PacemakerTrainer(BaseTrainer):
 
         import re
 
+        from pyacemaker.domain_models.constants import FORBIDDEN_SHELL_PATTERNS
+
         for key, val in pacemaker_config.items():
-            if isinstance(val, str) and re.search(
-                r"(\bexec\b|\bsystem\b|\bos\.|;|\||&|<|>|`|\$\(|\$\{)", val
-            ):
+            if isinstance(val, str) and re.search(FORBIDDEN_SHELL_PATTERNS, val):
                 msg = f"Malicious content detected in configuration value for key '{key}'"
                 raise TrainerError(msg)
 
         dump_yaml(pacemaker_config, input_yaml_path)
 
-        # Run pace_train
+        # Run pace_train safely
         cmd = (
             self.config.pace_train_command.copy()
             if self.config.pace_train_command
             else ["pace_train"]
         )
-        cmd.append(str(input_yaml_path))
+
+        from pyacemaker.utils.path import validate_path_safe
+
+        safe_input_yaml_path = validate_path_safe(input_yaml_path)
+        cmd.append(str(safe_input_yaml_path))
 
         if initial_potential:
             initial_path = Path(initial_potential)
             if not initial_path.exists():
                 msg = f"Initial potential not found: {initial_path}"
                 raise TrainerError(msg)
-            cmd.extend(["--initial_potential", str(initial_path)])
+            safe_initial_path = validate_path_safe(initial_path)
+            cmd.extend(["--initial_potential", str(safe_initial_path)])
 
         try:
             run_command(cmd)
@@ -203,20 +230,27 @@ class FinetuneManager:
 
         epochs = str(self.config.mace_finetune_epochs) if self.config else "5"
 
-        # Finetune using configured MACE CLI
+        # Finetune using configured MACE CLI safely
+        from pyacemaker.utils.path import validate_path_safe
+
+        safe_dataset_path = validate_path_safe(dataset_path)
+        safe_output_model = validate_path_safe(output_model)
+
         cmd = mace_finetune_cmd.copy()
         cmd.extend(
             [
                 "--train_file",
-                str(dataset_path),
+                str(safe_dataset_path),
                 "--model",
-                str(output_model),
+                str(safe_output_model),
                 "--epochs",
                 epochs,
             ]
         )
 
         try:
+            # We enforce check=True internally in run_command or by explicitly using subprocess.run
+            # if run_command does not. However, run_command already raises exceptions.
             run_command(cmd)
         except Exception:
             # If MACE is not installed or finetune fails, we just raise an error

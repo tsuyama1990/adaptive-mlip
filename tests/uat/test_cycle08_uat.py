@@ -140,7 +140,7 @@ def test_scenario_phase4_resume(mock_driver: MagicMock, tmp_path: Path) -> None:
     # 1. Finetune MACE
     finetune_mgr = FinetuneManager()
     dataset_path = tmp_path / "dataset.xyz"
-    dataset_path.touch()
+    dataset_path.write_text("1\n\nFe 0.0 0.0 0.0\n")
     # Mock run_command to simulate successful execution since MACE is not installed in the test env
     with patch("pyacemaker.core.trainer.run_command"):
         # Finetune method creates the file internally when simulating, so we touch it to avoid FileNotFoundError

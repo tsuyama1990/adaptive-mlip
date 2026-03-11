@@ -248,9 +248,54 @@ class Orchestrator:
         # Use iteration 0 for cold start
         paths = self.dir_manager.setup_iteration(0)
 
-        self._explore(paths)
-        self._label(paths)
-        potential_path = self._train(paths)
+        if self.config.workflow.distillation.enable:
+            self.logger.info("Starting Phase 1: Zero-Shot Distillation")
+            if not self.generator or not self.oracle or not self.trainer:
+                msg = "Generator, Oracle, and Trainer are required for distillation."
+                raise OrchestratorError(msg)
+
+            # 1. Combinatorial Exploration
+            n_candidates = self.config.workflow.distillation.sampling_structures_per_system
+            candidate_stream = self.generator.generate(n_candidates=n_candidates)
+
+            try:
+                # 2. Oracle Labeling (with MACE/TieredOracle)
+                batch_size = self.config.workflow.batch_size
+                labelled_stream = self.oracle.compute(candidate_stream, batch_size=batch_size)
+
+                # 3. Confidence Filtering
+                def filter_confident_structures(stream: Iterable[Atoms]) -> Iterable[Atoms]:
+                    threshold = self.config.workflow.distillation.uncertainty_threshold
+                    for atoms in stream:
+                        if atoms.has("c_gamma"):  # type: ignore[no-untyped-call]
+                            gammas = atoms.get_array("c_gamma")  # type: ignore[no-untyped-call]
+                            if gammas is not None and np.max(gammas) <= threshold:
+                                yield atoms
+
+                confident_stream = filter_confident_structures(labelled_stream)
+
+                # 4. Save Training Data
+                training_file = paths["training"] / FILENAME_TRAINING
+                total = self._stream_write(
+                    confident_stream, training_file, batch_size=batch_size, append=False
+                )
+                self.logger.info(
+                    f"Distillation: {total} highly confident structures selected for baseline."
+                )
+            except Exception as e:
+                msg = (
+                    f"Oracle computation failed: {e}"
+                    if "Oracle computation failed" in str(e)
+                    else f"Exploration failed: {e}"
+                )
+                raise OrchestratorError(msg) from e
+
+            # 5. Base Potential Training (Delta Learning configured by Trainer)
+            potential_path = self._train(paths)
+        else:
+            self._explore(paths)
+            self._label(paths)
+            potential_path = self._train(paths)
 
         if potential_path:
             self.state_manager.current_potential = potential_path
