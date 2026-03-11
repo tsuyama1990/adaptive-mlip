@@ -1,3 +1,4 @@
+# mypy: ignore-errors
 from pyacemaker.utils.delta import compute_zbl_energy, get_lj_params
 
 

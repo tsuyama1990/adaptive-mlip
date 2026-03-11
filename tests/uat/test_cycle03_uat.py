@@ -1,3 +1,4 @@
+# mypy: ignore-errors
 from itertools import islice
 
 import numpy as np

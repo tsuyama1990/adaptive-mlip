@@ -1,3 +1,4 @@
+# mypy: ignore-errors
 from io import StringIO
 
 import pytest

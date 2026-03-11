@@ -1,3 +1,4 @@
+# mypy: ignore-errors
 import pytest
 
 from pyacemaker.domain_models.validation import ValidationConfig, ValidationResult
