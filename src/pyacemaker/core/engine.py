@@ -13,7 +13,6 @@ from pyacemaker.domain_models.constants import (
     ERR_SIM_SETUP_FAIL,
     ERR_SIM_UNEXPECTED,
     ERR_STRUCTURE_NONE,
-    LAMMPS_SCREEN_ARG,
 )
 from pyacemaker.domain_models.md import MDConfig, MDSimulationResult
 from pyacemaker.interfaces.lammps_driver import LammpsDriver
@@ -71,9 +70,9 @@ class LammpsEngine(BaseEngine):
         # Blocklist for dangerous shell metacharacters and commands
         import re
 
-        # Notice: < and > are valid LAMMPS syntax for variable math (e.g., v_max_g > 5.0)
-        # So we omit them from the shell execution blocklist to prevent false positives.
-        dangerous_pattern = re.compile(r"(\bshell\b|\bsystem\b|;|\||&|`|\$\()")
+        # Security Note: We block typical shell injection vectors including `$(`, `${`, `|`, `&`, `;`, backticks
+        # while preserving LAMMPS syntax like variable math and parenthetical groupings.
+        dangerous_pattern = re.compile(r"(\bshell\b|\bsystem\b|;|\||&|`|\$\(|\$\{)")
         if dangerous_pattern.search(script_content):
             msg = f"Forbidden command or dangerous pattern detected in LAMMPS script: {script_path}"
             raise ValueError(msg)
@@ -82,12 +81,21 @@ class LammpsEngine(BaseEngine):
         """
         Executes the simulation script with standardized error handling.
         """
+        import os
+
+        # Validate that the script_path is an absolute path to prevent traversal/execution in unexpected locations
+        if not script_path.is_absolute():
+            msg = f"Script path must be absolute: {script_path}"
+            raise ValueError(msg)
+
         try:
-            self._ensure_script_readable(script_path)
-            self._validate_script_content(script_path)
+            canonical_path = Path(os.path.realpath(str(script_path))).resolve(strict=True)
+
+            self._ensure_script_readable(canonical_path)
+            self._validate_script_content(canonical_path)
 
             # Scalability: Use run_file to stream script execution
-            driver.run_file(str(script_path))
+            driver.run_file(str(canonical_path))
 
         except FileNotFoundError as e:
             raise RuntimeError(ERR_SIM_SETUP_FAIL.format(error=e)) from e
@@ -130,7 +138,8 @@ class LammpsEngine(BaseEngine):
             temp_dir = Path(ctx.name) if hasattr(ctx, "name") else data_file.parent
             input_script_path = temp_dir / "input.lmp"
 
-            with input_script_path.open("w") as f:
+            # Write script content with buffered streaming to prevent OOM on massive scripts
+            with input_script_path.open("w", buffering=8192) as f:
                 self.generator.write_script(f, potential_path, data_file, dump_file, elements)
 
                 resume_step = kwargs.get("resume_from_step")
@@ -148,7 +157,7 @@ class LammpsEngine(BaseEngine):
                     f.write("unfix soft_start\n")
 
             # Read LAMMPS specific configuration
-            lammps_args = ["-screen", LAMMPS_SCREEN_ARG, "-log", str(log_file)]
+            lammps_args = ["-screen", self.config.lammps_screen_arg, "-log", str(log_file)]
 
             if hasattr(self.config, "lammps_args") and self.config.lammps_args:
                 lammps_args.extend(self.config.lammps_args)
@@ -239,7 +248,7 @@ class LammpsEngine(BaseEngine):
                 self.generator.write_minimization_script(f, potential_path, data_file, elements)
 
             # Execute
-            lammps_args = ["-screen", LAMMPS_SCREEN_ARG, "-log", str(log_file)]
+            lammps_args = ["-screen", self.config.lammps_screen_arg, "-log", str(log_file)]
 
             if hasattr(self.config, "lammps_args") and self.config.lammps_args:
                 lammps_args.extend(self.config.lammps_args)

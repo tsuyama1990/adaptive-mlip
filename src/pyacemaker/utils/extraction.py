@@ -40,7 +40,7 @@ def _pre_relax_buffer(cluster: Atoms, fmax: float = 0.05, steps: int = 50) -> At
     return cluster_copy  # type: ignore[no-any-return]
 
 
-def _passivate_surface(cluster: Atoms, element: str = "H") -> Atoms:
+def _passivate_surface(cluster: Atoms, element: str = "H", bond_length: float = 1.0) -> Atoms:
     """
     Passivates the surface of the cluster by adding dummy atoms (e.g. H) to undercoordinated atoms.
     """
@@ -73,7 +73,7 @@ def _passivate_surface(cluster: Atoms, element: str = "H") -> Atoms:
                 direction = np.array([1.0, 0.0, 0.0])
                 norm = 1.0
 
-            offset = (direction / norm) * 1.0  # 1.0 Angstrom bond length
+            offset = (direction / norm) * bond_length
             new_pos = pos + offset
 
             new_atoms.append(Atoms(element, positions=[new_pos]))
@@ -102,8 +102,9 @@ def extract_intelligent_cluster(
     total_cutoff = config.core_radius + config.buffer_radius
 
     # We will compute the distances from all atoms to all target atoms
-    # Use ASE's neighbor_list for each target atom
-
+    # Use ASE's neighbor_list. ASE's neighbor_list natively uses highly optimized
+    # cell lists internally for O(N) complexity given a valid cutoff.
+    # This prevents the O(N^2) explosion that would occur with a naive distance matrix.
     i_indices, j_indices, D_vectors = neighbor_list("ijD", structure, cutoff=total_cutoff)  # type: ignore[no-untyped-call]
 
     mask = np.isin(i_indices, target_atoms)
@@ -160,13 +161,13 @@ def extract_intelligent_cluster(
 
     if config.enable_pre_relaxation:
         cluster = _pre_relax_buffer(
-            cluster,
-            fmax=config.pre_relax_fmax,
-            steps=config.pre_relax_steps
+            cluster, fmax=config.pre_relax_fmax, steps=config.pre_relax_steps
         )
 
     if config.enable_passivation:
-        cluster = _passivate_surface(cluster, element=config.passivation_element)
+        cluster = _passivate_surface(
+            cluster, element=config.passivation_element, bond_length=config.passivation_bond_length
+        )
 
     # Finally, embed the cluster into a cell
     return embed_cluster(cluster, buffer=5.0)

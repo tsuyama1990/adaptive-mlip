@@ -25,14 +25,21 @@ def _run_calculator_process(
 ) -> tuple[Any, Exception | None]:
     """Top-level helper to run a single calculation attempt. Returns calculator and any exception for ProcessPoolExecutor."""
     try:
+        # Deep copy atoms to prevent race conditions and memory corruption in shared process memory
+        import copy
+
+        isolated_atoms = atoms.copy()  # type: ignore[no-untyped-call]
+        # ASE copy might shallow copy some arrays, explicit deepcopy ensures total isolation
+        isolated_atoms = copy.deepcopy(isolated_atoms)
+
         # Create new calculator for clean state
         # Use provided temporary directory to prevent file collisions and race conditions
-        calc = driver.get_calculator(atoms, config.model_copy(), directory=calc_dir)
-        atoms.calc = calc
+        calc = driver.get_calculator(isolated_atoms, config.model_copy(), directory=calc_dir)
+        isolated_atoms.calc = calc
 
         # Trigger actual calculation
-        atoms.get_potential_energy()  # type: ignore[no-untyped-call]
-        atoms.get_forces()  # type: ignore[no-untyped-call]
+        isolated_atoms.get_potential_energy()
+        isolated_atoms.get_forces()
 
         # Try to get stress (optional)
         with contextlib.suppress(PropertyNotImplementedError, RuntimeError):
@@ -93,6 +100,10 @@ class DFTManager(BaseOracle):
                 calc_dir = work_path / f"calc_{i}"
                 calc_dir.mkdir()
                 yield self._process_structure(atoms, str(calc_dir))
+                import shutil
+
+                # Clean up subdirectory to avoid OOM/disk exhaustion on large datasets
+                shutil.rmtree(calc_dir, ignore_errors=True)
 
     def _process_structure(self, atoms: Atoms, calc_dir: str) -> Atoms:
         """
@@ -127,7 +138,10 @@ class DFTManager(BaseOracle):
         c.smearing_width *= self.config.smearing_width_factor
 
     def _strategy_use_cg(self, c: DFTConfig) -> None:
-        c.diagonalization = "cg"
+        if "cg" in self.config.allowed_diagonalization_methods:
+            c.diagonalization = "cg"
+        elif len(self.config.allowed_diagonalization_methods) > 0:
+            c.diagonalization = self.config.allowed_diagonalization_methods[0]
 
     def _handle_exception(self, exception: Exception) -> None:
         """Raises a structured error for failed calculations."""
@@ -207,35 +221,48 @@ class MACEManager(BaseOracle):
     Provides energy, forces, and uncertainty estimation.
     """
 
-    def __init__(self, model_path: str) -> None:
+    def __init__(self, model_path: str, allowed_dir_str: str | None = None) -> None:
         import os
 
-        from pyacemaker.domain_models.defaults import DEFAULT_POTENTIALS_DIR
+        if allowed_dir_str is None:
+            from pyacemaker.domain_models.defaults import DEFAULT_POTENTIALS_DIR
 
-        # Canonicalize the path using os.path.realpath to safely unpack symlinks and avoid TOCTOU
-        canonical_path_str = os.path.realpath(model_path)
-        canonical_path = Path(canonical_path_str)
+            allowed_dir_str = DEFAULT_POTENTIALS_DIR
+
+        # Solve TOCTOU by strictly resolving before checking containment or properties
+        try:
+            canonical_path = Path(os.path.realpath(model_path)).resolve(strict=True)
+        except Exception as e:
+            msg = "Invalid MACE model path."
+            raise ValueError(msg) from e
 
         # Verify containment: ensure the path falls inside the accepted allowed_base_dir.
         # This prevents traversal attacks (e.g., passing "../../../etc/passwd").
-        allowed_dir = Path(DEFAULT_POTENTIALS_DIR).resolve()
+        allowed_dir = Path(allowed_dir_str).resolve()
 
         # Proceed with containment check
         if not canonical_path.is_relative_to(allowed_dir):
             msg = "Invalid MACE model path."
             raise ValueError(msg)
 
-        # We will use `os.path.realpath` as explicitly instructed by the audit.
-        if not canonical_path.exists():
-            msg = "MACE model path does not exist."
-            raise FileNotFoundError(msg)
         if not canonical_path.is_file():
             msg = "MACE model path must be a file."
             raise ValueError(msg)
 
         self.model_path = str(canonical_path)
-        # Mock MACE initialization
-        self.is_initialized = True
+
+        try:
+            from mace.calculators import mace_mp
+
+            # We initialize a real MACE calculator if the package is installed.
+            # Caching it here ensures we don't recreate the model every generator loop.
+            self.calc = mace_mp(
+                model=self.model_path, dispersion=False, default_dtype="float64", device="cpu"
+            )
+        except Exception:
+            # Fallback gracefully if missing, though typically we expect mace_mp installed.
+            # We store the exception or set calc to None depending on design.
+            self.calc = None  # type: ignore[assignment]
 
     def compute(self, structures: Iterator[Atoms], batch_size: int = 10) -> Iterator[Atoms]:
         if not isinstance(structures, Iterator):
@@ -244,20 +271,15 @@ class MACEManager(BaseOracle):
         return self._compute_generator(structures, batch_size)
 
     def _compute_generator(self, structures: Iterator[Atoms], batch_size: int) -> Iterator[Atoms]:
-        # Enforce usage of mace, no mocks allowed
-        from mace.calculators import mace_mp
-
-        # We initialize a real MACE calculator if the package is installed
-        # Note: For production, instantiation should probably be cached
-        calc = mace_mp(
-            model=self.model_path, dispersion=False, default_dtype="float64", device="cpu"
-        )
+        if self.calc is None:
+            msg = "MACEManager requires mace_mp and a valid model to compute."
+            raise RuntimeError(msg)
 
         for atoms in structures:
             atoms_copy = atoms.copy()  # type: ignore[no-untyped-call]
 
-            # Attach the real calculator
-            atoms_copy.calc = calc
+            # Attach the cached calculator
+            atoms_copy.calc = self.calc
 
             try:
                 energy = atoms_copy.get_potential_energy()

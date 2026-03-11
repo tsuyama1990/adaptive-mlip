@@ -37,19 +37,23 @@ class PacemakerTrainer(BaseTrainer):
         if not history_file.exists():
             return []
 
-        # Read history iteratively, stream to list
+        # Use reservoir sampling to maintain O(1) memory
+        reservoir = []
         try:
-            history = list(iread(str(history_file)))
+            # We use SystemRandom for cryptographic safety to pass linter, though not strictly required here
+            secure_random = random.SystemRandom()
+            for i, atoms in enumerate(iread(str(history_file))):
+                if i < size:
+                    reservoir.append(atoms)
+                else:
+                    j = secure_random.randint(0, i)
+                    if j < size:
+                        reservoir[j] = atoms
         except Exception as e:
             msg = f"Failed to read training history from {history_file}: {e}"
             raise TrainerError(msg) from e
 
-        if not history:
-            return []
-
-        # Sample up to `size` items
-        sample_size = min(size, len(history))
-        return random.sample(history, sample_size)
+        return reservoir
 
     def incremental_train(
         self,
@@ -85,9 +89,12 @@ class PacemakerTrainer(BaseTrainer):
         Raises:
             TrainerError: If the training data file does not exist or format is invalid.
         """
-        # Ensure pace_train is installed
-        if not shutil.which("pace_train"):
-            msg = "Executable 'pace_train' not found in PATH."
+        # Ensure pace_train command exists
+        pace_train_exe = (
+            self.config.pace_train_command[0] if self.config.pace_train_command else "pace_train"
+        )
+        if not shutil.which(pace_train_exe):
+            msg = f"Executable '{pace_train_exe}' not found in PATH."
             raise TrainerError(msg)
 
         data_path = Path(training_data_path).resolve()
@@ -110,7 +117,7 @@ class PacemakerTrainer(BaseTrainer):
 
         for key, val in pacemaker_config.items():
             if isinstance(val, str) and re.search(
-                r"(\bexec\b|\bsystem\b|\bos\.|;|\||>|<|&|`|\$\()", val
+                r"(\bexec\b|\bsystem\b|\bos\.|;|\||&|<|>|`|\$\(|\$\{)", val
             ):
                 msg = f"Malicious content detected in configuration value for key '{key}'"
                 raise TrainerError(msg)
@@ -118,7 +125,12 @@ class PacemakerTrainer(BaseTrainer):
         dump_yaml(pacemaker_config, input_yaml_path)
 
         # Run pace_train
-        cmd = ["pace_train", str(input_yaml_path)]
+        cmd = (
+            self.config.pace_train_command.copy()
+            if self.config.pace_train_command
+            else ["pace_train"]
+        )
+        cmd.append(str(input_yaml_path))
 
         if initial_potential:
             initial_path = Path(initial_potential)
@@ -177,26 +189,32 @@ class FinetuneManager:
             msg = f"Dataset for finetuning not found: {dataset_path}"
             raise FileNotFoundError(msg)
 
-        if not shutil.which("python"):
-            msg = "Python executable not found in PATH."
+        mace_finetune_cmd = (
+            self.config.mace_finetune_command
+            if self.config and self.config.mace_finetune_command
+            else ["python", "-m", "mace.cli.finetune"]
+        )
+
+        if not shutil.which(mace_finetune_cmd[0]):
+            msg = f"Executable '{mace_finetune_cmd[0]}' not found in PATH."
             raise RuntimeError(msg)
 
         output_model = dataset_path.parent / "awakened_mace_model.model"
 
         epochs = str(self.config.mace_finetune_epochs) if self.config else "5"
 
-        # Finetune using MACE CLI
-        cmd = [
-            "python",
-            "-m",
-            "mace.cli.finetune",
-            "--train_file",
-            str(dataset_path),
-            "--model",
-            str(output_model),
-            "--epochs",
-            epochs,
-        ]
+        # Finetune using configured MACE CLI
+        cmd = mace_finetune_cmd.copy()
+        cmd.extend(
+            [
+                "--train_file",
+                str(dataset_path),
+                "--model",
+                str(output_model),
+                "--epochs",
+                epochs,
+            ]
+        )
 
         try:
             run_command(cmd)

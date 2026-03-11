@@ -11,8 +11,6 @@ __generated_with = "0.2.0"
 app = marimo.App(width="medium")
 
 
-
-
 @app.cell
 def _() -> tuple[Any]:
     import marimo as mo
@@ -174,7 +172,9 @@ def uat_02(config: Any, temp_dir: Any, LammpsEngine: Any, fe_bcc: Any) -> None:
 
 
 @app.cell
-def uat_03(config: Any, fe_bcc: Any, extract_intelligent_cluster: Any, temp_dir: Any, np: Any) -> tuple[Any]:
+def uat_03(
+    config: Any, fe_bcc: Any, extract_intelligent_cluster: Any, temp_dir: Any, np: Any
+) -> tuple[Any]:
 
     # Simulate a structural anomaly causing high uncertainty on atom 0
     anomalous_structure = fe_bcc.copy()

@@ -93,6 +93,7 @@ def test_dft_manager_self_healing(
 
     class DummyExecutor:
         call_count: int = 0
+
         def __init__(self, max_workers: int) -> None:
             # We track the call count at the class level because DummyExecutor is instantiated fresh each loop
             pass
