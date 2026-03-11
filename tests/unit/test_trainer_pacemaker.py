@@ -64,6 +64,7 @@ def test_train_element_detection_scanning(
     with (
         patch("pyacemaker.core.trainer.run_command") as mock_run,
         patch("pyacemaker.core.trainer.dump_yaml") as mock_dump,
+        patch.object(trainer, "_validate_training_data", return_value=None),
     ):
         # Create dummy output so file check passes
         (data_path.parent / "test_pot.yace").touch()
@@ -108,7 +109,10 @@ def test_train_process_fail_util(
     data_path = tmp_path / "train.xyz"
     write(data_path, Atoms("H"))
 
-    with patch("pyacemaker.core.trainer.run_command") as mock_run:
+    with (
+        patch("pyacemaker.core.trainer.run_command") as mock_run,
+        patch.object(trainer, "_validate_training_data", return_value=None)
+    ):
         mock_run.side_effect = subprocess.CalledProcessError(1, "cmd", stderr="error")
 
         with pytest.raises(TrainerError, match="Training failed"):
@@ -127,12 +131,13 @@ def test_train_initial_potential(
 
     with (
         patch("pyacemaker.core.trainer.run_command") as mock_run,
-        patch("pyacemaker.core.trainer.dump_yaml"),
+        patch("pyacemaker.core.trainer.dump_yaml")
     ):
         # Create dummy output
         (data_path.parent / "test_pot.yace").touch()
 
-        trainer.train(data_path, initial_potential=initial_pot)
+        with patch.object(trainer, "_validate_training_data", return_value=None):
+            trainer.train(data_path, initial_potential=initial_pot)
 
         mock_run.assert_called_once()
         cmd = mock_run.call_args[0][0]
@@ -150,5 +155,8 @@ def test_train_initial_potential_missing(
 
     initial_pot = tmp_path / "missing.yace"
 
-    with pytest.raises(TrainerError, match="Initial potential not found"):
+    with (
+        patch.object(trainer, "_validate_training_data", return_value=None),
+        pytest.raises(TrainerError, match="Initial potential not found")
+    ):
         trainer.train(data_path, initial_potential=initial_pot)

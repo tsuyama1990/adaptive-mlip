@@ -102,6 +102,10 @@ class LammpsInputValidator:
         # Convert to Path but do not resolve yet; validate_path_safe handles resolution checks
         p = Path(potential)
 
+        if p.is_symlink():
+            msg = f"Symlink path traversal attacks detected: {p}"
+            raise ValueError(msg)
+
         # Use centralized secure validator
         path = validate_path_safe(p)
 

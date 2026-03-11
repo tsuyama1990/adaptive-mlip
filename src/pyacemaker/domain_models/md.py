@@ -170,30 +170,30 @@ class MDConfig(BaseModel):
     # Configurable LAMMPS Parameters (No Hardcoding)
     lammps_screen_arg: str = Field("none", description="Argument for the LAMMPS -screen flag")
     velocity_seed: int = Field(
-        LAMMPS_VELOCITY_SEED, description="Random seed for velocity initialization"
+        LAMMPS_VELOCITY_SEED, ge=0, description="Random seed for velocity initialization"
     )
     minimize_steps: int = Field(
-        LAMMPS_MINIMIZE_STEPS, description="Max iterations for minimization (steps)"
+        LAMMPS_MINIMIZE_STEPS, ge=0, description="Max iterations for minimization (steps)"
     )
     minimize_max_iter: int = Field(
-        LAMMPS_MINIMIZE_MAX_ITER, description="Max force evaluations for minimization"
+        LAMMPS_MINIMIZE_MAX_ITER, ge=0, description="Max force evaluations for minimization"
     )
     minimize_tol: float = Field(
-        DEFAULT_MD_MINIMIZE_TOL, description="Energy tolerance for minimization"
+        DEFAULT_MD_MINIMIZE_TOL, ge=0.0, description="Energy tolerance for minimization"
     )
     minimize_ftol: float = Field(
-        DEFAULT_MD_MINIMIZE_FTOL, description="Force tolerance for minimization"
+        DEFAULT_MD_MINIMIZE_FTOL, ge=0.0, description="Force tolerance for minimization"
     )
 
     # Seamless Resume Settings
     langevin_seed: int = Field(
-        48279, description="Random seed for Langevin thermostat during soft start"
+        48279, ge=0, description="Random seed for Langevin thermostat during soft start"
     )
     langevin_damping: float = Field(
-        100.0, description="Damping factor for Langevin thermostat (fs)"
+        100.0, gt=0.0, description="Damping factor for Langevin thermostat (fs)"
     )
     soft_start_steps: int = Field(
-        10, description="Number of steps to apply soft start Langevin thermostat when resuming"
+        10, ge=0, description="Number of steps to apply soft start Langevin thermostat when resuming"
     )
 
     # Advanced Settings
@@ -234,10 +234,26 @@ class MDConfig(BaseModel):
     check_interval: int = Field(
         DEFAULT_MD_CHECK_INTERVAL, gt=0, description="Step interval for uncertainty check"
     )
+    smooth_steps: int = Field(
+        3, gt=0, description="Number of consecutive steps exceeding threshold required to halt"
+    )
 
     # Spec Section 3.1: Ramping and MC
     ramping: MDRampingConfig | None = Field(None, description="Configuration for T/P ramping")
     mc: MCConfig | None = Field(None, description="Configuration for Monte Carlo atom swapping")
+
+    @model_validator(mode="after")
+    def validate_security(self) -> "MDConfig":
+        import re
+
+        from pyacemaker.domain_models.constants import MALICIOUS_SHELL_PATTERN
+
+        # Prevent command injection inside string fields (like lammps_screen_arg)
+        if self.lammps_screen_arg and re.search(MALICIOUS_SHELL_PATTERN, self.lammps_screen_arg):
+            msg = "lammps_screen_arg contains potentially malicious shell characters."
+            raise ValueError(msg)
+
+        return self
 
     @model_validator(mode="after")
     def validate_simulation_physics(self) -> "MDConfig":

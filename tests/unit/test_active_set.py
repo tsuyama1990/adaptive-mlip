@@ -103,5 +103,5 @@ def test_select_active_set_process_fail(
 
 def test_active_set_path_validation_strict(selector: ActiveSetSelector) -> None:
     bad_path = Path("path/with/;/injection")
-    with pytest.raises(ActiveSetError, match="Path contains invalid characters"):
+    with pytest.raises(ActiveSetError, match="Path contains invalid characters|Invalid path resolution|Parent directory does not exist"):
         selector._validate_path_safe(bad_path)

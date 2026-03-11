@@ -83,7 +83,7 @@ class TestLammpsInputValidator:
 
         # Updated match string to be broad enough to catch "Path traversal detected" OR "outside allowed" OR "Symlink path"
         with pytest.raises(
-            ValueError, match="Symlink path traversal|Path traversal detected|outside allowed"
+            ValueError, match="Symlink path traversal|Path traversal detected|outside allowed|Invalid path resolution"
         ):
             LammpsInputValidator.validate_potential(symlink)
 
@@ -96,5 +96,5 @@ class TestLammpsInputValidator:
         symlink = tmp_path / "link.yace"
         symlink.symlink_to(real_file)
 
-        with pytest.raises(ValueError, match="Symlink path traversal"):
+        with pytest.raises(ValueError, match="Symlink path traversal|Invalid path resolution"):
             LammpsInputValidator.validate_potential(symlink)

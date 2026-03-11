@@ -1,4 +1,3 @@
-import shlex
 from pathlib import Path
 from typing import TextIO
 
@@ -32,15 +31,28 @@ class LammpsScriptGenerator:
         Quotes a path for LAMMPS script safety after validation.
         Uses caching to avoid redundant validation calls.
         """
+        import re
+
+        from pyacemaker.domain_models.constants import LAMMPS_SAFE_CMD_PATTERN
+
         # Sanitize input path
         # Note: path must be string for lru_cache
-        safe_path = validate_path_safe(Path(path))
+        p = Path(path)
+        safe_path = validate_path_safe(p)
         if not safe_path.exists() and not safe_path.parent.exists():
             msg = f"Path {safe_path} is invalid or has an invalid parent directory."
             raise ValueError(msg)
 
-        # Use shlex.quote for shell safety
-        return shlex.quote(str(safe_path))
+        path_str = str(safe_path)
+
+        # In LAMMPS, quotes are mostly evaluated internally and not shell interpreted
+        # A safest approach is to ensure the path conforms strictly to safe characters
+        if not re.match(LAMMPS_SAFE_CMD_PATTERN, path_str):
+            msg = f"Path '{path_str}' contains characters not allowed in LAMMPS inputs."
+            raise ValueError(msg)
+
+        # We return it in double quotes specifically for LAMMPS
+        return f'"{path_str}"'
 
     def _gen_potential_pure(
         self, buffer: TextIO, potential_path: Path, elements: list[str]
@@ -101,9 +113,30 @@ class LammpsScriptGenerator:
         buffer.write(f"compute gamma all pace {quoted_pot}\n")
         buffer.write("compute max_gamma all reduce max c_gamma\n")
         buffer.write("variable max_g equal c_max_gamma\n")
+        buffer.write(f"variable threshold_dft equal {self.config.uncertainty_threshold}\n")
+        buffer.write(f"variable smooth_steps equal {self.config.smooth_steps}\n")
+
+        # Python evaluator referencing static module
+        buffer.write("variable consecutive_exceed equal 0.0\n")
+
+        # Get absolute path to static lammps_evaluator.py
+        import pyacemaker.core.lammps_evaluator
+
+        mod_file = pyacemaker.core.lammps_evaluator.__file__
+        if not mod_file:
+            msg = "Could not find static lammps_evaluator.py module path"
+            raise RuntimeError(msg)
+
+        evaluator_path = Path(mod_file).resolve()
+
+        quoted_evaluator_path = self._quote(str(evaluator_path))
+        buffer.write(f'python invoke_evaluator invoke file {quoted_evaluator_path}\n')
+        buffer.write(f"fix py_invoke all python/invoke {self.config.check_interval} post_force invoke_evaluator\n")
+
+        buffer.write("variable exceed_flag equal \"v_consecutive_exceed >= v_smooth_steps\"\n")
         buffer.write(
             f"fix halt_check all halt {self.config.check_interval} "
-            f"v_max_g > {self.config.uncertainty_threshold} error continue\n"
+            f"v_exceed_flag != 0 error continue\n"
         )
 
     def _gen_mc(self, buffer: TextIO, elements: list[str]) -> None:

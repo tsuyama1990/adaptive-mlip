@@ -64,10 +64,27 @@ class PacemakerTrainer(BaseTrainer):
         """
         Mixes a replay buffer with the new active learning data and runs incremental delta learning.
         """
-        # In a real implementation this would merge replay buffer with the new dataset
-        # Here we just delegate to train
-        _replay_buffer = self.get_replay_buffer(strategy_config.replay_buffer_size)
-        return self.train(new_data_path, initial_potential)
+        from ase.io import read, write
+
+        new_data_p = Path(new_data_path)
+        replay_buffer = self.get_replay_buffer(strategy_config.replay_buffer_size)
+
+        if replay_buffer:
+            # Combine the replay buffer with new data
+            new_data = read(str(new_data_p), index=":")
+            if not isinstance(new_data, list):
+                new_data = [new_data]
+
+            combined_data = replay_buffer + new_data
+
+            # Write to a combined temporary file
+            combined_path = new_data_p.parent / f"combined_{new_data_p.name}"
+            write(str(combined_path), combined_data, format="extxyz")
+
+            # Train using the combined dataset
+            return self.train(combined_path, initial_potential)
+        # If no replay buffer exists yet, just train on the new data
+        return self.train(new_data_p, initial_potential)
 
     def train(
         self, training_data_path: str | Path, initial_potential: str | Path | None = None
@@ -115,25 +132,32 @@ class PacemakerTrainer(BaseTrainer):
 
         import re
 
+        from pyacemaker.domain_models.constants import MALICIOUS_SHELL_PATTERN
+        from pyacemaker.utils.path import validate_path_safe
+
         for key, val in pacemaker_config.items():
             if isinstance(val, str) and re.search(
-                r"(\bexec\b|\bsystem\b|\bos\.|;|\||&|<|>|`|\$\(|\$\{)", val
+                MALICIOUS_SHELL_PATTERN, val
             ):
                 msg = f"Malicious content detected in configuration value for key '{key}'"
                 raise TrainerError(msg)
 
-        dump_yaml(pacemaker_config, input_yaml_path)
+        # Validate input config path
+        safe_input_yaml_path = validate_path_safe(input_yaml_path)
 
-        # Run pace_train
+        dump_yaml(pacemaker_config, safe_input_yaml_path)
+
+        # Run pace_train safely
+        # Note: shell=False in run_command avoids needing shlex.quote for list items
         cmd = (
             self.config.pace_train_command.copy()
             if self.config.pace_train_command
             else ["pace_train"]
         )
-        cmd.append(str(input_yaml_path))
+        cmd.append(str(safe_input_yaml_path))
 
         if initial_potential:
-            initial_path = Path(initial_potential)
+            initial_path = validate_path_safe(Path(initial_potential))
             if not initial_path.exists():
                 msg = f"Initial potential not found: {initial_path}"
                 raise TrainerError(msg)
@@ -158,18 +182,42 @@ class PacemakerTrainer(BaseTrainer):
 
     def _validate_training_data(self, data_path: Path) -> None:
         """Validates existence and basic format of training data."""
-        if not data_path.exists():
-            msg = f"Training data not found: {data_path}"
+        from pyacemaker.utils.path import validate_path_safe
+
+        try:
+            safe_path = validate_path_safe(data_path)
+        except ValueError as e:
+            msg = f"Invalid data path: {e}"
+            raise TrainerError(msg) from e
+
+        if not safe_path.exists():
+            msg = f"Training data not found: {safe_path}"
             raise TrainerError(msg)
 
-        if data_path.suffix not in {".pckl", ".xyz", ".extxyz", ".gzip"}:
-            msg = f"Invalid training data format: {data_path.suffix}"
+        if safe_path.suffix not in {".pckl", ".xyz", ".extxyz", ".gzip"}:
+            msg = f"Invalid training data format: {safe_path.suffix}"
             raise TrainerError(msg)
 
         # Check for empty file
-        if data_path.stat().st_size == 0:
-            msg = f"Training data file is empty: {data_path}"
+        if safe_path.stat().st_size == 0:
+            msg = f"Training data file is empty: {safe_path}"
             raise TrainerError(msg)
+
+        # Security: scan file contents for malicious patterns to prevent injection
+        import re
+
+        from pyacemaker.domain_models.constants import MALICIOUS_SHELL_PATTERN
+
+        # Only read up to 1MB to avoid memory bloat on large files
+        try:
+            with safe_path.open("r", encoding="utf-8", errors="ignore") as f:
+                content = f.read(1024 * 1024)
+                if re.search(MALICIOUS_SHELL_PATTERN, content):
+                    msg = "Malicious content detected in training data file"
+                    raise TrainerError(msg)
+        except OSError as e:
+            msg_os = f"Failed to read training data for validation: {e}"
+            raise TrainerError(msg_os) from e
 
 
 class FinetuneManager:
@@ -184,9 +232,11 @@ class FinetuneManager:
         """
         Briefly trains the final readout layers of the MACE foundation model.
         """
-        dataset_path = Path(dataset_path).resolve()
-        if not dataset_path.exists():
-            msg = f"Dataset for finetuning not found: {dataset_path}"
+        from pyacemaker.utils.path import validate_path_safe
+
+        safe_dataset_path = validate_path_safe(Path(dataset_path))
+        if not safe_dataset_path.exists():
+            msg = f"Dataset for finetuning not found: {safe_dataset_path}"
             raise FileNotFoundError(msg)
 
         mace_finetune_cmd = (
@@ -199,33 +249,47 @@ class FinetuneManager:
             msg = f"Executable '{mace_finetune_cmd[0]}' not found in PATH."
             raise RuntimeError(msg)
 
-        output_model = dataset_path.parent / "awakened_mace_model.model"
+        safe_output_model = validate_path_safe(safe_dataset_path.parent / "awakened_mace_model.model")
 
-        epochs = str(self.config.mace_finetune_epochs) if self.config else "5"
+        epochs = str(int(self.config.mace_finetune_epochs)) if self.config else "5"
 
         # Finetune using configured MACE CLI
+        # Note: shell=False in run_command avoids needing shlex.quote for list items
         cmd = mace_finetune_cmd.copy()
         cmd.extend(
             [
                 "--train_file",
-                str(dataset_path),
+                str(safe_dataset_path),
                 "--model",
-                str(output_model),
+                str(safe_output_model),
                 "--epochs",
                 epochs,
             ]
         )
 
+        import re
+
+        from pyacemaker.domain_models.constants import MALICIOUS_SHELL_PATTERN
+
+        for arg in cmd:
+            if re.search(MALICIOUS_SHELL_PATTERN, arg):
+                msg = "Malicious content detected in MACE finetuning command arguments"
+                raise ValueError(msg)
+
+        import logging
+        logger = logging.getLogger(__name__)
+
         try:
             run_command(cmd)
-        except Exception:
+        except Exception as e:
             # If MACE is not installed or finetune fails, we just raise an error
             # as the instruction says no mocks
+            logger.exception("MACE finetuning command failed unexpectedly.")
             msg = f"Failed to run MACE finetuning command: {' '.join(cmd)}"
-            raise RuntimeError(msg) from None
+            raise RuntimeError(msg) from e
 
-        if not output_model.exists():
-            msg = f"Finetuned model was not created at {output_model}"
+        if not safe_output_model.exists():
+            msg = f"Finetuned model was not created at {safe_output_model}"
             raise RuntimeError(msg)
 
-        return str(output_model)
+        return str(safe_output_model)

@@ -1,7 +1,6 @@
 from typing import Final
 
 from .defaults import (
-    DANGEROUS_PATH_CHARS,
     DEFAULT_EON_EXECUTABLE,
     DEFAULT_EON_SEED,
     DEFAULT_LJ_PARAMS,
@@ -42,6 +41,7 @@ from .defaults import (
     LAMMPS_SAFE_CMD_PATTERN,
     LAMMPS_SCREEN_ARG,
     LAMMPS_VELOCITY_SEED,
+    MALICIOUS_SHELL_PATTERN,
     MAX_MD_DURATION,
     MAX_MD_PRESSURE,
     PACE_DRIVER_TEMPLATE,
@@ -69,7 +69,6 @@ FILE_NAME_DEPOSITED: Final[str] = "deposited.xyz"
 FILE_NAME_EON_POS: Final[str] = "pos.con"
 
 __all__ = [
-    "DANGEROUS_PATH_CHARS",
     "DEFAULT_EON_EXECUTABLE",
     "DEFAULT_EON_SEED",
     "DEFAULT_LJ_PARAMS",
@@ -116,6 +115,7 @@ __all__ = [
     "LAMMPS_SAFE_CMD_PATTERN",
     "LAMMPS_SCREEN_ARG",
     "LAMMPS_VELOCITY_SEED",
+    "MALICIOUS_SHELL_PATTERN",
     "MAX_MD_DURATION",
     "MAX_MD_PRESSURE",
     "PACE_DRIVER_TEMPLATE",
