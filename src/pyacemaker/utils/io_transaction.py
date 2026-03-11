@@ -29,9 +29,10 @@ class DirectoryTransaction:
                 try:
                     if path.is_dir() and not any(path.iterdir()):
                         path.rmdir()
-                except OSError:
-                    # Log or ignore if we can't cleanup (e.g. permission lost)
-                    pass
+                except OSError as e:
+                    import logging
+
+                    logging.getLogger(__name__).warning(f"Failed to rollback directory {path}: {e}")
 
     def create_directory(self, path: Path) -> None:
         """

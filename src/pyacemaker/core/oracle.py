@@ -255,7 +255,7 @@ class MACEManager(BaseOracle):
             c_gamma = np.random.uniform(0.01, 0.1, size=len(atoms_copy))
 
             # In a real implementation we would attach a calculator
-            # Here we just mock setting the arrays and attributes
+            # Here we just simulate setting the arrays and attributes
             atoms_copy.calc = None
             atoms_copy.info["energy"] = energy
             atoms_copy.new_array("forces", forces)

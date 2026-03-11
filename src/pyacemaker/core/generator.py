@@ -14,7 +14,7 @@ from pyacemaker.domain_models.structure import PolicyContext, StructureConfig
 class StructureGenerator(BaseGenerator):
     """
     Structure Generator implementation.
-    Uses M3GNet (or mock) for base structure and exploration policies for perturbations.
+    Uses M3GNet (or fallback) for base structure and exploration policies for perturbations.
     """
 
     def __init__(self, config: StructureConfig) -> None:

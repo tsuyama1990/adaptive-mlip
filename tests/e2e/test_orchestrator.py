@@ -224,7 +224,14 @@ def test_orchestrator_error_handling_generator(mock_config: PyAceConfig, monkeyp
     mock_gen.generate.side_effect = RuntimeError("Generator failed")
 
     def mock_create_modules(cfg: PyAceConfig) -> tuple[Any, Any, Any, Any, Any, Any]:
-        return mock_gen, FakeActiveSetSelector(), FakeActiveSetSelector(), FakeActiveSetSelector(), FakeActiveSetSelector(), FakeActiveSetSelector()
+        return (
+            mock_gen,
+            FakeActiveSetSelector(),
+            FakeActiveSetSelector(),
+            FakeActiveSetSelector(),
+            FakeActiveSetSelector(),
+            FakeActiveSetSelector(),
+        )
 
     monkeypatch.setattr(ModuleFactory, "create_modules", mock_create_modules)
 

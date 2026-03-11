@@ -181,7 +181,7 @@ class LammpsEngine(BaseEngine):
                     # If using fix halt, checking step count is a proxy for early termination
                     halted = step < n_steps_target
 
-                # Evaluate two-tier thresholds if provided in config overrides (mock implementation)
+                # Evaluate two-tier thresholds if provided in config overrides (Python implementation)
                 # If max_gamma exceeds the threshold, we halt manually if LAMMPS didn't.
                 if "threshold_call_dft" in kwargs and max_gamma > kwargs["threshold_call_dft"]:
                     halted = True

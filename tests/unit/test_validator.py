@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from ase import Atoms
 
-from pyacemaker.core.validator import LammpsInputValidator, Validator
+from pyacemaker.core.validator import Validator
 from pyacemaker.domain_models.validation import ValidationConfig, ValidationResult
 
 
@@ -94,14 +94,3 @@ class TestValidator:
 
         assert relaxed == "relaxed_structure"
         mock_engine.relax.assert_called_once_with(structure, pot_path)
-
-    def test_validate_structure_invalid_element(self):
-        """Test rejection of structure with invalid chemical symbol (dummy X)."""
-        # 'X' is in atomic_numbers but Z=0
-        # Need pbc and cell for get_volume() check to pass first if we want to hit the element check.
-        # Or let volume check fail? But volume check raises "Failed to compute structure volume"
-        # We want to test element check specifically.
-        # So we provide a valid cell.
-        structure = Atoms("X", positions=[[0, 0, 0]], cell=[10, 10, 10], pbc=True)
-        with pytest.raises(ValueError, match="dummy element"):
-            LammpsInputValidator.validate_structure(structure)

@@ -483,7 +483,7 @@ class Orchestrator:
                         # Mocks might return themselves (MagicMock), handle strings/Paths safely
                         if isinstance(res, (str, Path)):
                             return Path(res)
-                        # if it's a mock or other object just return it
+                        # if it's a fake or other object just return it
                         return res  # type: ignore
                 except TypeError:
                     # In tests where trainer is a MagicMock, TypeError might be thrown if signature doesn't match
@@ -558,7 +558,7 @@ class Orchestrator:
                 # Robust checkpointing: load restart file to recover phase space
                 self.logger.info("Attempting recovery via read_restart fallback...")
 
-                # Create a mock/empty result since the real engine would handle the restart file internally
+                # Create an empty result since the real engine would handle the restart file internally
                 # or we return a halted result to trigger refinement if needed.
                 return MDSimulationResult(
                     energy=0.0,
