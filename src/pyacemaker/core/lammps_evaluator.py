@@ -1,7 +1,7 @@
 def invoke_evaluator() -> None:
     import traceback
     try:
-        import lammps  # type: ignore[import-untyped]
+        import lammps
     except ImportError:
         # Avoid crashing if LAMMPS module not present during tests or parsing
         return
@@ -26,6 +26,12 @@ def invoke_evaluator() -> None:
         # Ensure exceed is strictly a float before injection
         safe_exceed = float(exceed)
 
-        lmp.command(f"variable consecutive_exceed equal {safe_exceed}")
+        import re
+
+        from pyacemaker.domain_models.constants import MALICIOUS_SHELL_PATTERN
+
+        # Safe assignment if no injection pattern found
+        if not re.search(MALICIOUS_SHELL_PATTERN, str(safe_exceed)):
+            lmp.command(f"variable consecutive_exceed equal {safe_exceed}")
     except Exception:
         traceback.print_exc()

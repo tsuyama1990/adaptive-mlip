@@ -122,36 +122,7 @@ DEFAULT_VALIDATION_ELASTIC_STEPS = 5
 
 # Security constants
 # Regex for detecting malicious shell code injections
-MALICIOUS_SHELL_PATTERN: Final[str] = r"(\bexec\b|\beval\b|\bsystem\b|\bos\.|subprocess|;|\||&|<|>|`|\$\(|\$\{|\n|\r|\\|\\0)"
-
-# Audit fix: Expanded list of dangerous characters
-DANGEROUS_PATH_CHARS: Final[set[str]] = {
-    ";",
-    "&",
-    "|",
-    "`",
-    "$",
-    "(",
-    ")",
-    "<",
-    ">",
-    "\n",
-    "\r",
-    "\t",
-    "?",
-    "*",
-    "[",
-    "]",
-    "{",
-    "}",
-    "'",
-    '"',
-    "!",
-    "#",
-    "\\",
-    "\0",
-    "%00"
-}
+MALICIOUS_SHELL_PATTERN: Final[str] = r"(\bexec\b|\beval\b|\bsystem\b|\bos\.|subprocess|;|\||&|<|>|`|\$\(|\$\{|\n|\r|\\|\0|%00|\u0000|\t|\?|\*|\[|\]|\{|\}|'|\"|!|#)"
 
 # RAM Disk logic
 _ram_disk_candidate = "/dev/shm"  # noqa: S108

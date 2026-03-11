@@ -10,12 +10,12 @@ tests/e2e/test_engine_integration.py ..                                  [  0%]
 tests/e2e/test_orchestrator.py .......                                   [  3%]
 tests/e2e/test_orchestrator_loop.py ...                                  [  4%]
 tests/e2e/test_orchestrator_refinement.py ..                             [  5%]
-tests/integration/test_pacemaker_integration.py ..                       [  6%]
+tests/integration/test_pacemaker_integration.py FF                       [  6%]
 tests/integration/test_scenarios.py .                                    [  6%]
 tests/uat/test_cycle01_uat.py ...                                        [  7%]
 tests/uat/test_cycle02_uat.py ..                                         [  8%]
 tests/uat/test_cycle03_uat.py ..                                         [  9%]
-tests/uat/test_cycle04_uat.py ...                                        [ 10%]
+tests/uat/test_cycle04_uat.py FF.                                        [ 10%]
 tests/uat/test_cycle06_uat.py ..                                         [ 11%]
 tests/uat/test_cycle07_uat.py ..                                         [ 12%]
 tests/uat/test_cycle08_uat.py ...                                        [ 13%]
@@ -64,6 +64,413 @@ tests/unit/test_trainer_pacemaker.py ......                              [ 94%]
 tests/unit/test_validator.py ....                                        [ 95%]
 tests/unit/test_validator_security.py ...........                        [100%]
 
+=================================== FAILURES ===================================
+_____________________ test_pacemaker_integration_full_flow _____________________
+
+tmp_path = PosixPath('/tmp/pytest-of-jules/pytest-40/test_pacemaker_integration_ful0')
+
+    def test_pacemaker_integration_full_flow(tmp_path: Path) -> None:
+        """
+        Integration test for PacemakerTrainer.
+        Verifies:
+        1. Input file reading (element detection).
+        2. Config generation (using defaults).
+        3. Command execution (mocked).
+        4. Output file handling.
+        """
+        # 1. Setup Data
+        data_path = tmp_path / "training_data.xyz"
+        # Write a few frames to test element detection
+        atoms = [Atoms("H2O"), Atoms("H2O")]
+        write(data_path, atoms)
+
+        output_pot_path = tmp_path / "output.yace"
+
+        # 2. Config
+        config = TrainingConfig(
+            potential_type="ace",
+            cutoff_radius=4.0,
+            max_basis_size=300,
+            output_filename="output.yace",
+            # No elements specified, relies on detection
+        )
+
+        trainer = PacemakerTrainer(config)
+
+        # 3. Mock Execution Environment
+        # We mock:
+        # - shutil.which (to simulate pace_train exists)
+        # - subprocess.run (to simulate successful execution)
+        with (
+            patch("shutil.which", return_value="/usr/bin/pace_train"),
+            patch("pyacemaker.core.trainer.run_command") as mock_run,
+        ):
+            # Simulate output file creation by the external process
+            def side_effect(cmd: list[str], **kwargs: Any) -> MagicMock:
+                # cmd[0] is 'pace_train', cmd[1] is input.yaml path
+                input_yaml = Path(cmd[1])
+                assert input_yaml.exists()
+
+                # Verify generated YAML content
+                with input_yaml.open() as f:
+                    data = yaml.safe_load(f)
+                    assert data["potential"]["elements"] == ["H", "O"]
+                    assert data["cutoff"] == 4.0
+
+                # Create the expected output file
+                output_pot_path.touch()
+                return MagicMock(returncode=0)
+
+            mock_run.side_effect = side_effect
+
+            # 4. Execute
+>           result = trainer.train(data_path)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_pacemaker_integration.py:71:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+src/pyacemaker/core/trainer.py:118: in train
+    self._validate_training_data(data_path)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <pyacemaker.core.trainer.PacemakerTrainer object at 0x7efe4e0a5a00>
+data_path = PosixPath('/tmp/pytest-of-jules/pytest-40/test_pacemaker_integration_ful0/training_data.xyz')
+
+    def _validate_training_data(self, data_path: Path) -> None:
+        """Validates existence and basic format of training data."""
+        from pyacemaker.utils.path import validate_path_safe
+
+        try:
+            safe_path = validate_path_safe(data_path)
+        except ValueError as e:
+            msg = f"Invalid data path: {e}"
+            raise TrainerError(msg) from e
+
+        if not safe_path.exists():
+            msg = f"Training data not found: {safe_path}"
+            raise TrainerError(msg)
+
+        if safe_path.suffix not in {".pckl", ".xyz", ".extxyz", ".gzip"}:
+            msg = f"Invalid training data format: {safe_path.suffix}"
+            raise TrainerError(msg)
+
+        # Check for empty file
+        if safe_path.stat().st_size == 0:
+            msg = f"Training data file is empty: {safe_path}"
+            raise TrainerError(msg)
+
+        # Security: scan file contents for malicious patterns to prevent injection
+        import re
+
+        from pyacemaker.domain_models.constants import MALICIOUS_SHELL_PATTERN
+
+        # Only read up to 1MB to avoid memory bloat on large files
+        try:
+            with safe_path.open("r", encoding="utf-8", errors="ignore") as f:
+                content = f.read(1024 * 1024)
+                if re.search(MALICIOUS_SHELL_PATTERN, content):
+                    msg = "Malicious content detected in training data file"
+>                   raise TrainerError(msg)
+E                   pyacemaker.core.exceptions.TrainerError: Malicious content detected in training data file
+
+src/pyacemaker/core/trainer.py:217: TrainerError
+_________________ test_pacemaker_integration_failure_handling __________________
+
+tmp_path = PosixPath('/tmp/pytest-of-jules/pytest-40/test_pacemaker_integration_fai0')
+
+    def test_pacemaker_integration_failure_handling(tmp_path: Path) -> None:
+        """Test trainer failure handling."""
+        data_path = tmp_path / "data.xyz"
+        write(data_path, Atoms("He"))
+
+        config = TrainingConfig(potential_type="ace", cutoff_radius=3.0, max_basis_size=100)
+        trainer = PacemakerTrainer(config)
+
+        from pyacemaker.core.exceptions import TrainerError
+
+        with (
+            patch("shutil.which", return_value="/bin/true"),
+            patch("pyacemaker.core.trainer.run_command") as mock_run,
+        ):
+            # Simulate process failure
+            mock_run.side_effect = subprocess.CalledProcessError(1, "cmd")
+
+            with pytest.raises(TrainerError, match="Training failed with exit code 1"):
+>               trainer.train(data_path)
+
+tests/integration/test_pacemaker_integration.py:97:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+src/pyacemaker/core/trainer.py:118: in train
+    self._validate_training_data(data_path)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <pyacemaker.core.trainer.PacemakerTrainer object at 0x7efe4e0ad610>
+data_path = PosixPath('/tmp/pytest-of-jules/pytest-40/test_pacemaker_integration_fai0/data.xyz')
+
+    def _validate_training_data(self, data_path: Path) -> None:
+        """Validates existence and basic format of training data."""
+        from pyacemaker.utils.path import validate_path_safe
+
+        try:
+            safe_path = validate_path_safe(data_path)
+        except ValueError as e:
+            msg = f"Invalid data path: {e}"
+            raise TrainerError(msg) from e
+
+        if not safe_path.exists():
+            msg = f"Training data not found: {safe_path}"
+            raise TrainerError(msg)
+
+        if safe_path.suffix not in {".pckl", ".xyz", ".extxyz", ".gzip"}:
+            msg = f"Invalid training data format: {safe_path.suffix}"
+            raise TrainerError(msg)
+
+        # Check for empty file
+        if safe_path.stat().st_size == 0:
+            msg = f"Training data file is empty: {safe_path}"
+            raise TrainerError(msg)
+
+        # Security: scan file contents for malicious patterns to prevent injection
+        import re
+
+        from pyacemaker.domain_models.constants import MALICIOUS_SHELL_PATTERN
+
+        # Only read up to 1MB to avoid memory bloat on large files
+        try:
+            with safe_path.open("r", encoding="utf-8", errors="ignore") as f:
+                content = f.read(1024 * 1024)
+                if re.search(MALICIOUS_SHELL_PATTERN, content):
+                    msg = "Malicious content detected in training data file"
+>                   raise TrainerError(msg)
+E                   pyacemaker.core.exceptions.TrainerError: Malicious content detected in training data file
+
+src/pyacemaker/core/trainer.py:217: TrainerError
+
+During handling of the above exception, another exception occurred:
+
+tmp_path = PosixPath('/tmp/pytest-of-jules/pytest-40/test_pacemaker_integration_fai0')
+
+    def test_pacemaker_integration_failure_handling(tmp_path: Path) -> None:
+        """Test trainer failure handling."""
+        data_path = tmp_path / "data.xyz"
+        write(data_path, Atoms("He"))
+
+        config = TrainingConfig(potential_type="ace", cutoff_radius=3.0, max_basis_size=100)
+        trainer = PacemakerTrainer(config)
+
+        from pyacemaker.core.exceptions import TrainerError
+
+        with (
+            patch("shutil.which", return_value="/bin/true"),
+            patch("pyacemaker.core.trainer.run_command") as mock_run,
+        ):
+            # Simulate process failure
+            mock_run.side_effect = subprocess.CalledProcessError(1, "cmd")
+
+>           with pytest.raises(TrainerError, match="Training failed with exit code 1"):
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           AssertionError: Regex pattern did not match.
+E             Expected regex: 'Training failed with exit code 1'
+E             Actual message: 'Malicious content detected in training data file'
+
+tests/integration/test_pacemaker_integration.py:96: AssertionError
+____________________________ test_uat_fit_potential ____________________________
+
+tmp_path = PosixPath('/tmp/pytest-of-jules/pytest-40/test_uat_fit_potential0')
+
+    def test_uat_fit_potential(tmp_path: Path) -> None:
+        # GIVEN a labelled dataset
+        dataset_path = tmp_path / "train.xyz"
+        write(dataset_path, Atoms("H2", positions=[[0, 0, 0], [0, 0, 1]]))
+
+        config = TrainingConfig(
+            potential_type="ace",
+            cutoff_radius=5.0,
+            max_basis_size=2,
+            delta_learning=True,
+            output_filename="output_potential.yace",
+            elements=["H"],
+        )
+        trainer = PacemakerTrainer(config)
+
+        # Use run_command patch to simulate success without real Pacemaker
+        # And verify config file content
+        with (
+            patch("pyacemaker.core.trainer.run_command") as mock_run,
+            patch("pyacemaker.core.trainer.dump_yaml") as mock_dump,
+            patch("shutil.which", return_value="/usr/bin/pace_train"),
+        ):  # Mock executable check
+            # Simulate output file creation
+            (tmp_path / "output_potential.yace").touch()
+
+>           result = trainer.train(dataset_path)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/uat/test_cycle04_uat.py:40:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+src/pyacemaker/core/trainer.py:118: in train
+    self._validate_training_data(data_path)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <pyacemaker.core.trainer.PacemakerTrainer object at 0x7efd229ca270>
+data_path = PosixPath('/tmp/pytest-of-jules/pytest-40/test_uat_fit_potential0/train.xyz')
+
+    def _validate_training_data(self, data_path: Path) -> None:
+        """Validates existence and basic format of training data."""
+        from pyacemaker.utils.path import validate_path_safe
+
+        try:
+            safe_path = validate_path_safe(data_path)
+        except ValueError as e:
+            msg = f"Invalid data path: {e}"
+            raise TrainerError(msg) from e
+
+        if not safe_path.exists():
+            msg = f"Training data not found: {safe_path}"
+            raise TrainerError(msg)
+
+        if safe_path.suffix not in {".pckl", ".xyz", ".extxyz", ".gzip"}:
+            msg = f"Invalid training data format: {safe_path.suffix}"
+            raise TrainerError(msg)
+
+        # Check for empty file
+        if safe_path.stat().st_size == 0:
+            msg = f"Training data file is empty: {safe_path}"
+            raise TrainerError(msg)
+
+        # Security: scan file contents for malicious patterns to prevent injection
+        import re
+
+        from pyacemaker.domain_models.constants import MALICIOUS_SHELL_PATTERN
+
+        # Only read up to 1MB to avoid memory bloat on large files
+        try:
+            with safe_path.open("r", encoding="utf-8", errors="ignore") as f:
+                content = f.read(1024 * 1024)
+                if re.search(MALICIOUS_SHELL_PATTERN, content):
+                    msg = "Malicious content detected in training data file"
+>                   raise TrainerError(msg)
+E                   pyacemaker.core.exceptions.TrainerError: Malicious content detected in training data file
+
+src/pyacemaker/core/trainer.py:217: TrainerError
+________________________ test_uat_fit_potential_failure ________________________
+
+tmp_path = PosixPath('/tmp/pytest-of-jules/pytest-40/test_uat_fit_potential_failure0')
+
+    def test_uat_fit_potential_failure(tmp_path: Path) -> None:
+        # GIVEN a labelled dataset
+        dataset_path = tmp_path / "train.xyz"
+        write(dataset_path, Atoms("H"))
+
+        config = TrainingConfig(
+            potential_type="ace",
+            cutoff_radius=5.0,
+            max_basis_size=2,
+            delta_learning=True,
+            output_filename="output_potential.yace",
+            elements=["H"],
+        )
+        trainer = PacemakerTrainer(config)
+
+        # Simulate process failure
+        import subprocess
+
+        from pyacemaker.core.exceptions import TrainerError
+
+        with (
+            patch("pyacemaker.core.trainer.run_command") as mock_run,
+            patch("shutil.which", return_value="/usr/bin/pace_train"),
+        ):
+            mock_run.side_effect = subprocess.CalledProcessError(1, "cmd", stderr="Simulated Crash")
+
+            with pytest.raises(TrainerError, match="Training failed with exit code 1"):
+>               trainer.train(dataset_path)
+
+tests/uat/test_cycle04_uat.py:83:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+src/pyacemaker/core/trainer.py:118: in train
+    self._validate_training_data(data_path)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <pyacemaker.core.trainer.PacemakerTrainer object at 0x7efd2296db80>
+data_path = PosixPath('/tmp/pytest-of-jules/pytest-40/test_uat_fit_potential_failure0/train.xyz')
+
+    def _validate_training_data(self, data_path: Path) -> None:
+        """Validates existence and basic format of training data."""
+        from pyacemaker.utils.path import validate_path_safe
+
+        try:
+            safe_path = validate_path_safe(data_path)
+        except ValueError as e:
+            msg = f"Invalid data path: {e}"
+            raise TrainerError(msg) from e
+
+        if not safe_path.exists():
+            msg = f"Training data not found: {safe_path}"
+            raise TrainerError(msg)
+
+        if safe_path.suffix not in {".pckl", ".xyz", ".extxyz", ".gzip"}:
+            msg = f"Invalid training data format: {safe_path.suffix}"
+            raise TrainerError(msg)
+
+        # Check for empty file
+        if safe_path.stat().st_size == 0:
+            msg = f"Training data file is empty: {safe_path}"
+            raise TrainerError(msg)
+
+        # Security: scan file contents for malicious patterns to prevent injection
+        import re
+
+        from pyacemaker.domain_models.constants import MALICIOUS_SHELL_PATTERN
+
+        # Only read up to 1MB to avoid memory bloat on large files
+        try:
+            with safe_path.open("r", encoding="utf-8", errors="ignore") as f:
+                content = f.read(1024 * 1024)
+                if re.search(MALICIOUS_SHELL_PATTERN, content):
+                    msg = "Malicious content detected in training data file"
+>                   raise TrainerError(msg)
+E                   pyacemaker.core.exceptions.TrainerError: Malicious content detected in training data file
+
+src/pyacemaker/core/trainer.py:217: TrainerError
+
+During handling of the above exception, another exception occurred:
+
+tmp_path = PosixPath('/tmp/pytest-of-jules/pytest-40/test_uat_fit_potential_failure0')
+
+    def test_uat_fit_potential_failure(tmp_path: Path) -> None:
+        # GIVEN a labelled dataset
+        dataset_path = tmp_path / "train.xyz"
+        write(dataset_path, Atoms("H"))
+
+        config = TrainingConfig(
+            potential_type="ace",
+            cutoff_radius=5.0,
+            max_basis_size=2,
+            delta_learning=True,
+            output_filename="output_potential.yace",
+            elements=["H"],
+        )
+        trainer = PacemakerTrainer(config)
+
+        # Simulate process failure
+        import subprocess
+
+        from pyacemaker.core.exceptions import TrainerError
+
+        with (
+            patch("pyacemaker.core.trainer.run_command") as mock_run,
+            patch("shutil.which", return_value="/usr/bin/pace_train"),
+        ):
+            mock_run.side_effect = subprocess.CalledProcessError(1, "cmd", stderr="Simulated Crash")
+
+>           with pytest.raises(TrainerError, match="Training failed with exit code 1"):
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           AssertionError: Regex pattern did not match.
+E             Expected regex: 'Training failed with exit code 1'
+E             Actual message: 'Malicious content detected in training data file'
+
+tests/uat/test_cycle04_uat.py:82: AssertionError
 =============================== warnings summary ===============================
 tests/uat/test_cycle01_uat.py::test_scenario_01_02_guardrails_check_temp
   /app/.venv/lib/python3.12/site-packages/pydantic/main.py:464: UserWarning: Pydantic serializer warnings:
@@ -108,7 +515,7 @@ tests/unit/test_oracle.py::test_dft_manager_embedding
 tests/unit/test_oracle_streaming.py::test_dft_manager_streaming_behavior
 tests/unit/test_oracle_streaming.py::test_dft_manager_streaming_behavior
 tests/unit/test_oracle_streaming.py::test_dft_manager_streaming_behavior
-  /home/jules/.pyenv/versions/3.12.12/lib/python3.12/multiprocessing/popen_fork.py:66: DeprecationWarning: This process (pid=15338) is multi-threaded, use of fork() may lead to deadlocks in the child.
+  /home/jules/.pyenv/versions/3.12.12/lib/python3.12/multiprocessing/popen_fork.py:66: DeprecationWarning: This process (pid=27209) is multi-threaded, use of fork() may lead to deadlocks in the child.
     self.pid = os.fork()
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
@@ -127,8 +534,8 @@ src/pyacemaker/core/engine.py                  131     31    76%   49, 63-64, 77
 src/pyacemaker/core/exceptions.py                8      0   100%
 src/pyacemaker/core/generator.py                53     11    79%   36-39, 59, 62, 97, 107, 113, 115, 138
 src/pyacemaker/core/io_manager.py               74     30    59%   58-71, 78-81, 106-107, 110-115, 124-125, 129, 133-141
-src/pyacemaker/core/lammps_evaluator.py         21     20     5%   2-31
-src/pyacemaker/core/lammps_generator.py        150     22    85%   43-44, 51-52, 127, 146-162, 170, 189-196
+src/pyacemaker/core/lammps_evaluator.py         24     23     4%   2-37
+src/pyacemaker/core/lammps_generator.py        151     23    85%   43-44, 51-52, 127-128, 147-163, 171, 190-197
 src/pyacemaker/core/loop.py                     70      6    91%   56, 63, 79-82, 85
 src/pyacemaker/core/m3gnet_wrapper.py           46     19    59%   27-28, 32-33, 52-70, 98-105
 src/pyacemaker/core/oracle.py                  173     41    76%   143-144, 194-199, 235-237, 245-246, 249-250, 268-271, 274-306, 322-323, 326-327, 335, 362
@@ -136,16 +543,16 @@ src/pyacemaker/core/policy.py                  114     33    71%   29-30, 80-109
 src/pyacemaker/core/policy_factory.py           31      7    77%   47, 53-54, 58-59, 86-87
 src/pyacemaker/core/report.py                   12      1    92%   85
 src/pyacemaker/core/state_manager.py            34      2    94%   37-38
-src/pyacemaker/core/trainer.py                 117     35    70%   41-56, 113-114, 125-126, 155-158, 161-162, 169-170, 173-174, 198-199, 208-209, 231-235, 238-239
-src/pyacemaker/core/validator.py                68      7    90%   63, 68, 75-76, 79, 113, 150
+src/pyacemaker/core/trainer.py                 153     50    67%   41-56, 74-85, 130-131, 142-143, 172-175, 178-179, 189-191, 194-195, 198-199, 219-220, 239-240, 249-250, 276-277, 284-289, 292-293
+src/pyacemaker/core/validator.py                71      7    90%   63, 68, 75-76, 79, 117, 154
 src/pyacemaker/domain_models/__init__.py        11      0   100%
 src/pyacemaker/domain_models/config.py          22      0   100%
 src/pyacemaker/domain_models/constants.py       17      0   100%
-src/pyacemaker/domain_models/defaults.py       132      0   100%
+src/pyacemaker/domain_models/defaults.py       131      0   100%
 src/pyacemaker/domain_models/dft.py             37      4    89%   85-86, 93-94
 src/pyacemaker/domain_models/eon.py             34      4    88%   66-69
 src/pyacemaker/domain_models/logging.py         31      9    71%   24-25, 31, 39, 45-47, 50-51
-src/pyacemaker/domain_models/md.py             138     24    83%   40, 62-63, 82-83, 119-120, 125-126, 128-129, 133-134, 136-137, 249, 255-256, 264-265, 272-273, 275-276
+src/pyacemaker/domain_models/md.py             146     26    82%   40, 62-63, 82-83, 119-120, 125-126, 128-129, 133-134, 136-137, 253-254, 262, 268-269, 277-278, 285-286, 288-289
 src/pyacemaker/domain_models/scenario.py         7      0   100%
 src/pyacemaker/domain_models/structure.py       71      4    94%   97-98, 116-117
 src/pyacemaker/domain_models/training.py        49      0   100%
@@ -168,13 +575,18 @@ src/pyacemaker/utils/elastic.py                 80     52    35%   34-35, 46-137
 src/pyacemaker/utils/embedding.py               36      6    83%   41-42, 49-50, 61-62
 src/pyacemaker/utils/extraction.py             118     19    84%   36-40, 72-88, 91-96, 109
 src/pyacemaker/utils/io.py                      73      0   100%
-src/pyacemaker/utils/path.py                    43      5    88%   38-40, 55-56
+src/pyacemaker/utils/path.py                    41      5    88%   38-40, 50-51
 src/pyacemaker/utils/perturbations.py           43      1    98%   77
 src/pyacemaker/utils/phonons.py                 51      2    96%   51, 69
 src/pyacemaker/utils/process.py                 32      6    81%   76-83
 src/pyacemaker/utils/structure.py                6      2    67%   19-20
 --------------------------------------------------------------------------
-TOTAL                                         3221    559    83%
-====================== 253 passed, 224 warnings in 19.92s ======================
+TOTAL                                         3269    580    82%
+=========================== short test summary info ============================
+FAILED tests/integration/test_pacemaker_integration.py::test_pacemaker_integration_full_flow
+FAILED tests/integration/test_pacemaker_integration.py::test_pacemaker_integration_failure_handling
+FAILED tests/uat/test_cycle04_uat.py::test_uat_fit_potential - pyacemaker.cor...
+FAILED tests/uat/test_cycle04_uat.py::test_uat_fit_potential_failure - Assert...
+================= 4 failed, 249 passed, 224 warnings in 25.24s =================
 /app/.venv/lib/python3.12/site-packages/coverage/inorout.py:561: CoverageWarning: Module dev_src was never imported. (module-not-imported); see https://coverage.readthedocs.io/en/7.13.4/messages.html#warning-module-not-imported
   self.warn(f"Module {pkg} was never imported.", slug="module-not-imported")

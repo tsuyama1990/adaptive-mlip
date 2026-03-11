@@ -1,10 +1,10 @@
 import tempfile
 from pathlib import Path
 
-from pyacemaker.domain_models.constants import DANGEROUS_PATH_CHARS, DEFAULT_RAM_DISK_PATH
+from pyacemaker.domain_models.constants import DEFAULT_RAM_DISK_PATH, MALICIOUS_SHELL_PATTERN
 
 
-def validate_path_safe(path: Path) -> Path:  # noqa: C901
+def validate_path_safe(path: Path) -> Path:
     """
     Ensures path is safe using strict resolution and character allowlisting.
     Centralized utility for path validation.
@@ -39,11 +39,6 @@ def validate_path_safe(path: Path) -> Path:  # noqa: C901
         msg = f"Invalid path resolution: {path}"
         raise ValueError(msg) from e
 
-    # Prevent symlink traversal attacks
-    if path.is_symlink():
-        msg = f"Symlink path traversal attacks detected: {path}"
-        raise ValueError(msg)
-
     # Verify it resolves correctly
     if not resolved.exists() and not resolved.parent.exists():
         msg = f"Parent directory does not exist: {resolved.parent}"
@@ -55,7 +50,8 @@ def validate_path_safe(path: Path) -> Path:  # noqa: C901
         msg = f"Path traversal attempt detected in resolved path: {resolved}"
         raise ValueError(msg)
 
-    if any(c in s for c in DANGEROUS_PATH_CHARS):
+    import re
+    if re.search(MALICIOUS_SHELL_PATTERN, s):
         msg = f"Path contains invalid characters: {path}"
         raise ValueError(msg)
 

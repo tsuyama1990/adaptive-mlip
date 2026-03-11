@@ -1,7 +1,6 @@
 from typing import Final
 
 from .defaults import (
-    DANGEROUS_PATH_CHARS,
     DEFAULT_EON_EXECUTABLE,
     DEFAULT_EON_SEED,
     DEFAULT_LJ_PARAMS,
@@ -70,7 +69,6 @@ FILE_NAME_DEPOSITED: Final[str] = "deposited.xyz"
 FILE_NAME_EON_POS: Final[str] = "pos.con"
 
 __all__ = [
-    "DANGEROUS_PATH_CHARS",
     "DEFAULT_EON_EXECUTABLE",
     "DEFAULT_EON_SEED",
     "DEFAULT_LJ_PARAMS",
