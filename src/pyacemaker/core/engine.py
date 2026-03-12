@@ -129,13 +129,37 @@ class LammpsEngine(BaseEngine):
             temp_dir = Path(ctx.name) if hasattr(ctx, "name") else data_file.parent
             input_script_path = temp_dir / "input.lmp"
 
+            # Restart logic
+            restart_file = temp_dir / "lammps.restart"
+            read_restart = restart_file if restart_file.exists() and resume_from_step is not None else None
+
+            # Get threshold kwargs for evaluator wrapper
+            thresholds = {}
+            if "threshold_call_dft" in kwargs:
+                thresholds["threshold_call_dft"] = kwargs["threshold_call_dft"]
+            if "threshold_add_train" in kwargs:
+                thresholds["threshold_add_train"] = kwargs["threshold_add_train"]
+            if "smooth_steps" in kwargs:
+                thresholds["smooth_steps"] = kwargs["smooth_steps"]
+
             with input_script_path.open("w") as f:
-                self.generator.write_script(f, potential_path, data_file, dump_file, elements)
+                self.generator.write_script(
+                    f,
+                    potential_path,
+                    data_file,
+                    dump_file,
+                    elements,
+                    use_fix_invoke=use_fix_invoke,
+                    thresholds=thresholds,
+                    resume_from_step=resume_from_step,
+                    restart_file=restart_file,
+                    read_restart=read_restart,
+                    eval_dir=temp_dir
+                )
 
                 resume_step = resume_from_step
                 if resume_step is not None:
                     # Write custom variables or commands for seamless resume
-                    # In a real implementation we would load a restart file.
                     # Here we append a print statement to indicate resume logic.
                     f.write(f"\nprint 'Resuming from step {resume_step}'\n")
 

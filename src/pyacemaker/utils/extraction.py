@@ -30,7 +30,8 @@ def _pre_relax_buffer(cluster: Atoms, mace_model_path: str | None = None) -> Ato
 
             calc = MACECalculator(model_paths=mace_model_path, device="cpu")
         except ImportError:
-            pass
+            msg = "mace-torch is not installed. Zero Tolerance for Mocks."
+            raise RuntimeError(msg) from None
 
     if calc is None:
         try:
@@ -38,14 +39,10 @@ def _pre_relax_buffer(cluster: Atoms, mace_model_path: str | None = None) -> Ato
 
             calc = mace_mp(model="medium", device="cpu")
         except ImportError:
-            pass
+            msg = "mace-torch is not installed. Zero Tolerance for Mocks."
+            raise RuntimeError(msg) from None
 
-    if calc is not None:
-        cluster_copy.calc = calc
-    else:
-        # We must not fallback to mock calculators in production code.
-        msg = "MACE calculator could not be initialized for pre-relaxation. Please install mace-torch."
-        raise RuntimeError(msg)
+    cluster_copy.calc = calc
 
     with Path(os.devnull).open("w") as devnull:
         opt = LBFGS(cluster_copy, logfile=devnull)

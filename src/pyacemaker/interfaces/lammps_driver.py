@@ -93,6 +93,9 @@ class LammpsDriver:
             "min_modify",
             "variable",
             "print",
+            "restart",
+            "write_restart",
+            "python",
         }
 
         if first_token not in allowed_commands:

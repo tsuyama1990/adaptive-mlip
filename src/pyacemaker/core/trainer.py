@@ -200,12 +200,42 @@ class FinetuneManager:
             msg = "No frames to finetune."
             raise TrainerError(msg)
 
-        # Mocking the actual torch-based training for this project,
-        # but returning a distinct output file representation
-        awakened_model = data_file.parent / "awakened_mace_model.model"
+        # Real implementation, call mace_run_train to finetune
+        if not shutil.which("mace_run_train"):
+            msg = "Executable 'mace_run_train' not found in PATH."
+            raise TrainerError(msg)
 
-        # In a real environment, this would call mace_run_train or torch logic
-        # For now, create the output file to satisfy file existence checks in orchestration
-        awakened_model.touch()
+        cmd = [
+            "mace_run_train",
+            "--train_file", str(data_file),
+            "--valid_fraction", "0.0",
+            "--E0s", "average",
+            "--model", "MACE",
+            "--num_interactions", "2",
+            "--max_num_epochs", "10",
+            "--start_swa", "5",
+            "--scheduler_patience", "5",
+            "--patience", "10",
+            "--eval_interval", "1",
+            "--loss", "forces_only",
+            "--device", "cuda",
+            "--name", "awakened_mace_model",
+            "--train_dir", str(data_file.parent)
+        ]
 
-        return str(awakened_model)
+        try:
+            run_command(cmd)
+        except subprocess.CalledProcessError as e:
+            msg = f"MACE Finetuning failed with exit code {e.returncode}: {e}"
+            raise TrainerError(msg) from e
+        except Exception as e:
+            msg = f"MACE Finetuning failed unexpectedly: {e}"
+            raise TrainerError(msg) from e
+
+        # Find the output model
+        mace_model_path = data_file.parent / "awakened_mace_model.model"
+        if not mace_model_path.exists():
+            msg = f"MACE Finetuning did not produce a model at {mace_model_path}"
+            raise TrainerError(msg)
+
+        return str(mace_model_path)

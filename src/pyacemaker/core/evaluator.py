@@ -40,9 +40,10 @@ class TwoTierEvaluator:
                 )
                 # Trigger halt
                 lmp.command("variable trigger_halt string true")
-        except Exception:
+        except Exception as e:
             logger.exception("TwoTierEvaluator encountered an error")
-            raise
+            msg = "TwoTierEvaluator encountered an error"
+            raise RuntimeError(msg) from e
 
 
 # To use via fix python/invoke, we need a module-level wrapper that instantiates and calls evaluate.

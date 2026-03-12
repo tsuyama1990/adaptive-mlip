@@ -87,3 +87,37 @@ def test_uat_03_02_defect_generation() -> None:
 
     assert len(defect_atoms) < len(pristine_atoms)
     assert np.allclose(defect_atoms.get_cell(), pristine_atoms.get_cell())  # type: ignore[no-untyped-call]
+
+
+def test_uat_03_03_intelligent_extraction() -> None:
+    """
+    Scenario 03-03: Intelligent Cutout
+    Objective: Verify that the system extracts and isolates atoms correctly.
+    """
+    from pyacemaker.domain_models.workflow import CutoutConfig
+    from pyacemaker.utils.extraction import extract_intelligent_cluster
+
+    # 1. Preparation
+    # We use a mocked test here due to heavy MACE requirements, but structure math should work
+    config = CutoutConfig(
+        core_radius=4.0,
+        buffer_radius=3.0,
+        enable_pre_relaxation=False,  # Disable to avoid torch dependency during UAT without MACE
+        enable_passivation=False,
+    )
+
+    atoms = Atoms(
+        "Fe10", positions=[[i * 1.5, 0, 0] for i in range(10)], cell=[20, 20, 20], pbc=False
+    )
+
+    # 2. Action
+    cluster = extract_intelligent_cluster(atoms, [5], config)
+
+    # 3. Expectation
+    assert cluster is not None
+    assert len(cluster) > 0
+    # Center atom should be included
+    assert "force_weight" in cluster.arrays
+    weights = cluster.get_array("force_weight")
+    # At least one core atom
+    assert sum(weights == 1.0) >= 1
