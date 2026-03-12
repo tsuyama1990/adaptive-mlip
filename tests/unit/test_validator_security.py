@@ -9,7 +9,7 @@ from pyacemaker.core.validator import LammpsInputValidator
 class TestLammpsInputValidator:
     def test_validate_structure_none(self) -> None:
         with pytest.raises(ValueError, match="Structure is None"):
-            LammpsInputValidator.validate_structure(None)
+            LammpsInputValidator.validate_structure(None)  # type: ignore[arg-type]
 
     def test_validate_structure_type_error(self) -> None:
         with pytest.raises(TypeError, match="Invalid structure type"):
@@ -45,7 +45,9 @@ class TestLammpsInputValidator:
         if not forbidden_file.exists():
             pass
 
-    def test_validate_potential_allowed_cwd(self, tmp_path, monkeypatch) -> None:
+    def test_validate_potential_allowed_cwd(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """Test validation within CWD."""
         monkeypatch.chdir(tmp_path)
         pot_file = tmp_path / "pot.yace"
@@ -63,7 +65,7 @@ class TestLammpsInputValidator:
         except Exception as e:
             pytest.fail(f"Unexpected exception: {e}")
 
-    def test_validate_potential_symlink_traversal(self, tmp_path) -> None:
+    def test_validate_potential_symlink_traversal(self, tmp_path: Path) -> None:
         """Test symlink resolving to outside (should fail)."""
         # Create a symlink in tmp_path (allowed location) pointing to /etc/hosts (forbidden location)
         target = Path("/etc/hosts")
@@ -86,7 +88,9 @@ class TestLammpsInputValidator:
         ):
             LammpsInputValidator.validate_potential(symlink)
 
-    def test_validate_potential_symlink_internal(self, tmp_path, monkeypatch) -> None:
+    def test_validate_potential_symlink_internal(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """Test symlink resolving to inside (should fail as symlinks are wholly blocked by the security patch)."""
         monkeypatch.chdir(tmp_path)
         real_file = tmp_path / "real.yace"

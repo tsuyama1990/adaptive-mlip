@@ -51,21 +51,22 @@ class M3GNetWrapper:
 
             n_atoms = len(symbols)
             if n_atoms == 0:
-                raise ValueError("Empty composition formula")
+                msg = "Empty composition formula"
+                raise ValueError(msg) from None
 
             # Create a simple cubic grid matching the number of atoms
             import math
 
             # Find grid size
-            grid_size = math.ceil(n_atoms ** (1/3))
-            a = 3.0 # Basic 3A spacing
+            grid_size = math.ceil(n_atoms ** (1 / 3))
+            a = 3.0  # Basic 3A spacing
             cell = [grid_size * a, grid_size * a, grid_size * a]
 
-            positions = []
+            positions: list[list[float]] = []
             for i in range(grid_size):
                 for j in range(grid_size):
                     for k in range(grid_size):
                         if len(positions) < n_atoms:
-                            positions.append([i*a, j*a, k*a])
+                            positions.append([i * a, j * a, k * a])
 
             return Atoms(symbols=symbols, positions=positions, cell=cell, pbc=True)

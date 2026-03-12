@@ -373,7 +373,7 @@ def create_test_config_dict(**overrides: Any) -> ConfigDictType:
 from pyacemaker.core.active_set import ActiveSetSelector
 
 
-class FakeActiveSetSelector(ActiveSetSelector):  # type: ignore[misc]
+class FakeActiveSetSelector(ActiveSetSelector):
     def select(self, candidates: Any, potential: Any, n_select: int, anchor: Any = None) -> Any:
         return candidates
 
@@ -392,7 +392,7 @@ class FakeValidator:
         )
 
 
-class FakeTrainer(BaseTrainer):  # type: ignore[misc]
+class FakeTrainer(BaseTrainer):
     def __init__(self, output_pot: Path) -> None:
         self.output_pot = output_pot
 

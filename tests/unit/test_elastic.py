@@ -9,11 +9,11 @@ from pyacemaker.utils.elastic import ElasticCalculator
 
 class TestElasticCalculator:
     @pytest.fixture
-    def mock_engine(self) -> None:
+    def mock_engine(self) -> MagicMock:
         return MagicMock(spec=BaseEngine)
 
     @pytest.fixture
-    def calculator(self, mock_engine) -> None:
+    def calculator(self, mock_engine: MagicMock) -> ElasticCalculator:
         return ElasticCalculator(engine=mock_engine, strain=0.01, steps=5)
 
     def test_check_born_stability_cubic_stable(self) -> None:

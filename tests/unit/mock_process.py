@@ -4,7 +4,7 @@ from unittest.mock import MagicMock
 from pyacemaker.interfaces.process import ProcessRunner
 
 
-class MockProcessRunner(ProcessRunner):  # type: ignore[misc]
+class MockProcessRunner(ProcessRunner):
     """Mock runner for testing."""
 
     def __init__(self, returncode: int = 0, stdout: str = "", stderr: str = "") -> None:
