@@ -2,7 +2,6 @@
 platform linux -- Python 3.12.13, pytest-9.0.2, pluggy-1.6.0
 rootdir: /app
 configfile: pyproject.toml
-testpaths: tests
 plugins: cov-7.0.0, anyio-4.12.1
 collected 260 items
 
@@ -72,8 +71,8 @@ tests/unit/test_validator_security.py ...........                        [100%]
 ___________________________ test_lammps_engine_relax ___________________________
 
 mock_md_config = MDConfig(temperature=300.0, pressure=1.0, timestep=0.001, n_steps=1000, thermo_freq=10, dump_freq=100, minimize=False,...se, uncertainty_threshold=5.0, check_interval=10, evaluator_thresholds=None, ramping=None, mc=None, soft_start_steps=0)
-mock_driver_relax = <MagicMock name='LammpsDriver' id='139727908637776'>
-tmp_path = PosixPath('/tmp/pytest-of-jules/pytest-26/test_lammps_engine_relax0')
+mock_driver_relax = <MagicMock name='LammpsDriver' id='140522879380960'>
+tmp_path = PosixPath('/tmp/pytest-of-jules/pytest-30/test_lammps_engine_relax0')
 
     def test_lammps_engine_relax(
         mock_md_config: MDConfig, mock_driver_relax: Any, tmp_path: Path
@@ -103,8 +102,7 @@ tmp_path = PosixPath('/tmp/pytest-of-jules/pytest-26/test_lammps_engine_relax0')
 
         # Actually we just want to bypass the LammpsDriver and mock _execute_simulation instead,
         # to catch the generated file, but here we can just intercept `_execute_simulation` to read it:
-        original_execute = engine._execute_simulation
-        def mock_execute(driver, script_path):
+        def mock_execute(driver: Any, script_path: Path) -> None:
             script_content.append(script_path.read_text())
 
         with patch.object(engine, '_execute_simulation', side_effect=mock_execute):
@@ -122,7 +120,7 @@ tmp_path = PosixPath('/tmp/pytest-of-jules/pytest-26/test_lammps_engine_relax0')
 >       assert "minimize" in script
 E       AssertionError: assert 'minimize' in ''
 
-tests/unit/test_engine_relax.py:62: AssertionError
+tests/unit/test_engine_relax.py:61: AssertionError
 =============================== warnings summary ===============================
 tests/e2e/test_orchestrator_loop.py::test_run_loop_iteration_halt
   /app/.venv/lib/python3.12/site-packages/e3nn/o3/_wigner.py:10: UserWarning: Environment variable TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD detected, since the`weights_only` argument was not explicitly passed to `torch.load`, forcing weights_only=False.
@@ -167,7 +165,8 @@ src/pyacemaker/core/evaluator.py                63      7    89%   44-45, 78-79,
 src/pyacemaker/core/exceptions.py               14      0   100%
 src/pyacemaker/core/generator.py                53     11    79%   36-39, 59, 62, 97, 107, 113, 115, 138
 src/pyacemaker/core/io_manager.py               74     30    59%   58-71, 78-81, 106-107, 110-115, 124-125, 129, 133-141
-src/pyacemaker/core/lammps_generator.py        181     32    82%   39-40, 46-47, 161-177, 186, 205-212, 327-340
+src/pyacemaker/core/lammps_generator.py        186     34    82%   39-40, 46-47, 163-179, 188, 207-214, 332-348
+src/pyacemaker/core/lammps_template.py          13      4    69%   18-19, 23-24
 src/pyacemaker/core/loop.py                     70      6    91%   56, 63, 79-82, 85
 src/pyacemaker/core/m3gnet_wrapper.py           20      6    70%   26-27, 33-35, 52-54
 src/pyacemaker/core/oracle.py                  157     17    89%   180-185, 230-231, 233-234, 244, 286-287, 290-291, 299, 341-343
@@ -213,9 +212,9 @@ src/pyacemaker/utils/phonons.py                 51      2    96%   51, 69
 src/pyacemaker/utils/process.py                 32      6    81%   76-83
 src/pyacemaker/utils/structure.py                6      2    67%   19-20
 --------------------------------------------------------------------------
-TOTAL                                         3380    617    82%
+TOTAL                                         3398    623    82%
 =========================== short test summary info ============================
 FAILED tests/unit/test_engine_relax.py::test_lammps_engine_relax - AssertionE...
-================== 1 failed, 259 passed, 9 warnings in 15.31s ==================
+================== 1 failed, 259 passed, 9 warnings in 17.79s ==================
 /app/.venv/lib/python3.12/site-packages/coverage/inorout.py:561: CoverageWarning: Module dev_src was never imported. (module-not-imported); see https://coverage.readthedocs.io/en/7.13.4/messages.html#warning-module-not-imported
   self.warn(f"Module {pkg} was never imported.", slug="module-not-imported")

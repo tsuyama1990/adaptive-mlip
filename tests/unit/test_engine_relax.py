@@ -43,8 +43,7 @@ def test_lammps_engine_relax(
 
     # Actually we just want to bypass the LammpsDriver and mock _execute_simulation instead,
     # to catch the generated file, but here we can just intercept `_execute_simulation` to read it:
-    original_execute = engine._execute_simulation
-    def mock_execute(driver, script_path):
+    def mock_execute(driver: Any, script_path: Path) -> None:
         script_content.append(script_path.read_text())
 
     with patch.object(engine, '_execute_simulation', side_effect=mock_execute):
