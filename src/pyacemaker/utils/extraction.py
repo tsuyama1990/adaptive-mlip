@@ -24,8 +24,11 @@ def _pre_relax_buffer(cluster: Atoms) -> Atoms:
     cluster_copy.set_constraint(constraint)
 
     if cluster_copy.calc is None:
-        from mace.calculators import mace_mp
-        cluster_copy.calc = mace_mp(model="small", dispersion=False, default_dtype="float32", device="cpu")
+        if getattr(cluster, "calc", None) is not None:
+            cluster_copy.calc = cluster.calc
+        else:
+            msg = "No calculator attached to structure for pre-relaxation."
+            raise ValueError(msg)
 
     # Relax the buffer region
     import os

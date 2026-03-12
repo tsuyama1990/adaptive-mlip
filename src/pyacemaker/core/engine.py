@@ -66,10 +66,25 @@ class LammpsEngine(BaseEngine):
 
     def _validate_script_content(self, script_path: Path) -> None:
         """Validates script content for shell injection vulnerabilities."""
-        script_content = script_path.read_text()
-        if "shell" in script_content:
-            msg = f"Forbidden command 'shell' detected in LAMMPS script: {script_path}"
+        max_size = 1024 * 1024  # 1MB limit
+        if script_path.stat().st_size > max_size:
+            msg = f"Script file size exceeds maximum limit of 1MB: {script_path}"
             raise ValueError(msg)
+
+        from pyacemaker.interfaces.lammps_driver import LammpsDriver
+        driver = LammpsDriver() # Get access to validation logic
+
+        with script_path.open('r', encoding='utf-8') as f:
+            for line_idx, line in enumerate(f):
+                line_str = line.strip()
+                if not line_str or line_str.startswith("#"):
+                    continue
+                # Reuse the robust validation logic from LammpsDriver directly
+                try:
+                    driver._validate_command(line_str)
+                except ValueError as e:
+                    msg = f"Forbidden command detected in LAMMPS script line {line_idx+1} ({script_path}): {e}"
+                    raise ValueError(msg) from e
 
     def _execute_simulation(self, driver: LammpsDriver, script_path: Path) -> None:
         """
@@ -180,11 +195,6 @@ class LammpsEngine(BaseEngine):
                 if self.config.fix_halt:
                     # If using fix halt, checking step count is a proxy for early termination
                     halted = step < n_steps_target
-
-                # Evaluate two-tier thresholds if provided in config overrides (mock implementation)
-                # If max_gamma exceeds the threshold, we halt manually if LAMMPS didn't.
-                if "threshold_call_dft" in kwargs and max_gamma > kwargs["threshold_call_dft"]:
-                    halted = True
 
                 # Result
                 return MDSimulationResult(

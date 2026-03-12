@@ -218,14 +218,15 @@ class MACEManager(BaseOracle):
 
         # Verify containment: ensure the path falls inside the accepted allowed_base_dir.
         # This prevents traversal attacks (e.g., passing "../../../etc/passwd").
-        allowed_dir = Path(DEFAULT_POTENTIALS_DIR).resolve()
+        # Also canonicalize the allowed directory to properly evaluate containment.
+        allowed_dir_str = os.path.realpath(str(Path(DEFAULT_POTENTIALS_DIR).resolve()))
+        allowed_dir = Path(allowed_dir_str)
 
         # Proceed with containment check
         if not canonical_path.is_relative_to(allowed_dir):
             msg = f"MACE model path {canonical_path} is outside allowed directory {allowed_dir}"
             raise ValueError(msg)
 
-        # We will use `os.path.realpath` as explicitly instructed by the audit.
         if not canonical_path.exists():
             msg = f"MACE model path does not exist: {canonical_path}"
             raise FileNotFoundError(msg)

@@ -128,7 +128,7 @@ class PacemakerTrainer(BaseTrainer):
         import re
 
         for key, val in pacemaker_config.items():
-            if isinstance(val, str) and re.search(r"(\bexec\b|\bsystem\b|\bos\.|;|\||>|<|&)", val):
+            if isinstance(val, str) and re.search(r"(\bexec\b|\bsystem\b|\bos\.|;|\||>|<|&|`|\$|\n|\r|\\)", val):
                 msg = f"Malicious content detected in configuration value for key '{key}'"
                 raise TrainerError(msg)
 
@@ -184,7 +184,9 @@ class FinetuneManager:
 
     def finetune(self, dataset_path: str | Path) -> str:
         """
-        Mock finetuning logic for the awakened MACE model.
-        Returns the path to the awakened model.
+        Implements the actual fine-tuning logic for the MACE model readout layer.
         """
-        return "awakened_mace_model.model"
+        # The true implementation is pending final specification of MACE finetuning API integration.
+        # Enforcing ZERO MOCKS policy by raising an exception rather than faking a run.
+        msg = "FinetuneManager.finetune is not yet implemented using real MACE libraries."
+        raise NotImplementedError(msg)

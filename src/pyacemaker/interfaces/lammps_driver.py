@@ -44,6 +44,14 @@ class LammpsDriver:
             msg = f"Command contains forbidden characters: {cmd}"
             raise ValueError(msg)
 
+        # Additional explicit blocklist check against dangerous shell injection characters
+        # Just in case SAFE_CMD_PATTERN is bypassed or redefined improperly
+        import re
+        blocked_pattern = re.compile(r"[;&|\`<>\n\r]")
+        if blocked_pattern.search(cmd):
+            msg = f"Command contains explicitly blocked shell metacharacters: {cmd}"
+            raise ValueError(msg)
+
         tokens = cmd.split()
         if not tokens:
             return
