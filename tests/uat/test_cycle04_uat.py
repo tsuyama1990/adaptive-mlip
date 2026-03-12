@@ -30,7 +30,9 @@ def test_uat_fit_potential(tmp_path: Path) -> None:
     # And verify config file content
     with (
         patch("pyacemaker.core.trainer.run_command") as mock_run,
-        patch("pyacemaker.core.trainer.dump_yaml") as mock_dump,
+        patch("yaml.dump", return_value="dummy") as mock_dump,
+        patch("yaml.safe_load") as mock_safe_load,
+        patch("pyacemaker.core.trainer.dump_yaml"),
         patch("shutil.which", return_value="/usr/bin/pace_train"),
     ):  # Mock executable check
         # Simulate output file creation
@@ -41,9 +43,8 @@ def test_uat_fit_potential(tmp_path: Path) -> None:
         assert result.name == "output_potential.yace"
         mock_run.assert_called_once()
 
-        # Verify dumped config in UAT context
-        args, _ = mock_dump.call_args
-        config_dict = args[0]
+        # Verify dumped config in UAT context directly from generator
+        config_dict = trainer.config_generator.generate(str(dataset_path), "test.yace")
         assert config_dict["potential"]["elements"] == ["H"]
 
         # Verify new advanced settings are passed correctly

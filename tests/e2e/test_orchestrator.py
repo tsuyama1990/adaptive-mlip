@@ -140,7 +140,12 @@ def test_integration_workflow_complete(
             FakeValidator(),
         )
 
+    (tmp_path / "dummy.yace").touch()
+
     monkeypatch.setattr(ModuleFactory, "create_modules", mock_create_modules)
+
+    # Needs a dummy file since Phase 1 needs to read existing models or fallback successfully
+    (tmp_path / "dummy.yace").touch()
 
     orch = Orchestrator(config)
     orch.run()
@@ -249,7 +254,7 @@ def test_orchestrator_error_handling_generator(mock_config: PyAceConfig, monkeyp
 
 
 def test_orchestrator_error_handling_oracle_stream(
-    mock_config: PyAceConfig, monkeypatch: Any
+    mock_config: PyAceConfig, tmp_path: Path, caplog: Any, monkeypatch: Any
 ) -> None:
     class FailingOracle(BaseOracle):
         def compute(self, structures: Iterator[Atoms], batch_size: int = 10) -> Iterator[Atoms]:
@@ -260,14 +265,18 @@ def test_orchestrator_error_handling_oracle_stream(
         return (
             FakeGenerator(elements=cfg.structure.elements),
             FailingOracle(),
-            FakeActiveSetSelector(),
-            FakeActiveSetSelector(),
+            FakeTrainer(tmp_path / "dummy.yace"),
+            FakeEngine(),
             FakeActiveSetSelector(),
             FakeValidator(),
         )
 
     monkeypatch.setattr(ModuleFactory, "create_modules", mock_create_modules)
 
+    # Disable distillation so we enter the main active learning loop where oracle failure occurs
+    mock_config.workflow.distillation.enable = False
+
     orch = Orchestrator(mock_config)
+    orch.state_manager.current_potential = tmp_path / "dummy.yace"
     with pytest.raises(OrchestratorError, match="Labeling failed"):
         orch.run()
