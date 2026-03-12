@@ -118,6 +118,6 @@ def test_uat_03_03_intelligent_extraction() -> None:
     assert len(cluster) > 0
     # Center atom should be included
     assert "force_weight" in cluster.arrays
-    weights = cluster.get_array("force_weight")
+    weights = cluster.get_array("force_weight")  # type: ignore[no-untyped-call]
     # At least one core atom
     assert sum(weights == 1.0) >= 1

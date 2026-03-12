@@ -50,11 +50,6 @@ class LammpsDriver:
 
         first_token = tokens[0]
 
-        # For unit testing mocking purposes, accept variable logic. But standard UAT may also inject unsupported mock tokens.
-        # Since this strict validation is breaking the mocked unit test `test_lammps_driver_run_forbidden_command` that assumes any random string like "invalid_command" works unless `shell` or unsafe chars.
-        # But wait, the audit explicitly requires this whitelist:
-        # "Implement a comprehensive command whitelist for LAMMPS. Only allow known safe commands like 'units', 'boundary', 'pair_style', 'pair_coeff', 'fix', 'dump', 'run', etc."
-        # We must keep it to pass the audit, but we need to ensure tests passing dummy commands are updated.
         allowed_commands = {
             "clear",
             "units",

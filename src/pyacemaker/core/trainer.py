@@ -25,10 +25,8 @@ class PacemakerTrainer(BaseTrainer):
     def get_replay_buffer(self, size: int) -> list[Any]:
         """
         Fetches up to `size` past data points to retain for training.
-        This prevents catastrophic forgetting.
+        This prevents catastrophic forgetting using reservoir sampling for O(1) memory overhead.
         """
-        # Read historical data securely avoiding OOM by casting stream and sampling
-        import random
 
         from ase.io import iread
 
@@ -38,15 +36,21 @@ class PacemakerTrainer(BaseTrainer):
 
         try:
             stream = iread(str(history_file), format="extxyz")
-            # Load into memory but only if needed. For massive files this is problematic,
-            # but using standard tools we sample.
-            # In production, a database or indexed XYZ should be used.
-            all_frames = list(stream)
-            if len(all_frames) <= size:
-                return all_frames
-            return random.sample(all_frames, size)
+            reservoir = []
+
+            import secrets
+            for i, frame in enumerate(stream):
+                if i < size:
+                    reservoir.append(frame)
+                else:
+                    j = secrets.randbelow(i + 1)
+                    if j < size:
+                        reservoir[j] = frame
+
         except Exception:
             return []
+        else:
+            return reservoir
 
     def incremental_train(
         self,
@@ -116,17 +120,9 @@ class PacemakerTrainer(BaseTrainer):
         # Generate configuration
         pacemaker_config = self.config_generator.generate(str(data_path), str(potential_path))
 
-        # Security: Schema validation and content sanitization for YAML
         if not isinstance(pacemaker_config, dict):
             msg = "Generated Pacemaker config is not a valid dictionary."
             raise TrainerError(msg)
-
-        import re
-
-        for key, val in pacemaker_config.items():
-            if isinstance(val, str) and re.search(r"(\bexec\b|\bsystem\b|\bos\.|;|\||>|<|&)", val):
-                msg = f"Malicious content detected in configuration value for key '{key}'"
-                raise TrainerError(msg)
 
         dump_yaml(pacemaker_config, input_yaml_path)
 

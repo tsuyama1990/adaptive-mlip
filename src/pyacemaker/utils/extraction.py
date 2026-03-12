@@ -30,7 +30,7 @@ def _pre_relax_buffer(cluster: Atoms, mace_model_path: str | None = None) -> Ato
 
             calc = MACECalculator(model_paths=mace_model_path, device="cpu")
         except ImportError:
-            msg = "mace-torch is not installed. Zero Tolerance for Mocks."
+            msg = "mace-torch package is required for structural relaxation but is not installed. Please install it using 'pip install mace-torch'."
             raise RuntimeError(msg) from None
 
     if calc is None:
@@ -39,7 +39,7 @@ def _pre_relax_buffer(cluster: Atoms, mace_model_path: str | None = None) -> Ato
 
             calc = mace_mp(model="medium", device="cpu")
         except ImportError:
-            msg = "mace-torch is not installed. Zero Tolerance for Mocks."
+            msg = "mace-torch package is required for structural relaxation but is not installed. Please install it using 'pip install mace-torch'."
             raise RuntimeError(msg) from None
 
     cluster_copy.calc = calc
@@ -73,7 +73,6 @@ def _passivate_surface(
     new_atoms = []
     margin = 0.4  # Tolerance for bond distance
 
-    # A better approach: Run neighbor_list on the original structure to find all bonds.
     i_indices, j_indices, D_vectors = neighbor_list("ijD", original_structure, cutoff=5.0)  # type: ignore[no-untyped-call]
 
     # Filter only bonds where `i` is in buffer region of our cluster
@@ -129,7 +128,8 @@ def extract_intelligent_cluster(
     relaxing the buffer and passivating the surface.
     """
     if not target_atoms:
-        return structure.copy()  # type: ignore[no-untyped-call, no-any-return]
+        msg = "target_atoms cannot be empty for extraction."
+        raise ValueError(msg)
 
     total_cutoff = config.core_radius + config.buffer_radius
 

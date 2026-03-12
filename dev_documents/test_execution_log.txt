@@ -90,12 +90,12 @@ src/pyacemaker/core/active_set.py               71     10    86%   46-47, 60-61,
 src/pyacemaker/core/base.py                     32      0   100%
 src/pyacemaker/core/config_generator.py         36      3    92%   56-58
 src/pyacemaker/core/directory_manager.py        20      0   100%
-src/pyacemaker/core/engine.py                  128     32    75%   50, 64-65, 71-72, 86, 88, 91-92, 110-111, 113-114, 120-121, 139, 141, 143, 170, 185-190, 196-197, 211, 236-241, 263
+src/pyacemaker/core/engine.py                  128     32    75%   50, 64-65, 71-72, 86, 88, 91-92, 110-111, 113-114, 120-121, 139, 141, 143, 170, 185-190, 196-197, 210, 235-240, 262
 src/pyacemaker/core/evaluator.py                25      0   100%
 src/pyacemaker/core/exceptions.py                8      0   100%
 src/pyacemaker/core/generator.py                53     11    79%   36-39, 59, 62, 97, 107, 113, 115, 138
 src/pyacemaker/core/io_manager.py               74     30    59%   58-71, 78-81, 106-107, 110-115, 124-125, 129, 133-141
-src/pyacemaker/core/lammps_generator.py        163     32    80%   39-40, 107-134, 150-166, 175, 194-201, 289-290
+src/pyacemaker/core/lammps_generator.py        166     35    79%   39-40, 107-127, 143-159, 168, 187-194, 282-283
 src/pyacemaker/core/loop.py                     70      6    91%   56, 63, 79-82, 85
 src/pyacemaker/core/m3gnet_wrapper.py           20      6    70%   26-27, 33-35, 52-54
 src/pyacemaker/core/oracle.py                  157     17    89%   180-185, 230-231, 233-234, 244, 286-287, 290-291, 299, 341-343
@@ -103,7 +103,7 @@ src/pyacemaker/core/policy.py                  116     34    71%   30-31, 81-106
 src/pyacemaker/core/policy_factory.py           31      7    77%   47, 53-54, 58-59, 86-87
 src/pyacemaker/core/report.py                   12      1    92%   85
 src/pyacemaker/core/state_manager.py            34      2    94%   37-38
-src/pyacemaker/core/trainer.py                 124     45    64%   39-49, 66-78, 121-122, 128-129, 149-152, 155-156, 163-164, 167-168, 190-191, 200-201, 205-206, 228-233, 238-239
+src/pyacemaker/core/trainer.py                 123     48    61%   37-53, 70-82, 124-125, 145-148, 151-152, 159-160, 163-164, 186-187, 196-197, 201-202, 224-229, 234-235
 src/pyacemaker/core/validator.py               101     15    85%   63, 68, 75-76, 79, 113, 180-188, 199
 src/pyacemaker/domain_models/__init__.py        11      0   100%
 src/pyacemaker/domain_models/config.py          22      0   100%
@@ -121,7 +121,7 @@ src/pyacemaker/domain_models/workflow.py        58      4    93%   76-77, 79-80
 src/pyacemaker/factory.py                       32      3    91%   82-84
 src/pyacemaker/interfaces/__init__.py            5      0   100%
 src/pyacemaker/interfaces/eon_driver.py         74     12    84%   86, 133-142, 158, 162
-src/pyacemaker/interfaces/lammps_driver.py      99     11    89%   49, 106-107, 139-140, 159, 195, 228, 247-249
+src/pyacemaker/interfaces/lammps_driver.py      99     11    89%   49, 101-102, 134-135, 154, 190, 223, 242-244
 src/pyacemaker/interfaces/process.py            14      5    64%   12, 22-29
 src/pyacemaker/interfaces/qe_driver.py          48      2    96%   113-114
 src/pyacemaker/logger.py                        22      1    95%   42
@@ -133,7 +133,7 @@ src/pyacemaker/scenarios/fept_mgo.py           148     28    81%   80, 162-165, 
 src/pyacemaker/utils/delta.py                   20      3    85%   21, 37-38
 src/pyacemaker/utils/elastic.py                 80     52    35%   34-35, 46-137, 146, 154
 src/pyacemaker/utils/embedding.py               36      6    83%   41-42, 49-50, 61-62
-src/pyacemaker/utils/extraction.py             133     47    65%   15-51, 85-108, 111-116, 132
+src/pyacemaker/utils/extraction.py             134     48    64%   15-51, 84-107, 110-115, 131-132
 src/pyacemaker/utils/io.py                      73      0   100%
 src/pyacemaker/utils/path.py                    38      4    89%   57-61
 src/pyacemaker/utils/perturbations.py           43      1    98%   77
@@ -141,7 +141,7 @@ src/pyacemaker/utils/phonons.py                 51      2    96%   51, 69
 src/pyacemaker/utils/process.py                 32      6    81%   76-83
 src/pyacemaker/utils/structure.py                6      2    67%   19-20
 --------------------------------------------------------------------------
-TOTAL                                         3276    607    81%
-======================= 255 passed, 3 warnings in 4.95s ========================
+TOTAL                                         3279    614    81%
+======================= 255 passed, 3 warnings in 3.43s ========================
 /app/.venv/lib/python3.12/site-packages/coverage/inorout.py:561: CoverageWarning: Module dev_src was never imported. (module-not-imported); see https://coverage.readthedocs.io/en/7.13.4/messages.html#warning-module-not-imported
   self.warn(f"Module {pkg} was never imported.", slug="module-not-imported")

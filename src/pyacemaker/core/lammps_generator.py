@@ -106,28 +106,21 @@ class LammpsScriptGenerator:
             # We add a boolean variable to hold the trigger from TwoTierEvaluator
             buffer.write("variable trigger_halt string false\n")
 
-            # Create Python evaluator wrapper script dynamically
-            # It will be called by fix python/invoke
-            eval_script_path = eval_dir / "evaluator_wrapper.py"
-            # Ensure safe path string representation for lammps
-            quoted_eval_script = self._quote(str(eval_script_path))
-
             # The parameters for TwoTierEvaluator
             threshold_call = thresholds.get("threshold_call_dft", self.config.uncertainty_threshold)
             threshold_add = thresholds.get("threshold_add_train", self.config.uncertainty_threshold * 0.5)
             smooth_steps = thresholds.get("smooth_steps", 3)
 
-            # We write the evaluator wrapper dynamically here
-            with eval_script_path.open("w") as eval_f:
-                eval_f.write(
-                    "from pyacemaker.core.evaluator import TwoTierEvaluator\n"
-                    f"evaluator = TwoTierEvaluator({threshold_call}, {threshold_add}, {smooth_steps})\n"
-                    "def lammps_invoke_evaluator(lmp):\n"
-                    "    evaluator.evaluate(lmp)\n"
-                )
+            # Setup fix python/invoke using inline here document to avoid dynamic file creation vulnerabilities
+            buffer.write("python invoke_evaluator invoke lammps_invoke_evaluator here \"\"\"\n")
+            buffer.write("from pyacemaker.core.evaluator import TwoTierEvaluator\n")
+            buffer.write("import lammps\n")
+            buffer.write(f"evaluator = TwoTierEvaluator({threshold_call}, {threshold_add}, {smooth_steps})\n")
+            buffer.write("def lammps_invoke_evaluator():\n")
+            buffer.write("    lmp = lammps.lammps(name='', cmdargs=['-log', 'none', '-screen', 'none'])\n")
+            buffer.write("    evaluator.evaluate(lmp)\n")
+            buffer.write("\"\"\"\n")
 
-            # Setup fix python/invoke
-            buffer.write(f"python invoke_evaluator invoke lammps_invoke_evaluator file {quoted_eval_script}\n")
             buffer.write(f"fix invoke_eval all python/invoke {self.config.check_interval} end_of_step invoke_evaluator\n")
 
             # Secondary halt check that relies on the trigger variable from TwoTierEvaluator
