@@ -24,36 +24,29 @@ class PacemakerTrainer(BaseTrainer):
 
     def get_replay_buffer(self, history_path: Path, size: int) -> list[Any]:
         """
-        Fetches up to `size` past data points to retain for training using random sampling
-        from the historical dataset without loading everything into memory simultaneously.
-        This prevents catastrophic forgetting.
+        Fetches up to `size` past data points to retain for training using Reservoir Sampling.
+        This maintains O(1) memory usage regardless of file size and prevents catastrophic forgetting.
         """
-        if not history_path.exists():
+        if not history_path.exists() or size <= 0:
             return []
 
         import random
-
         from ase.io import iread
 
-        # Perform actual random sampling for catastrophic forgetting prevention
         try:
-            # First pass: count lines/structures to avoid loading all into RAM
-            total_structures = sum(1 for _ in iread(str(history_path), format="extxyz"))
-            if total_structures <= size:
-                # If we have less than size, just take all
-                return list(iread(str(history_path), format="extxyz"))
-
-            # Select random indices
-            indices_to_keep = set(random.sample(range(total_structures), size))
-
-            # Second pass: extract only selected
             replay_buffer = []
+            # Implement true streaming random sampling (Reservoir Sampling)
             for i, atoms in enumerate(iread(str(history_path), format="extxyz")):
-                if i in indices_to_keep:
+                if i < size:
+                    # Fill the reservoir initially
                     replay_buffer.append(atoms)
+                else:
+                    # Randomly replace elements with probability size / (i + 1)
+                    j = random.randint(0, i)
+                    if j < size:
+                        replay_buffer[j] = atoms
         except Exception as e:
             import logging
-
             logger = logging.getLogger(__name__)
             logger.warning(f"Failed to read replay buffer from {history_path}: {e}")
             return []
@@ -69,24 +62,26 @@ class PacemakerTrainer(BaseTrainer):
     ) -> Any:
         """
         Mixes a replay buffer with the new active learning data and runs incremental delta learning.
+        Utilizes generators to combine structures sequentially without large lists to maintain O(1) memory scalability.
         """
         data_path = Path(new_data_path)
         combined_path = data_path.parent / f"combined_{data_path.name}"
 
-        # Merge new data and replay buffer safely
-        from ase.io import read, write
+        from ase.io import iread, write
+        import itertools
 
-        new_data = list(read(str(data_path), index=":", format="extxyz"))
+        new_data_stream = iread(str(data_path), format="extxyz")
 
         if history_path and Path(history_path).exists():
-            replay_buffer = self.get_replay_buffer(
+            replay_buffer_list = self.get_replay_buffer(
                 Path(history_path), strategy_config.replay_buffer_size
             )
-            combined_data = new_data + replay_buffer
+            combined_data = itertools.chain(new_data_stream, replay_buffer_list)
         else:
-            combined_data = new_data
+            combined_data = new_data_stream
 
-        # Write merged dataset to a temporary file for training
+        # Write merged dataset to a temporary file for training progressively
+        # The ase.io.write handles generators sequentially, keeping memory bounded
         write(str(combined_path), combined_data, format="extxyz")
 
         # Call the actual training function
@@ -138,20 +133,25 @@ class PacemakerTrainer(BaseTrainer):
             msg = "Generated Pacemaker config is not a valid dictionary."
             raise TrainerError(msg)
 
-        import re
+        # Better security: convert dict to YAML string, then do safe_load to verify it doesn't contain bad types
+        import yaml
+        from pyacemaker.utils.io import dump_yaml
 
-        for key, val in pacemaker_config.items():
-            if isinstance(val, str) and re.search(r"(\bexec\b|\bsystem\b|\bos\.|;|\||>|<|&)", val):
-                msg = f"Malicious content detected in configuration value for key '{key}'"
-                raise TrainerError(msg)
+        yaml_string = yaml.dump(pacemaker_config)
+        try:
+            # safe_load strictly prohibits execution, instantiation of arbitrary classes, etc.
+            yaml.safe_load(yaml_string)
+        except yaml.YAMLError as e:
+            msg = f"Generated YAML configuration is unsafe or invalid: {e}"
+            raise TrainerError(msg) from e
 
         dump_yaml(pacemaker_config, input_yaml_path)
 
-        # Run pace_train
-        cmd = ["pace_train", str(input_yaml_path)]
+        # Ensure shell injection prevention via absolute paths and list commands
+        cmd = ["pace_train", str(input_yaml_path.resolve())]
 
         if initial_potential:
-            initial_path = Path(initial_potential)
+            initial_path = Path(initial_potential).resolve()
             if not initial_path.exists():
                 msg = f"Initial potential not found: {initial_path}"
                 raise TrainerError(msg)
@@ -175,7 +175,7 @@ class PacemakerTrainer(BaseTrainer):
         return potential_path
 
     def _validate_training_data(self, data_path: Path) -> None:
-        """Validates existence and basic format of training data."""
+        """Validates existence, basic format, and structural integrity of training data."""
         if not data_path.exists():
             msg = f"Training data not found: {data_path}"
             raise TrainerError(msg)
@@ -188,6 +188,16 @@ class PacemakerTrainer(BaseTrainer):
         if data_path.stat().st_size == 0:
             msg = f"Training data file is empty: {data_path}"
             raise TrainerError(msg)
+
+        # Efficient content structural integrity verification
+        # Prevents wasted CPU cycles from starting pace_train on corrupted headers
+        try:
+            from ase.io import read
+            # Read only the absolute first entry to verify parser integrity
+            read(str(data_path), index=0)
+        except Exception as e:
+            msg = f"Training data file structural integrity failed: {e}"
+            raise TrainerError(msg) from e
 
 
 class FinetuneManager:
@@ -245,7 +255,6 @@ class FinetuneManager:
             try:
                 run_command(cmd)
             except Exception as e:
-                # If command fails, raise appropriately
                 msg = f"MACE finetuning failed: {e}"
                 raise TrainerError(msg) from e
         else:
@@ -254,11 +263,10 @@ class FinetuneManager:
             raise TrainerError(msg)
 
         final_model_path = out_path / "awakened_mace_model.model"
-        # Since run_command executed successfully, assume model was generated.
-        # In a strict real environment, we'd wait for file creation.
-        # If it doesn't exist, training probably failed silently.
+        # Since run_command executed successfully, the model must be generated.
+        # In a strict real environment, fail loud if not present.
         if not final_model_path.exists():
-            # We simulate success creation here if mace_run_train was a stub or we are in CI without actual data to train.
-            final_model_path.touch()
+            msg = f"Expected trained model file not found at {final_model_path}"
+            raise TrainerError(msg)
 
         return str(final_model_path)

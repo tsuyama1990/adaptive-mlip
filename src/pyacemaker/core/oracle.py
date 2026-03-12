@@ -216,23 +216,18 @@ class MACEManager(BaseOracle):
         if model_path in ["mace-mp-0-small", "mace-mp-0-medium", "mace-mp-0-large"]:
             self.model_path = model_path
         else:
-            # Canonicalize the path using os.path.realpath to safely unpack symlinks and avoid TOCTOU
-            canonical_path_str = os.path.realpath(model_path)
-            canonical_path = Path(canonical_path_str)
+            try:
+                canonical_path = Path(model_path).resolve(strict=True)
+            except FileNotFoundError:
+                msg = f"MACE model path does not exist: {model_path}"
+                raise FileNotFoundError(msg) from None
 
-            # Verify containment: ensure the path falls inside the accepted allowed_base_dir.
-            # This prevents traversal attacks (e.g., passing "../../../etc/passwd").
-            allowed_dir = Path(DEFAULT_POTENTIALS_DIR).resolve()
+            allowed_dir = Path(DEFAULT_POTENTIALS_DIR).resolve(strict=True)
 
-            # Proceed with containment check
             if not canonical_path.is_relative_to(allowed_dir):
                 msg = f"MACE model path {canonical_path} is outside allowed directory {allowed_dir}"
                 raise ValueError(msg)
 
-            # We will use `os.path.realpath` as explicitly instructed by the audit.
-            if not canonical_path.exists():
-                msg = f"MACE model path does not exist: {canonical_path}"
-                raise FileNotFoundError(msg)
             if not canonical_path.is_file():
                 msg = f"MACE model path must be a file: {canonical_path}"
                 raise ValueError(msg)
