@@ -138,9 +138,11 @@ def test_lammps_engine_hybrid_potential(
 
     driver_instance.run_file.side_effect = capture_run
 
-    with patch("pyacemaker.core.engine.LammpsEngine._validate_script_content"):
-        with patch("pyacemaker.core.engine.LammpsDriver", return_value=driver_instance):
-            engine.run(atoms, pot_path)
+    with (
+        patch("pyacemaker.core.engine.LammpsEngine._validate_script_content"),
+        patch("pyacemaker.core.engine.LammpsDriver", return_value=driver_instance)
+    ):
+        engine.run(atoms, pot_path)
 
     # Check captured script
     assert len(script_content) == 1
@@ -245,6 +247,8 @@ def test_run_driver_failure(mock_md_config: MDConfig, mock_driver: Any, tmp_path
     pot_path.touch()
 
     # Updated error message expectation
-    with patch("pyacemaker.core.engine.LammpsEngine._validate_script_content"):
-        with pytest.raises(RuntimeError, match="Simulation execution failed"):
-            engine.run(atoms, pot_path)
+    with (
+        patch("pyacemaker.core.engine.LammpsEngine._validate_script_content"),
+        pytest.raises(RuntimeError, match="Simulation execution failed")
+    ):
+        engine.run(atoms, pot_path)

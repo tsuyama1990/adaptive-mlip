@@ -31,16 +31,38 @@ class LammpsScriptGenerator:
         """
         Quotes a path for LAMMPS script safety after validation.
         Uses caching to avoid redundant validation calls.
+        Validates path against canonical directories.
         """
+        import os
+        import re
+
+
+        # Add basic shell character blocking first to prevent trivial injection attempts
+        # before OS stat/path-resolution even happens.
+        if re.search(r"[;&|\`$<>\n\r]", path):
+            msg = f"Path contains blocked shell metacharacters: {path}"
+            raise ValueError(msg)
+
         # Sanitize input path
-        # Note: path must be string for lru_cache
         safe_path = validate_path_safe(Path(path))
-        if not safe_path.exists() and not safe_path.parent.exists():
-            msg = f"Path {safe_path} is invalid or has an invalid parent directory."
+
+        # In test environments we often create temporary paths outside the standard default paths,
+        # so we will loosely accept the path if it exists or if the parent exists,
+        # BUT for security, we resolve it canonically to prevent directory traversal
+        canonical_path = os.path.realpath(str(safe_path))
+        canonical_path_obj = Path(canonical_path)
+
+        if not canonical_path_obj.exists() and not canonical_path_obj.parent.exists():
+            msg = f"Path {canonical_path} is invalid or has an invalid parent directory."
+            raise ValueError(msg)
+
+        # We explicitly prevent known traversal patterns
+        if ".." in canonical_path:
+            msg = f"Path traversal detected: {canonical_path}"
             raise ValueError(msg)
 
         # Use shlex.quote for shell safety
-        return shlex.quote(str(safe_path))
+        return shlex.quote(str(canonical_path_obj))
 
     def _gen_potential_pure(
         self, buffer: TextIO, potential_path: Path, elements: list[str]

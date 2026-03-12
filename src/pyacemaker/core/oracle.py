@@ -148,6 +148,12 @@ class DFTManager(BaseOracle):
         Raises:
             OracleError: If calculation fails after all retries and strategies.
         """
+        from pyacemaker.core.validator import LammpsInputValidator
+
+        # Security: Apply strict pre-computation validation to prevent malicious atomic
+        # objects from exhausting memory or bypassing physical parameter bounds safely.
+        LammpsInputValidator.validate_structure(atoms)
+
         current_config = self.config.model_copy()
         strategies = self._get_strategies()
         last_error: Exception | None = None
@@ -208,28 +214,27 @@ class MACEManager(BaseOracle):
     """
 
     def __init__(self, model_path: str) -> None:
-        import os
 
         from pyacemaker.domain_models.defaults import DEFAULT_POTENTIALS_DIR
 
-        # Canonicalize the path using os.path.realpath to safely unpack symlinks and avoid TOCTOU
-        canonical_path_str = os.path.realpath(model_path)
-        canonical_path = Path(canonical_path_str)
-
         # Verify containment: ensure the path falls inside the accepted allowed_base_dir.
         # This prevents traversal attacks (e.g., passing "../../../etc/passwd").
-        # Also canonicalize the allowed directory to properly evaluate containment.
-        allowed_dir_str = os.path.realpath(str(Path(DEFAULT_POTENTIALS_DIR).resolve()))
-        allowed_dir = Path(allowed_dir_str)
 
-        # Proceed with containment check
+        # We must strictly resolve the path before checking containment to safely unpack all symlinks.
+        try:
+            canonical_path = Path(model_path).resolve(strict=True)
+        except FileNotFoundError as e:
+            msg = f"MACE model path does not exist: {model_path}"
+            raise FileNotFoundError(msg) from e
+
+        # Also canonicalize the allowed directory to properly evaluate containment.
+        allowed_dir = Path(DEFAULT_POTENTIALS_DIR).resolve(strict=True)
+
+        # Proceed with strict containment check on resolved paths
         if not canonical_path.is_relative_to(allowed_dir):
             msg = f"MACE model path {canonical_path} is outside allowed directory {allowed_dir}"
             raise ValueError(msg)
 
-        if not canonical_path.exists():
-            msg = f"MACE model path does not exist: {canonical_path}"
-            raise FileNotFoundError(msg)
         if not canonical_path.is_file():
             msg = f"MACE model path must be a file: {canonical_path}"
             raise ValueError(msg)

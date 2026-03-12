@@ -34,7 +34,7 @@ def test_dft_manager_streaming_behavior(mock_dft_config: DFTConfig) -> None:
         i = 0
         while True:
             # Yield single atom each time
-            yield Atoms("H", positions=[[0, 0, 0]])
+            yield Atoms("H", positions=[[0, 0, 0]], cell=[10, 10, 10], pbc=True)
             i += 1
 
     # 2. Mock driver
