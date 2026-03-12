@@ -346,6 +346,7 @@ class Orchestrator:
                 structure=halt_structure,
                 target_atoms=target_atoms,
                 config=self.config.workflow.cutout,
+                mace_model_path=self.config.workflow.distillation.mace_model_path,
             )
         except Exception:
             self.logger.exception("Failed to extract local cluster.")

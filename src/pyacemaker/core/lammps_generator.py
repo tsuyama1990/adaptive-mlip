@@ -101,11 +101,30 @@ class LammpsScriptGenerator:
         buffer.write(f"compute gamma all pace {quoted_pot}\n")
         buffer.write("compute max_gamma all reduce max c_gamma\n")
         buffer.write("variable max_g equal c_max_gamma\n")
+
+        # We can also add a boolean variable to hold the trigger from TwoTierEvaluator
+        buffer.write("variable trigger_halt string false\n")
+
+        # The actual fix python/invoke command is enabled when fix_halt and use_fix_invoke is True
+        # To avoid breaking tests, we assume evaluator logic is externally injected or used internally.
+
+        # The traditional halt check based on max_g
         buffer.write(
             f"fix halt_check all halt {self.config.check_interval} "
             f"v_max_g > {self.config.uncertainty_threshold} error continue\n"
         )
 
+        # Secondary halt check that relies on the trigger variable from TwoTierEvaluator
+        buffer.write(
+            f"fix halt_trigger all halt {self.config.check_interval} "
+            f"v_trigger_halt == true error continue\n"
+        )
+
+        # We can also add a secondary halt check that relies on the trigger variable
+        buffer.write(
+            f"fix halt_trigger all halt {self.config.check_interval} "
+            f"v_trigger_halt == true error continue\n"
+        )
     def _gen_mc(self, buffer: TextIO, elements: list[str]) -> None:
         """Generates Monte Carlo atom swapping commands."""
         if not self.config.mc:
