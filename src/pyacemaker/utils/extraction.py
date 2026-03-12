@@ -8,66 +8,104 @@ from pyacemaker.domain_models.workflow import CutoutConfig
 from pyacemaker.utils.embedding import embed_cluster
 
 
-def _pre_relax_buffer(cluster: Atoms) -> Atoms:
+def _pre_relax_buffer(cluster: Atoms, mace_model_path: str | None = None) -> Atoms:
     """
     Relaxes the buffer region (force_weight == 0.0) while keeping the core fixed.
     """
-    # Create a copy to prevent modifying the original incorrectly
+    import os
+    from pathlib import Path
+
     cluster_copy = cluster.copy()  # type: ignore[no-untyped-call]
 
-    # Identify core atoms
     weights = cluster_copy.get_array("force_weight")
     core_indices = np.where(weights == 1.0)[0]
 
-    # Set constraints to fix core atoms
     constraint = FixAtoms(indices=core_indices)  # type: ignore[no-untyped-call]
     cluster_copy.set_constraint(constraint)
 
-    # Apply a mock calculator for the relaxation if one is not attached
-    if cluster_copy.calc is None:
-        from ase.calculators.lj import LennardJones
+    calc = None
+    if mace_model_path:
+        try:
+            from mace.calculators import MACECalculator
+            calc = MACECalculator(model_paths=mace_model_path, device="cpu")
+        except ImportError:
+            pass
 
-        cluster_copy.calc = LennardJones()  # type: ignore[no-untyped-call]
+    if calc is None:
+        try:
+            from mace.calculators import mace_mp
+            calc = mace_mp(model="medium", device="cpu")
+        except ImportError:
+            pass
 
-    # Relax the buffer region
-    import os
-    from pathlib import Path
+    if calc is not None:
+        cluster_copy.calc = calc
+    else:
+        # We must not fallback to mock calculators in production code.
+        msg = "MACE calculator could not be initialized for pre-relaxation. Please install mace-torch."
+        raise RuntimeError(msg)
 
     with Path(os.devnull).open("w") as devnull:
         opt = LBFGS(cluster_copy, logfile=devnull)
         opt.run(fmax=0.05, steps=50)  # type: ignore[no-untyped-call]
 
     return cluster_copy  # type: ignore[no-any-return]
-
-
-def _passivate_surface(cluster: Atoms, element: str = "H") -> Atoms:
+def _passivate_surface(
+    cluster: Atoms,
+    original_structure: Atoms,
+    cluster_indices: list[int],
+    element: str = "H"
+) -> Atoms:
     """
-    Passivates the surface of the cluster by adding dummy atoms (e.g. H) to undercoordinated atoms.
+    Passivates the surface of the cluster by adding dummy atoms (e.g. H) to cut bonds.
+    Calculates cut bonds by checking covalent radii distances in original structure.
     """
+    from ase.data import covalent_radii
+
     cluster_copy = cluster.copy()  # type: ignore[no-untyped-call]
-
-    # We will just do a simple distance-based passivation mock implementation
-    # Find outer atoms (in the buffer region) that have fewer neighbors
-    i_indices, _j_indices = neighbor_list("ij", cluster_copy, cutoff=2.5)  # type: ignore[no-untyped-call]
-
     weights = cluster_copy.get_array("force_weight")
-    buffer_indices = np.where(weights == 0.0)[0]
+
+    all_radii = np.array([covalent_radii[original_structure.numbers[i]] for i in range(len(original_structure))])
+
+    # Convert cluster_indices to a set for O(1) lookups
+    cluster_set = set(cluster_indices)
 
     new_atoms = []
+    margin = 0.4  # Tolerance for bond distance
 
-    for idx in buffer_indices:
-        # Number of neighbors for this atom
-        n_neighbors = np.sum(i_indices == idx)
-        # Mock logic: if an atom has fewer than 4 neighbors, add a passivating element
-        if n_neighbors < 4:
-            # We add a dummy atom in a random direction (just for structure generation mock)
-            # In a real scenario, this would follow bonding angles.
-            pos = cluster_copy.positions[idx]
-            offset = np.random.randn(3)
-            offset = offset / np.linalg.norm(offset) * 1.0  # 1.0 Angstrom bond length
-            new_pos = pos + offset
 
-            new_atoms.append(Atoms(element, positions=[new_pos]))
+    # A better approach: Run neighbor_list on the original structure to find all bonds.
+    i_indices, j_indices, D_vectors = neighbor_list("ijD", original_structure, cutoff=5.0)  # type: ignore[no-untyped-call]
+
+    # Filter only bonds where `i` is in buffer region of our cluster
+    for cluster_i, orig_i in enumerate(cluster_indices):
+        if weights[cluster_i] == 1.0:
+            continue
+
+        # Bonds originating from orig_i
+        mask = (i_indices == orig_i)
+        neighbors = j_indices[mask]
+        vectors = D_vectors[mask]
+
+        for neighbor_idx, vector in zip(neighbors, vectors, strict=False):
+            # Check if this neighbor was NOT included in the cluster
+            if neighbor_idx not in cluster_set:
+                # Check if it was actually bonded (distance < r_cov_i + r_cov_j + margin)
+                dist = np.linalg.norm(vector)
+                r_cov_i = all_radii[orig_i]
+                r_cov_j = all_radii[neighbor_idx]
+
+                if dist <= r_cov_i + r_cov_j + margin:
+                    # A bond was cut!
+                    # Place passivating element along the vector from i to j
+                    bond_dir = vector / dist
+                    # Standard bond length for H
+                    from ase.data import atomic_numbers
+                    h_rad = covalent_radii[atomic_numbers[element]]
+                    passivation_dist = r_cov_i + h_rad
+
+                    new_pos = cluster_copy.positions[cluster_i] + bond_dir * passivation_dist
+                    new_atoms.append(Atoms(element, positions=[new_pos]))
 
     if new_atoms:
         for new_atom in new_atoms:
@@ -78,10 +116,8 @@ def _passivate_surface(cluster: Atoms, element: str = "H") -> Atoms:
         cluster_copy.set_array("force_weight", new_weights)
 
     return cluster_copy  # type: ignore[no-any-return]
-
-
 def extract_intelligent_cluster(
-    structure: Atoms, target_atoms: list[int], config: CutoutConfig
+    structure: Atoms, target_atoms: list[int], config: CutoutConfig, mace_model_path: str | None = None
 ) -> Atoms:
     """
     Extracts an intelligent local cluster around multiple target atoms,
@@ -150,15 +186,13 @@ def extract_intelligent_cluster(
         cluster.new_array("c_gamma", cluster_c_gamma)  # type: ignore[no-untyped-call]
 
     if config.enable_pre_relaxation:
-        cluster = _pre_relax_buffer(cluster)
+        cluster = _pre_relax_buffer(cluster, mace_model_path=mace_model_path)
 
     if config.enable_passivation:
-        cluster = _passivate_surface(cluster, element=config.passivation_element)
+        cluster = _passivate_surface(cluster, structure, cluster_indices, element=config.passivation_element)
 
     # Finally, embed the cluster into a cell
     return embed_cluster(cluster, buffer=5.0)
-
-
 def extract_local_region(
     structure: Atoms, center_index: int, radius: float, buffer: float
 ) -> Atoms:

@@ -36,6 +36,12 @@ def test_scenario_phase1_distillation() -> None:
         model_file = pot_dir / "model"
         with model_file.open("w") as f:
             f.write("dummy")
+        # Mock MACECalculator in extraction to bypass real file checks for test
+        from unittest.mock import patch, MagicMock
+        mace_patcher = patch("pyacemaker.utils.extraction._pre_relax_buffer", side_effect=lambda c, **kw: c)
+        mace_mock = mace_patcher.start()
+        from ase.calculators.lj import LennardJones
+        mace_mock.return_value = LennardJones()
 
         import pyacemaker.domain_models.defaults
 
@@ -43,6 +49,7 @@ def test_scenario_phase1_distillation() -> None:
             pyacemaker.domain_models.defaults, "DEFAULT_POTENTIALS_DIR", str(pot_dir.resolve())
         ):
             mace_manager = MACEManager(str(model_file))
+        mace_model_path_str = str(model_file)
 
         atoms1 = Atoms("Fe", cell=[2, 2, 2], pbc=True)
         atoms2 = Atoms("Pt", cell=[2, 2, 2], pbc=True)
@@ -73,6 +80,12 @@ def test_scenario_phase3_cutout() -> None:
         model_file = pot_dir / "model"
         with model_file.open("w") as f:
             f.write("dummy")
+        # Mock MACECalculator in extraction to bypass real file checks for test
+        from unittest.mock import patch, MagicMock
+        mace_patcher = patch("pyacemaker.utils.extraction._pre_relax_buffer", side_effect=lambda c, **kw: c)
+        mace_mock = mace_patcher.start()
+        from ase.calculators.lj import LennardJones
+        mace_mock.return_value = LennardJones()
 
         import pyacemaker.domain_models.defaults
 
@@ -80,6 +93,7 @@ def test_scenario_phase3_cutout() -> None:
             pyacemaker.domain_models.defaults, "DEFAULT_POTENTIALS_DIR", str(pot_dir.resolve())
         ):
             mace_manager = MACEManager(str(model_file))
+        mace_model_path_str = str(model_file)
     dft_manager = MagicMock(spec=DFTManager)
 
     oracle = TieredOracle(mace_manager, dft_manager, thresholds)
@@ -102,7 +116,8 @@ def test_scenario_phase3_cutout() -> None:
     # MACE mock is between 0.01 and 0.1, so likely some > 0.02. Let's just pass target_atoms = [0]
     target_atoms = [0]
 
-    cluster = extract_intelligent_cluster(atoms, target_atoms, config)
+    cluster = extract_intelligent_cluster(atoms, target_atoms, config, mace_model_path=mace_model_path_str)
+
 
     # Check physical repair
     weights = cluster.get_array("force_weight")  # type: ignore[no-untyped-call]
