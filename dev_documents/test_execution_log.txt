@@ -71,9 +71,9 @@ tests/unit/test_validator_security.py ...........                        [100%]
 =================================== FAILURES ===================================
 ___________________________ test_lammps_engine_relax ___________________________
 
-mock_md_config = MDConfig(temperature=300.0, pressure=1.0, timestep=0.001, n_steps=1000, thermo_freq=10, dump_freq=100, minimize=False,...ut_outer=2.5), fix_halt=False, uncertainty_threshold=5.0, check_interval=10, ramping=None, mc=None, soft_start_steps=0)
-mock_driver_relax = <MagicMock name='LammpsDriver' id='140714292361312'>
-tmp_path = PosixPath('/tmp/pytest-of-jules/pytest-15/test_lammps_engine_relax0')
+mock_md_config = MDConfig(temperature=300.0, pressure=1.0, timestep=0.001, n_steps=1000, thermo_freq=10, dump_freq=100, minimize=False,...se, uncertainty_threshold=5.0, check_interval=10, evaluator_thresholds=None, ramping=None, mc=None, soft_start_steps=0)
+mock_driver_relax = <MagicMock name='LammpsDriver' id='139727908637776'>
+tmp_path = PosixPath('/tmp/pytest-of-jules/pytest-26/test_lammps_engine_relax0')
 
     def test_lammps_engine_relax(
         mock_md_config: MDConfig, mock_driver_relax: Any, tmp_path: Path
@@ -101,21 +101,28 @@ tmp_path = PosixPath('/tmp/pytest-of-jules/pytest-15/test_lammps_engine_relax0')
 
         driver_instance.run_file.side_effect = capture_script
 
-        # Call relax
-        result_atoms = engine.relax(initial_atoms, pot_path)
+        # Actually we just want to bypass the LammpsDriver and mock _execute_simulation instead,
+        # to catch the generated file, but here we can just intercept `_execute_simulation` to read it:
+        original_execute = engine._execute_simulation
+        def mock_execute(driver, script_path):
+            script_content.append(script_path.read_text())
+
+        with patch.object(engine, '_execute_simulation', side_effect=mock_execute):
+            # Call relax
+            result_atoms = engine.relax(initial_atoms, pot_path)
 
         # Verify result
         assert result_atoms == relaxed_atoms
         assert result_atoms.get_chemical_symbols() == ["He"]  # type: ignore[no-untyped-call]
 
         # Verify script content
-        assert len(script_content) == 1
-        script = script_content[0]
+        assert len(script_content) >= 1
+        script = "\n".join(script_content)
 
 >       assert "minimize" in script
 E       AssertionError: assert 'minimize' in ''
 
-tests/unit/test_engine_relax.py:55: AssertionError
+tests/unit/test_engine_relax.py:62: AssertionError
 =============================== warnings summary ===============================
 tests/e2e/test_orchestrator_loop.py::test_run_loop_iteration_halt
   /app/.venv/lib/python3.12/site-packages/e3nn/o3/_wigner.py:10: UserWarning: Environment variable TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD detected, since the`weights_only` argument was not explicitly passed to `torch.load`, forcing weights_only=False.
@@ -139,111 +146,6 @@ tests/uat/test_cycle01_uat.py::test_scenario_01_02_guardrails_check_cutoff
     PydanticSerializationUnexpectedValue(Expected `TrainingConfig` - serialized value may not be as expected [field_name='training', input_value={'cutoff_radius': -1.0}, input_type=dict])
     return self.__pydantic_serializer__.to_python(
 
-tests/unit/test_engine_file_contention.py::test_engine_file_contention
-  /app/.venv/lib/python3.12/site-packages/_pytest/threadexception.py:58: PytestUnhandledThreadExceptionWarning: Exception in thread Thread-3 (worker)
-
-  Traceback (most recent call last):
-    File "/app/src/pyacemaker/interfaces/lammps_driver.py", line 35, in __init__
-      self.lmp = lammps(cmdargs=cmdargs)
-                 ^^^^^^^^^^^^^^^^^^^^^^^
-    File "/app/.venv/lib/python3.12/site-packages/lammps/core.py", line 228, in __init__
-      self.lib = CDLL(libpath,RTLD_GLOBAL)
-                 ^^^^^^^^^^^^^^^^^^^^^^^^^
-    File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/ctypes/__init__.py", line 379, in __init__
-      self._handle = _dlopen(self._name, mode)
-                     ^^^^^^^^^^^^^^^^^^^^^^^^^
-  OSError: libmpi.so.12: cannot open shared object file: No such file or directory
-
-  The above exception was the direct cause of the following exception:
-
-  Traceback (most recent call last):
-    File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/threading.py", line 1075, in _bootstrap_inner
-      self.run()
-    File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/threading.py", line 1012, in run
-      self._target(*self._args, **self._kwargs)
-    File "/app/tests/unit/test_engine_file_contention.py", line 50, in worker
-      engine.run(atoms, potential)
-    File "/app/src/pyacemaker/core/engine.py", line 196, in run
-      driver = LammpsDriver(lammps_args)
-               ^^^^^^^^^^^^^^^^^^^^^^^^^
-    File "/app/src/pyacemaker/interfaces/lammps_driver.py", line 39, in __init__
-      raise RuntimeError(msg) from e
-  RuntimeError: Failed to initialize LAMMPS: libmpi.so.12: cannot open shared object file: No such file or directory
-
-  Enable tracemalloc to get traceback where the object was allocated.
-  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
-    warnings.warn(pytest.PytestUnhandledThreadExceptionWarning(msg))
-
-tests/unit/test_engine_file_contention.py::test_engine_file_contention
-  /app/.venv/lib/python3.12/site-packages/_pytest/threadexception.py:58: PytestUnhandledThreadExceptionWarning: Exception in thread Thread-8 (worker)
-
-  Traceback (most recent call last):
-    File "/app/src/pyacemaker/interfaces/lammps_driver.py", line 35, in __init__
-      self.lmp = lammps(cmdargs=cmdargs)
-                 ^^^^^^^^^^^^^^^^^^^^^^^
-    File "/app/.venv/lib/python3.12/site-packages/lammps/core.py", line 228, in __init__
-      self.lib = CDLL(libpath,RTLD_GLOBAL)
-                 ^^^^^^^^^^^^^^^^^^^^^^^^^
-    File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/ctypes/__init__.py", line 379, in __init__
-      self._handle = _dlopen(self._name, mode)
-                     ^^^^^^^^^^^^^^^^^^^^^^^^^
-  OSError: libmpi.so.12: cannot open shared object file: No such file or directory
-
-  The above exception was the direct cause of the following exception:
-
-  Traceback (most recent call last):
-    File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/threading.py", line 1075, in _bootstrap_inner
-      self.run()
-    File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/threading.py", line 1012, in run
-      self._target(*self._args, **self._kwargs)
-    File "/app/tests/unit/test_engine_file_contention.py", line 50, in worker
-      engine.run(atoms, potential)
-    File "/app/src/pyacemaker/core/engine.py", line 196, in run
-      driver = LammpsDriver(lammps_args)
-               ^^^^^^^^^^^^^^^^^^^^^^^^^
-    File "/app/src/pyacemaker/interfaces/lammps_driver.py", line 39, in __init__
-      raise RuntimeError(msg) from e
-  RuntimeError: Failed to initialize LAMMPS: libmpi.so.12: cannot open shared object file: No such file or directory
-
-  Enable tracemalloc to get traceback where the object was allocated.
-  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
-    warnings.warn(pytest.PytestUnhandledThreadExceptionWarning(msg))
-
-tests/unit/test_engine_file_contention.py::test_engine_file_contention
-  /app/.venv/lib/python3.12/site-packages/_pytest/threadexception.py:58: PytestUnhandledThreadExceptionWarning: Exception in thread Thread-6 (worker)
-
-  Traceback (most recent call last):
-    File "/app/src/pyacemaker/interfaces/lammps_driver.py", line 35, in __init__
-      self.lmp = lammps(cmdargs=cmdargs)
-                 ^^^^^^^^^^^^^^^^^^^^^^^
-    File "/app/.venv/lib/python3.12/site-packages/lammps/core.py", line 228, in __init__
-      self.lib = CDLL(libpath,RTLD_GLOBAL)
-                 ^^^^^^^^^^^^^^^^^^^^^^^^^
-    File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/ctypes/__init__.py", line 379, in __init__
-      self._handle = _dlopen(self._name, mode)
-                     ^^^^^^^^^^^^^^^^^^^^^^^^^
-  OSError: libmpi.so.12: cannot open shared object file: No such file or directory
-
-  The above exception was the direct cause of the following exception:
-
-  Traceback (most recent call last):
-    File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/threading.py", line 1075, in _bootstrap_inner
-      self.run()
-    File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/threading.py", line 1012, in run
-      self._target(*self._args, **self._kwargs)
-    File "/app/tests/unit/test_engine_file_contention.py", line 50, in worker
-      engine.run(atoms, potential)
-    File "/app/src/pyacemaker/core/engine.py", line 196, in run
-      driver = LammpsDriver(lammps_args)
-               ^^^^^^^^^^^^^^^^^^^^^^^^^
-    File "/app/src/pyacemaker/interfaces/lammps_driver.py", line 39, in __init__
-      raise RuntimeError(msg) from e
-  RuntimeError: Failed to initialize LAMMPS: libmpi.so.12: cannot open shared object file: No such file or directory
-
-  Enable tracemalloc to get traceback where the object was allocated.
-  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
-    warnings.warn(pytest.PytestUnhandledThreadExceptionWarning(msg))
-
 tests/unit/test_io.py::test_write_lammps_streaming_basic
   /app/.venv/lib/python3.12/site-packages/ase/io/lammpsdata.py:72: FutureWarning: "style" is deprecated; please use "atom_style".
     warnings.warn(
@@ -260,12 +162,12 @@ src/pyacemaker/core/active_set.py               71     10    86%   46-47, 60-61,
 src/pyacemaker/core/base.py                     32      0   100%
 src/pyacemaker/core/config_generator.py         36      3    92%   56-58
 src/pyacemaker/core/directory_manager.py        20      0   100%
-src/pyacemaker/core/engine.py                  158     46    71%   51, 65-66, 72-73, 90, 92, 96-102, 104-105, 123-124, 126-127, 133-134, 137-138, 140-141, 143-144, 162, 164, 166, 193, 213-218, 224-225, 243-246, 272-277, 299
-src/pyacemaker/core/evaluator.py                59      5    92%   38-39, 76-77, 81
+src/pyacemaker/core/engine.py                  139     31    78%   51, 65-66, 75-76, 93, 95, 101-102, 119-120, 122-123, 128-129, 170, 190-195, 201-202, 220-223, 249-254, 276
+src/pyacemaker/core/evaluator.py                63      7    89%   44-45, 78-79, 87-88, 92
 src/pyacemaker/core/exceptions.py               14      0   100%
 src/pyacemaker/core/generator.py                53     11    79%   36-39, 59, 62, 97, 107, 113, 115, 138
 src/pyacemaker/core/io_manager.py               74     30    59%   58-71, 78-81, 106-107, 110-115, 124-125, 129, 133-141
-src/pyacemaker/core/lammps_generator.py        174     31    82%   42-44, 151-167, 176, 195-202, 324-337
+src/pyacemaker/core/lammps_generator.py        181     32    82%   39-40, 46-47, 161-177, 186, 205-212, 327-340
 src/pyacemaker/core/loop.py                     70      6    91%   56, 63, 79-82, 85
 src/pyacemaker/core/m3gnet_wrapper.py           20      6    70%   26-27, 33-35, 52-54
 src/pyacemaker/core/oracle.py                  157     17    89%   180-185, 230-231, 233-234, 244, 286-287, 290-291, 299, 341-343
@@ -282,7 +184,7 @@ src/pyacemaker/domain_models/defaults.py       131      0   100%
 src/pyacemaker/domain_models/dft.py             36      4    89%   79-80, 87-88
 src/pyacemaker/domain_models/eon.py             34      4    88%   66-69
 src/pyacemaker/domain_models/logging.py         31      9    71%   24-25, 31, 39, 45-47, 50-51
-src/pyacemaker/domain_models/md.py             136     25    82%   40, 62-63, 82-83, 122-123, 128-129, 131-132, 136-137, 139-140, 242-243, 249-250, 258-259, 266-267, 269-270
+src/pyacemaker/domain_models/md.py             155     25    84%   40, 62-63, 82-83, 132-133, 138-139, 141-142, 146-147, 149-150, 269-270, 276-277, 285-286, 293-294, 296-297
 src/pyacemaker/domain_models/scenario.py         7      0   100%
 src/pyacemaker/domain_models/structure.py       71      4    94%   97-98, 116-117
 src/pyacemaker/domain_models/training.py        46      0   100%
@@ -311,9 +213,9 @@ src/pyacemaker/utils/phonons.py                 51      2    96%   51, 69
 src/pyacemaker/utils/process.py                 32      6    81%   76-83
 src/pyacemaker/utils/structure.py                6      2    67%   19-20
 --------------------------------------------------------------------------
-TOTAL                                         3369    629    81%
+TOTAL                                         3380    617    82%
 =========================== short test summary info ============================
 FAILED tests/unit/test_engine_relax.py::test_lammps_engine_relax - AssertionE...
-================= 1 failed, 259 passed, 12 warnings in 14.65s ==================
+================== 1 failed, 259 passed, 9 warnings in 15.31s ==================
 /app/.venv/lib/python3.12/site-packages/coverage/inorout.py:561: CoverageWarning: Module dev_src was never imported. (module-not-imported); see https://coverage.readthedocs.io/en/7.13.4/messages.html#warning-module-not-imported
   self.warn(f"Module {pkg} was never imported.", slug="module-not-imported")

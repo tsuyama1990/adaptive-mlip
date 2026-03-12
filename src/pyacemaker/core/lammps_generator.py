@@ -1,6 +1,6 @@
 import shlex
 from pathlib import Path
-from typing import Any, TextIO
+from typing import TextIO
 
 from ase.data import atomic_numbers
 
@@ -35,16 +35,19 @@ class LammpsScriptGenerator:
         # Sanitize input path
         # Note: path must be string for lru_cache
         safe_path = validate_path_safe(Path(path))
-        import sys
-        if "pytest" in sys.modules:
-            # Under pytest, tests write lots of mocked files.
-            pass
-        elif not safe_path.exists() and not safe_path.parent.exists():
+        if not safe_path.exists() and not safe_path.parent.exists():
             msg = f"Path {safe_path} is invalid or has an invalid parent directory."
             raise ValueError(msg)
 
+        # Ensure potential path contains only safe characters
+        path_str = str(safe_path)
+        import re
+        if not re.match(r"^[a-zA-Z0-9_./-]+$", path_str):
+            msg = f"Path contains invalid characters: {path_str}"
+            raise ValueError(msg)
+
         # Use shlex.quote for shell safety
-        return shlex.quote(str(safe_path))
+        return shlex.quote(path_str)
 
     def _gen_potential_pure(
         self, buffer: TextIO, potential_path: Path, elements: list[str]
@@ -63,8 +66,12 @@ class LammpsScriptGenerator:
         quoted_pot = self._quote(str(potential_path))
         params = self.config.hybrid_params
 
+        # Explicit type casting for security before injection
+        inner = float(params.zbl_cut_inner)
+        outer = float(params.zbl_cut_outer)
+
         buffer.write(
-            f"pair_style hybrid/overlay pace zbl {params.zbl_cut_inner} {params.zbl_cut_outer}\n"
+            f"pair_style hybrid/overlay pace zbl {inner} {outer}\n"
         )
         buffer.write(f"pair_coeff * * pace {quoted_pot} {species_str}\n")
 
@@ -96,7 +103,7 @@ class LammpsScriptGenerator:
         buffer.write("neigh_modify delay 0 every 1 check yes\n")
         buffer.write(f"timestep {self.config.timestep}\n")
 
-    def _gen_watchdog(self, buffer: TextIO, potential_path: Path, use_fix_invoke: bool = False, thresholds: dict[str, Any] | None = None, eval_dir: Path | None = None) -> None:
+    def _gen_watchdog(self, buffer: TextIO, potential_path: Path, use_fix_invoke: bool = False, eval_dir: Path | None = None) -> None:
         """Generates Uncertainty Watchdog commands."""
         if not self.config.fix_halt:
             return
@@ -106,14 +113,17 @@ class LammpsScriptGenerator:
         buffer.write("compute max_gamma all reduce max c_gamma\n")
         buffer.write("variable max_g equal c_max_gamma\n")
 
-        if use_fix_invoke and thresholds is not None and eval_dir is not None:
+        if use_fix_invoke and self.config.evaluator_thresholds and eval_dir is not None:
             # We add a boolean variable to hold the trigger from TwoTierEvaluator
             buffer.write("variable trigger_halt string false\n")
 
             # The parameters for TwoTierEvaluator
-            threshold_call = thresholds.get("threshold_call_dft", self.config.uncertainty_threshold)
-            threshold_add = thresholds.get("threshold_add_train", self.config.uncertainty_threshold * 0.5)
-            smooth_steps = thresholds.get("smooth_steps", 3)
+            # Validation handled by Pydantic domain model
+            threshold_call = self.config.evaluator_thresholds.threshold_call_dft
+            threshold_add = self.config.evaluator_thresholds.threshold_add_train
+            smooth_steps = self.config.evaluator_thresholds.smooth_steps
+            max_retries = self.config.evaluator_thresholds.max_retries
+            base_backoff = self.config.evaluator_thresholds.base_backoff
 
             eval_dir.mkdir(parents=True, exist_ok=True)
             evaluator_script_path = eval_dir / "evaluator_script.py"
@@ -121,7 +131,7 @@ class LammpsScriptGenerator:
             with evaluator_script_path.open("w") as eval_f:
                 eval_f.write("from pyacemaker.core.evaluator import TwoTierEvaluator\n")
                 eval_f.write("import lammps\n")
-                eval_f.write(f"evaluator = TwoTierEvaluator({threshold_call}, {threshold_add}, {smooth_steps})\n")
+                eval_f.write(f"evaluator = TwoTierEvaluator({threshold_call}, {threshold_add}, {smooth_steps}, {max_retries}, {base_backoff})\n")
                 eval_f.write("def lammps_invoke_evaluator(*args, **kwargs):\n")
                 eval_f.write("    lmp = lammps.lammps(name='', cmdargs=['-log', 'none', '-screen', 'none'])\n")
                 eval_f.write("    evaluator.evaluate(lmp)\n")
@@ -270,44 +280,37 @@ class LammpsScriptGenerator:
     def _gen_post_run_diagnostics(self, buffer: TextIO) -> None:
         """Generates post-run diagnostic prints."""
 
+    from pyacemaker.domain_models.md import ScriptGenerationContext
+
     def write_script(
         self,
         buffer: TextIO,
-        potential_path: Path,
-        data_file: Path,
-        dump_file: Path,
-        elements: list[str],
-        use_fix_invoke: bool = False,
-        thresholds: dict[str, Any] | None = None,
-        resume_from_step: int | None = None,
-        restart_file: Path | None = None,
-        read_restart: Path | None = None,
-        eval_dir: Path | None = None,
+        ctx: "ScriptGenerationContext",
     ) -> None:
         """
         Writes the LAMMPS input script to the provided buffer.
         """
         buffer.write("clear\n")
 
-        if read_restart:
-            quoted_read_restart = self._quote(str(read_restart))
+        if ctx.read_restart:
+            quoted_read_restart = self._quote(str(ctx.read_restart))
             buffer.write(f"read_restart {quoted_read_restart}\n")
         else:
             buffer.write("units metal\n")
             # Use .value to ensure we get the string value "atomic", "charge" etc.
             buffer.write(f"atom_style {self.config.atom_style.value}\n")
             buffer.write("boundary p p p\n")
-            quoted_data = self._quote(str(data_file))
+            quoted_data = self._quote(str(ctx.data_file))
             buffer.write(f"read_data {quoted_data}\n")
 
-        self._gen_potential(buffer, potential_path, elements)
+        self._gen_potential(buffer, ctx.potential_path, ctx.elements)
         self._gen_settings(buffer)
-        self._gen_watchdog(buffer, potential_path, use_fix_invoke=use_fix_invoke, thresholds=thresholds, eval_dir=eval_dir)
+        self._gen_watchdog(buffer, ctx.potential_path, use_fix_invoke=ctx.use_fix_invoke, eval_dir=ctx.eval_dir)
 
         # Output setup MUST come before run
-        self._gen_output_setup(buffer, dump_file)
+        self._gen_output_setup(buffer, ctx.dump_file)
 
-        self._gen_execution(buffer, elements, resume_from_step=resume_from_step, restart_file=restart_file)
+        self._gen_execution(buffer, ctx.elements, resume_from_step=ctx.resume_from_step, restart_file=ctx.restart_file)
 
         self._gen_post_run_diagnostics(buffer)
 

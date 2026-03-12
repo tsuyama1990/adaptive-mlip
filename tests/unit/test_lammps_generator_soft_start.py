@@ -28,20 +28,25 @@ def test_generator_soft_start_and_restart(tmp_path: Path) -> None:
     evaluator_script_path = eval_dir / "evaluator_script.py"
     evaluator_script_path.touch()
 
+    from pyacemaker.domain_models.md import ScriptGenerationContext
     buffer = StringIO()
-    generator.write_script(
-        buffer,
-        pot_path,
-        data_file,
-        dump_file,
-        ["Al"],
+
+    config.evaluator_thresholds = __import__("pyacemaker.domain_models.md", fromlist=["EvaluatorThresholds"]).EvaluatorThresholds(
+        threshold_call_dft=0.5, threshold_add_train=0.2, smooth_steps=3, max_retries=3, base_backoff=0.1
+    )
+
+    ctx = ScriptGenerationContext(
+        potential_path=pot_path,
+        data_file=data_file,
+        dump_file=dump_file,
+        elements=["Al"],
         use_fix_invoke=True,
-        thresholds={"threshold_call_dft": 0.5, "threshold_add_train": 0.2, "smooth_steps": 3},
         resume_from_step=100,
         restart_file=restart_file,
         read_restart=read_restart,
         eval_dir=eval_dir
     )
+    generator.write_script(buffer, ctx)
     script = buffer.getvalue()
 
     # Read restart
@@ -64,5 +69,5 @@ def test_generator_soft_start_and_restart(tmp_path: Path) -> None:
     evaluator_script_path = eval_dir / "evaluator_script.py"
     assert evaluator_script_path.exists()
     eval_script = evaluator_script_path.read_text()
-    assert "evaluator = TwoTierEvaluator(0.5, 0.2, 3)" in eval_script
+    assert "evaluator = TwoTierEvaluator(0.5, 0.2, 3, 3, 0.1)" in eval_script
     assert f"python invoke_evaluator invoke lammps_invoke_evaluator file {evaluator_script_path!s}" in script
