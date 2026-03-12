@@ -125,6 +125,7 @@ class LammpsScriptGenerator:
             f"fix halt_trigger all halt {self.config.check_interval} "
             f"v_trigger_halt == true error continue\n"
         )
+
     def _gen_mc(self, buffer: TextIO, elements: list[str]) -> None:
         """Generates Monte Carlo atom swapping commands."""
         if not self.config.mc:

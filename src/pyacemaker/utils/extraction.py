@@ -27,6 +27,7 @@ def _pre_relax_buffer(cluster: Atoms, mace_model_path: str | None = None) -> Ato
     if mace_model_path:
         try:
             from mace.calculators import MACECalculator
+
             calc = MACECalculator(model_paths=mace_model_path, device="cpu")
         except ImportError:
             pass
@@ -34,6 +35,7 @@ def _pre_relax_buffer(cluster: Atoms, mace_model_path: str | None = None) -> Ato
     if calc is None:
         try:
             from mace.calculators import mace_mp
+
             calc = mace_mp(model="medium", device="cpu")
         except ImportError:
             pass
@@ -50,11 +52,10 @@ def _pre_relax_buffer(cluster: Atoms, mace_model_path: str | None = None) -> Ato
         opt.run(fmax=0.05, steps=50)  # type: ignore[no-untyped-call]
 
     return cluster_copy  # type: ignore[no-any-return]
+
+
 def _passivate_surface(
-    cluster: Atoms,
-    original_structure: Atoms,
-    cluster_indices: list[int],
-    element: str = "H"
+    cluster: Atoms, original_structure: Atoms, cluster_indices: list[int], element: str = "H"
 ) -> Atoms:
     """
     Passivates the surface of the cluster by adding dummy atoms (e.g. H) to cut bonds.
@@ -65,14 +66,15 @@ def _passivate_surface(
     cluster_copy = cluster.copy()  # type: ignore[no-untyped-call]
     weights = cluster_copy.get_array("force_weight")
 
-    all_radii = np.array([covalent_radii[original_structure.numbers[i]] for i in range(len(original_structure))])
+    all_radii = np.array(
+        [covalent_radii[original_structure.numbers[i]] for i in range(len(original_structure))]
+    )
 
     # Convert cluster_indices to a set for O(1) lookups
     cluster_set = set(cluster_indices)
 
     new_atoms = []
     margin = 0.4  # Tolerance for bond distance
-
 
     # A better approach: Run neighbor_list on the original structure to find all bonds.
     i_indices, j_indices, D_vectors = neighbor_list("ijD", original_structure, cutoff=5.0)  # type: ignore[no-untyped-call]
@@ -83,7 +85,7 @@ def _passivate_surface(
             continue
 
         # Bonds originating from orig_i
-        mask = (i_indices == orig_i)
+        mask = i_indices == orig_i
         neighbors = j_indices[mask]
         vectors = D_vectors[mask]
 
@@ -101,6 +103,7 @@ def _passivate_surface(
                     bond_dir = vector / dist
                     # Standard bond length for H
                     from ase.data import atomic_numbers
+
                     h_rad = covalent_radii[atomic_numbers[element]]
                     passivation_dist = r_cov_i + h_rad
 
@@ -116,8 +119,13 @@ def _passivate_surface(
         cluster_copy.set_array("force_weight", new_weights)
 
     return cluster_copy  # type: ignore[no-any-return]
+
+
 def extract_intelligent_cluster(
-    structure: Atoms, target_atoms: list[int], config: CutoutConfig, mace_model_path: str | None = None
+    structure: Atoms,
+    target_atoms: list[int],
+    config: CutoutConfig,
+    mace_model_path: str | None = None,
 ) -> Atoms:
     """
     Extracts an intelligent local cluster around multiple target atoms,
@@ -189,10 +197,14 @@ def extract_intelligent_cluster(
         cluster = _pre_relax_buffer(cluster, mace_model_path=mace_model_path)
 
     if config.enable_passivation:
-        cluster = _passivate_surface(cluster, structure, cluster_indices, element=config.passivation_element)
+        cluster = _passivate_surface(
+            cluster, structure, cluster_indices, element=config.passivation_element
+        )
 
     # Finally, embed the cluster into a cell
     return embed_cluster(cluster, buffer=5.0)
+
+
 def extract_local_region(
     structure: Atoms, center_index: int, radius: float, buffer: float
 ) -> Atoms:

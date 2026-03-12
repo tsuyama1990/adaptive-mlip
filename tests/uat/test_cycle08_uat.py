@@ -1,8 +1,8 @@
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from ase import Atoms
 import numpy as np
+from ase import Atoms
 
 from pyacemaker.core.engine import LammpsEngine
 from pyacemaker.core.oracle import DFTManager, MACEManager, TieredOracle
@@ -47,8 +47,10 @@ def test_scenario_phase1_distillation() -> None:
         results = list(mace_manager.compute(iter([atoms1, atoms2])))
 
         assert len(results) == 2
-        assert "energy" in results[0].info
-        assert "forces" in results[0].arrays
+        # We assert the calculator holds energy and forces, as we moved away from info/arrays mock
+        assert results[0].calc is not None
+        assert results[0].get_potential_energy() is not None  # type: ignore[no-untyped-call]
+        assert results[0].get_forces() is not None  # type: ignore[no-untyped-call]
 
         for atoms in results:
             c_gamma = atoms.get_array("c_gamma")  # type: ignore[no-untyped-call]
@@ -89,7 +91,9 @@ def test_scenario_phase3_cutout() -> None:
         target_atoms = [0]
 
         with patch("pyacemaker.utils.extraction._pre_relax_buffer", return_value=atoms):
-            cluster = extract_intelligent_cluster(atoms, target_atoms, config, mace_model_path=str(model_file))
+            cluster = extract_intelligent_cluster(
+                atoms, target_atoms, config, mace_model_path=str(model_file)
+            )
 
         weights = cluster.get_array("force_weight")  # type: ignore[no-untyped-call]
         assert 1.0 in weights
@@ -100,11 +104,14 @@ def test_scenario_phase3_cutout() -> None:
 
 @patch("pyacemaker.core.engine.LammpsDriver")
 def test_scenario_phase4_resume(mock_driver: MagicMock, tmp_path: Path) -> None:
+    from ase import Atoms
+    from ase.io import write
+
     finetune_mgr = FinetuneManager()
     dataset_path = tmp_path / "dataset.xyz"
-    dataset_path.touch()
+    write(str(dataset_path), Atoms("Fe"), format="extxyz")
     awakened_model = finetune_mgr.finetune(dataset_path)
-    assert awakened_model == "awakened_mace_model.model"
+    assert str(tmp_path / "awakened_mace_model.model") in awakened_model
 
     t_config = TrainingConfig(
         potential_type="ace",

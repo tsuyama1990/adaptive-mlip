@@ -696,7 +696,6 @@ class Orchestrator:
         try:
             if result.halted:
                 self._increase_exploration_aggressiveness()
-                self._adjust_replay_buffer()
             else:
                 self._stabilize_exploration()
         except Exception as e:

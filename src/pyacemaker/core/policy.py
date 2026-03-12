@@ -156,11 +156,21 @@ class NormalModePolicy(SafeBasePolicy):
             # Generate displacement. If epicenters are identified, focus the displacement there.
             displacement = np.random.randn(*positions.shape) * POLICY_NORMALMODE_NOISE_STDEV
 
-            if epicenter_indices:
+            if len(epicenter_indices) > 0:
                 # Apply heavier displacement around epicenters and taper off
                 mask = np.zeros(len(positions))
-                mask[epicenter_indices] = 1.0
-                # In a real implementation this would be a smooth radial mask
+                for idx in epicenter_indices:
+                    mask[idx] = 1.0
+
+                # Broaden the mask slightly to neighboring atoms (simple distance-based)
+                # O(N^2) naive approach for simplicity, can be optimized for huge systems
+                from ase.neighborlist import neighbor_list
+
+                i, j = neighbor_list("ij", mod_struct, cutoff=3.0)  # type: ignore[no-untyped-call]
+                for idx_i, idx_j in zip(i, j, strict=False):
+                    if mask[idx_i] == 1.0:
+                        mask[idx_j] = max(mask[idx_j], 0.5)
+
                 displacement *= mask[:, np.newaxis]
 
             positions += displacement
