@@ -237,6 +237,7 @@ class MACEManager(BaseOracle):
 
         try:
             from mace.calculators import mace_mp
+
             # Device can be auto-detected, but we use cpu to be safe in containerized environments by default
             self.calculator = mace_mp(model=self.model_path, default_dtype="float32", device="cpu")
             self.is_initialized = True

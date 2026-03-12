@@ -346,8 +346,11 @@ class Orchestrator:
 
             mace_calc = None
             import contextlib
+
             with contextlib.suppress(Exception):
-                mace_calc = MACECalculator(model_paths=self.config.workflow.distillation.mace_model_path, device="cpu")
+                mace_calc = MACECalculator(
+                    model_paths=self.config.workflow.distillation.mace_model_path, device="cpu"
+                )
 
             return extract_intelligent_cluster(
                 structure=halt_structure,

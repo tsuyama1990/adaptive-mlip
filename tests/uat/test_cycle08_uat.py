@@ -52,9 +52,12 @@ def test_scenario_phase1_distillation() -> None:
             def get_forces(self, atoms=None):
                 return np.zeros((len(atoms), 3)) if atoms else np.zeros((0, 3))
 
-        with patch.object(
-            pyacemaker.domain_models.defaults, "DEFAULT_POTENTIALS_DIR", str(pot_dir.resolve())
-        ), patch("mace.calculators.mace_mp", return_value=FakeMACEModel()):
+        with (
+            patch.object(
+                pyacemaker.domain_models.defaults, "DEFAULT_POTENTIALS_DIR", str(pot_dir.resolve())
+            ),
+            patch("mace.calculators.mace_mp", return_value=FakeMACEModel()),
+        ):
             mace_manager = MACEManager(str(model_file))
 
         atoms1 = Atoms("Fe", cell=[2, 2, 2], pbc=True)
@@ -104,9 +107,12 @@ def test_scenario_phase3_cutout() -> None:
             def get_forces(self, atoms=None):
                 return np.zeros((len(atoms), 3)) if atoms else np.zeros((0, 3))
 
-        with patch.object(
-            pyacemaker.domain_models.defaults, "DEFAULT_POTENTIALS_DIR", str(pot_dir.resolve())
-        ), patch("mace.calculators.mace_mp", return_value=FakeMACEModel()):
+        with (
+            patch.object(
+                pyacemaker.domain_models.defaults, "DEFAULT_POTENTIALS_DIR", str(pot_dir.resolve())
+            ),
+            patch("mace.calculators.mace_mp", return_value=FakeMACEModel()),
+        ):
             mace_manager = MACEManager(str(model_file))
 
         atoms = Atoms("FePt", positions=[[0, 0, 0], [1, 1, 1]], cell=[10, 10, 10])
@@ -137,7 +143,9 @@ def test_scenario_phase3_cutout() -> None:
 @patch("pyacemaker.core.trainer.run_command")
 @patch("pyacemaker.core.trainer.shutil.which")
 @patch("pyacemaker.core.engine.LammpsDriver")
-def test_scenario_phase4_resume(mock_driver: MagicMock, mock_which: MagicMock, mock_run: MagicMock, tmp_path: Path) -> None:
+def test_scenario_phase4_resume(
+    mock_driver: MagicMock, mock_which: MagicMock, mock_run: MagicMock, tmp_path: Path
+) -> None:
     from ase import Atoms
     from ase.io import write
 

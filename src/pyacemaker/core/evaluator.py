@@ -25,6 +25,7 @@ class TwoTierEvaluator:
             max_gamma = None
             retries = 3
             import time
+
             for attempt in range(retries):
                 try:
                     max_gamma = lmp.extract_variable("max_g")
@@ -33,7 +34,7 @@ class TwoTierEvaluator:
                     if attempt == retries - 1:
                         msg = "Failed to extract max_g variable after retries."
                         raise RuntimeError(msg) from err
-                    time.sleep(0.1 * (2 ** attempt)) # exponential backoff
+                    time.sleep(0.1 * (2**attempt))  # exponential backoff
 
             if max_gamma is None:
                 self._raise_extraction_error()

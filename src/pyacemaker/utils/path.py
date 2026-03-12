@@ -29,7 +29,9 @@ def validate_path_safe(path: Path) -> Path:  # noqa: C901, PLR0912
     # Check absolute path prefixes to ensure we don't start with dangerous roots not in allowed directly
     tmp_path_str = tempfile.gettempdir()
     shm_path_str = DEFAULT_RAM_DISK_PATH
-    if path.is_absolute() and not str(path).startswith((tmp_path_str, shm_path_str, str(Path.cwd().resolve()))):
+    if path.is_absolute() and not str(path).startswith(
+        (tmp_path_str, shm_path_str, str(Path.cwd().resolve()))
+    ):
         msg = f"Path attempts to access external root: {path}"
         raise ValueError(msg)
 

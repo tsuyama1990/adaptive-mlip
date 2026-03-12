@@ -39,6 +39,7 @@ class PacemakerTrainer(BaseTrainer):
             reservoir = []
 
             import secrets
+
             for i, frame in enumerate(stream):
                 if i < size:
                     reservoir.append(frame)
@@ -180,6 +181,7 @@ class PacemakerTrainer(BaseTrainer):
         # Verify content parses cleanly
         try:
             from ase.io import iread
+
             first_frame = next(iread(str(data_path)))
             if not len(first_frame):
                 _raise_empty()
@@ -224,20 +226,34 @@ class FinetuneManager:
 
         cmd = [
             "mace_run_train",
-            "--train_file", str(data_file),
-            "--valid_fraction", "0.0",
-            "--E0s", "average",
-            "--model", "MACE",
-            "--num_interactions", "2",
-            "--max_num_epochs", "10",
-            "--start_swa", "5",
-            "--scheduler_patience", "5",
-            "--patience", "10",
-            "--eval_interval", "1",
-            "--loss", "forces_only",
-            "--device", "cuda",
-            "--name", "awakened_mace_model",
-            "--train_dir", str(data_file.parent)
+            "--train_file",
+            str(data_file),
+            "--valid_fraction",
+            "0.0",
+            "--E0s",
+            "average",
+            "--model",
+            "MACE",
+            "--num_interactions",
+            "2",
+            "--max_num_epochs",
+            "10",
+            "--start_swa",
+            "5",
+            "--scheduler_patience",
+            "5",
+            "--patience",
+            "10",
+            "--eval_interval",
+            "1",
+            "--loss",
+            "forces_only",
+            "--device",
+            "cuda",
+            "--name",
+            "awakened_mace_model",
+            "--train_dir",
+            str(data_file.parent),
         ]
 
         try:

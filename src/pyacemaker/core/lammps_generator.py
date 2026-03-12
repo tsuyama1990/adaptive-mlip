@@ -92,7 +92,14 @@ class LammpsScriptGenerator:
         buffer.write("neigh_modify delay 0 every 1 check yes\n")
         buffer.write(f"timestep {self.config.timestep}\n")
 
-    def _gen_watchdog(self, buffer: TextIO, potential_path: Path, use_fix_invoke: bool = False, thresholds: dict[str, Any] | None = None, eval_dir: Path | None = None) -> None:
+    def _gen_watchdog(
+        self,
+        buffer: TextIO,
+        potential_path: Path,
+        use_fix_invoke: bool = False,
+        thresholds: dict[str, Any] | None = None,
+        eval_dir: Path | None = None,
+    ) -> None:
         """Generates Uncertainty Watchdog commands."""
         if not self.config.fix_halt:
             return
@@ -108,20 +115,28 @@ class LammpsScriptGenerator:
 
             # The parameters for TwoTierEvaluator
             threshold_call = thresholds.get("threshold_call_dft", self.config.uncertainty_threshold)
-            threshold_add = thresholds.get("threshold_add_train", self.config.uncertainty_threshold * 0.5)
+            threshold_add = thresholds.get(
+                "threshold_add_train", self.config.uncertainty_threshold * 0.5
+            )
             smooth_steps = thresholds.get("smooth_steps", 3)
 
             # Setup fix python/invoke using inline here document to avoid dynamic file creation vulnerabilities
-            buffer.write("python invoke_evaluator invoke lammps_invoke_evaluator here \"\"\"\n")
+            buffer.write('python invoke_evaluator invoke lammps_invoke_evaluator here """\n')
             buffer.write("from pyacemaker.core.evaluator import TwoTierEvaluator\n")
             buffer.write("import lammps\n")
-            buffer.write(f"evaluator = TwoTierEvaluator({threshold_call}, {threshold_add}, {smooth_steps})\n")
+            buffer.write(
+                f"evaluator = TwoTierEvaluator({threshold_call}, {threshold_add}, {smooth_steps})\n"
+            )
             buffer.write("def lammps_invoke_evaluator():\n")
-            buffer.write("    lmp = lammps.lammps(name='', cmdargs=['-log', 'none', '-screen', 'none'])\n")
+            buffer.write(
+                "    lmp = lammps.lammps(name='', cmdargs=['-log', 'none', '-screen', 'none'])\n"
+            )
             buffer.write("    evaluator.evaluate(lmp)\n")
-            buffer.write("\"\"\"\n")
+            buffer.write('"""\n')
 
-            buffer.write(f"fix invoke_eval all python/invoke {self.config.check_interval} end_of_step invoke_evaluator\n")
+            buffer.write(
+                f"fix invoke_eval all python/invoke {self.config.check_interval} end_of_step invoke_evaluator\n"
+            )
 
             # Secondary halt check that relies on the trigger variable from TwoTierEvaluator
             buffer.write(
@@ -162,7 +177,13 @@ class LammpsScriptGenerator:
         )
 
     # ruff: noqa: C901
-    def _gen_execution(self, buffer: TextIO, elements: list[str], resume_from_step: int | None = None, restart_file: Path | None = None) -> None:
+    def _gen_execution(
+        self,
+        buffer: TextIO,
+        elements: list[str],
+        resume_from_step: int | None = None,
+        restart_file: Path | None = None,
+    ) -> None:
         """Generates minimization and MD run commands."""
         if self.config.minimize and resume_from_step is None:
             buffer.write(
@@ -207,7 +228,7 @@ class LammpsScriptGenerator:
             )
             buffer.write("fix nve all nve\n")
             buffer.write(
-                "run 10\n" # Soft start 10 steps
+                "run 10\n"  # Soft start 10 steps
             )
             buffer.write("unfix langevin\n")
             buffer.write("unfix nve\n")
@@ -291,12 +312,20 @@ class LammpsScriptGenerator:
 
         self._gen_potential(buffer, potential_path, elements)
         self._gen_settings(buffer)
-        self._gen_watchdog(buffer, potential_path, use_fix_invoke=use_fix_invoke, thresholds=thresholds, eval_dir=eval_dir)
+        self._gen_watchdog(
+            buffer,
+            potential_path,
+            use_fix_invoke=use_fix_invoke,
+            thresholds=thresholds,
+            eval_dir=eval_dir,
+        )
 
         # Output setup MUST come before run
         self._gen_output_setup(buffer, dump_file)
 
-        self._gen_execution(buffer, elements, resume_from_step=resume_from_step, restart_file=restart_file)
+        self._gen_execution(
+            buffer, elements, resume_from_step=resume_from_step, restart_file=restart_file
+        )
 
         self._gen_post_run_diagnostics(buffer)
 

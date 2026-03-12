@@ -37,5 +37,7 @@ def test_validate_path_safe_flag_injection() -> None:
 def test_validate_path_safe_outside_allowed() -> None:
     # /etc/passwd is outside allowed
     if Path("/etc/passwd").exists():
-        with pytest.raises(ValueError, match="(Path traversal detected|Path attempts to access external root)"):
+        with pytest.raises(
+            ValueError, match="(Path traversal detected|Path attempts to access external root)"
+        ):
             validate_path_safe(Path("/etc/passwd"))

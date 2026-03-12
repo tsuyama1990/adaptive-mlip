@@ -120,10 +120,14 @@ class LammpsEngine(BaseEngine):
             msg = "override_n_steps must be a non-negative integer"
             raise ValueError(msg)
 
-        if "threshold_call_dft" in kwargs and not isinstance(kwargs["threshold_call_dft"], (int, float)):
+        if "threshold_call_dft" in kwargs and not isinstance(
+            kwargs["threshold_call_dft"], (int, float)
+        ):
             msg = "threshold_call_dft must be a number"
             raise ValueError(msg)
-        if "threshold_add_train" in kwargs and not isinstance(kwargs["threshold_add_train"], (int, float)):
+        if "threshold_add_train" in kwargs and not isinstance(
+            kwargs["threshold_add_train"], (int, float)
+        ):
             msg = "threshold_add_train must be a number"
             raise ValueError(msg)
         if "smooth_steps" in kwargs and not isinstance(kwargs["smooth_steps"], int):
@@ -141,7 +145,9 @@ class LammpsEngine(BaseEngine):
 
             # Restart logic
             restart_file = temp_dir / "lammps.restart"
-            read_restart = restart_file if restart_file.exists() and resume_from_step is not None else None
+            read_restart = (
+                restart_file if restart_file.exists() and resume_from_step is not None else None
+            )
 
             # Get threshold kwargs for evaluator wrapper
             thresholds = {}
@@ -164,7 +170,7 @@ class LammpsEngine(BaseEngine):
                     resume_from_step=resume_from_step,
                     restart_file=restart_file,
                     read_restart=read_restart,
-                    eval_dir=temp_dir
+                    eval_dir=temp_dir,
                 )
 
                 resume_step = resume_from_step
