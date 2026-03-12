@@ -49,13 +49,13 @@ def test_scenario_phase1_distillation() -> None:
         assert len(results) == 2
         # We assert the calculator holds energy and forces, as we moved away from info/arrays mock
         assert results[0].calc is not None
-        energy: float = results[0].get_potential_energy()  # type: ignore[no-untyped-call]
+        energy = results[0].get_potential_energy()  # type: ignore[no-untyped-call]
         assert energy is not None
-        forces: np.ndarray = results[0].get_forces()  # type: ignore[no-untyped-call]
+        forces = results[0].get_forces()  # type: ignore[no-untyped-call]
         assert forces is not None
 
         for atoms in results:
-            c_gamma: np.ndarray = atoms.get_array("c_gamma")  # type: ignore[no-untyped-call]
+            c_gamma = atoms.get_array("c_gamma")  # type: ignore[no-untyped-call]
             assert (c_gamma <= 0.1).all()
 
 
@@ -97,10 +97,10 @@ def test_scenario_phase3_cutout() -> None:
                 atoms, target_atoms, config, calculator=getattr(mace_manager, "calc", None)
             )
 
-        weights: np.ndarray = cluster.get_array("force_weight")  # type: ignore[no-untyped-call]
+        weights = cluster.get_array("force_weight")  # type: ignore[no-untyped-call]
         assert 1.0 in weights
 
-        symbols: list[str] = cluster.get_chemical_symbols()  # type: ignore[no-untyped-call]
+        symbols = cluster.get_chemical_symbols()  # type: ignore[no-untyped-call]
         assert len(symbols) > 0
 
 
