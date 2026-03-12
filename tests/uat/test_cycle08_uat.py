@@ -97,10 +97,10 @@ def test_scenario_phase3_cutout() -> None:
                 atoms, target_atoms, config, calculator=getattr(mace_manager, "calc", None)
             )
 
-        weights = cluster.get_array("force_weight")  # type: ignore[no-untyped-call]
+        weights: np.ndarray = cluster.get_array("force_weight")  # type: ignore[no-untyped-call]
         assert 1.0 in weights
 
-        symbols = cluster.get_chemical_symbols()  # type: ignore[no-untyped-call]
+        symbols: list[str] = cluster.get_chemical_symbols()  # type: ignore[no-untyped-call]
         assert len(symbols) > 0
 
 
