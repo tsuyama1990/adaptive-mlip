@@ -198,7 +198,7 @@ class MDConfig(BaseModel):
         DEFAULT_MD_PDAMP_FACTOR, gt=0.0, description="Pressure damping factor (multiplies timestep)"
     )
 
-    # Mocking Parameters (Audit Requirement)
+    # Mocking Parameters (Audit Requirement) - keeping but noting they should be restricted to test configs
     base_energy: float = Field(
         DEFAULT_MD_BASE_ENERGY, description="Baseline energy for mock simulation"
     )
@@ -231,7 +231,8 @@ class MDConfig(BaseModel):
     def validate_simulation_physics(self) -> "MDConfig":
         total_time = self.n_steps * self.timestep
         if total_time > MAX_MD_DURATION:
-            pass
+            msg = f"Total simulation time {total_time} ps exceeds maximum {MAX_MD_DURATION} ps"
+            raise ValueError(msg)
         return self
 
     @model_validator(mode="after")

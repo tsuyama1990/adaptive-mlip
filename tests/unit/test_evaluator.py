@@ -1,6 +1,9 @@
-import pytest
 from unittest.mock import MagicMock
+
+import pytest
+
 from pyacemaker.core.evaluator import TwoTierEvaluator
+
 
 def test_evaluator_thermal_noise():
     evaluator = TwoTierEvaluator(threshold_call_dft=0.5, threshold_add_train=0.2, smooth_steps=3)

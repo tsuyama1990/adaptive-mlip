@@ -3,7 +3,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 class TwoTierEvaluator:
-    def __init__(self, threshold_call_dft: float, threshold_add_train: float, smooth_steps: int):
+    def __init__(self, threshold_call_dft: float, threshold_add_train: float, smooth_steps: int) -> None:
         self.threshold_call_dft = threshold_call_dft
         self.threshold_add_train = threshold_add_train
         self.smooth_steps = smooth_steps
@@ -14,7 +14,6 @@ class TwoTierEvaluator:
         Evaluate logic called by LAMMPS via fix python/invoke.
         """
         try:
-            global logger
             # Extract system max_gamma (which should be calculated by pace/mace pair style)
             # For this mock/real implementation, we assume max_gamma is available as a variable
             max_gamma = lmp.extract_variable("max_g")
@@ -31,10 +30,8 @@ class TwoTierEvaluator:
                 logger.info(f"TwoTierEvaluator: Threshold exceeded for {self.smooth_steps} consecutive steps. Triggering halt.")
                 # Trigger halt
                 lmp.command("variable trigger_halt string true")
-        except Exception as e:
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.error(f"TwoTierEvaluator encountered an error: {e}")
+        except Exception:
+            logger.exception("TwoTierEvaluator encountered an error")
             raise
 
 # To use via fix python/invoke, we need a module-level wrapper that instantiates and calls evaluate.
