@@ -165,7 +165,8 @@ class NormalModePolicy(SafeBasePolicy):
                 # Broaden the mask slightly to neighboring atoms (simple distance-based)
                 # O(N^2) naive approach for simplicity, can be optimized for huge systems
                 from ase.neighborlist import neighbor_list
-                i, j = neighbor_list('ij', mod_struct, cutoff=3.0)
+
+                i, j = neighbor_list("ij", mod_struct, cutoff=3.0)  # type: ignore[no-untyped-call]
                 for idx_i, idx_j in zip(i, j, strict=False):
                     if mask[idx_i] == 1.0:
                         mask[idx_j] = max(mask[idx_j], 0.5)

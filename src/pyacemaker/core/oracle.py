@@ -247,6 +247,7 @@ class MACEManager(BaseOracle):
 
     def _compute_generator(self, structures: Iterator[Atoms], batch_size: int) -> Iterator[Atoms]:
         from ase.calculators.singlepoint import SinglePointCalculator
+
         for atoms in structures:
             atoms_copy = atoms.copy()  # type: ignore[no-untyped-call]
 
@@ -260,11 +261,11 @@ class MACEManager(BaseOracle):
 
             # Strictly enforce ASE Calculator protocol.
             # Never silently push energy into `atoms.info`. Use SinglePointCalculator.
-            calc = SinglePointCalculator(atoms_copy, energy=energy, forces=forces)
+            calc = SinglePointCalculator(atoms_copy, energy=energy, forces=forces)  # type: ignore[no-untyped-call]
             atoms_copy.calc = calc
 
             # Uncertainty mappings require custom arrays
-            atoms_copy.new_array("c_gamma", c_gamma)  # type: ignore[no-untyped-call]
+            atoms_copy.new_array("c_gamma", c_gamma)
 
             yield atoms_copy
 
@@ -330,7 +331,9 @@ class TieredOracle(BaseOracle):
                 weights[epicenter_mask] = 1.0
                 dft_result.new_array("force_weight", weights)  # type: ignore[no-untyped-call]
 
-                logger.info(f"Two-Tier Evaluation: Identified {np.sum(epicenter_mask)} epicenter atoms exceeding threshold_add_train ({self.thresholds.threshold_add_train}).")
+                logger.info(
+                    f"Two-Tier Evaluation: Identified {np.sum(epicenter_mask)} epicenter atoms exceeding threshold_add_train ({self.thresholds.threshold_add_train})."
+                )
 
                 yield dft_result
             else:

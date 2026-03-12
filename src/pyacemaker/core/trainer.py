@@ -73,6 +73,7 @@ class PacemakerTrainer(BaseTrainer):
                 write(str(new_data_path), combined_data, format="extxyz")
             except Exception as e:
                 import logging
+
                 logger = logging.getLogger(__name__)
                 logger.warning(f"Failed to merge replay buffer: {e}")
                 # Proceed with just new data if merge fails
@@ -191,12 +192,13 @@ class FinetuneManager:
 
         try:
             frames = read(str(data_file), index=":")
-            if not frames:
-                msg = "No frames to finetune."
-                raise TrainerError(msg)
         except Exception as e:
             msg = f"Failed to read dataset: {e}"
             raise TrainerError(msg) from e
+
+        if not frames:
+            msg = "No frames to finetune."
+            raise TrainerError(msg)
 
         # Mocking the actual torch-based training for this project,
         # but returning a distinct output file representation

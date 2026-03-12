@@ -91,7 +91,9 @@ def test_scenario_phase3_cutout() -> None:
         target_atoms = [0]
 
         with patch("pyacemaker.utils.extraction._pre_relax_buffer", return_value=atoms):
-            cluster = extract_intelligent_cluster(atoms, target_atoms, config, mace_model_path=str(model_file))
+            cluster = extract_intelligent_cluster(
+                atoms, target_atoms, config, mace_model_path=str(model_file)
+            )
 
         weights = cluster.get_array("force_weight")  # type: ignore[no-untyped-call]
         assert 1.0 in weights
@@ -102,8 +104,9 @@ def test_scenario_phase3_cutout() -> None:
 
 @patch("pyacemaker.core.engine.LammpsDriver")
 def test_scenario_phase4_resume(mock_driver: MagicMock, tmp_path: Path) -> None:
-    from ase.io import write
     from ase import Atoms
+    from ase.io import write
+
     finetune_mgr = FinetuneManager()
     dataset_path = tmp_path / "dataset.xyz"
     write(str(dataset_path), Atoms("Fe"), format="extxyz")

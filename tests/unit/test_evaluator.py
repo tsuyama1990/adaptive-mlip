@@ -21,6 +21,7 @@ def test_evaluator_thermal_noise():
     assert evaluator.consecutive_exceedances == 0
     lmp_mock.command.assert_not_called()
 
+
 def test_evaluator_trigger_halt():
     evaluator = TwoTierEvaluator(threshold_call_dft=0.5, threshold_add_train=0.2, smooth_steps=3)
     lmp_mock = MagicMock()
@@ -40,6 +41,7 @@ def test_evaluator_trigger_halt():
     evaluator.evaluate(lmp_mock)
     assert evaluator.consecutive_exceedances == 3
     lmp_mock.command.assert_called_with("variable trigger_halt string true")
+
 
 def test_evaluator_exception_handling():
     evaluator = TwoTierEvaluator(threshold_call_dft=0.5, threshold_add_train=0.2, smooth_steps=3)
