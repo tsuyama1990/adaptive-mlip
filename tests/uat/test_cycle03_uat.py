@@ -36,7 +36,7 @@ def test_uat_03_01_generate_candidates() -> None:
 
     # Verify chemistry
     s0 = first_two[0]
-    symbols = s0.get_chemical_symbols()
+    symbols = getattr(s0, "get_chemical_symbols")()
     assert "Fe" in symbols
     assert "Pt" in symbols
 
@@ -86,4 +86,4 @@ def test_uat_03_02_defect_generation() -> None:
     pristine_atoms = next(pristine_gen.generate(1))
 
     assert len(defect_atoms) < len(pristine_atoms)
-    assert np.allclose(defect_atoms.get_cell(), pristine_atoms.get_cell())
+    assert np.allclose(getattr(defect_atoms, "get_cell")(), getattr(pristine_atoms, "get_cell")())

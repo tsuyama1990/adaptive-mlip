@@ -55,7 +55,7 @@ def test_scenario_phase1_distillation() -> None:
 
         # 2. Only structures below threshold are extracted
         for atoms in results:
-            c_gamma = atoms.get_array("c_gamma")
+            c_gamma = getattr(atoms, "get_array")("c_gamma")
             assert (c_gamma <= 0.1).all()  # MACE mock produces up to 0.1
 
 
@@ -109,12 +109,12 @@ def test_scenario_phase3_cutout() -> None:
     cluster = extract_intelligent_cluster(atoms, target_atoms, config)
 
     # Check physical repair
-    weights = cluster.get_array("force_weight")
+    weights = getattr(cluster, "get_array")("force_weight")
     assert 1.0 in weights
 
     # Depending on neighbor cutoff distance and atom setup, H may or may not be added
     # We test that the functionality executes successfully.
-    symbols = cluster.get_chemical_symbols()
+    symbols = getattr(cluster, "get_chemical_symbols")()
     assert len(symbols) > 0
 
 

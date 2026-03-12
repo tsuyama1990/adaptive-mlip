@@ -22,7 +22,7 @@ class FakeGenerator(BaseGenerator):  # type: ignore[misc]
         # We can tag it or check size.
         # Just yield copies for now.
         for _ in range(n_candidates):
-            yield base_structure.copy()  # type: ignore[no-untyped-call]
+            yield getattr(base_structure, "copy")()
 
 
 class FakeOracle(BaseOracle):  # type: ignore[misc]

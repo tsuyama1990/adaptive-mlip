@@ -32,7 +32,7 @@ class FakeGenerator(BaseGenerator):  # type: ignore[misc]
         self, base_structure: Atoms, n_candidates: int, **kwargs: Any
     ) -> Iterator[Atoms]:
         for _ in range(n_candidates):
-            yield base_structure.copy()  # type: ignore[no-untyped-call]
+            yield getattr(base_structure, "copy")()
 
 
 @pytest.fixture

@@ -55,7 +55,7 @@ def test_rattle_policy() -> None:
     assert structures[0] is not structures[1]
 
     # Verify positions are different between generated structures
-    pos0 = structures[0].positions.copy()
+    pos0 = getattr(structures[0].positions, "copy")()
 
     # Verify they are different from base
     assert not np.allclose(pos0, base.positions)

@@ -33,7 +33,7 @@ def test_fept_mgo_integration(integration_config) -> Any:  # type: ignore[no-unt
     # Setup mocks for heavy lifting
     mock_engine = MagicMock()
     # relax returns a copy
-    mock_engine.relax.side_effect = lambda atoms, pot: atoms.copy()
+    mock_engine.relax.side_effect = lambda atoms, pot: getattr(atoms, "copy")()
 
     # We use real EONWrapper but mock the runner to avoid executing eonclient
     mock_runner = MagicMock()

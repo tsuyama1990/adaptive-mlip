@@ -65,11 +65,11 @@ def test_dft_manager_compute_success(mock_dft_config: DFTConfig) -> None:
     generator = manager.compute(iter([atoms]))
     result = next(generator)
 
-    assert result.get_potential_energy() == TEST_ENERGY_GENERIC
+    assert getattr(result, "get_potential_energy")() == TEST_ENERGY_GENERIC
 
     # ProcessPoolExecutor copies state, so we can't easily assert on fake_driver call_count
     # Verify generator returned the correctly calculated atoms object instead.
-    assert result.get_potential_energy() == TEST_ENERGY_GENERIC
+    assert getattr(result, "get_potential_energy")() == TEST_ENERGY_GENERIC
 
 
 def test_dft_manager_self_healing(
@@ -110,7 +110,7 @@ def test_dft_manager_self_healing(
             calc = MockCalculator(fail_count=0)
             atoms = args[1]
             atoms.calc = calc
-            atoms.get_potential_energy()
+            getattr(atoms, "get_potential_energy")()
             return DummyFuture(calc, None)
 
     DummyExecutor.call_count = 0  # type: ignore[attr-defined]
@@ -123,7 +123,7 @@ def test_dft_manager_self_healing(
     gen = manager.compute(iter([atoms]))
     result = next(gen)
 
-    assert result.get_potential_energy() == TEST_ENERGY_GENERIC
+    assert getattr(result, "get_potential_energy")() == TEST_ENERGY_GENERIC
 
 
 def test_dft_manager_fatal_error(

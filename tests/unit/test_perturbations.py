@@ -45,7 +45,7 @@ def test_apply_strain() -> None:
 
 def test_create_vacancy() -> None:
     # Use a larger supercell
-    atoms = getattr(bulk("Al", "fcc", a=4.0), "repeat")((3, 3, 3))
+    atoms = bulk("Al", "fcc", a=4.0).repeat((3, 3, 3))  # type: ignore[no-untyped-call]
     n_original = len(atoms)
 
     # Remove 10%

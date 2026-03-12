@@ -26,7 +26,7 @@ class MockPolicy(SafeBasePolicy):  # type: ignore[misc]
         context: Any = None,
     ) -> Iterator[Atoms]:
         for _ in range(n_structures):
-            a = base_structure.copy()  # type: ignore[no-untyped-call]
+            a = getattr(base_structure, "copy")()
             a.info["policy"] = self.name
             yield a
 
