@@ -92,6 +92,16 @@ class MCConfig(BaseModel):
     seed: int = Field(DEFAULT_MC_SEED, description="Random seed for MC swaps")
 
 
+class EvaluatorThresholds(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    threshold_call_dft: float = Field(..., description="MACE uncertainty threshold to call DFT")
+    threshold_add_train: float = Field(..., description="Lower threshold to add atoms to active set")
+    smooth_steps: int = Field(3, description="Consecutive steps required to halt MD")
+    max_retries: int = Field(3, description="Max retries for extracting LAMMPS variables")
+    base_backoff: float = Field(0.1, description="Base backoff time for LAMMPS variable extraction")
+
+
 class MDSimulationResult(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -111,6 +121,9 @@ class MDSimulationResult(BaseModel):
         None, description="Path to the structure where halt occurred"
     )
     halt_step: int | None = Field(None, description="The step at which the simulation was halted")
+    epicenter_indices: list[int] | None = Field(
+        None, description="Indices of atoms whose uncertainty exceeded threshold_add_train"
+    )
 
     @model_validator(mode="after")
     def validate_physical_values(self) -> "MDSimulationResult":
@@ -137,6 +150,20 @@ class MDSimulationResult(BaseModel):
             raise ValueError(msg)
 
         return self
+
+
+class ScriptGenerationContext(BaseModel):
+    model_config = ConfigDict(extra="forbid", arbitrary_types_allowed=True)
+
+    potential_path: Path
+    data_file: Path
+    dump_file: Path
+    elements: list[str]
+    use_fix_invoke: bool = False
+    resume_from_step: int | None = None
+    restart_file: Path | None = None
+    read_restart: Path | None = None
+    eval_dir: Path | None = None
 
 
 class MDConfig(BaseModel):
@@ -222,10 +249,18 @@ class MDConfig(BaseModel):
     check_interval: int = Field(
         DEFAULT_MD_CHECK_INTERVAL, gt=0, description="Step interval for uncertainty check"
     )
+    evaluator_thresholds: EvaluatorThresholds | None = Field(
+        None, description="Explicit thresholds for Cycle 04 TwoTierEvaluator"
+    )
 
     # Spec Section 3.1: Ramping and MC
     ramping: MDRampingConfig | None = Field(None, description="Configuration for T/P ramping")
     mc: MCConfig | None = Field(None, description="Configuration for Monte Carlo atom swapping")
+
+    # Cycle 04 Soft Start
+    soft_start_steps: int = Field(
+        0, ge=0, description="Number of steps to run a strong Langevin thermostat upon resume"
+    )
 
     @model_validator(mode="after")
     def validate_simulation_physics(self) -> "MDConfig":

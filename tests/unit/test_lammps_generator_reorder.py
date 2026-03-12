@@ -15,15 +15,16 @@ def test_lammps_generator_order() -> None:
     )
     generator = LammpsScriptGenerator(config)
 
+    from pyacemaker.domain_models.md import ScriptGenerationContext
     # Use StringIO as buffer
     buffer = StringIO()
-    generator.write_script(
-        buffer,
+    ctx = ScriptGenerationContext(
         potential_path=Path("pot.yace"),
         data_file=Path("data.lmp"),
         dump_file=Path("dump.lammps"),
         elements=["Fe"],
     )
+    generator.write_script(buffer, ctx)
 
     script = buffer.getvalue()
 
@@ -59,14 +60,15 @@ def test_lammps_generator_gamma_column() -> None:
     )
     generator = LammpsScriptGenerator(config)
 
+    from pyacemaker.domain_models.md import ScriptGenerationContext
     buffer = StringIO()
-    generator.write_script(
-        buffer,
+    ctx = ScriptGenerationContext(
         potential_path=Path("pot.yace"),
         data_file=Path("data.lmp"),
         dump_file=Path("dump.lammps"),
         elements=["Fe"],
     )
+    generator.write_script(buffer, ctx)
     script = buffer.getvalue()
 
     dump_line = next(line for line in script.splitlines() if line.startswith("dump"))

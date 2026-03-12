@@ -17,8 +17,15 @@ def test_generator_pure_pace(tmp_path: Path) -> None:
     data_file = tmp_path / "data.lmp"
     dump_file = tmp_path / "dump.lammpstrj"
 
+    from pyacemaker.domain_models.md import ScriptGenerationContext
     buffer = StringIO()
-    generator.write_script(buffer, pot_path, data_file, dump_file, ["Al"])
+    ctx = ScriptGenerationContext(
+        potential_path=pot_path,
+        data_file=data_file,
+        dump_file=dump_file,
+        elements=["Al"],
+    )
+    generator.write_script(buffer, ctx)
     script = buffer.getvalue()
 
     assert "pair_style pace" in script
@@ -45,8 +52,15 @@ def test_generator_hybrid_potential(tmp_path: Path) -> None:
     data_file = tmp_path / "data.lmp"
     dump_file = tmp_path / "dump.lammpstrj"
 
+    from pyacemaker.domain_models.md import ScriptGenerationContext
     buffer = StringIO()
-    generator.write_script(buffer, pot_path, data_file, dump_file, ["H", "He"])
+    ctx = ScriptGenerationContext(
+        potential_path=pot_path,
+        data_file=data_file,
+        dump_file=dump_file,
+        elements=["H", "He"],
+    )
+    generator.write_script(buffer, ctx)
     script = buffer.getvalue()
 
     assert "pair_style hybrid/overlay" in script
@@ -77,8 +91,15 @@ def test_generator_watchdog(tmp_path: Path) -> None:
     data_file = tmp_path / "data.lmp"
     dump_file = tmp_path / "dump.lammpstrj"
 
+    from pyacemaker.domain_models.md import ScriptGenerationContext
     buffer = StringIO()
-    generator.write_script(buffer, pot_path, data_file, dump_file, ["Al"])
+    ctx = ScriptGenerationContext(
+        potential_path=pot_path,
+        data_file=data_file,
+        dump_file=dump_file,
+        elements=["Al"],
+    )
+    generator.write_script(buffer, ctx)
     script = buffer.getvalue()
 
     expected_pot = shlex.quote(str(pot_path))

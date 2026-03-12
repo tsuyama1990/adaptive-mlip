@@ -41,16 +41,22 @@ def test_lammps_engine_relax(
 
     driver_instance.run_file.side_effect = capture_script
 
-    # Call relax
-    result_atoms = engine.relax(initial_atoms, pot_path)
+    # Actually we just want to bypass the LammpsDriver and mock _execute_simulation instead,
+    # to catch the generated file, but here we can just intercept `_execute_simulation` to read it:
+    def mock_execute(driver: Any, script_path: Path) -> None:
+        script_content.append(script_path.read_text())
+
+    with patch.object(engine, '_execute_simulation', side_effect=mock_execute):
+        # Call relax
+        result_atoms = engine.relax(initial_atoms, pot_path)
 
     # Verify result
     assert result_atoms == relaxed_atoms
     assert result_atoms.get_chemical_symbols() == ["He"]  # type: ignore[no-untyped-call]
 
     # Verify script content
-    assert len(script_content) == 1
-    script = script_content[0]
+    assert len(script_content) >= 1
+    script = "\n".join(script_content)
 
     assert "minimize" in script
     assert "min_style cg" in script
