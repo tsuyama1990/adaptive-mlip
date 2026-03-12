@@ -6,7 +6,7 @@ import pytest
 from pyacemaker.utils.process import run_command
 
 
-def test_run_command_success(monkeypatch):
+def test_run_command_success(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         subprocess,
         "run",
@@ -19,18 +19,18 @@ def test_run_command_success(monkeypatch):
     assert res.stdout == "success"
 
 
-def test_run_command_empty():
+def test_run_command_empty() -> None:
     with pytest.raises(ValueError, match="Command list cannot be empty"):
         run_command([])
 
 
-def test_run_command_not_found(monkeypatch):
+def test_run_command_not_found(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(shutil, "which", lambda x: None)
     with pytest.raises(FileNotFoundError, match="Executable not found"):
         run_command(["nonexistent_command"])
 
 
-def test_run_command_shell_injection(monkeypatch):
+def test_run_command_shell_injection(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(shutil, "which", lambda x: "/bin/echo")
 
     with pytest.raises(ValueError, match="potentially dangerous"):

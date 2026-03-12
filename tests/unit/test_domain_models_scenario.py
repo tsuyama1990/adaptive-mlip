@@ -4,7 +4,7 @@ from pydantic import ValidationError
 from pyacemaker.domain_models.scenario import ScenarioConfig
 
 
-def test_scenario_config_valid():
+def test_scenario_config_valid() -> None:
     config = ScenarioConfig(
         name="fept_mgo",
         parameters={"fe_pt_ratio": 0.5, "steps": 100},
@@ -17,4 +17,4 @@ def test_scenario_config_valid():
 
 def test_scenario_config_extra_forbid() -> None:
     with pytest.raises(ValidationError):
-        ScenarioConfig(name="test", extra_field="forbidden")  # type: ignore[call-arg]
+        ScenarioConfig(**{"name": "test", "extra_field": "forbidden"})

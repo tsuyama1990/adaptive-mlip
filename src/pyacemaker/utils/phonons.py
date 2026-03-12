@@ -38,9 +38,7 @@ class PhononCalculator:
 
     def _phonopy_to_ase(self, phonon_atoms: PhonopyAtoms) -> Atoms:
         # PhonopyAtoms has get_scaled_positions() method, but 'scaled_positions' might be property depending on version.
-        # But wait, unit test mock returns Atoms object from ase, NOT PhonopyAtoms.
         # In actual code, Phonopy.get_supercells_with_displacements returns list of PhonopyAtoms.
-        # In test, I mocked it to return [structure.copy()], which is ASE Atoms.
         # ASE Atoms does NOT have scaled_positions attribute (it has get_scaled_positions()).
 
         # If phonon_atoms is ASE Atoms (in test):

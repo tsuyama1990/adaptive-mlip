@@ -28,7 +28,7 @@ def test_extract_local_region_basic() -> None:
     assert len(cluster) == 19
 
     # Check weights
-    weights = cluster.get_array("force_weight")  # type: ignore[no-untyped-call]
+    weights = cluster.get_array("force_weight")
 
     # Center (index 0 in cluster usually, but let's check positions)
     # Center is at [0,0,0] relative to original extraction logic, but embed_cluster centers it in box.
@@ -61,5 +61,5 @@ def test_extract_local_region_pbc() -> None:
     # So we expect 1 + 6 = 7 atoms in cluster.
     assert len(cluster) == 7
 
-    weights = cluster.get_array("force_weight")  # type: ignore[no-untyped-call]
+    weights = cluster.get_array("force_weight")
     assert np.all(weights == 1.0)  # All are within radius

@@ -6,6 +6,11 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 class LoggingConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    @staticmethod
+    def _raise_invalid_log_path(path: Path) -> None:
+        msg = f"Log path parent directory does not exist and is outside CWD: {path}"
+        raise ValueError(msg)
+
     level: str = Field(
         default="INFO", pattern="^(DEBUG|INFO|WARNING|ERROR|CRITICAL)$", description="Logging level"
     )
@@ -32,11 +37,8 @@ class LoggingConfig(BaseModel):
                 else:
                     # Resolve parent directory strictly
                     parent = path.parent
-                    if not parent.exists():
-                        # Create if doesn't exist? No, config validation shouldn't create dirs
-                        # But log setup might. Let's resolve what we can.
-                        # For security, we ensure the parent is within CWD
-                        pass
+                    if not parent.exists() and not path.absolute().is_relative_to(Path.cwd()):
+                        LoggingConfig._raise_invalid_log_path(path)
 
                     # Resolve as much as possible relative to CWD
                     abs_path = path.absolute().resolve(strict=False)

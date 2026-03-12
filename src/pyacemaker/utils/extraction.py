@@ -14,6 +14,9 @@ def _pre_relax_buffer(cluster: Atoms) -> Atoms:
     """
     # Create a copy to prevent modifying the original incorrectly
     cluster_copy = cluster.copy()  # type: ignore[no-untyped-call]
+    # ASE copy drops the calculator, we must explicitly restore it
+    if getattr(cluster, "calc", None) is not None:
+        cluster_copy.calc = cluster.calc
 
     # Identify core atoms
     weights = cluster_copy.get_array("force_weight")
@@ -23,13 +26,10 @@ def _pre_relax_buffer(cluster: Atoms) -> Atoms:
     constraint = FixAtoms(indices=core_indices)  # type: ignore[no-untyped-call]
     cluster_copy.set_constraint(constraint)
 
-    # Apply a mock calculator for the relaxation if one is not attached
     if cluster_copy.calc is None:
-        from ase.calculators.lj import LennardJones
+        msg = "Cannot relax cluster: no Calculator attached to the structure. Please attach a real potential (e.g. MACE) before calling this function."
+        raise ValueError(msg)
 
-        cluster_copy.calc = LennardJones()  # type: ignore[no-untyped-call]
-
-    # Relax the buffer region
     import os
     from pathlib import Path
 
@@ -42,11 +42,11 @@ def _pre_relax_buffer(cluster: Atoms) -> Atoms:
 
 def _passivate_surface(cluster: Atoms, element: str = "H") -> Atoms:
     """
-    Passivates the surface of the cluster by adding dummy atoms (e.g. H) to undercoordinated atoms.
+    Passivates the surface of the cluster by adding passivating atoms (e.g. H) to undercoordinated atoms.
     """
     cluster_copy = cluster.copy()  # type: ignore[no-untyped-call]
 
-    # We will just do a simple distance-based passivation mock implementation
+    # Simple distance-based surface passivation.
     # Find outer atoms (in the buffer region) that have fewer neighbors
     i_indices, _j_indices = neighbor_list("ij", cluster_copy, cutoff=2.5)  # type: ignore[no-untyped-call]
 
@@ -55,16 +55,25 @@ def _passivate_surface(cluster: Atoms, element: str = "H") -> Atoms:
 
     new_atoms = []
 
+    # Calculate geometric center of the cluster
+    center_pos = np.mean(cluster_copy.positions, axis=0)
+
     for idx in buffer_indices:
         # Number of neighbors for this atom
         n_neighbors = np.sum(i_indices == idx)
-        # Mock logic: if an atom has fewer than 4 neighbors, add a passivating element
+        # If an atom has fewer than 4 neighbors, add a passivating element pointing outwards
         if n_neighbors < 4:
-            # We add a dummy atom in a random direction (just for structure generation mock)
-            # In a real scenario, this would follow bonding angles.
             pos = cluster_copy.positions[idx]
-            offset = np.random.randn(3)
-            offset = offset / np.linalg.norm(offset) * 1.0  # 1.0 Angstrom bond length
+            # Direction vector pointing away from center
+            direction = pos - center_pos
+            norm = np.linalg.norm(direction)
+            if norm < 1e-6:
+                # Fallback if atom is exactly at center (rare for buffer)
+                direction = np.array([1.0, 0.0, 0.0])
+
+                norm = np.float64(1.0)
+
+            offset = (direction / norm) * 1.0  # 1.0 Angstrom bond length for passivation
             new_pos = pos + offset
 
             new_atoms.append(Atoms(element, positions=[new_pos]))
@@ -143,6 +152,9 @@ def extract_intelligent_cluster(
     cluster = Atoms(symbols=cluster_symbols, positions=cluster_positions, pbc=False)
 
     cluster.new_array("force_weight", weights)  # type: ignore[no-untyped-call]
+
+    if getattr(structure, "calc", None) is not None:
+        cluster.calc = structure.calc
 
     if structure.has("c_gamma"):  # type: ignore[no-untyped-call]
         original_c_gamma = structure.get_array("c_gamma")  # type: ignore[no-untyped-call]

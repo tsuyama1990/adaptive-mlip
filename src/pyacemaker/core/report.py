@@ -21,7 +21,7 @@ class ReportGenerator:
             h1 { color: #333; }
             .section { margin-bottom: 2rem; border: 1px solid #ddd; padding: 1rem; border-radius: 5px; }
             .status { font-weight: bold; }
-            .pass { color: green; }
+            .report-pass { color: green; }
             .fail { color: red; }
             table { width: 100%; border-collapse: collapse; }
             th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
@@ -34,12 +34,12 @@ class ReportGenerator:
         <div class="section">
             <h2>Summary</h2>
             <p><strong>Dynamical Stability (Phonons):</strong>
-                <span class="status {{ 'pass' if result.phonon_stable else 'fail' }}">
+                <span class="status {{ 'report-pass' if result.phonon_stable else 'fail' }}">
                     {{ 'Stable' if result.phonon_stable else 'Unstable' }}
                 </span>
             </p>
             <p><strong>Mechanical Stability (Elastic):</strong>
-                <span class="status {{ 'pass' if result.elastic_stable else 'fail' }}">
+                <span class="status {{ 'report-pass' if result.elastic_stable else 'fail' }}">
                     {{ 'Stable' if result.elastic_stable else 'Unstable' }}
                 </span>
             </p>

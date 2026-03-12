@@ -43,7 +43,7 @@ def test_dft_manager_streaming_behavior(mock_dft_config: DFTConfig) -> None:
 
     fake_driver = FakeDriver(calcs=MockCalculator(fail_count=0))
 
-    manager = DFTManager(mock_dft_config, driver=fake_driver)  # type: ignore[arg-type]
+    manager = DFTManager(mock_dft_config, driver=fake_driver)
 
     # 3. Call compute
     # This should return a generator immediately without hanging

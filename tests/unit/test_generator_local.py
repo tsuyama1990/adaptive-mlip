@@ -1,3 +1,4 @@
+from typing import Any
 from unittest.mock import MagicMock
 
 from ase import Atoms
@@ -6,7 +7,7 @@ from pyacemaker.core.generator import StructureGenerator
 from pyacemaker.domain_models.structure import LocalGenerationStrategy, StructureConfig
 
 
-def test_generate_local_rattle():
+def test_generate_local_rattle() -> None:
     config = StructureConfig(
         elements=["H"],
         supercell_size=[1, 1, 1],
@@ -21,7 +22,7 @@ def test_generate_local_rattle():
     assert any(c.positions[0].tolist() != [0, 0, 0] for c in candidates)
 
 
-def test_generate_local_md_burst():
+def test_generate_local_md_burst() -> None:
     # Mock PolicyFactory to return a Mock Policy, so we don't depend on Engine logic here (tested in policy test)
     # OR mock Engine passed to generator.
 
@@ -52,10 +53,10 @@ def test_generate_local_md_burst():
 
     # Mock type(engine)(config)
     class MockEngineClass:
-        def __init__(self, config) -> None:
+        def __init__(self, config) -> None:  # type: ignore[no-untyped-def]
             self.config = config
 
-        def run(self, s, p):
+        def run(self, s, p) -> Any:  # type: ignore[no-untyped-def]
             return mock_result
 
     real_mock_engine = MockEngineClass(MagicMock())

@@ -7,7 +7,7 @@ from pyacemaker.domain_models.structure import (
 )
 
 
-def test_get_policy_single():
+def test_get_policy_single() -> None:
     config = StructureConfig(
         elements=["H"], supercell_size=[1, 1, 1], active_policies=[ExplorationPolicy.RANDOM_RATTLE]
     )
@@ -16,7 +16,7 @@ def test_get_policy_single():
     assert not isinstance(policy, CompositePolicy)
 
 
-def test_get_policy_composite():
+def test_get_policy_composite() -> None:
     config = StructureConfig(
         elements=["H"],
         supercell_size=[1, 1, 1],
@@ -29,7 +29,7 @@ def test_get_policy_composite():
     assert isinstance(policy.policies[1], StrainPolicy)
 
 
-def test_get_local_policy():
+def test_get_local_policy() -> None:
     policy = PolicyFactory.get_local_policy(LocalGenerationStrategy.MD_MICRO_BURST)
     assert isinstance(policy, MDMicroBurstPolicy)
 

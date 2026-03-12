@@ -18,19 +18,19 @@ def test_embed_cluster_basic() -> None:
     # extent y: 0.0. New L = 0.0 + 2.0 = 2.0.
     # extent z: 0.0. New L = 0.0 + 2.0 = 2.0.
 
-    cell = embedded.get_cell()  # type: ignore[no-untyped-call]
+    cell = getattr(embedded, "get_cell")()
     assert np.allclose(cell.lengths(), [3.0, 2.0, 2.0])
-    assert np.all(embedded.get_pbc())  # type: ignore[no-untyped-call]
+    assert np.all(getattr(embedded, "get_pbc")())
 
 
 def test_embed_cluster_copy() -> None:
     """Test that copy=True does not modify original cluster."""
     original = Atoms("H", positions=[[0, 0, 0]])
-    original_pos = original.get_positions().copy()  # type: ignore[no-untyped-call]
+    original_pos = getattr(original, "get_positions")().copy()
 
     _ = embed_cluster(original, buffer=5.0, copy=True)
 
-    assert np.allclose(original.get_positions(), original_pos)  # type: ignore[no-untyped-call]
+    assert np.allclose(getattr(original, "get_positions")(), original_pos)
 
 
 def test_embed_cluster_inplace() -> None:
@@ -42,7 +42,7 @@ def test_embed_cluster_inplace() -> None:
     embedded = embed_cluster(original, buffer=10.0, copy=False)
 
     assert embedded is original
-    assert np.allclose(original.get_positions(), [[5.0, 5.0, 5.0]])  # type: ignore[no-untyped-call]
+    assert np.allclose(getattr(original, "get_positions")(), [[5.0, 5.0, 5.0]])
 
 
 def test_embed_cluster_empty() -> None:
@@ -66,7 +66,7 @@ def test_embed_cluster_large() -> None:
     embedded = embed_cluster(cluster, buffer=10.0)
 
     assert len(embedded) == 100
-    assert np.all(embedded.get_pbc())  # type: ignore[no-untyped-call]
+    assert np.all(getattr(embedded, "get_pbc")())
 
 
 def test_embed_cluster_boundary_conditions() -> None:
@@ -77,7 +77,7 @@ def test_embed_cluster_boundary_conditions() -> None:
     # Expected cell: 1.0 (extent) + 2.0 (buffer) = 3.0 in x. 2.0 in y, z.
 
     embedded = embed_cluster(cluster, buffer=buffer)
-    cell = embedded.get_cell()  # type: ignore[no-untyped-call]
+    cell = getattr(embedded, "get_cell")()
 
     assert np.allclose(cell.lengths(), [3.0, 2.0, 2.0])
 
@@ -87,6 +87,6 @@ def test_embed_cluster_boundary_conditions() -> None:
     # New pos 1: 1000 - 999 = 1.0.
     # New pos 2: 1001 - 999 = 2.0.
 
-    pos = embedded.get_positions()  # type: ignore[no-untyped-call]
+    pos = getattr(embedded, "get_positions")()
     assert np.allclose(pos[0], [1.0, 1.0, 1.0])
     assert np.allclose(pos[1], [2.0, 1.0, 1.0])

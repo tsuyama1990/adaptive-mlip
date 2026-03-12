@@ -7,7 +7,7 @@ from pyacemaker.core.base import BaseGenerator, BaseOracle
 
 
 # Fake Components
-class FakeGenerator(BaseGenerator):
+class FakeGenerator(BaseGenerator):  # type: ignore[misc]
     def update_config(self, config: Any) -> None:
         pass
 
@@ -25,12 +25,8 @@ class FakeGenerator(BaseGenerator):
             yield base_structure.copy()  # type: ignore[no-untyped-call]
 
 
-class FakeOracle(BaseOracle):
+class FakeOracle(BaseOracle):  # type: ignore[misc]
     def compute(self, structures: Iterator[Atoms], batch_size: int = 10) -> Iterator[Atoms]:
         for atoms in structures:
             atoms.info["energy"] = -5.0
             yield atoms
-
-
-
-

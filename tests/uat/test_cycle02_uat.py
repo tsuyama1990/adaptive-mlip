@@ -30,8 +30,6 @@ def uat_dft_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> DFTConfig
     )
 
 
-
-
 class DummyFuture:
     def __init__(self, result_value: Any, exception: Any = None) -> None:
         self._result_value = result_value
@@ -57,6 +55,7 @@ class DummyExecutor:
             return DummyFuture(res, exc)
         except Exception as e:
             return DummyFuture(None, e)
+
 
 def test_uat_02_01_single_point_calculation(
     uat_dft_config: DFTConfig, monkeypatch: pytest.MonkeyPatch
@@ -93,8 +92,8 @@ def test_uat_02_01_single_point_calculation(
         result = next(gen)
 
         # 3. Expectation
-        assert result.get_potential_energy() == TEST_ENERGY_H2O  # type: ignore[no-untyped-call]
-        assert result.get_forces().shape == (3, 3)  # type: ignore[no-untyped-call]
+        assert result.get_potential_energy() == TEST_ENERGY_H2O
+        assert result.get_forces().shape == (3, 3)
 
 
 def test_uat_02_02_self_healing(
@@ -130,7 +129,7 @@ def test_uat_02_02_self_healing(
         result = next(gen)
 
         # 3. Expectation
-        assert result.get_potential_energy() == TEST_ENERGY_H2O  # type: ignore[no-untyped-call]
+        assert result.get_potential_energy() == TEST_ENERGY_H2O
 
         # Verify that get_calculator was called twice (original + retry)
         assert mock_driver_instance.get_calculator.call_count == 2
