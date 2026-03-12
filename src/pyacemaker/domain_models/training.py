@@ -20,6 +20,21 @@ from pyacemaker.domain_models.defaults import (
 )
 
 
+class MaceFinetuneConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    valid_fraction: float = Field(0.0, description="Validation fraction for MACE finetuning", ge=0.0, le=1.0)
+    E0s: str = Field("average", description="E0s calculation strategy")
+    model_architecture: str = Field("MACE", description="MACE Model architecture")
+    num_interactions: int = Field(2, description="Number of MACE interactions", gt=0)
+    max_num_epochs: int = Field(10, description="Maximum epochs for finetuning", gt=0)
+    start_swa: int = Field(5, description="Start Stochastic Weight Averaging epoch", ge=0)
+    scheduler_patience: int = Field(5, description="Patience for LR scheduler", gt=0)
+    patience: int = Field(10, description="Patience for early stopping", gt=0)
+    eval_interval: int = Field(1, description="Evaluation interval", gt=0)
+    loss: str = Field("forces_only", description="Loss function configuration")
+    device: str = Field("cuda", description="Compute device (cuda/cpu)")
+
 class PacemakerConfig(BaseModel):
     """Specific configuration for Pacemaker training."""
 
@@ -89,6 +104,10 @@ class TrainingConfig(BaseModel):
 
     pacemaker: PacemakerConfig = Field(
         default_factory=PacemakerConfig, description="Detailed Pacemaker configuration"
+    )
+
+    mace_finetune: MaceFinetuneConfig = Field(
+        default_factory=MaceFinetuneConfig, description="Configuration for MACE finetuning"
     )
 
     # Mocking & Output (Audit Requirement)

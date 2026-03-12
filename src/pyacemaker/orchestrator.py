@@ -108,6 +108,15 @@ class Orchestrator:
             msg = LOG_MODULE_INIT_FAIL.format(error=e)
             raise OrchestratorError(msg) from e
 
+        import contextlib
+        self.mace_calculator = None
+        with contextlib.suppress(Exception):
+            from mace.calculators import MACECalculator
+            self.mace_calculator = MACECalculator(
+                model_paths=self.config.workflow.distillation.mace_model_path,
+                device="cpu"
+            )
+
         self.logger.info(LOG_MODULES_INIT_SUCCESS)
 
     def _stream_write(
@@ -346,7 +355,7 @@ class Orchestrator:
                 structure=halt_structure,
                 target_atoms=target_atoms,
                 config=self.config.workflow.cutout,
-                mace_model_path=self.config.workflow.distillation.mace_model_path,
+                calculator=self.mace_calculator,
             )
         except Exception:
             self.logger.exception("Failed to extract local cluster.")
@@ -429,7 +438,7 @@ class Orchestrator:
             self._stream_write(dft_labelled_gen, training_file, append=True)
 
             # 2. Awaken MACE (Finetune MACE)
-            _finetune_manager = FinetuneManager()
+            _finetune_manager = FinetuneManager(self.config.training.mace_finetune)
             awakened_mace_path = _finetune_manager.finetune(training_file)
             self.logger.info(
                 f"MACE model awakened (finetuned) at {awakened_mace_path} using new DFT data."

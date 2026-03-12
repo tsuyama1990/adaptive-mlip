@@ -1,6 +1,6 @@
 import shlex
 from pathlib import Path
-from typing import TextIO
+from typing import Any, TextIO
 
 from ase.data import atomic_numbers
 
@@ -92,7 +92,7 @@ class LammpsScriptGenerator:
         buffer.write("neigh_modify delay 0 every 1 check yes\n")
         buffer.write(f"timestep {self.config.timestep}\n")
 
-    def _gen_watchdog(self, buffer: TextIO, potential_path: Path) -> None:
+    def _gen_watchdog(self, buffer: TextIO, potential_path: Path, use_fix_invoke: bool = False, thresholds: dict[str, Any] | None = None, eval_dir: Path | None = None) -> None:
         """Generates Uncertainty Watchdog commands."""
         if not self.config.fix_halt:
             return
@@ -102,29 +102,49 @@ class LammpsScriptGenerator:
         buffer.write("compute max_gamma all reduce max c_gamma\n")
         buffer.write("variable max_g equal c_max_gamma\n")
 
-        # We can also add a boolean variable to hold the trigger from TwoTierEvaluator
-        buffer.write("variable trigger_halt string false\n")
+        if use_fix_invoke and thresholds is not None and eval_dir is not None:
+            # We add a boolean variable to hold the trigger from TwoTierEvaluator
+            buffer.write("variable trigger_halt string false\n")
 
-        # The actual fix python/invoke command is enabled when fix_halt and use_fix_invoke is True
-        # To avoid breaking tests, we assume evaluator logic is externally injected or used internally.
+            # The parameters for TwoTierEvaluator exported as lammps variables cleanly
+            threshold_call = float(thresholds.get("threshold_call_dft", self.config.uncertainty_threshold))
+            threshold_add = float(thresholds.get("threshold_add_train", self.config.uncertainty_threshold * 0.5))
+            smooth_steps = int(thresholds.get("smooth_steps", 3))
 
-        # The traditional halt check based on max_g
-        buffer.write(
-            f"fix halt_check all halt {self.config.check_interval} "
-            f"v_max_g > {self.config.uncertainty_threshold} error continue\n"
-        )
+            buffer.write(f"variable eval_threshold_call equal {threshold_call}\n")
+            buffer.write(f"variable eval_threshold_add equal {threshold_add}\n")
+            buffer.write(f"variable eval_smooth_steps equal {smooth_steps}\n")
 
-        # Secondary halt check that relies on the trigger variable from TwoTierEvaluator
-        buffer.write(
-            f"fix halt_trigger all halt {self.config.check_interval} "
-            f"v_trigger_halt == true error continue\n"
-        )
+            # Setup fix python/invoke using inline here document to avoid dynamic file creation vulnerabilities
+            # and avoids string interpolation inside the python code block completely.
+            buffer.write("python invoke_evaluator invoke lammps_invoke_evaluator here \"\"\"\n")
+            buffer.write("from pyacemaker.core.evaluator import TwoTierEvaluator\n")
+            buffer.write("import lammps\n")
+            buffer.write("evaluator = None\n")
+            buffer.write("def lammps_invoke_evaluator():\n")
+            buffer.write("    global evaluator\n")
+            buffer.write("    lmp = lammps.lammps(name='', cmdargs=['-log', 'none', '-screen', 'none'])\n")
+            buffer.write("    if evaluator is None:\n")
+            buffer.write("        t_call = lmp.extract_variable('eval_threshold_call')\n")
+            buffer.write("        t_add = lmp.extract_variable('eval_threshold_add')\n")
+            buffer.write("        s_steps = int(lmp.extract_variable('eval_smooth_steps'))\n")
+            buffer.write("        evaluator = TwoTierEvaluator(t_call, t_add, s_steps)\n")
+            buffer.write("    evaluator.evaluate(lmp)\n")
+            buffer.write("\"\"\"\n")
 
-        # We can also add a secondary halt check that relies on the trigger variable
-        buffer.write(
-            f"fix halt_trigger all halt {self.config.check_interval} "
-            f"v_trigger_halt == true error continue\n"
-        )
+            buffer.write(f"fix invoke_eval all python/invoke {self.config.check_interval} end_of_step invoke_evaluator\n")
+
+            # Secondary halt check that relies on the trigger variable from TwoTierEvaluator
+            buffer.write(
+                f"fix halt_trigger all halt {self.config.check_interval} "
+                f"v_trigger_halt == true error continue\n"
+            )
+        else:
+            # The traditional halt check based on max_g
+            buffer.write(
+                f"fix halt_check all halt {self.config.check_interval} "
+                f"v_max_g > {self.config.uncertainty_threshold} error continue\n"
+            )
 
     def _gen_mc(self, buffer: TextIO, elements: list[str]) -> None:
         """Generates Monte Carlo atom swapping commands."""
@@ -152,9 +172,10 @@ class LammpsScriptGenerator:
             f"{temp} ke no types {types_str}\n"
         )
 
-    def _gen_execution(self, buffer: TextIO, elements: list[str]) -> None:
+    # ruff: noqa: C901
+    def _gen_execution(self, buffer: TextIO, elements: list[str], resume_from_step: int | None = None, restart_file: Path | None = None) -> None:
         """Generates minimization and MD run commands."""
-        if self.config.minimize:
+        if self.config.minimize and resume_from_step is None:
             buffer.write(
                 f"minimize {self.config.minimize_tol} {self.config.minimize_ftol} "
                 f"{self.config.minimize_steps} {self.config.minimize_max_iter}\n"
@@ -183,13 +204,45 @@ class LammpsScriptGenerator:
             if self.config.ramping.press_end is not None:
                 press_end = self.config.ramping.press_end
 
-        # Use configurable velocity seed
-        buffer.write(f"velocity all create {temp_start} {self.config.velocity_seed}\n")
-        buffer.write(
-            f"fix npt all npt temp {temp_start} {temp_end} {tdamp} "
-            f"iso {press_start} {press_end} {pdamp}\n"
-        )
-        buffer.write(f"run {self.config.n_steps}\n")
+        if resume_from_step is None:
+            # Use configurable velocity seed
+            buffer.write(f"velocity all create {temp_start} {self.config.velocity_seed}\n")
+            buffer.write(
+                f"fix npt all npt temp {temp_start} {temp_end} {tdamp} "
+                f"iso {press_start} {press_end} {pdamp}\n"
+            )
+        else:
+            # When resuming, use a strong Langevin thermostat for the first few steps (soft start)
+            buffer.write(
+                f"fix langevin all langevin {temp_start} {temp_end} {tdamp} {self.config.velocity_seed}\n"
+            )
+            buffer.write("fix nve all nve\n")
+            buffer.write(
+                "run 10\n" # Soft start 10 steps
+            )
+            buffer.write("unfix langevin\n")
+            buffer.write("unfix nve\n")
+            buffer.write(
+                f"fix npt all npt temp {temp_start} {temp_end} {tdamp} "
+                f"iso {press_start} {press_end} {pdamp}\n"
+            )
+
+        # Write restart file logic
+        if restart_file:
+            quoted_restart = self._quote(str(restart_file))
+            buffer.write(f"restart 1000 {quoted_restart}\n")
+
+        # How many steps left
+        run_steps = self.config.n_steps
+        if resume_from_step is not None:
+            run_steps = max(0, self.config.n_steps - resume_from_step)
+
+        buffer.write(f"run {run_steps}\n")
+
+        # Write final restart
+        if restart_file:
+            quoted_restart = self._quote(str(restart_file))
+            buffer.write(f"write_restart {quoted_restart}\n")
 
     def _gen_output_setup(self, buffer: TextIO, dump_file: Path) -> None:
         """Generates output settings (thermo and dump)."""
@@ -224,27 +277,37 @@ class LammpsScriptGenerator:
         data_file: Path,
         dump_file: Path,
         elements: list[str],
+        use_fix_invoke: bool = False,
+        thresholds: dict[str, Any] | None = None,
+        resume_from_step: int | None = None,
+        restart_file: Path | None = None,
+        read_restart: Path | None = None,
+        eval_dir: Path | None = None,
     ) -> None:
         """
         Writes the LAMMPS input script to the provided buffer.
         """
-        quoted_data = self._quote(str(data_file))
-
         buffer.write("clear\n")
-        buffer.write("units metal\n")
-        # Use .value to ensure we get the string value "atomic", "charge" etc.
-        buffer.write(f"atom_style {self.config.atom_style.value}\n")
-        buffer.write("boundary p p p\n")
-        buffer.write(f"read_data {quoted_data}\n")
+
+        if read_restart:
+            quoted_read_restart = self._quote(str(read_restart))
+            buffer.write(f"read_restart {quoted_read_restart}\n")
+        else:
+            buffer.write("units metal\n")
+            # Use .value to ensure we get the string value "atomic", "charge" etc.
+            buffer.write(f"atom_style {self.config.atom_style.value}\n")
+            buffer.write("boundary p p p\n")
+            quoted_data = self._quote(str(data_file))
+            buffer.write(f"read_data {quoted_data}\n")
 
         self._gen_potential(buffer, potential_path, elements)
         self._gen_settings(buffer)
-        self._gen_watchdog(buffer, potential_path)
+        self._gen_watchdog(buffer, potential_path, use_fix_invoke=use_fix_invoke, thresholds=thresholds, eval_dir=eval_dir)
 
         # Output setup MUST come before run
         self._gen_output_setup(buffer, dump_file)
 
-        self._gen_execution(buffer, elements)
+        self._gen_execution(buffer, elements, resume_from_step=resume_from_step, restart_file=restart_file)
 
         self._gen_post_run_diagnostics(buffer)
 

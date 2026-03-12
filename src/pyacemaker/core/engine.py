@@ -16,6 +16,7 @@ from pyacemaker.domain_models.constants import (
     LAMMPS_SCREEN_ARG,
 )
 from pyacemaker.domain_models.md import MDConfig, MDSimulationResult
+from pyacemaker.domain_models.workflow import ActiveLearningThresholds
 from pyacemaker.interfaces.lammps_driver import LammpsDriver
 
 
@@ -99,6 +100,7 @@ class LammpsEngine(BaseEngine):
         use_fix_invoke: bool = False,
         resume_from_step: int | None = None,
         override_n_steps: int | None = None,
+        thresholds: "ActiveLearningThresholds | None" = None,
         **kwargs: Any,
     ) -> MDSimulationResult:
         """
@@ -120,6 +122,7 @@ class LammpsEngine(BaseEngine):
             msg = "override_n_steps must be a non-negative integer"
             raise ValueError(msg)
 
+
         ctx, data_file, dump_file, log_file, elements, potential_path = (
             self._prepare_simulation_env(structure, potential)
         )
@@ -129,13 +132,33 @@ class LammpsEngine(BaseEngine):
             temp_dir = Path(ctx.name) if hasattr(ctx, "name") else data_file.parent
             input_script_path = temp_dir / "input.lmp"
 
+            # Restart logic
+            restart_file = temp_dir / "lammps.restart"
+            read_restart = restart_file if restart_file.exists() and resume_from_step is not None else None
+
+            # Convert Thresholds obj to dict to cleanly pass
+            threshold_kwargs = {}
+            if thresholds is not None:
+                threshold_kwargs = thresholds.model_dump()
+
             with input_script_path.open("w") as f:
-                self.generator.write_script(f, potential_path, data_file, dump_file, elements)
+                self.generator.write_script(
+                    f,
+                    potential_path,
+                    data_file,
+                    dump_file,
+                    elements,
+                    use_fix_invoke=use_fix_invoke,
+                    thresholds=threshold_kwargs,
+                    resume_from_step=resume_from_step,
+                    restart_file=restart_file,
+                    read_restart=read_restart,
+                    eval_dir=temp_dir
+                )
 
                 resume_step = resume_from_step
                 if resume_step is not None:
                     # Write custom variables or commands for seamless resume
-                    # In a real implementation we would load a restart file.
                     # Here we append a print statement to indicate resume logic.
                     f.write(f"\nprint 'Resuming from step {resume_step}'\n")
 
@@ -181,9 +204,8 @@ class LammpsEngine(BaseEngine):
                     # If using fix halt, checking step count is a proxy for early termination
                     halted = step < n_steps_target
 
-                # Evaluate two-tier thresholds if provided in config overrides (mock implementation)
-                # If max_gamma exceeds the threshold, we halt manually if LAMMPS didn't.
-                if "threshold_call_dft" in kwargs and max_gamma > kwargs["threshold_call_dft"]:
+                # Two-tier threshold verification backup
+                if thresholds is not None and max_gamma > thresholds.threshold_call_dft:
                     halted = True
 
                 # Result

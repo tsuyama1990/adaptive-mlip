@@ -4,7 +4,8 @@ from pathlib import Path
 from pyacemaker.domain_models.constants import DANGEROUS_PATH_CHARS, DEFAULT_RAM_DISK_PATH
 
 
-def validate_path_safe(path: Path) -> Path:  # noqa: C901
+# ruff: noqa: C901
+def validate_path_safe(path: Path) -> Path:
     """
     Ensures path is safe using strict resolution and character allowlisting.
     Centralized utility for path validation.
@@ -26,6 +27,13 @@ def validate_path_safe(path: Path) -> Path:  # noqa: C901
         msg = f"Path traversal attempt detected (parent directory reference): {path}"
         raise ValueError(msg)
 
+    # Check absolute path prefixes to ensure we don't start with dangerous roots not in allowed directly
+    tmp_path_str = tempfile.gettempdir()
+    shm_path_str = DEFAULT_RAM_DISK_PATH
+    if path.is_absolute() and not str(path).startswith((tmp_path_str, shm_path_str, str(Path.cwd().resolve()))):
+        msg = f"Path attempts to access external root: {path}"
+        raise ValueError(msg)
+
     if any(c in s for c in DANGEROUS_PATH_CHARS):
         msg = f"Path contains invalid characters: {path}"
         raise ValueError(msg)
@@ -40,23 +48,19 @@ def validate_path_safe(path: Path) -> Path:  # noqa: C901
         msg = f"Symlink path traversal attacks detected: {path}"
         raise ValueError(msg)
 
+    import os
     try:
-        # Canonicalize path.
-        # Enforce strict=True if the path exists to catch symlink attacks immediately.
-        # If it doesn't exist (e.g. output file), we must resolve based on parent.
-        if path.exists():
-            resolved = path.resolve(strict=True)
-        # For non-existent files, check parent
-        elif path.parent.exists():
-            resolved_parent = path.parent.resolve(strict=True)
-            # Combine resolved parent with filename
-            resolved = resolved_parent / path.name
-        else:
-            # If even parent doesn't exist, this is likely unsafe or too deep
-            # Fallback to loose resolve but we will check containment
-            resolved = path.resolve(strict=False)
+        # Use realpath to resolve all symlinks safely
+        real_path_str = os.path.realpath(str(path))
+        resolved = Path(real_path_str)
+
+        # Verify parent exists if file doesn't
+        if not resolved.exists() and not resolved.parent.exists():
+            _raise_parent_error(path)
 
     except Exception as e:
+        if isinstance(e, ValueError):
+            raise
         msg = f"Invalid path resolution: {path}"
         raise ValueError(msg) from e
 
@@ -80,3 +84,7 @@ def validate_path_safe(path: Path) -> Path:  # noqa: C901
         raise ValueError(msg)
 
     return resolved
+
+def _raise_parent_error(path: Path) -> None:
+    msg = f"Parent directory does not exist for resolution: {path}"
+    raise ValueError(msg)

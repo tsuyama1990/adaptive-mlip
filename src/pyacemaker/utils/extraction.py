@@ -1,3 +1,5 @@
+from typing import Any
+
 import numpy as np
 from ase import Atoms
 from ase.constraints import FixAtoms
@@ -8,9 +10,10 @@ from pyacemaker.domain_models.workflow import CutoutConfig
 from pyacemaker.utils.embedding import embed_cluster
 
 
-def _pre_relax_buffer(cluster: Atoms, mace_model_path: str | None = None) -> Atoms:
+def _pre_relax_buffer(cluster: Atoms, calculator: Any | None = None, fmax: float = 0.05, steps: int = 50) -> Atoms:
     """
     Relaxes the buffer region (force_weight == 0.0) while keeping the core fixed.
+    Accepts an instantiated calculator and configuration to decouple dependencies.
     """
     import os
     from pathlib import Path
@@ -23,33 +26,15 @@ def _pre_relax_buffer(cluster: Atoms, mace_model_path: str | None = None) -> Ato
     constraint = FixAtoms(indices=core_indices)  # type: ignore[no-untyped-call]
     cluster_copy.set_constraint(constraint)
 
-    calc = None
-    if mace_model_path:
-        try:
-            from mace.calculators import MACECalculator
+    if calculator is None:
+        msg = "Calculator must be provided for pre-relaxation."
+        raise ValueError(msg)
 
-            calc = MACECalculator(model_paths=mace_model_path, device="cpu")
-        except ImportError:
-            pass
-
-    if calc is None:
-        try:
-            from mace.calculators import mace_mp
-
-            calc = mace_mp(model="medium", device="cpu")
-        except ImportError:
-            pass
-
-    if calc is not None:
-        cluster_copy.calc = calc
-    else:
-        # We must not fallback to mock calculators in production code.
-        msg = "MACE calculator could not be initialized for pre-relaxation. Please install mace-torch."
-        raise RuntimeError(msg)
+    cluster_copy.calc = calculator
 
     with Path(os.devnull).open("w") as devnull:
         opt = LBFGS(cluster_copy, logfile=devnull)
-        opt.run(fmax=0.05, steps=50)  # type: ignore[no-untyped-call]
+        opt.run(fmax=fmax, steps=steps)  # type: ignore[no-untyped-call]
 
     return cluster_copy  # type: ignore[no-any-return]
 
@@ -76,7 +61,6 @@ def _passivate_surface(
     new_atoms = []
     margin = 0.4  # Tolerance for bond distance
 
-    # A better approach: Run neighbor_list on the original structure to find all bonds.
     i_indices, j_indices, D_vectors = neighbor_list("ijD", original_structure, cutoff=5.0)  # type: ignore[no-untyped-call]
 
     # Filter only bonds where `i` is in buffer region of our cluster
@@ -125,14 +109,15 @@ def extract_intelligent_cluster(
     structure: Atoms,
     target_atoms: list[int],
     config: CutoutConfig,
-    mace_model_path: str | None = None,
+    calculator: Any | None = None,
 ) -> Atoms:
     """
     Extracts an intelligent local cluster around multiple target atoms,
     relaxing the buffer and passivating the surface.
     """
     if not target_atoms:
-        return structure.copy()  # type: ignore[no-untyped-call, no-any-return]
+        msg = "target_atoms cannot be empty for extraction."
+        raise ValueError(msg)
 
     total_cutoff = config.core_radius + config.buffer_radius
 
@@ -194,7 +179,7 @@ def extract_intelligent_cluster(
         cluster.new_array("c_gamma", cluster_c_gamma)  # type: ignore[no-untyped-call]
 
     if config.enable_pre_relaxation:
-        cluster = _pre_relax_buffer(cluster, mace_model_path=mace_model_path)
+        cluster = _pre_relax_buffer(cluster, calculator=calculator, fmax=config.fmax, steps=config.steps)
 
     if config.enable_passivation:
         cluster = _passivate_surface(

@@ -59,6 +59,8 @@ class ActiveLearningThresholds(BaseModel):
     smooth_steps: int = Field(
         3, description="Consecutive steps required to exceed threshold to exclude thermal noise"
     )
+    max_retries: int = Field(3, description="Maximum number of retries for variable extraction")
+    backoff_base: float = Field(0.1, description="Base value for exponential backoff during retries")
 
 
 class CutoutConfig(BaseModel):
@@ -69,6 +71,10 @@ class CutoutConfig(BaseModel):
     enable_pre_relaxation: bool = True
     enable_passivation: bool = True
     passivation_element: str = "H"
+
+    # Optimization parameters for pre-relaxation
+    fmax: float = Field(0.05, description="Maximum force tolerance for pre-relaxation", gt=0.0)
+    steps: int = Field(50, description="Maximum number of steps for pre-relaxation", gt=0)
 
     @model_validator(mode="after")
     def validate_radii(self) -> "CutoutConfig":
