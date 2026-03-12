@@ -41,8 +41,6 @@ def test_validation_result_valid() -> None:
     assert result.c_ij["C11"] == 200.0
 
 
-
-
 def test_validation_result_missing_fields() -> None:
     with pytest.raises(ValidationError):
         ValidationResult(phonon_stable=True)  # type: ignore[call-arg]

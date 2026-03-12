@@ -212,30 +212,46 @@ class MACEManager(BaseOracle):
 
         from pyacemaker.domain_models.defaults import DEFAULT_POTENTIALS_DIR
 
-        # Canonicalize the path using os.path.realpath to safely unpack symlinks and avoid TOCTOU
-        canonical_path_str = os.path.realpath(model_path)
-        canonical_path = Path(canonical_path_str)
+        # If it's a known string identifier for foundation models, bypass local file verification
+        if model_path in ["mace-mp-0-small", "mace-mp-0-medium", "mace-mp-0-large"]:
+            self.model_path = model_path
+        else:
+            # Canonicalize the path using os.path.realpath to safely unpack symlinks and avoid TOCTOU
+            canonical_path_str = os.path.realpath(model_path)
+            canonical_path = Path(canonical_path_str)
 
-        # Verify containment: ensure the path falls inside the accepted allowed_base_dir.
-        # This prevents traversal attacks (e.g., passing "../../../etc/passwd").
-        allowed_dir = Path(DEFAULT_POTENTIALS_DIR).resolve()
+            # Verify containment: ensure the path falls inside the accepted allowed_base_dir.
+            # This prevents traversal attacks (e.g., passing "../../../etc/passwd").
+            allowed_dir = Path(DEFAULT_POTENTIALS_DIR).resolve()
 
-        # Proceed with containment check
-        if not canonical_path.is_relative_to(allowed_dir):
-            msg = f"MACE model path {canonical_path} is outside allowed directory {allowed_dir}"
-            raise ValueError(msg)
+            # Proceed with containment check
+            if not canonical_path.is_relative_to(allowed_dir):
+                msg = f"MACE model path {canonical_path} is outside allowed directory {allowed_dir}"
+                raise ValueError(msg)
 
-        # We will use `os.path.realpath` as explicitly instructed by the audit.
-        if not canonical_path.exists():
-            msg = f"MACE model path does not exist: {canonical_path}"
-            raise FileNotFoundError(msg)
-        if not canonical_path.is_file():
-            msg = f"MACE model path must be a file: {canonical_path}"
-            raise ValueError(msg)
+            # We will use `os.path.realpath` as explicitly instructed by the audit.
+            if not canonical_path.exists():
+                msg = f"MACE model path does not exist: {canonical_path}"
+                raise FileNotFoundError(msg)
+            if not canonical_path.is_file():
+                msg = f"MACE model path must be a file: {canonical_path}"
+                raise ValueError(msg)
 
-        self.model_path = str(canonical_path)
-        # Mock MACE initialization
+            self.model_path = str(canonical_path)
         self.is_initialized = True
+
+        from mace.calculators import mace_mp  # type: ignore[import-not-found]
+
+        # Determine the model size from the path or name
+        model_size = "medium"
+        if "small" in self.model_path.lower():
+            model_size = "small"
+        elif "large" in self.model_path.lower():
+            model_size = "large"
+
+        # Use the built-in mace_mp factory which handles model downloading and instantiation automatically
+        # To avoid strict path requirements from the basic MACECalculator when running actual evaluations.
+        self.calc = mace_mp(model=model_size, default_dtype="float64", device="cpu")
 
     def compute(self, structures: Iterator[Atoms], batch_size: int = 10) -> Iterator[Atoms]:
         if not isinstance(structures, Iterator):
@@ -247,18 +263,31 @@ class MACEManager(BaseOracle):
         for atoms in structures:
             atoms_copy = atoms.copy()  # type: ignore[no-untyped-call]
 
-            # Mock MACE predictions
-            energy = -10.0 * len(atoms_copy)
-            forces = np.zeros((len(atoms_copy), 3))
+            # Attach calculator and compute properties for real
+            atoms_copy.calc = self.calc
 
-            # Mock uncertainty in c_gamma array
-            c_gamma = np.random.uniform(0.01, 0.1, size=len(atoms_copy))
+            # Trigger calculations
+            try:
+                atoms_copy.get_potential_energy()
+                atoms_copy.get_forces()
 
-            # In a real implementation we would attach a calculator
-            # Here we just mock setting the arrays and attributes
-            atoms_copy.calc = None
-            atoms_copy.info["energy"] = energy
-            atoms_copy.new_array("forces", forces)
+                # Check if c_gamma (uncertainty) is provided by the model (e.g. MACE with uncertainty enabled)
+                if hasattr(atoms_copy.calc, "results") and "c_gamma" in atoms_copy.calc.results:
+                    c_gamma = atoms_copy.calc.results["c_gamma"]
+                elif (
+                    hasattr(atoms_copy.calc, "results")
+                    and "node_energy_variance" in atoms_copy.calc.results
+                ):
+                    c_gamma = atoms_copy.calc.results["node_energy_variance"]
+                else:
+                    # Fallback for models without explicit variance output
+                    c_gamma = np.zeros(len(atoms_copy))
+
+            except Exception:
+                # Handle calculation failure
+                logger.exception("MACEManager inference failed:")
+                c_gamma = np.ones(len(atoms_copy)) * float("inf")
+
             atoms_copy.new_array("c_gamma", c_gamma)
 
             yield atoms_copy

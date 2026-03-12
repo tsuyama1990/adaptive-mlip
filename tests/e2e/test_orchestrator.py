@@ -249,7 +249,7 @@ def test_orchestrator_error_handling_generator(mock_config: PyAceConfig, monkeyp
 
 
 def test_orchestrator_error_handling_oracle_stream(
-    mock_config: PyAceConfig, monkeypatch: Any
+    mock_config: PyAceConfig, tmp_path: Path, caplog: Any, monkeypatch: Any
 ) -> None:
     class FailingOracle(BaseOracle):
         def compute(self, structures: Iterator[Atoms], batch_size: int = 10) -> Iterator[Atoms]:
@@ -260,8 +260,8 @@ def test_orchestrator_error_handling_oracle_stream(
         return (
             FakeGenerator(elements=cfg.structure.elements),
             FailingOracle(),
-            FakeActiveSetSelector(),
-            FakeActiveSetSelector(),
+            FakeTrainer(Path("dummy.yace")),
+            FakeEngine(),
             FakeActiveSetSelector(),
             FakeValidator(),
         )
