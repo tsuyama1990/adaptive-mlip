@@ -18,9 +18,22 @@ class TwoTierEvaluator:
         Evaluate logic called by LAMMPS via fix python/invoke.
         """
         try:
-            # Extract system max_gamma (which should be calculated by pace/mace pair style)
-            # For this mock/real implementation, we assume max_gamma is available as a variable
-            max_gamma = lmp.extract_variable("max_g")
+            max_gamma = None
+            retries = 3
+            import time
+            for attempt in range(retries):
+                try:
+                    max_gamma = lmp.extract_variable("max_g")
+                    break
+                except Exception as err:
+                    if attempt == retries - 1:
+                        msg = "Failed to extract max_g variable after retries."
+                        raise RuntimeError(msg) from err
+                    time.sleep(0.1 * (2 ** attempt)) # exponential backoff
+
+            if max_gamma is None:
+                msg = "Failed to extract max_g variable from LAMMPS."
+                raise RuntimeError(msg)
 
             if max_gamma > self.threshold_call_dft:
                 self.consecutive_exceedances += 1
@@ -40,9 +53,10 @@ class TwoTierEvaluator:
                 )
                 # Trigger halt
                 lmp.command("variable trigger_halt string true")
-        except Exception:
+        except Exception as e:
             logger.exception("TwoTierEvaluator encountered an error")
-            raise
+            msg = "TwoTierEvaluator encountered an error"
+            raise RuntimeError(msg) from e
 
 
 # To use via fix python/invoke, we need a module-level wrapper that instantiates and calls evaluate.

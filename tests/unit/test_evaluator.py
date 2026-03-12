@@ -48,5 +48,5 @@ def test_evaluator_exception_handling() -> None:
     lmp_mock = MagicMock()
     lmp_mock.extract_variable.side_effect = ValueError("Missing variable")
 
-    with pytest.raises(ValueError, match="Missing variable"):
+    with pytest.raises(RuntimeError, match="TwoTierEvaluator encountered an error"):
         evaluator.evaluate(lmp_mock)

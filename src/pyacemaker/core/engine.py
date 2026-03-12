@@ -120,6 +120,16 @@ class LammpsEngine(BaseEngine):
             msg = "override_n_steps must be a non-negative integer"
             raise ValueError(msg)
 
+        if "threshold_call_dft" in kwargs and not isinstance(kwargs["threshold_call_dft"], (int, float)):
+            msg = "threshold_call_dft must be a number"
+            raise ValueError(msg)
+        if "threshold_add_train" in kwargs and not isinstance(kwargs["threshold_add_train"], (int, float)):
+            msg = "threshold_add_train must be a number"
+            raise ValueError(msg)
+        if "smooth_steps" in kwargs and not isinstance(kwargs["smooth_steps"], int):
+            msg = "smooth_steps must be an integer"
+            raise ValueError(msg)
+
         ctx, data_file, dump_file, log_file, elements, potential_path = (
             self._prepare_simulation_env(structure, potential)
         )
@@ -129,13 +139,37 @@ class LammpsEngine(BaseEngine):
             temp_dir = Path(ctx.name) if hasattr(ctx, "name") else data_file.parent
             input_script_path = temp_dir / "input.lmp"
 
+            # Restart logic
+            restart_file = temp_dir / "lammps.restart"
+            read_restart = restart_file if restart_file.exists() and resume_from_step is not None else None
+
+            # Get threshold kwargs for evaluator wrapper
+            thresholds = {}
+            if "threshold_call_dft" in kwargs:
+                thresholds["threshold_call_dft"] = kwargs["threshold_call_dft"]
+            if "threshold_add_train" in kwargs:
+                thresholds["threshold_add_train"] = kwargs["threshold_add_train"]
+            if "smooth_steps" in kwargs:
+                thresholds["smooth_steps"] = kwargs["smooth_steps"]
+
             with input_script_path.open("w") as f:
-                self.generator.write_script(f, potential_path, data_file, dump_file, elements)
+                self.generator.write_script(
+                    f,
+                    potential_path,
+                    data_file,
+                    dump_file,
+                    elements,
+                    use_fix_invoke=use_fix_invoke,
+                    thresholds=thresholds,
+                    resume_from_step=resume_from_step,
+                    restart_file=restart_file,
+                    read_restart=read_restart,
+                    eval_dir=temp_dir
+                )
 
                 resume_step = resume_from_step
                 if resume_step is not None:
                     # Write custom variables or commands for seamless resume
-                    # In a real implementation we would load a restart file.
                     # Here we append a print statement to indicate resume logic.
                     f.write(f"\nprint 'Resuming from step {resume_step}'\n")
 
@@ -181,8 +215,7 @@ class LammpsEngine(BaseEngine):
                     # If using fix halt, checking step count is a proxy for early termination
                     halted = step < n_steps_target
 
-                # Evaluate two-tier thresholds if provided in config overrides (mock implementation)
-                # If max_gamma exceeds the threshold, we halt manually if LAMMPS didn't.
+                # Two-tier threshold verification backup
                 if "threshold_call_dft" in kwargs and max_gamma > kwargs["threshold_call_dft"]:
                     halted = True
 

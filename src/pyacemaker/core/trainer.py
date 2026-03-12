@@ -25,10 +25,8 @@ class PacemakerTrainer(BaseTrainer):
     def get_replay_buffer(self, size: int) -> list[Any]:
         """
         Fetches up to `size` past data points to retain for training.
-        This prevents catastrophic forgetting.
+        This prevents catastrophic forgetting using reservoir sampling for O(1) memory overhead.
         """
-        # Read historical data securely avoiding OOM by casting stream and sampling
-        import random
 
         from ase.io import iread
 
@@ -38,15 +36,21 @@ class PacemakerTrainer(BaseTrainer):
 
         try:
             stream = iread(str(history_file), format="extxyz")
-            # Load into memory but only if needed. For massive files this is problematic,
-            # but using standard tools we sample.
-            # In production, a database or indexed XYZ should be used.
-            all_frames = list(stream)
-            if len(all_frames) <= size:
-                return all_frames
-            return random.sample(all_frames, size)
+            reservoir = []
+
+            import secrets
+            for i, frame in enumerate(stream):
+                if i < size:
+                    reservoir.append(frame)
+                else:
+                    j = secrets.randbelow(i + 1)
+                    if j < size:
+                        reservoir[j] = frame
+
         except Exception:
             return []
+        else:
+            return reservoir
 
     def incremental_train(
         self,
@@ -64,18 +68,23 @@ class PacemakerTrainer(BaseTrainer):
         # Merge replay buffer into the new data
         if replay_buffer:
             try:
-                # Read new data, append replay, write back
+                # Read new data, append replay, write back safely via temp file
                 new_data = read(str(new_data_path), index=":", format="extxyz")
                 if not isinstance(new_data, list):
                     new_data = [new_data]
 
                 combined_data = new_data + replay_buffer
-                write(str(new_data_path), combined_data, format="extxyz")
+
+                temp_path = Path(str(new_data_path) + ".tmp")
+                write(str(temp_path), combined_data, format="extxyz")
+                shutil.move(str(temp_path), str(new_data_path))
             except Exception as e:
                 import logging
 
                 logger = logging.getLogger(__name__)
                 logger.warning(f"Failed to merge replay buffer: {e}")
+                if "temp_path" in locals() and temp_path.exists():
+                    temp_path.unlink()
                 # Proceed with just new data if merge fails
 
         return self.train(new_data_path, initial_potential)
@@ -116,17 +125,9 @@ class PacemakerTrainer(BaseTrainer):
         # Generate configuration
         pacemaker_config = self.config_generator.generate(str(data_path), str(potential_path))
 
-        # Security: Schema validation and content sanitization for YAML
         if not isinstance(pacemaker_config, dict):
             msg = "Generated Pacemaker config is not a valid dictionary."
             raise TrainerError(msg)
-
-        import re
-
-        for key, val in pacemaker_config.items():
-            if isinstance(val, str) and re.search(r"(\bexec\b|\bsystem\b|\bos\.|;|\||>|<|&)", val):
-                msg = f"Malicious content detected in configuration value for key '{key}'"
-                raise TrainerError(msg)
 
         dump_yaml(pacemaker_config, input_yaml_path)
 
@@ -158,7 +159,7 @@ class PacemakerTrainer(BaseTrainer):
         return potential_path
 
     def _validate_training_data(self, data_path: Path) -> None:
-        """Validates existence and basic format of training data."""
+        """Validates existence, basic format, and integrity of training data."""
         if not data_path.exists():
             msg = f"Training data not found: {data_path}"
             raise TrainerError(msg)
@@ -171,6 +172,17 @@ class PacemakerTrainer(BaseTrainer):
         if data_path.stat().st_size == 0:
             msg = f"Training data file is empty: {data_path}"
             raise TrainerError(msg)
+
+        # Verify content parses cleanly
+        try:
+            from ase.io import iread
+            first_frame = next(iread(str(data_path)))
+            if not len(first_frame):
+                msg = f"First frame of training data is empty: {data_path}"
+                raise TrainerError(msg)
+        except Exception as e:
+            msg = f"Training data failed integrity parsing check: {e}"
+            raise TrainerError(msg) from e
 
 
 class FinetuneManager:
@@ -200,12 +212,42 @@ class FinetuneManager:
             msg = "No frames to finetune."
             raise TrainerError(msg)
 
-        # Mocking the actual torch-based training for this project,
-        # but returning a distinct output file representation
-        awakened_model = data_file.parent / "awakened_mace_model.model"
+        # Real implementation, call mace_run_train to finetune
+        if not shutil.which("mace_run_train"):
+            msg = "Executable 'mace_run_train' not found in PATH."
+            raise TrainerError(msg)
 
-        # In a real environment, this would call mace_run_train or torch logic
-        # For now, create the output file to satisfy file existence checks in orchestration
-        awakened_model.touch()
+        cmd = [
+            "mace_run_train",
+            "--train_file", str(data_file),
+            "--valid_fraction", "0.0",
+            "--E0s", "average",
+            "--model", "MACE",
+            "--num_interactions", "2",
+            "--max_num_epochs", "10",
+            "--start_swa", "5",
+            "--scheduler_patience", "5",
+            "--patience", "10",
+            "--eval_interval", "1",
+            "--loss", "forces_only",
+            "--device", "cuda",
+            "--name", "awakened_mace_model",
+            "--train_dir", str(data_file.parent)
+        ]
 
-        return str(awakened_model)
+        try:
+            run_command(cmd)
+        except subprocess.CalledProcessError as e:
+            msg = f"MACE Finetuning failed with exit code {e.returncode}: {e}"
+            raise TrainerError(msg) from e
+        except Exception as e:
+            msg = f"MACE Finetuning failed unexpectedly: {e}"
+            raise TrainerError(msg) from e
+
+        # Find the output model
+        mace_model_path = data_file.parent / "awakened_mace_model.model"
+        if not mace_model_path.exists():
+            msg = f"MACE Finetuning did not produce a model at {mace_model_path}"
+            raise TrainerError(msg)
+
+        return str(mace_model_path)

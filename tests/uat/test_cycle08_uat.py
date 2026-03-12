@@ -92,7 +92,7 @@ def test_scenario_phase3_cutout() -> None:
 
         with patch("pyacemaker.utils.extraction._pre_relax_buffer", return_value=atoms):
             cluster = extract_intelligent_cluster(
-                atoms, target_atoms, config, mace_model_path=str(model_file)
+                atoms, target_atoms, config, calculator=getattr(mace_manager, "calc", None)
             )
 
         weights = cluster.get_array("force_weight")  # type: ignore[no-untyped-call]
@@ -102,14 +102,24 @@ def test_scenario_phase3_cutout() -> None:
         assert len(symbols) > 0
 
 
+@patch("pyacemaker.core.trainer.run_command")
+@patch("pyacemaker.core.trainer.shutil.which")
 @patch("pyacemaker.core.engine.LammpsDriver")
-def test_scenario_phase4_resume(mock_driver: MagicMock, tmp_path: Path) -> None:
+def test_scenario_phase4_resume(mock_driver: MagicMock, mock_which: MagicMock, mock_run: MagicMock, tmp_path: Path) -> None:
     from ase import Atoms
     from ase.io import write
+
+    mock_which.return_value = "/bin/mace_run_train"
+
+    def side_effect_run(cmd: list[str]) -> None:
+        (tmp_path / "awakened_mace_model.model").touch()
+
+    mock_run.side_effect = side_effect_run
 
     finetune_mgr = FinetuneManager()
     dataset_path = tmp_path / "dataset.xyz"
     write(str(dataset_path), Atoms("Fe"), format="extxyz")
+
     awakened_model = finetune_mgr.finetune(dataset_path)
     assert str(tmp_path / "awakened_mace_model.model") in awakened_model
 
