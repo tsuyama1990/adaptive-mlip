@@ -41,8 +41,10 @@ def test_scenario_phase1_distillation() -> None:
 
         with patch.object(
             pyacemaker.domain_models.defaults, "DEFAULT_POTENTIALS_DIR", str(pot_dir.resolve())
-        ):
+        ), patch("mace.calculators.MACECalculator", create=True) as MockMace:
             mace_manager = MACEManager(str(model_file))
+            mace_manager.calc = MockMace.return_value
+            mace_manager.calc.results = {"c_gamma": __import__('numpy').zeros(8)}
 
         atoms1 = Atoms("Fe", cell=[2, 2, 2], pbc=True)
         atoms2 = Atoms("Pt", cell=[2, 2, 2], pbc=True)
@@ -78,8 +80,11 @@ def test_scenario_phase3_cutout() -> None:
 
         with patch.object(
             pyacemaker.domain_models.defaults, "DEFAULT_POTENTIALS_DIR", str(pot_dir.resolve())
-        ):
+        ), patch("mace.calculators.MACECalculator", create=True) as MockMace:
             mace_manager = MACEManager(str(model_file))
+            mace_manager.calc = MockMace.return_value
+            mace_manager.calc.results = {"c_gamma": __import__('numpy').zeros(8)}
+
     dft_manager = MagicMock(spec=DFTManager)
 
     oracle = TieredOracle(mace_manager, dft_manager, thresholds)
@@ -90,9 +95,10 @@ def test_scenario_phase3_cutout() -> None:
 
     import numpy as np
 
-    with patch("pyacemaker.core.oracle.np.random.uniform", return_value=np.array([0.1, 0.1])):
-        gen = oracle.compute(iter([atoms]))
-        _result = next(gen)
+    mace_manager.calc.results = {"c_gamma": np.array([0.1, 0.1])}
+
+    gen = oracle.compute(iter([atoms]))
+    _result = next(gen)
 
     # max_g = 0.1 > 0.05, so it falls back to DFT
     dft_manager.compute.assert_called()
