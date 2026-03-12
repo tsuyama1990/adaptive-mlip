@@ -34,10 +34,30 @@ def test_scenario_phase1_distillation() -> None:
         with model_file.open("w") as f:
             f.write("dummy")
 
-        import pyacemaker.domain_models.defaults
+        from typing import Any
 
-        with patch.object(
-            pyacemaker.domain_models.defaults, "DEFAULT_POTENTIALS_DIR", str(pot_dir.resolve())
+        import numpy as np
+
+        import pyacemaker.domain_models.defaults
+        class FakeMACEModel:
+            def get_property(self, name: str, atoms: Any | None = None, allow_calculation: bool = True) -> Any:
+                if name == "node_energy_variance":
+                    if hasattr(self, "variance_fixed"):
+                        return self.variance_fixed
+                    return np.random.uniform(0.01, 0.1, size=len(atoms)) if atoms else np.zeros(0)
+                return None
+
+            def get_potential_energy(self, atoms: Any | None = None, force_consistent: bool = False) -> float:
+                return -10.0 * len(atoms) if atoms else 0.0
+
+            def get_forces(self, atoms: Any | None = None) -> Any:
+                return np.zeros((len(atoms), 3)) if atoms else np.zeros((0, 3))
+
+        with (
+            patch.object(
+                pyacemaker.domain_models.defaults, "DEFAULT_POTENTIALS_DIR", str(pot_dir.resolve())
+            ),
+            patch("mace.calculators.mace_mp", return_value=FakeMACEModel()),
         ):
             mace_manager = MACEManager(str(model_file))
 
@@ -69,10 +89,31 @@ def test_scenario_phase3_cutout() -> None:
         with model_file.open("w") as f:
             f.write("dummy")
 
-        import pyacemaker.domain_models.defaults
+        from typing import Any
 
-        with patch.object(
-            pyacemaker.domain_models.defaults, "DEFAULT_POTENTIALS_DIR", str(pot_dir.resolve())
+        import numpy as np
+
+        import pyacemaker.domain_models.defaults
+        class FakeMACEModel:
+            def __init__(self) -> None:
+                self.variance_fixed = np.array([0.1, 0.1])
+
+            def get_property(self, name: str, atoms: Any | None = None, allow_calculation: bool = True) -> Any:
+                if name == "node_energy_variance":
+                    return self.variance_fixed
+                return None
+
+            def get_potential_energy(self, atoms: Any | None = None, force_consistent: bool = False) -> float:
+                return -10.0 * len(atoms) if atoms else 0.0
+
+            def get_forces(self, atoms: Any | None = None) -> Any:
+                return np.zeros((len(atoms), 3)) if atoms else np.zeros((0, 3))
+
+        with (
+            patch.object(
+                pyacemaker.domain_models.defaults, "DEFAULT_POTENTIALS_DIR", str(pot_dir.resolve())
+            ),
+            patch("mace.calculators.mace_mp", return_value=FakeMACEModel()),
         ):
             mace_manager = MACEManager(str(model_file))
 
@@ -82,9 +123,8 @@ def test_scenario_phase3_cutout() -> None:
 
         oracle = TieredOracle(mace_manager, dft_manager, thresholds)
 
-        with patch("pyacemaker.core.oracle.np.random.uniform", return_value=np.array([0.1, 0.1])):
-            gen = oracle.compute(iter([atoms]))
-            _result = next(gen)
+        gen = oracle.compute(iter([atoms]))
+        _result = next(gen)
 
         dft_manager.compute.assert_called()
 
@@ -105,7 +145,9 @@ def test_scenario_phase3_cutout() -> None:
 @patch("pyacemaker.core.trainer.run_command")
 @patch("pyacemaker.core.trainer.shutil.which")
 @patch("pyacemaker.core.engine.LammpsDriver")
-def test_scenario_phase4_resume(mock_driver: MagicMock, mock_which: MagicMock, mock_run: MagicMock, tmp_path: Path) -> None:
+def test_scenario_phase4_resume(
+    mock_driver: MagicMock, mock_which: MagicMock, mock_run: MagicMock, tmp_path: Path
+) -> None:
     from ase import Atoms
     from ase.io import write
 

@@ -4,7 +4,7 @@ from pathlib import Path
 from pyacemaker.domain_models.constants import DANGEROUS_PATH_CHARS, DEFAULT_RAM_DISK_PATH
 
 
-def validate_path_safe(path: Path) -> Path:  # noqa: C901
+def validate_path_safe(path: Path) -> Path:  # noqa: C901, PLR0912
     """
     Ensures path is safe using strict resolution and character allowlisting.
     Centralized utility for path validation.
@@ -29,7 +29,9 @@ def validate_path_safe(path: Path) -> Path:  # noqa: C901
     # Check absolute path prefixes to ensure we don't start with dangerous roots not in allowed directly
     tmp_path_str = tempfile.gettempdir()
     shm_path_str = DEFAULT_RAM_DISK_PATH
-    if path.is_absolute() and not str(path).startswith((tmp_path_str, shm_path_str, str(Path.cwd().resolve()))):
+    if path.is_absolute() and not str(path).startswith(
+        (tmp_path_str, shm_path_str, str(Path.cwd().resolve()))
+    ):
         msg = f"Path attempts to access external root: {path}"
         raise ValueError(msg)
 
@@ -59,13 +61,17 @@ def validate_path_safe(path: Path) -> Path:  # noqa: C901
             # Combine resolved parent with filename
             resolved = resolved_parent / path.name
         else:
-            # If even parent doesn't exist, this is definitively unsafe for creation in secure contexts
-            msg = f"Parent directory does not exist for resolution: {path}"
-            raise ValueError(msg)
+            # We defer raising inside the block to avoid TRY301
+            resolved = None
 
     except Exception as e:
         msg = f"Invalid path resolution: {path}"
         raise ValueError(msg) from e
+
+    if resolved is None:
+        # If even parent doesn't exist, this is definitively unsafe for creation in secure contexts
+        msg = f"Parent directory does not exist for resolution: {path}"
+        raise ValueError(msg)
 
     base_dir = Path.cwd().resolve()
 

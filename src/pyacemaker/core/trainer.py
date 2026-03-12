@@ -39,6 +39,7 @@ class PacemakerTrainer(BaseTrainer):
             reservoir = []
 
             import secrets
+
             for i, frame in enumerate(stream):
                 if i < size:
                     reservoir.append(frame)
@@ -173,13 +174,19 @@ class PacemakerTrainer(BaseTrainer):
             msg = f"Training data file is empty: {data_path}"
             raise TrainerError(msg)
 
+        def _raise_empty() -> None:
+            msg = f"First frame of training data is empty: {data_path}"
+            raise TrainerError(msg)
+
         # Verify content parses cleanly
         try:
             from ase.io import iread
+
             first_frame = next(iread(str(data_path)))
             if not len(first_frame):
-                msg = f"First frame of training data is empty: {data_path}"
-                raise TrainerError(msg)
+                _raise_empty()
+        except TrainerError:
+            raise
         except Exception as e:
             msg = f"Training data failed integrity parsing check: {e}"
             raise TrainerError(msg) from e
@@ -219,20 +226,34 @@ class FinetuneManager:
 
         cmd = [
             "mace_run_train",
-            "--train_file", str(data_file),
-            "--valid_fraction", "0.0",
-            "--E0s", "average",
-            "--model", "MACE",
-            "--num_interactions", "2",
-            "--max_num_epochs", "10",
-            "--start_swa", "5",
-            "--scheduler_patience", "5",
-            "--patience", "10",
-            "--eval_interval", "1",
-            "--loss", "forces_only",
-            "--device", "cuda",
-            "--name", "awakened_mace_model",
-            "--train_dir", str(data_file.parent)
+            "--train_file",
+            str(data_file),
+            "--valid_fraction",
+            "0.0",
+            "--E0s",
+            "average",
+            "--model",
+            "MACE",
+            "--num_interactions",
+            "2",
+            "--max_num_epochs",
+            "10",
+            "--start_swa",
+            "5",
+            "--scheduler_patience",
+            "5",
+            "--patience",
+            "10",
+            "--eval_interval",
+            "1",
+            "--loss",
+            "forces_only",
+            "--device",
+            "cuda",
+            "--name",
+            "awakened_mace_model",
+            "--train_dir",
+            str(data_file.parent),
         ]
 
         try:

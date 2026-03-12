@@ -18,7 +18,6 @@ from pyacemaker.domain_models.constants import (
 )
 from pyacemaker.domain_models.defaults import (
     DEFAULT_MD_ATOM_STYLE,
-    DEFAULT_MD_BASE_ENERGY,
     DEFAULT_MD_CHECK_INTERVAL,
     DEFAULT_MD_DUMP_FREQ,
     DEFAULT_MD_HYBRID_ZBL_INNER,
@@ -198,14 +197,6 @@ class MDConfig(BaseModel):
         DEFAULT_MD_PDAMP_FACTOR, gt=0.0, description="Pressure damping factor (multiplies timestep)"
     )
 
-    # Mocking Parameters (Audit Requirement) - keeping but noting they should be restricted to test configs
-    base_energy: float = Field(
-        DEFAULT_MD_BASE_ENERGY, description="Baseline energy for mock simulation"
-    )
-    default_forces: list[list[float]] = Field(
-        default=[[0.0, 0.0, 0.0]], description="Default forces for mock simulation"
-    )
-
     # Spec Section 3.4 (Hybrid Potential & OTF)
     hybrid_potential: bool = Field(False, description="Use hybrid potential (ACE + LJ/ZBL)")
     hybrid_params: HybridParams = Field(
@@ -248,16 +239,5 @@ class MDConfig(BaseModel):
             p = Path(self.temp_dir)
             if not p.exists() or not os.access(p, os.W_OK):
                 msg = f"Temporary directory {p} does not exist or is not writable."
-                raise ValueError(msg)
-        return self
-
-    @model_validator(mode="after")
-    def validate_default_forces(self) -> "MDConfig":
-        for f in self.default_forces:
-            if len(f) != 3:
-                msg = "Default forces must be a list of 3D vectors (list of 3 floats)"
-                raise ValueError(msg)
-            if not all(isinstance(x, (int, float)) for x in f):
-                msg = "Default forces elements must be numeric"
                 raise ValueError(msg)
         return self

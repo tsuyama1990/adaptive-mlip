@@ -18,7 +18,7 @@ def get_lj_params(element: str) -> dict[str, float]:
     res = DEFAULT_LJ_PARAMS.get(element, FALLBACK_LJ_PARAMS)
     if isinstance(res, dict):
         return res.copy()
-    return {"sigma": res, "epsilon": res}  # Mock if it's float, actually fallback should be dict
+    return {"sigma": float(res), "epsilon": float(res)}
 
 
 def compute_zbl_energy(el1: str, el2: str, r: float) -> float:

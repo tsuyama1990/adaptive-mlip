@@ -345,10 +345,12 @@ class Orchestrator:
             from mace.calculators import MACECalculator
 
             mace_calc = None
-            try:
-                mace_calc = MACECalculator(model_paths=self.config.workflow.distillation.mace_model_path, device="cpu")
-            except Exception:
-                pass
+            import contextlib
+
+            with contextlib.suppress(Exception):
+                mace_calc = MACECalculator(
+                    model_paths=self.config.workflow.distillation.mace_model_path, device="cpu"
+                )
 
             return extract_intelligent_cluster(
                 structure=halt_structure,
@@ -397,7 +399,7 @@ class Orchestrator:
 
         return self._stream_write(labelled_gen, training_file, batch_size=batch_size, append=True)
 
-    def _refine_potential(  # noqa: PLR0911
+    def _refine_potential(
         self, result: MDSimulationResult, potential_path: Path, paths: dict[str, Path]
     ) -> Path | None:
         """
@@ -478,25 +480,16 @@ class Orchestrator:
             # 3. ACE Incremental Update
             training_file = paths["training"] / FILENAME_TRAINING
 
-            # Try to use incremental_train if it exists and is callable, ignoring mocks that might throw
             if hasattr(self.trainer, "incremental_train") and callable(
                 self.trainer.incremental_train
             ):
-                try:
-                    res = self.trainer.incremental_train(
-                        new_data_path=str(training_file),
-                        strategy_config=self.config.workflow.loop_strategy,
-                        initial_potential=str(potential_path) if potential_path else None,
-                    )
-                    if res:
-                        # Mocks might return themselves (MagicMock), handle strings/Paths safely
-                        if isinstance(res, (str, Path)):
-                            return Path(res)
-                        # if it's a mock or other object just return it
-                        return res  # type: ignore
-                except TypeError:
-                    # In tests where trainer is a MagicMock, TypeError might be thrown if signature doesn't match
-                    pass
+                res = self.trainer.incremental_train(
+                    new_data_path=str(training_file),
+                    strategy_config=self.config.workflow.loop_strategy,
+                    initial_potential=str(potential_path) if potential_path else None,
+                )
+                if res:
+                    return Path(res)
 
             # Fallback to standard train
             return self._train(paths, initial_potential=potential_path)
@@ -567,22 +560,9 @@ class Orchestrator:
                 # Robust checkpointing: load restart file to recover phase space
                 self.logger.info("Attempting recovery via read_restart fallback...")
 
-                # Create a mock/empty result since the real engine would handle the restart file internally
-                # or we return a halted result to trigger refinement if needed.
-                return MDSimulationResult(
-                    energy=0.0,
-                    forces=[[0.0, 0.0, 0.0]],
-                    stress=[0.0] * 6,
-                    halted=True,
-                    max_gamma=self.config.workflow.otf.uncertainty_threshold + 1.0,
-                    n_steps=0,
-                    temperature=0.0,
-                    trajectory_path="",
-                    halt_structure_path=str(self.state_manager.current_potential)
-                    if self.state_manager.current_potential
-                    else "",
-                    halt_step=0,
-                )
+                # Return None to indicate unrecoverable crash without a proper result,
+                # as the orchestrator should gracefully restart rather than forging a result.
+                return None
 
         return None
 
@@ -594,15 +574,7 @@ class Orchestrator:
             self.logger.info(f"MD Halted at step {result.n_steps}. Triggering refinement.")
             new_potential = self._refine_potential(result, deployed_potential, paths)
             if new_potential:
-                # Mock objects used in testing bypass exists() safely by raising/returning truthy
-                # but we should handle it more robustly
-                exists = True
-                import contextlib
-
-                with contextlib.suppress(Exception):
-                    exists = new_potential.exists()
-
-                if not exists:
+                if not new_potential.exists():
                     self.logger.error(f"Refined potential path {new_potential} does not exist!")
                 else:
                     self.state_manager.current_potential = new_potential

@@ -6,7 +6,7 @@ from pyacemaker.domain_models.constants import ERR_M3GNET_PRED_FAIL
 class M3GNetWrapper:
     """
     Wrapper for M3GNet structure prediction.
-    Currently uses a mock implementation (ase.build.bulk) for 'cold start'.
+    Uses ASE build tools directly for 'cold start' initialization without mocks.
     """
 
     def predict_structure(self, composition: str) -> Atoms:
@@ -19,36 +19,20 @@ class M3GNetWrapper:
         Raises:
             RuntimeError: If prediction fails after retries.
         """
-        # Validate composition string ensuring no injected shells or unsafe characters exist
         import re
 
+        from ase.build import bulk
+
+        # Validate composition string ensuring no injected shells or unsafe characters exist
         if not re.match(r"^[A-Za-z0-9]+$", composition):
             msg = f"Invalid composition string format: {composition}"
             raise ValueError(msg)
 
-        # Simulated retry logic with exponential backoff could go here
-        # For now, we mock the call.
-        try:
-            return self._mock_predict(composition)
-        except Exception as e:
-            # In real impl, we would retry
-            raise RuntimeError(ERR_M3GNET_PRED_FAIL.format(composition=composition)) from e
-
-    def _mock_predict(self, composition: str) -> Atoms:
-        from ase.build import bulk
-
-        # Simple Mock logic
-        if composition == "FePt":
-            return Atoms(
-                "FePt",
-                positions=[[0, 0, 0], [1.9, 1.9, 1.9]],
-                cell=[3.8, 3.8, 3.8],
-                pbc=True,
-            )
-
-        # Fallback to bulk or simple cubic
         try:
             return bulk(composition)
-        except Exception:
-            # Very simple fallback
-            return Atoms(composition, cell=[5.0, 5.0, 5.0], pbc=True)
+        except Exception as e:
+            # For complex compositions or alloys that bulk() cannot handle directly,
+            # this wrapper should realistically call a true ML structure predictor (like matgl/M3GNet).
+            # To adhere to strict anti-mocking, if bulk() fails, we explicitly raise the prediction error
+            # rather than returning an arbitrary dummy cubic cell.
+            raise RuntimeError(ERR_M3GNET_PRED_FAIL.format(composition=composition)) from e
