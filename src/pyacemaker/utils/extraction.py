@@ -41,11 +41,9 @@ def _pre_relax_buffer(cluster: Atoms) -> Atoms:
 
 
 def _passivate_surface(cluster: Atoms, element: str = "H") -> Atoms:
-
     """
     Passivates the surface of the cluster by adding passivating atoms (e.g. H) to undercoordinated atoms.
     """
-    import numpy as np
     cluster_copy = cluster.copy()  # type: ignore[no-untyped-call]
 
     # Simple distance-based surface passivation.
@@ -72,7 +70,6 @@ def _passivate_surface(cluster: Atoms, element: str = "H") -> Atoms:
             if norm < 1e-6:
                 # Fallback if atom is exactly at center (rare for buffer)
                 direction = np.array([1.0, 0.0, 0.0])
-                import numpy as np
 
                 norm = np.float64(1.0)
 

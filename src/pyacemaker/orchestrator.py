@@ -487,7 +487,9 @@ class Orchestrator:
                         return res  # type: ignore
                 except TypeError as e:
                     # Log error instead of silently passing
-                    self.logger.warning(f"TypeError during incremental_train: {e}. Falling back to standard train.")
+                    self.logger.warning(
+                        f"TypeError during incremental_train: {e}. Falling back to standard train."
+                    )
 
             # Fallback to standard train
             return self._train(paths, initial_potential=potential_path)

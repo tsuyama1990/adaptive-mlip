@@ -84,7 +84,10 @@ class EONWrapper:
 
         if self.config.mpi_command:
             import logging
-            logging.getLogger(__name__).warning("MPI command handling not yet fully implemented for EON.")
+
+            logging.getLogger(__name__).warning(
+                "MPI command handling not yet fully implemented for EON."
+            )
 
         self._write_file_safe(output_path, "\n".join(config_content))
 

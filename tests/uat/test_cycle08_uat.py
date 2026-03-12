@@ -103,6 +103,7 @@ def test_scenario_phase3_cutout() -> None:
     target_atoms = [0]
 
     from ase.calculators.lj import LennardJones
+
     atoms.calc = LennardJones()
 
     cluster = extract_intelligent_cluster(atoms, target_atoms, config)

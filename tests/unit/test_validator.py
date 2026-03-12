@@ -22,7 +22,9 @@ class TestValidator:
         return MagicMock()
 
     @pytest.fixture
-    def validator(self, mock_phonon_calc: MagicMock, mock_elastic_calc: MagicMock, mock_report_gen: MagicMock) -> Validator:
+    def validator(
+        self, mock_phonon_calc: MagicMock, mock_elastic_calc: MagicMock, mock_report_gen: MagicMock
+    ) -> Validator:
         config = ValidationConfig()
         # Assuming Validator takes instances of calculators and report generator
         return Validator(
@@ -32,7 +34,13 @@ class TestValidator:
             report_generator=mock_report_gen,
         )
 
-    def test_validate_pass(self, validator: Validator, mock_phonon_calc: MagicMock, mock_elastic_calc: MagicMock, mock_report_gen: MagicMock) -> None:
+    def test_validate_pass(
+        self,
+        validator: Validator,
+        mock_phonon_calc: MagicMock,
+        mock_elastic_calc: MagicMock,
+        mock_report_gen: MagicMock,
+    ) -> None:
         mock_phonon_calc.check_stability.return_value = (True, "base64_phonon")
         mock_elastic_calc.calculate_properties.return_value = (
             True,
@@ -61,7 +69,9 @@ class TestValidator:
         mock_report_gen.generate.assert_called_once()
         mock_report_gen.save.assert_called_once()
 
-    def test_validate_fail_phonon(self, validator: Validator, mock_phonon_calc: MagicMock, mock_elastic_calc: MagicMock) -> None:
+    def test_validate_fail_phonon(
+        self, validator: Validator, mock_phonon_calc: MagicMock, mock_elastic_calc: MagicMock
+    ) -> None:
         mock_phonon_calc.check_stability.return_value = (False, "base64_phonon_unstable")
         mock_elastic_calc.calculate_properties.return_value = (
             True,
