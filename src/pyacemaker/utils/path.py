@@ -64,6 +64,8 @@ def validate_path_safe(path: Path) -> Path:  # noqa: C901
             raise ValueError(msg)
 
     except Exception as e:
+        if isinstance(e, ValueError) and str(e).startswith("Parent directory does not exist"):
+            raise
         msg = f"Invalid path resolution: {path}"
         raise ValueError(msg) from e
 

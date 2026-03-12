@@ -181,6 +181,8 @@ class PacemakerTrainer(BaseTrainer):
                 msg = f"First frame of training data is empty: {data_path}"
                 raise TrainerError(msg)
         except Exception as e:
+            if isinstance(e, TrainerError):
+                raise
             msg = f"Training data failed integrity parsing check: {e}"
             raise TrainerError(msg) from e
 
