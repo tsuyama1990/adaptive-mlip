@@ -104,7 +104,7 @@ def test_scenario_phase3_cutout() -> None:
 
     from ase.calculators.lj import LennardJones
 
-    atoms.calc = LennardJones()
+    atoms.calc = LennardJones()  # type: ignore[no-untyped-call]
 
     cluster = extract_intelligent_cluster(atoms, target_atoms, config)
 

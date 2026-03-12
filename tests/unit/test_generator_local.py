@@ -1,3 +1,4 @@
+from typing import Any
 from unittest.mock import MagicMock
 
 from ase import Atoms
@@ -52,10 +53,10 @@ def test_generate_local_md_burst() -> None:
 
     # Mock type(engine)(config)
     class MockEngineClass:
-        def __init__(self, config) -> None:
+        def __init__(self, config) -> None:  # type: ignore[no-untyped-def]
             self.config = config
 
-        def run(self, s, p) -> None:
+        def run(self, s, p) -> Any:  # type: ignore[no-untyped-def]
             return mock_result
 
     real_mock_engine = MockEngineClass(MagicMock())

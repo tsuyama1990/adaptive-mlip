@@ -30,7 +30,7 @@ from tests.conftest import FakeActiveSetSelector, FakeTrainer, FakeValidator
 
 
 # Concrete Fakes for testing
-class FakeGenerator(BaseGenerator):
+class FakeGenerator(BaseGenerator):  # type: ignore[misc]
     def __init__(self, elements: list[str] | None = None) -> None:
         self.elements = elements or ["H"]
 
@@ -49,14 +49,14 @@ class FakeGenerator(BaseGenerator):
             yield base_structure.copy()  # type: ignore[no-untyped-call]
 
 
-class FakeOracle(BaseOracle):
+class FakeOracle(BaseOracle):  # type: ignore[misc]
     def compute(self, structures: Iterator[Atoms], batch_size: int = 10) -> Iterator[Atoms]:
         for atoms in structures:
             atoms.info["energy"] = -10.0
             yield atoms
 
 
-class FakeEngine(BaseEngine):
+class FakeEngine(BaseEngine):  # type: ignore[misc]
     def run(self, structure: Atoms | None, potential: Any, **kwargs: Any) -> MDSimulationResult:
         return MDSimulationResult(
             energy=-10.0,
@@ -243,7 +243,7 @@ def test_orchestrator_error_handling_generator(mock_config: PyAceConfig, monkeyp
 def test_orchestrator_error_handling_oracle_stream(
     mock_config: PyAceConfig, monkeypatch: Any
 ) -> None:
-    class FailingOracle(BaseOracle):
+    class FailingOracle(BaseOracle):  # type: ignore[misc]
         def compute(self, structures: Iterator[Atoms], batch_size: int = 10) -> Iterator[Atoms]:
             msg = "Oracle computation failed"
             raise RuntimeError(msg)

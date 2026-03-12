@@ -106,8 +106,8 @@ def test_strain_policy() -> None:
     base_gen = StructureGenerator(base_config)
     base_atoms = next(base_gen.generate(1))
 
-    vol0 = structures[0].get_volume()  # type: ignore[no-untyped-call]
-    base_vol = base_atoms.get_volume()  # type: ignore[no-untyped-call]
+    vol0 = structures[0].get_volume()
+    base_vol = base_atoms.get_volume()
     assert vol0 != base_vol
 
 
@@ -123,7 +123,7 @@ def test_generator_invalid_composition() -> None:
         msg = "Simulated failure"
         raise ValueError(msg)
 
-    generator.m3gnet.predict_structure = mock_raise  # type: ignore
+    generator.m3gnet.predict_structure = mock_raise
 
     # Updated error message expectation
     with pytest.raises(GeneratorError, match="Base generator failed"):

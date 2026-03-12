@@ -13,7 +13,7 @@ from pyacemaker.core.policy import (
 from pyacemaker.domain_models.structure import StructureConfig
 
 
-class MockPolicy(SafeBasePolicy):
+class MockPolicy(SafeBasePolicy):  # type: ignore[misc]
     def __init__(self, name: str) -> None:
         super().__init__()
         self.name = name
@@ -118,7 +118,7 @@ def test_md_micro_burst_fallback() -> None:
     assert len(results) == 1
     # Check if rattled (positions changed) or fallback logic executed
     # Rattle changes positions.
-    assert results[0].get_chemical_symbols() == ["H"]  # type: ignore[no-untyped-call]
+    assert results[0].get_chemical_symbols() == ["H"]
 
 
 def test_normal_mode_policy_fallback() -> None:

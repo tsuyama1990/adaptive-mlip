@@ -9,7 +9,7 @@ from pyacemaker.core.validator import LammpsInputValidator
 class TestLammpsInputValidator:
     def test_validate_structure_none(self) -> None:
         with pytest.raises(ValueError, match="Structure is None"):
-            LammpsInputValidator.validate_structure(None)  # type: ignore[arg-type]
+            LammpsInputValidator.validate_structure(None)
 
     def test_validate_structure_type_error(self) -> None:
         with pytest.raises(TypeError, match="Invalid structure type"):

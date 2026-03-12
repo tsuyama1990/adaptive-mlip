@@ -13,7 +13,7 @@ def test_rattle() -> None:
     new_atoms = rattle(atoms, stdev=0.1)
 
     # Check that positions changed
-    assert not np.allclose(original_pos, new_atoms.get_positions())  # type: ignore[no-untyped-call]
+    assert not np.allclose(original_pos, new_atoms.get_positions())
 
     # Check that cell is same
     assert np.allclose(atoms.get_cell(), new_atoms.get_cell())  # type: ignore[no-untyped-call]
@@ -36,7 +36,7 @@ def test_apply_strain() -> None:
 
     # New cell should be 1.1 * old_cell (since I + 0.1*I = 1.1*I)
     expected_cell = original_cell * 1.1
-    assert np.allclose(new_atoms.get_cell(), expected_cell)  # type: ignore[no-untyped-call]
+    assert np.allclose(new_atoms.get_cell(), expected_cell)
 
     # Check error
     with pytest.raises(ValueError, match="3x3 matrix"):

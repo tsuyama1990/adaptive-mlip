@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -9,12 +10,12 @@ from pyacemaker.domain_models.validation import ValidationConfig
 
 
 @pytest.fixture
-def validator_dependencies() -> None:
+def validator_dependencies() -> Any:
     return {"phonon": MagicMock(), "elastic": MagicMock(), "report": MagicMock()}
 
 
 @pytest.fixture
-def validator(validator_dependencies) -> None:
+def validator(validator_dependencies) -> Any:  # type: ignore[no-untyped-def]
     config = ValidationConfig()
     return Validator(
         config,
@@ -24,7 +25,7 @@ def validator(validator_dependencies) -> None:
     )
 
 
-def test_uat_07_01_validate_potential_pass(validator, validator_dependencies) -> None:
+def test_uat_07_01_validate_potential_pass(validator, validator_dependencies) -> None:  # type: ignore[no-untyped-def]
     """Scenario 07-01: 'Validate Potential' (PASS)"""
     # 1. Preparation
     potential_path = Path("test_potential.yace")
@@ -62,7 +63,7 @@ def test_uat_07_01_validate_potential_pass(validator, validator_dependencies) ->
         potential_path.unlink()
 
 
-def test_uat_07_02_unstable_detection(validator, validator_dependencies) -> None:
+def test_uat_07_02_unstable_detection(validator, validator_dependencies) -> None:  # type: ignore[no-untyped-def]
     """Scenario 07-02: 'Unstable Detection'"""
     # 1. Preparation
     potential_path = Path("test_unstable.yace")
