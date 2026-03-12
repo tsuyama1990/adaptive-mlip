@@ -163,13 +163,13 @@ class LammpsScriptGenerator:
             if self.config.ramping.press_end is not None:
                 press_end = self.config.ramping.press_end
 
-        # Use configurable velocity seed
-        buffer.write(f"velocity all create {temp_start} {self.config.velocity_seed}\n")
+        # Use configurable velocity seed ONLY if not resuming
+        # We handle this conditionally in the main write_script method now
         buffer.write(
             f"fix npt all npt temp {temp_start} {temp_end} {tdamp} "
             f"iso {press_start} {press_end} {pdamp}\n"
         )
-        buffer.write(f"run {self.config.n_steps}\n")
+        # Note: the run command is written dynamically depending on resume status
 
     def _gen_output_setup(self, buffer: TextIO, dump_file: Path) -> None:
         """Generates output settings (thermo and dump)."""
@@ -224,8 +224,50 @@ class LammpsScriptGenerator:
         # Output setup MUST come before run
         self._gen_output_setup(buffer, dump_file)
 
+        # Write velocity and run conditionally
+        # If resume is true, these are skipped/handled externally
+
+        # Calculate start temp for velocity
+        temp_start = self.config.temperature
+        if self.config.ramping and self.config.ramping.temp_start is not None:
+            temp_start = self.config.ramping.temp_start
+
+        buffer.write(f"velocity all create {temp_start} {self.config.velocity_seed}\n")
+
+        self._gen_execution(buffer, elements)
+        buffer.write(f"run {self.config.n_steps}\n")
+
+        self._gen_post_run_diagnostics(buffer)
+
+    def write_script_resume(
+        self,
+        buffer: TextIO,
+        potential_path: Path,
+        restart_file: Path,
+        dump_file: Path,
+        elements: list[str],
+        resume_step: int,
+    ) -> None:
+        """
+        Writes a script specifically for resuming from a restart file.
+        """
+        quoted_restart = self._quote(str(restart_file))
+        buffer.write("clear\n")
+        buffer.write(f"read_restart {quoted_restart}\n")
+
+        self._gen_potential(buffer, potential_path, elements)
+        self._gen_settings(buffer)
+        self._gen_watchdog(buffer, potential_path)
+        self._gen_output_setup(buffer, dump_file)
         self._gen_execution(buffer, elements)
 
+        # We do NOT write velocity create here because it is read from restart
+        # Calculate remaining steps
+        steps_left = max(0, self.config.n_steps - resume_step)
+
+        # Master-Slave resume logic
+        buffer.write("reset_timestep ${step}\n") # step is read from restart
+        buffer.write(f"run {steps_left}\n")
         self._gen_post_run_diagnostics(buffer)
 
     def write_minimization_script(

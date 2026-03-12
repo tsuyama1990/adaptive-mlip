@@ -135,6 +135,11 @@ def test_scenario_phase4_resume(mock_driver: MagicMock, tmp_path: Path) -> None:
     trainer = PacemakerTrainer(t_config)
     strategy = LoopStrategyConfig(replay_buffer_size=100)
 
+    # Need a valid extxyz structure for reading
+    from ase.build import bulk
+    from ase.io import write
+    write(dataset_path, bulk('Fe'), format='extxyz')
+
     with patch.object(trainer, "train") as mock_train:
         mock_train.return_value = tmp_path / "test_pot.yace"
         new_pot = trainer.incremental_train(dataset_path, strategy, initial_potential="init.yace")
@@ -176,4 +181,4 @@ def test_scenario_phase4_resume(mock_driver: MagicMock, tmp_path: Path) -> None:
     engine.run(atoms, pot_path, resume_from_step=1500)
 
     assert len(script_content) == 1
-    assert "Resuming from step 1500" in script_content[0]
+    assert "read_restart" in script_content[0]

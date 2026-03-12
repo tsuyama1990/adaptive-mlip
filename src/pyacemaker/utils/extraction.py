@@ -23,11 +23,9 @@ def _pre_relax_buffer(cluster: Atoms) -> Atoms:
     constraint = FixAtoms(indices=core_indices)  # type: ignore[no-untyped-call]
     cluster_copy.set_constraint(constraint)
 
-    # Apply a mock calculator for the relaxation if one is not attached
     if cluster_copy.calc is None:
-        from ase.calculators.lj import LennardJones
-
-        cluster_copy.calc = LennardJones()  # type: ignore[no-untyped-call]
+        from mace.calculators import mace_mp
+        cluster_copy.calc = mace_mp(model="small", dispersion=False, default_dtype="float32", device="cpu")
 
     # Relax the buffer region
     import os
@@ -43,12 +41,15 @@ def _pre_relax_buffer(cluster: Atoms) -> Atoms:
 def _passivate_surface(cluster: Atoms, element: str = "H") -> Atoms:
     """
     Passivates the surface of the cluster by adding dummy atoms (e.g. H) to undercoordinated atoms.
+    Uses covalent radii to determine missing bonds.
     """
+    from ase.neighborlist import natural_cutoffs
+
     cluster_copy = cluster.copy()  # type: ignore[no-untyped-call]
 
-    # We will just do a simple distance-based passivation mock implementation
-    # Find outer atoms (in the buffer region) that have fewer neighbors
-    i_indices, _j_indices = neighbor_list("ij", cluster_copy, cutoff=2.5)  # type: ignore[no-untyped-call]
+    # Calculate covalent radii sums for cutoffs
+    cutoffs = natural_cutoffs(cluster_copy, mult=1.2) # type: ignore[no-untyped-call]
+    i_indices, j_indices, D_vectors = neighbor_list("ijD", cluster_copy, cutoff=cutoffs)  # type: ignore[no-untyped-call]
 
     weights = cluster_copy.get_array("force_weight")
     buffer_indices = np.where(weights == 0.0)[0]
@@ -57,14 +58,43 @@ def _passivate_surface(cluster: Atoms, element: str = "H") -> Atoms:
 
     for idx in buffer_indices:
         # Number of neighbors for this atom
-        n_neighbors = np.sum(i_indices == idx)
-        # Mock logic: if an atom has fewer than 4 neighbors, add a passivating element
-        if n_neighbors < 4:
-            # We add a dummy atom in a random direction (just for structure generation mock)
-            # In a real scenario, this would follow bonding angles.
+        mask = i_indices == idx
+        n_neighbors = np.sum(mask)
+
+        symbol = cluster_copy.get_chemical_symbols()[idx] # type: ignore[no-untyped-call]
+
+        # Simple heuristic for expected coordination based on valency
+        expected_coord = 6 # Typical for many transition metals and oxides in bulk
+        if symbol in ["O"]:
+            expected_coord = 2
+        elif symbol in ["Mg"]:
+            expected_coord = 6
+        elif symbol in ["Fe", "Pt"]:
+            expected_coord = 8 # BCC/FCC bulk roughly
+
+        if n_neighbors < expected_coord:
+            # We add a dummy atom in the direction of the "missing" bonds.
+            # A simple approach is to find the center of mass of the existing neighbors
+            # and place the passivating atom on the opposite side.
+            neighbors_vecs = D_vectors[mask]
+
+            if len(neighbors_vecs) > 0:
+                # Vector pointing away from the center of mass of neighbors
+                com_vec = np.mean(neighbors_vecs, axis=0)
+                offset = -com_vec
+
+                norm = np.linalg.norm(offset)
+                if norm > 1e-5:
+                    offset = offset / norm * 1.0  # 1.0 Angstrom bond length for H
+                else:
+                    offset = np.random.randn(3)
+                    offset = offset / np.linalg.norm(offset) * 1.0
+            else:
+                # No neighbors, just place it somewhere
+                offset = np.random.randn(3)
+                offset = offset / np.linalg.norm(offset) * 1.0
+
             pos = cluster_copy.positions[idx]
-            offset = np.random.randn(3)
-            offset = offset / np.linalg.norm(offset) * 1.0  # 1.0 Angstrom bond length
             new_pos = pos + offset
 
             new_atoms.append(Atoms(element, positions=[new_pos]))
