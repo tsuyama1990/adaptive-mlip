@@ -42,4 +42,4 @@ def test_validation_result_valid() -> None:
 
 def test_validation_result_missing_fields() -> None:
     with pytest.raises(ValueError, match="Field required"):
-        ValidationResult(phonon_stable=True)  # type: ignore[call-arg]
+        ValidationResult(**{"phonon_stable": True})

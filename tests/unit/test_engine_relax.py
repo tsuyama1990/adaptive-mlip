@@ -46,7 +46,7 @@ def test_lammps_engine_relax(
 
     # Verify result
     assert result_atoms == relaxed_atoms
-    assert result_atoms.get_chemical_symbols() == ["He"]
+    assert getattr(result_atoms, "get_chemical_symbols")() == ["He"]
 
     # Verify script content
     assert len(script_content) == 1

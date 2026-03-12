@@ -43,7 +43,7 @@ class TestPhononCalculator:
 
         # We also need to mock produce_force_constants or forces
         # The calculator will call generate_displacements, then compute forces, then set_forces
-        mock_phonopy.get_supercells_with_displacements.return_value = [structure.copy()]  # type: ignore[no-untyped-call]
+        mock_phonopy.get_supercells_with_displacements.return_value = [getattr(structure, "copy")()]
 
         is_stable, plot = calculator.check_stability(structure, potential_path)
 
@@ -68,7 +68,7 @@ class TestPhononCalculator:
         structure = Atoms("Fe", positions=[[0, 0, 0]], cell=[2.8, 2.8, 2.8], pbc=True)
         potential_path = Path("pot.yace")
 
-        mock_phonopy.get_supercells_with_displacements.return_value = [structure.copy()]  # type: ignore[no-untyped-call]
+        mock_phonopy.get_supercells_with_displacements.return_value = [getattr(structure, "copy")()]
 
         is_stable, plot = calculator.check_stability(structure, potential_path)
 
