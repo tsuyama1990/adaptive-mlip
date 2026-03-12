@@ -1,3 +1,5 @@
+from typing import Any
+
 import numpy as np
 from ase import Atoms
 from ase.constraints import FixAtoms
@@ -8,9 +10,10 @@ from pyacemaker.domain_models.workflow import CutoutConfig
 from pyacemaker.utils.embedding import embed_cluster
 
 
-def _pre_relax_buffer(cluster: Atoms, mace_model_path: str | None = None) -> Atoms:
+def _pre_relax_buffer(cluster: Atoms, calculator: Any | None = None) -> Atoms:
     """
     Relaxes the buffer region (force_weight == 0.0) while keeping the core fixed.
+    Accepts an instantiated calculator to decouple mace-torch dependencies.
     """
     import os
     from pathlib import Path
@@ -23,29 +26,16 @@ def _pre_relax_buffer(cluster: Atoms, mace_model_path: str | None = None) -> Ato
     constraint = FixAtoms(indices=core_indices)  # type: ignore[no-untyped-call]
     cluster_copy.set_constraint(constraint)
 
-    calc = None
-    if mace_model_path:
-        try:
-            from mace.calculators import MACECalculator
+    if calculator is None:
+        msg = "Calculator must be provided for pre-relaxation."
+        raise ValueError(msg)
 
-            calc = MACECalculator(model_paths=mace_model_path, device="cpu")
-        except ImportError:
-            msg = "mace-torch package is required for structural relaxation but is not installed. Please install it using 'pip install mace-torch'."
-            raise RuntimeError(msg) from None
-
-    if calc is None:
-        try:
-            from mace.calculators import mace_mp
-
-            calc = mace_mp(model="medium", device="cpu")
-        except ImportError:
-            msg = "mace-torch package is required for structural relaxation but is not installed. Please install it using 'pip install mace-torch'."
-            raise RuntimeError(msg) from None
-
-    cluster_copy.calc = calc
+    cluster_copy.calc = calculator
 
     with Path(os.devnull).open("w") as devnull:
         opt = LBFGS(cluster_copy, logfile=devnull)
+        # We assume standard defaults here, but ideally these are passed from CutoutConfig.
+        # For scope of function, hardcodes are replaced with injected calculators
         opt.run(fmax=0.05, steps=50)  # type: ignore[no-untyped-call]
 
     return cluster_copy  # type: ignore[no-any-return]
@@ -121,7 +111,7 @@ def extract_intelligent_cluster(
     structure: Atoms,
     target_atoms: list[int],
     config: CutoutConfig,
-    mace_model_path: str | None = None,
+    calculator: Any | None = None,
 ) -> Atoms:
     """
     Extracts an intelligent local cluster around multiple target atoms,
@@ -191,7 +181,7 @@ def extract_intelligent_cluster(
         cluster.new_array("c_gamma", cluster_c_gamma)  # type: ignore[no-untyped-call]
 
     if config.enable_pre_relaxation:
-        cluster = _pre_relax_buffer(cluster, mace_model_path=mace_model_path)
+        cluster = _pre_relax_buffer(cluster, calculator=calculator)
 
     if config.enable_passivation:
         cluster = _passivate_surface(

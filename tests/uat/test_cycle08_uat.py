@@ -92,7 +92,7 @@ def test_scenario_phase3_cutout() -> None:
 
         with patch("pyacemaker.utils.extraction._pre_relax_buffer", return_value=atoms):
             cluster = extract_intelligent_cluster(
-                atoms, target_atoms, config, mace_model_path=str(model_file)
+                atoms, target_atoms, config, calculator=getattr(mace_manager, "calc", None)
             )
 
         weights = cluster.get_array("force_weight")  # type: ignore[no-untyped-call]

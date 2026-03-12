@@ -120,6 +120,16 @@ class LammpsEngine(BaseEngine):
             msg = "override_n_steps must be a non-negative integer"
             raise ValueError(msg)
 
+        if "threshold_call_dft" in kwargs and not isinstance(kwargs["threshold_call_dft"], (int, float)):
+            msg = "threshold_call_dft must be a number"
+            raise ValueError(msg)
+        if "threshold_add_train" in kwargs and not isinstance(kwargs["threshold_add_train"], (int, float)):
+            msg = "threshold_add_train must be a number"
+            raise ValueError(msg)
+        if "smooth_steps" in kwargs and not isinstance(kwargs["smooth_steps"], int):
+            msg = "smooth_steps must be an integer"
+            raise ValueError(msg)
+
         ctx, data_file, dump_file, log_file, elements, potential_path = (
             self._prepare_simulation_env(structure, potential)
         )

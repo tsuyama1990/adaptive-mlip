@@ -26,6 +26,13 @@ def validate_path_safe(path: Path) -> Path:  # noqa: C901
         msg = f"Path traversal attempt detected (parent directory reference): {path}"
         raise ValueError(msg)
 
+    # Check absolute path prefixes to ensure we don't start with dangerous roots not in allowed directly
+    tmp_path_str = tempfile.gettempdir()
+    shm_path_str = DEFAULT_RAM_DISK_PATH
+    if path.is_absolute() and not str(path).startswith((tmp_path_str, shm_path_str, str(Path.cwd().resolve()))):
+        msg = f"Path attempts to access external root: {path}"
+        raise ValueError(msg)
+
     if any(c in s for c in DANGEROUS_PATH_CHARS):
         msg = f"Path contains invalid characters: {path}"
         raise ValueError(msg)
@@ -52,9 +59,9 @@ def validate_path_safe(path: Path) -> Path:  # noqa: C901
             # Combine resolved parent with filename
             resolved = resolved_parent / path.name
         else:
-            # If even parent doesn't exist, this is likely unsafe or too deep
-            # Fallback to loose resolve but we will check containment
-            resolved = path.resolve(strict=False)
+            # If even parent doesn't exist, this is definitively unsafe for creation in secure contexts
+            msg = f"Parent directory does not exist for resolution: {path}"
+            raise ValueError(msg)
 
     except Exception as e:
         msg = f"Invalid path resolution: {path}"

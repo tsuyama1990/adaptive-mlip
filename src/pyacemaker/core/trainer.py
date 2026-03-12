@@ -68,18 +68,23 @@ class PacemakerTrainer(BaseTrainer):
         # Merge replay buffer into the new data
         if replay_buffer:
             try:
-                # Read new data, append replay, write back
+                # Read new data, append replay, write back safely via temp file
                 new_data = read(str(new_data_path), index=":", format="extxyz")
                 if not isinstance(new_data, list):
                     new_data = [new_data]
 
                 combined_data = new_data + replay_buffer
-                write(str(new_data_path), combined_data, format="extxyz")
+
+                temp_path = Path(str(new_data_path) + ".tmp")
+                write(str(temp_path), combined_data, format="extxyz")
+                shutil.move(str(temp_path), str(new_data_path))
             except Exception as e:
                 import logging
 
                 logger = logging.getLogger(__name__)
                 logger.warning(f"Failed to merge replay buffer: {e}")
+                if "temp_path" in locals() and temp_path.exists():
+                    temp_path.unlink()
                 # Proceed with just new data if merge fails
 
         return self.train(new_data_path, initial_potential)
@@ -154,7 +159,7 @@ class PacemakerTrainer(BaseTrainer):
         return potential_path
 
     def _validate_training_data(self, data_path: Path) -> None:
-        """Validates existence and basic format of training data."""
+        """Validates existence, basic format, and integrity of training data."""
         if not data_path.exists():
             msg = f"Training data not found: {data_path}"
             raise TrainerError(msg)
@@ -167,6 +172,17 @@ class PacemakerTrainer(BaseTrainer):
         if data_path.stat().st_size == 0:
             msg = f"Training data file is empty: {data_path}"
             raise TrainerError(msg)
+
+        # Verify content parses cleanly
+        try:
+            from ase.io import iread
+            first_frame = next(iread(str(data_path)))
+            if not len(first_frame):
+                msg = f"First frame of training data is empty: {data_path}"
+                raise TrainerError(msg)
+        except Exception as e:
+            msg = f"Training data failed integrity parsing check: {e}"
+            raise TrainerError(msg) from e
 
 
 class FinetuneManager:

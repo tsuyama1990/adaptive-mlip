@@ -342,11 +342,19 @@ class Orchestrator:
             target_atoms = [center_idx]
 
             # Extract intelligent local cluster (S0)
+            from mace.calculators import MACECalculator
+
+            mace_calc = None
+            try:
+                mace_calc = MACECalculator(model_paths=self.config.workflow.distillation.mace_model_path, device="cpu")
+            except Exception:
+                pass
+
             return extract_intelligent_cluster(
                 structure=halt_structure,
                 target_atoms=target_atoms,
                 config=self.config.workflow.cutout,
-                mace_model_path=self.config.workflow.distillation.mace_model_path,
+                calculator=mace_calc,
             )
         except Exception:
             self.logger.exception("Failed to extract local cluster.")

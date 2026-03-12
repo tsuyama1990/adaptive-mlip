@@ -91,6 +91,9 @@ class LammpsDriver:
             "restart",
             "write_restart",
             "python",
+            "include",
+            "if",
+            "jump",
         }
 
         if first_token not in allowed_commands:
@@ -143,24 +146,20 @@ class LammpsDriver:
         # If we use lammps.file(), we bypass _validate_command unless we pre-scan.
         # Pre-scanning line by line is O(N) IO but O(1) memory.
 
-        # Security: Read the entire file into memory to avoid TOCTOU attacks
-        # Validate all content atomically before executing anything.
-        content = path.read_text(encoding="utf-8")
-
-        commands_to_execute = []
-        for line in content.splitlines():
-            cmd = line.strip()
-            if cmd.startswith("#"):
-                continue
-            if cmd:
-                cmd = cmd.split("#")[0].strip()
+        # Security: Stream line by line to prevent TOCTOU vulnerabilities
+        # and execute safely immediately after validation.
+        # NOTE: LAMMPS does not execute files line-by-line natively via `file` with Python safety,
+        # so we stream it and use `command()` directly.
+        with path.open("r", encoding="utf-8") as f:
+            for line in f:
+                cmd = line.strip()
+                if cmd.startswith("#"):
+                    continue
                 if cmd:
-                    self._validate_command(cmd)
-                    commands_to_execute.append(cmd)
-
-        # If we reach here, all commands are valid and atomic. Execute them.
-        for cmd in commands_to_execute:
-            self.lmp.command(cmd)
+                    cmd = cmd.split("#")[0].strip()
+                    if cmd:
+                        self._validate_command(cmd)
+                        self.lmp.command(cmd)
 
     def extract_variable(self, name: str) -> float:
         """

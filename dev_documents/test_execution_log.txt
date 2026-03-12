@@ -45,11 +45,11 @@ tests/unit/test_lammps_driver.py ...........                             [ 65%]
 tests/unit/test_lammps_driver_security.py ...                            [ 67%]
 tests/unit/test_lammps_generator.py ...                                  [ 68%]
 tests/unit/test_lammps_generator_reorder.py ..                           [ 69%]
-tests/unit/test_loop.py .......                                          [ 71%]
+tests/unit/test_loop.py .....F.                                          [ 71%]
 tests/unit/test_main.py ...                                              [ 72%]
 tests/unit/test_oracle.py ........                                       [ 76%]
 tests/unit/test_oracle_streaming.py .                                    [ 76%]
-tests/unit/test_path_validation.py .....                                 [ 78%]
+tests/unit/test_path_validation.py ....F                                 [ 78%]
 tests/unit/test_perturbations.py ...                                     [ 79%]
 tests/unit/test_phonons.py ..                                            [ 80%]
 tests/unit/test_policies_new.py ....                                     [ 81%]
@@ -63,7 +63,147 @@ tests/unit/test_trainer_pacemaker.py ......                              [ 94%]
 tests/unit/test_validator.py ....                                        [ 95%]
 tests/unit/test_validator_security.py ...........                        [100%]
 
+=================================== FAILURES ===================================
+__________________ test_loop_state_validation_path_traversal ___________________
+
+tmp_path = PosixPath('/tmp/pytest-of-jules/pytest-14/test_loop_state_validation_pat2')
+
+    def test_loop_state_validation_path_traversal(tmp_path: Path) -> None:
+        """Test validation fails if potential path is outside project root."""
+        # Create project structure
+        project_dir = tmp_path / "project"
+        project_dir.mkdir()
+
+        outside_dir = tmp_path / "outside"
+        outside_dir.mkdir()
+        unsafe_file = outside_dir / "unsafe.yace"
+        unsafe_file.touch()
+
+        # We need to change CWD to project_dir for the test to work
+        cwd = Path.cwd()
+        os.chdir(project_dir)
+        try:
+            # LoopState resolves path.
+            # We need to force a path that is NOT in /tmp (if possible)
+            # or rely on the mock if we are in /tmp.
+
+            with pytest.MonkeyPatch.context() as mp:
+                # Mock gettempdir to fail the whitelist check
+                mp.setattr(tempfile, "gettempdir", lambda: "/nonexistent_temp")
+
+                with pytest.raises(ValueError, match="outside allowed roots"):
+>                   LoopState(current_potential=unsafe_file)
+E                   pydantic_core._pydantic_core.ValidationError: 1 validation error for LoopState
+E                   current_potential
+E                     Value error, Path attempts to access external root: /tmp/pytest-of-jules/pytest-14/test_loop_state_validation_pat2/outside/unsafe.yace [type=value_error, input_value=PosixPath('/tmp/pytest-of...t2/outside/unsafe.yace'), input_type=PosixPath]
+E                       For further information visit https://errors.pydantic.dev/2.12/v/value_error
+
+tests/unit/test_loop.py:79: ValidationError
+
+During handling of the above exception, another exception occurred:
+
+tmp_path = PosixPath('/tmp/pytest-of-jules/pytest-14/test_loop_state_validation_pat2')
+
+    def test_loop_state_validation_path_traversal(tmp_path: Path) -> None:
+        """Test validation fails if potential path is outside project root."""
+        # Create project structure
+        project_dir = tmp_path / "project"
+        project_dir.mkdir()
+
+        outside_dir = tmp_path / "outside"
+        outside_dir.mkdir()
+        unsafe_file = outside_dir / "unsafe.yace"
+        unsafe_file.touch()
+
+        # We need to change CWD to project_dir for the test to work
+        cwd = Path.cwd()
+        os.chdir(project_dir)
+        try:
+            # LoopState resolves path.
+            # We need to force a path that is NOT in /tmp (if possible)
+            # or rely on the mock if we are in /tmp.
+
+            with pytest.MonkeyPatch.context() as mp:
+                # Mock gettempdir to fail the whitelist check
+                mp.setattr(tempfile, "gettempdir", lambda: "/nonexistent_temp")
+
+>               with pytest.raises(ValueError, match="outside allowed roots"):
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E               AssertionError: Regex pattern did not match.
+E                 Expected regex: 'outside allowed roots'
+E                 Actual message: "1 validation error for LoopState\ncurrent_potential\n  Value error, Path attempts to access external root: /tmp/pytest-of-jules/pytest-14/test_loop_state_validation_pat2/outside/unsafe.yace [type=value_error, input_value=PosixPath('/tmp/pytest-of...t2/outside/unsafe.yace'), input_type=PosixPath]\n    For further information visit https://errors.pydantic.dev/2.12/v/value_error"
+
+tests/unit/test_loop.py:78: AssertionError
+___________________ test_validate_path_safe_outside_allowed ____________________
+
+    def test_validate_path_safe_outside_allowed() -> None:
+        # /etc/passwd is outside allowed
+        if Path("/etc/passwd").exists():
+            with pytest.raises(ValueError, match="Path traversal detected"):
+>               validate_path_safe(Path("/etc/passwd"))
+
+tests/unit/test_path_validation.py:41:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+path = PosixPath('/etc/passwd')
+
+    def validate_path_safe(path: Path) -> Path:  # noqa: C901
+        """
+        Ensures path is safe using strict resolution and character allowlisting.
+        Centralized utility for path validation.
+
+        Args:
+            path: The path to validate.
+
+        Returns:
+            The resolved Path object.
+
+        Raises:
+            ValueError: If the path contains dangerous characters, traversal attempts,
+                        or resolves outside allowed directories (CWD, temp, /dev/shm).
+        """
+        s = str(path)
+
+        # Check for dangerous patterns in string representation BEFORE resolve
+        if ".." in s:
+            msg = f"Path traversal attempt detected (parent directory reference): {path}"
+            raise ValueError(msg)
+
+        # Check absolute path prefixes to ensure we don't start with dangerous roots not in allowed directly
+        tmp_path_str = tempfile.gettempdir()
+        shm_path_str = DEFAULT_RAM_DISK_PATH
+        if path.is_absolute() and not str(path).startswith((tmp_path_str, shm_path_str, str(Path.cwd().resolve()))):
+            msg = f"Path attempts to access external root: {path}"
+>           raise ValueError(msg)
+E           ValueError: Path attempts to access external root: /etc/passwd
+
+src/pyacemaker/utils/path.py:34: ValueError
+
+During handling of the above exception, another exception occurred:
+
+    def test_validate_path_safe_outside_allowed() -> None:
+        # /etc/passwd is outside allowed
+        if Path("/etc/passwd").exists():
+>           with pytest.raises(ValueError, match="Path traversal detected"):
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           AssertionError: Regex pattern did not match.
+E             Expected regex: 'Path traversal detected'
+E             Actual message: 'Path attempts to access external root: /etc/passwd'
+
+tests/unit/test_path_validation.py:40: AssertionError
 =============================== warnings summary ===============================
+tests/e2e/test_orchestrator_loop.py::test_run_loop_iteration_halt
+  /app/.venv/lib/python3.12/site-packages/e3nn/o3/_wigner.py:10: UserWarning: Environment variable TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD detected, since the`weights_only` argument was not explicitly passed to `torch.load`, forcing weights_only=False.
+    _Jd, _W3j_flat, _W3j_indices = torch.load(os.path.join(os.path.dirname(__file__), 'constants.pt'))
+
+tests/e2e/test_orchestrator_loop.py::test_run_loop_iteration_halt
+tests/e2e/test_orchestrator_loop.py::test_run_loop_iteration_halt
+tests/e2e/test_orchestrator_loop.py::test_run_loop_iteration_halt
+tests/e2e/test_orchestrator_loop.py::test_run_loop_iteration_halt
+tests/e2e/test_orchestrator_loop.py::test_run_loop_iteration_halt
+  /app/.venv/lib/python3.12/site-packages/torch/jit/_script.py:1480: DeprecationWarning: `torch.jit.script` is deprecated. Please switch to `torch.compile` or `torch.export`.
+    warnings.warn(
+
 tests/uat/test_cycle01_uat.py::test_scenario_01_02_guardrails_check_temp
   /app/.venv/lib/python3.12/site-packages/pydantic/main.py:464: UserWarning: Pydantic serializer warnings:
     PydanticSerializationUnexpectedValue(Expected `MDConfig` - serialized value may not be as expected [field_name='md', input_value={'temperature': -50.0}, input_type=dict])
@@ -90,8 +230,8 @@ src/pyacemaker/core/active_set.py               71     10    86%   46-47, 60-61,
 src/pyacemaker/core/base.py                     32      0   100%
 src/pyacemaker/core/config_generator.py         36      3    92%   56-58
 src/pyacemaker/core/directory_manager.py        20      0   100%
-src/pyacemaker/core/engine.py                  128     32    75%   50, 64-65, 71-72, 86, 88, 91-92, 110-111, 113-114, 120-121, 139, 141, 143, 170, 185-190, 196-197, 210, 235-240, 262
-src/pyacemaker/core/evaluator.py                25      0   100%
+src/pyacemaker/core/engine.py                  137     38    72%   50, 64-65, 71-72, 86, 88, 91-92, 110-111, 113-114, 120-121, 124-125, 127-128, 130-131, 149, 151, 153, 180, 195-200, 206-207, 220, 245-250, 272
+src/pyacemaker/core/evaluator.py                39      2    95%   35-36
 src/pyacemaker/core/exceptions.py                8      0   100%
 src/pyacemaker/core/generator.py                53     11    79%   36-39, 59, 62, 97, 107, 113, 115, 138
 src/pyacemaker/core/io_manager.py               74     30    59%   58-71, 78-81, 106-107, 110-115, 124-125, 129, 133-141
@@ -103,7 +243,7 @@ src/pyacemaker/core/policy.py                  116     34    71%   30-31, 81-106
 src/pyacemaker/core/policy_factory.py           31      7    77%   47, 53-54, 58-59, 86-87
 src/pyacemaker/core/report.py                   12      1    92%   85
 src/pyacemaker/core/state_manager.py            34      2    94%   37-38
-src/pyacemaker/core/trainer.py                 123     48    61%   37-53, 70-82, 124-125, 145-148, 151-152, 159-160, 163-164, 186-187, 196-197, 201-202, 224-229, 234-235
+src/pyacemaker/core/trainer.py                 136     57    58%   37-53, 70-87, 129-130, 150-153, 156-157, 164-165, 168-169, 181-185, 202-203, 212-213, 217-218, 240-245, 250-251
 src/pyacemaker/core/validator.py               101     15    85%   63, 68, 75-76, 79, 113, 180-188, 199
 src/pyacemaker/domain_models/__init__.py        11      0   100%
 src/pyacemaker/domain_models/config.py          22      0   100%
@@ -121,27 +261,30 @@ src/pyacemaker/domain_models/workflow.py        58      4    93%   76-77, 79-80
 src/pyacemaker/factory.py                       32      3    91%   82-84
 src/pyacemaker/interfaces/__init__.py            5      0   100%
 src/pyacemaker/interfaces/eon_driver.py         74     12    84%   86, 133-142, 158, 162
-src/pyacemaker/interfaces/lammps_driver.py      99     11    89%   49, 101-102, 134-135, 154, 190, 223, 242-244
+src/pyacemaker/interfaces/lammps_driver.py      96     11    89%   49, 104-105, 137-138, 157, 189, 222, 241-243
 src/pyacemaker/interfaces/process.py            14      5    64%   12, 22-29
 src/pyacemaker/interfaces/qe_driver.py          48      2    96%   113-114
 src/pyacemaker/logger.py                        22      1    95%   42
 src/pyacemaker/main.py                          47      9    81%   21-24, 49-50, 59-60, 74
-src/pyacemaker/orchestrator.py                 359    111    69%   106-109, 164, 198-215, 223, 227-228, 241-245, 264, 268-269, 299-300, 305, 317-319, 324-325, 338, 351-353, 362-390, 406, 410, 415, 444-494, 509-510, 523-524, 532-538, 555-579, 591-601, 620, 624, 631-632, 640-648, 665, 669, 672-673, 684-688, 732-735, 769
+src/pyacemaker/orchestrator.py                 365    111    70%   106-109, 164, 198-215, 223, 227-228, 241-245, 264, 268-269, 299-300, 305, 317-319, 324-325, 338, 359-361, 370-398, 414, 418, 423, 452-502, 517-518, 531-532, 540-546, 563-587, 599-609, 628, 632, 639-640, 648-656, 673, 677, 680-681, 692-696, 740-743, 777
 src/pyacemaker/scenarios/__init__.py             3      0   100%
 src/pyacemaker/scenarios/base_scenario.py       12      1    92%   20
 src/pyacemaker/scenarios/fept_mgo.py           148     28    81%   80, 162-165, 170-172, 181-182, 195-196, 203, 216, 221-222, 225-226, 233, 237, 245-258, 266-268
 src/pyacemaker/utils/delta.py                   20      3    85%   21, 37-38
 src/pyacemaker/utils/elastic.py                 80     52    35%   34-35, 46-137, 146, 154
 src/pyacemaker/utils/embedding.py               36      6    83%   41-42, 49-50, 61-62
-src/pyacemaker/utils/extraction.py             134     48    64%   15-51, 84-107, 110-115, 131-132
+src/pyacemaker/utils/extraction.py             123     36    71%   18-41, 74-97, 100-105, 121-122
 src/pyacemaker/utils/io.py                      73      0   100%
-src/pyacemaker/utils/path.py                    38      4    89%   57-61
+src/pyacemaker/utils/path.py                    44      7    84%   63-68, 86-87
 src/pyacemaker/utils/perturbations.py           43      1    98%   77
 src/pyacemaker/utils/phonons.py                 51      2    96%   51, 69
 src/pyacemaker/utils/process.py                 32      6    81%   76-83
 src/pyacemaker/utils/structure.py                6      2    67%   19-20
 --------------------------------------------------------------------------
-TOTAL                                         3279    614    81%
-======================= 255 passed, 3 warnings in 3.43s ========================
+TOTAL                                         3313    622    81%
+=========================== short test summary info ============================
+FAILED tests/unit/test_loop.py::test_loop_state_validation_path_traversal - A...
+FAILED tests/unit/test_path_validation.py::test_validate_path_safe_outside_allowed
+================== 2 failed, 253 passed, 9 warnings in 20.50s ==================
 /app/.venv/lib/python3.12/site-packages/coverage/inorout.py:561: CoverageWarning: Module dev_src was never imported. (module-not-imported); see https://coverage.readthedocs.io/en/7.13.4/messages.html#warning-module-not-imported
   self.warn(f"Module {pkg} was never imported.", slug="module-not-imported")
