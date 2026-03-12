@@ -49,8 +49,8 @@ def test_scenario_phase1_distillation() -> None:
         assert len(results) == 2
         # We assert the calculator holds energy and forces, as we moved away from info/arrays mock
         assert results[0].calc is not None
-        assert results[0].get_potential_energy() is not None
-        assert results[0].get_forces() is not None
+        assert results[0].get_potential_energy() is not None  # type: ignore[no-untyped-call]
+        assert results[0].get_forces() is not None  # type: ignore[no-untyped-call]
 
         for atoms in results:
             c_gamma = atoms.get_array("c_gamma")  # type: ignore[no-untyped-call]
