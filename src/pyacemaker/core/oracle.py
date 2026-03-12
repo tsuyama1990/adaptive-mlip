@@ -304,17 +304,32 @@ class TieredOracle(BaseOracle):
             max_uncertainty = np.max(c_gamma)
 
             if max_uncertainty > self.thresholds.threshold_call_dft:
-                # Fallback to DFT
+                # Two-Tier Evaluation logic:
+                # 1. We fall back to DFT because system max_uncertainty > threshold_call_dft.
+                # 2. But we should only add atoms to train if they exceed threshold_add_train.
+                # In standard TieredOracle during loop, we evaluate the whole cluster.
+
                 logger.info(
-                    f"Uncertainty {max_uncertainty:.4f} > {self.thresholds.threshold_call_dft}. Falling back to DFT."
+                    f"Two-Tier Evaluation: System max uncertainty {max_uncertainty:.4f} > {self.thresholds.threshold_call_dft}. Falling back to DFT."
                 )
 
-                # Only pass the atoms exceeding the add_train threshold to DFT?
-                # For now, evaluate the whole structure as per fallback logic.
                 dft_result = next(self.dft.compute(iter([atoms])))
 
-                # We should retain the c_gamma array for active learning tracking
+                # Keep track of epicenter atoms via c_gamma so the trainer can weight them.
                 dft_result.set_array("c_gamma", c_gamma)  # type: ignore[no-untyped-call]
+
+                # Set force weight natively so that PacemakerTrainer knows which atoms are the epicenter
+                weights = np.zeros(len(dft_result))
+                # Add Train Threshold check:
+                epicenter_mask = c_gamma > self.thresholds.threshold_add_train
+                weights[epicenter_mask] = 1.0
+                dft_result.new_array("force_weight", weights)  # type: ignore[no-untyped-call]
+
+                logger.info(f"Two-Tier Evaluation: Identified {np.sum(epicenter_mask)} epicenter atoms exceeding threshold_add_train ({self.thresholds.threshold_add_train}).")
+
                 yield dft_result
             else:
+                # Ensure structure always has a force_weight array for consistency if needed later
+                weights = np.zeros(len(mace_result))
+                mace_result.new_array("force_weight", weights)  # type: ignore[no-untyped-call]
                 yield mace_result
