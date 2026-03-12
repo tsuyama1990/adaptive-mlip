@@ -57,7 +57,15 @@ class FakeOracle(BaseOracle):
 
 
 class FakeEngine(BaseEngine):
-    def run(self, structure: Atoms | None, potential: Any, **kwargs: Any) -> MDSimulationResult:
+    def run(
+        self,
+        structure: Atoms | None,
+        potential: Any,
+        use_fix_invoke: bool = False,
+        resume_from_step: int | None = None,
+        override_n_steps: int | None = None,
+        **kwargs: Any,
+    ) -> MDSimulationResult:
         return MDSimulationResult(
             energy=-10.0,
             forces=[[0.0, 0.0, 0.0]],
@@ -224,7 +232,14 @@ def test_orchestrator_error_handling_generator(mock_config: PyAceConfig, monkeyp
     mock_gen.generate.side_effect = RuntimeError("Generator failed")
 
     def mock_create_modules(cfg: PyAceConfig) -> tuple[Any, Any, Any, Any, Any, Any]:
-        return mock_gen, FakeActiveSetSelector(), FakeActiveSetSelector(), FakeActiveSetSelector(), FakeActiveSetSelector(), FakeActiveSetSelector()
+        return (
+            mock_gen,
+            FakeActiveSetSelector(),
+            FakeActiveSetSelector(),
+            FakeActiveSetSelector(),
+            FakeActiveSetSelector(),
+            FakeActiveSetSelector(),
+        )
 
     monkeypatch.setattr(ModuleFactory, "create_modules", mock_create_modules)
 

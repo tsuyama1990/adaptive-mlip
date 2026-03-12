@@ -1,9 +1,10 @@
 import pytest
+from pydantic import ValidationError
 
 from pyacemaker.domain_models.validation import ValidationConfig, ValidationResult
 
 
-def test_validation_config_defaults():
+def test_validation_config_defaults() -> None:
     config = ValidationConfig()
     assert config.phonon_supercell == [2, 2, 2]
     assert config.phonon_displacement == 0.01
@@ -12,7 +13,7 @@ def test_validation_config_defaults():
     assert config.elastic_steps == 5
 
 
-def test_validation_config_custom():
+def test_validation_config_custom() -> None:
     config = ValidationConfig(
         phonon_supercell=[3, 3, 3],
         phonon_displacement=0.02,
@@ -27,7 +28,7 @@ def test_validation_config_custom():
     assert config.elastic_steps == 7
 
 
-def test_validation_result_valid():
+def test_validation_result_valid() -> None:
     result = ValidationResult(
         phonon_stable=True,
         elastic_stable=True,
@@ -40,6 +41,8 @@ def test_validation_result_valid():
     assert result.c_ij["C11"] == 200.0
 
 
-def test_validation_result_missing_fields():
-    with pytest.raises(ValueError, match="Field required"):
-        ValidationResult(phonon_stable=True)  # Missing required fields
+
+
+def test_validation_result_missing_fields() -> None:
+    with pytest.raises(ValidationError):
+        ValidationResult(phonon_stable=True)  # type: ignore[call-arg]

@@ -104,7 +104,7 @@ def test_dft_config_extra_forbid(
             kpoints_density=0.04,
             encut=500.0,
             pseudopotentials={"Fe": "Fe.UPF"},
-            extra_field="invalid",  # type: ignore
+            extra_field="invalid",  # type: ignore[call-arg]
         )
 
 

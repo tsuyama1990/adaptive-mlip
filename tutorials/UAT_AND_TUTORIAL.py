@@ -33,9 +33,11 @@ def fake_run_command(cmd: list[str], *args: Any, **kwargs: Any) -> Any:
         return
     return
 
+
 def main() -> int:
     # 1. Setup Environment
     import tempfile
+
     temp_dir = tempfile.TemporaryDirectory()
     base_dir = Path(temp_dir.name).resolve()
     os.chdir(base_dir)
@@ -97,7 +99,7 @@ def main() -> int:
                     threshold_call_dft=0.05,
                     threshold_add_train=0.02,
                     smooth_steps=3,
-                )
+                ),
             ),
             cutout=CutoutConfig(
                 core_radius=4.0,
@@ -106,13 +108,14 @@ def main() -> int:
                 enable_passivation=True,
                 passivation_element="H",
             ),
-            otf=OTFConfig()
-        )
+            otf=OTFConfig(),
+        ),
     )
 
     # 3. Execution of Phase 1 (Zero-Shot Initialization)
     import io
     import logging
+
     log_capture = io.StringIO()
     handler = logging.StreamHandler(log_capture)
     handler.setLevel(logging.INFO)
@@ -120,8 +123,10 @@ def main() -> int:
 
     try:
         # Use patch to mock external commands instead of dropping bash files
-        with patch("pyacemaker.core.trainer.shutil.which", return_value="/fake/path"),              patch("pyacemaker.core.trainer.run_command", side_effect=fake_run_command):
-
+        with (
+            patch("pyacemaker.core.trainer.shutil.which", return_value="/fake/path"),
+            patch("pyacemaker.core.trainer.run_command", side_effect=fake_run_command),
+        ):
             orchestrator = Orchestrator(config)
             orchestrator.initialize_modules()
             orchestrator._check_initial_potential()
@@ -139,10 +144,12 @@ def main() -> int:
 
     except Exception:
         import traceback
+
         traceback.print_exc()
         return 1
 
     return 0
+
 
 if __name__ == "__main__":
     sys.exit(main())

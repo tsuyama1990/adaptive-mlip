@@ -30,7 +30,3 @@ class FakeOracle(BaseOracle):
         for atoms in structures:
             atoms.info["energy"] = -5.0
             yield atoms
-
-
-
-

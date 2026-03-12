@@ -13,7 +13,7 @@ from pyacemaker.scenarios.fept_mgo import FePtMgoScenario
 
 
 @pytest.fixture
-def integration_config():
+def integration_config():  # type: ignore[no-untyped-def]
     with tempfile.NamedTemporaryFile(suffix=".yace") as tmp:
         path = Path(tmp.name)
         mock_conf = MagicMock(spec=PyAceConfig)
@@ -28,7 +28,7 @@ def integration_config():
         yield mock_conf
 
 
-def test_fept_mgo_integration(integration_config):
+def test_fept_mgo_integration(integration_config) -> None:  # type: ignore[no-untyped-def]
     # Setup mocks for heavy lifting
     mock_engine = MagicMock()
     # relax returns a copy

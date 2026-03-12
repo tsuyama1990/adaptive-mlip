@@ -69,7 +69,7 @@ def test_dft_manager_compute_success(mock_dft_config: DFTConfig) -> None:
 
     # ProcessPoolExecutor copies state, so we can't easily assert on fake_driver call_count
     # Verify generator returned the correctly calculated atoms object instead.
-    assert result.get_potential_energy() == TEST_ENERGY_GENERIC
+    assert result.get_potential_energy() == TEST_ENERGY_GENERIC  # type: ignore[no-untyped-call]
 
 
 def test_dft_manager_self_healing(
@@ -103,17 +103,17 @@ def test_dft_manager_self_healing(
             pass
 
         def submit(self, fn: Any, *args: Any, **kwargs: Any) -> DummyFuture:
-            DummyExecutor.call_count += 1
-            if DummyExecutor.call_count == 1:
+            DummyExecutor.call_count += 1  # type: ignore[attr-defined]
+            if DummyExecutor.call_count == 1:  # type: ignore[attr-defined]
                 return DummyFuture(None, RuntimeError("Setup failed"))
 
             calc = MockCalculator(fail_count=0)
             atoms = args[1]
             atoms.calc = calc
-            atoms.get_potential_energy()  # type: ignore[no-untyped-call]
+            atoms.get_potential_energy()
             return DummyFuture(calc, None)
 
-    DummyExecutor.call_count = 0
+    DummyExecutor.call_count = 0  # type: ignore[attr-defined]
 
     monkeypatch.setattr("concurrent.futures.ProcessPoolExecutor", DummyExecutor)
 
@@ -126,7 +126,9 @@ def test_dft_manager_self_healing(
     assert result.get_potential_energy() == TEST_ENERGY_GENERIC  # type: ignore[no-untyped-call]
 
 
-def test_dft_manager_fatal_error(mock_dft_config: DFTConfig, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_dft_manager_fatal_error(
+    mock_dft_config: DFTConfig, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Test fatal error after exhausting retries."""
     atoms = Atoms("H", cell=[10, 10, 10], pbc=True)
 
@@ -173,7 +175,9 @@ def test_dft_manager_fatal_error(mock_dft_config: DFTConfig, monkeypatch: pytest
     # We will just assert that the code raises the correct exception.
 
 
-def test_dft_manager_setup_error(mock_dft_config: DFTConfig, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_dft_manager_setup_error(
+    mock_dft_config: DFTConfig, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Test handling of CalculatorSetupError."""
     atoms = Atoms("H", cell=[10, 10, 10], pbc=True)
 
