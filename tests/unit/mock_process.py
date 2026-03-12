@@ -7,13 +7,13 @@ from pyacemaker.interfaces.process import ProcessRunner
 class MockProcessRunner(ProcessRunner):
     """Mock runner for testing."""
 
-    def __init__(self, returncode=0, stdout="", stderr="") -> None:
+    def __init__(self, returncode=0, stdout="", stderr="") -> None:  # type: ignore[no-untyped-def]
         self.returncode = returncode
         self.stdout = stdout
         self.stderr = stderr
-        self.commands = []
+        self.commands = []  # type: ignore[var-annotated]
 
-    def run(self, cmd: list[str], cwd: Path, **kwargs):
+    def run(self, cmd: list[str], cwd: Path, **kwargs):  # type: ignore[no-untyped-def]
         self.commands.append((cmd, cwd))
         mock_res = MagicMock()
         mock_res.returncode = self.returncode

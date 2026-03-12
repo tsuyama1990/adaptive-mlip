@@ -40,7 +40,7 @@ def test_fept_generate_surface(mock_config: Any) -> None:
     assert isinstance(surface, Atoms)
     assert len(surface) > 0
     # MgO rocksalt structure check
-    syms = list(surface.get_chemical_symbols())
+    syms = list(surface.get_chemical_symbols())  # type: ignore[no-untyped-call]
     assert "Mg" in syms
     assert "O" in syms
 
@@ -50,9 +50,9 @@ def test_fept_deposit_atoms_deterministic(mock_config: Any) -> None:
 
     # Configure engine.relax to return a modified structure (simulating relaxation)
     def mock_relax(atoms: Atoms, pot: Any) -> Atoms:
-        atoms_copy = atoms.copy()
+        atoms_copy = atoms.copy()  # type: ignore[no-untyped-call]
         atoms_copy.positions[0] += 0.1
-        return atoms_copy
+        return atoms_copy  # type: ignore[no-any-return]
 
     mock_engine.relax.side_effect = mock_relax
 
@@ -73,8 +73,8 @@ def test_fept_deposit_atoms_deterministic(mock_config: Any) -> None:
     # Check positions match (determinism)
     import numpy as np
 
-    assert np.allclose(deposited1.get_positions(), deposited2.get_positions())
-    assert deposited1.get_chemical_symbols() == deposited2.get_chemical_symbols()
+    assert np.allclose(deposited1.get_positions(), deposited2.get_positions())  # type: ignore[no-untyped-call]
+    assert deposited1.get_chemical_symbols() == deposited2.get_chemical_symbols()  # type: ignore[no-untyped-call]
 
 
 def test_fept_run_flow(mock_config: Any) -> None:

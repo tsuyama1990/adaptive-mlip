@@ -16,7 +16,7 @@ from pyacemaker.orchestrator import Orchestrator
 from tests.conftest import FakeActiveSetSelector
 
 
-class FakeGenerator(BaseGenerator):  # type: ignore[misc]
+class FakeGenerator(BaseGenerator):
     def __init__(self, elements: list[str] | None = None) -> None:
         self.elements = elements or ["H"]
 

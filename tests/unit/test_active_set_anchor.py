@@ -36,10 +36,10 @@ def test_select_with_anchor_basic(tmp_path: Path) -> None:
         assert len(result) == 5
 
         # Check first is anchor
-        assert result[0].get_chemical_symbols()[0] == "He"  # type: ignore[no-untyped-call]
+        assert result[0].get_chemical_symbols() == ["He"]  # type: ignore[no-untyped-call]
 
         # Check remaining are from mock output
-        assert result[1].get_chemical_symbols()[0] == "Li"  # type: ignore[no-untyped-call]
+        assert result[1].get_chemical_symbols() == ["Li"]  # type: ignore[no-untyped-call]
 
         # Check cmd arguments
         args, _ = mock_run.call_args
@@ -60,7 +60,7 @@ def test_select_with_anchor_only_one(tmp_path: Path) -> None:
         result = list(selector.select(candidates, pot_path, n_select=1, anchor=anchor))
 
         assert len(result) == 1
-        assert result[0].get_chemical_symbols()[0] == "He"  # type: ignore[no-untyped-call]
+        assert result[0].get_chemical_symbols() == ["He"]  # type: ignore[no-untyped-call]
         mock_run.assert_not_called()
 
 

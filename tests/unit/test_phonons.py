@@ -11,7 +11,7 @@ from pyacemaker.utils.phonons import PhononCalculator
 
 class TestPhononCalculator:
     @pytest.fixture
-    def mock_engine(self):
+    def mock_engine(self):  # type: ignore[no-untyped-def]
         engine = MagicMock(spec=BaseEngine)
         result = MagicMock()
         result.forces = [[0.0, 0.0, 0.0]]
@@ -19,13 +19,13 @@ class TestPhononCalculator:
         return engine
 
     @pytest.fixture
-    def calculator(self, mock_engine):
+    def calculator(self, mock_engine):  # type: ignore[no-untyped-def]
         return PhononCalculator(
             engine=mock_engine, supercell_matrix=[2, 2, 2], displacement=0.01, imaginary_tol=-0.05
         )
 
     @patch("pyacemaker.utils.phonons.Phonopy")
-    def test_check_stability_stable(self, mock_phonopy_cls, calculator):
+    def test_check_stability_stable(self, mock_phonopy_cls, calculator) -> None:  # type: ignore[no-untyped-def]
         mock_phonopy = mock_phonopy_cls.return_value
 
         # Mock band structure frequencies
@@ -41,7 +41,7 @@ class TestPhononCalculator:
 
         # We also need to mock produce_force_constants or forces
         # The calculator will call generate_displacements, then compute forces, then set_forces
-        mock_phonopy.get_supercells_with_displacements.return_value = [structure.copy()]
+        mock_phonopy.get_supercells_with_displacements.return_value = [structure.copy()]  # type: ignore[no-untyped-call]
 
         is_stable, plot = calculator.check_stability(structure, potential_path)
 
@@ -49,7 +49,7 @@ class TestPhononCalculator:
         assert isinstance(plot, str)
 
     @patch("pyacemaker.utils.phonons.Phonopy")
-    def test_check_stability_unstable(self, mock_phonopy_cls, calculator):
+    def test_check_stability_unstable(self, mock_phonopy_cls, calculator) -> None:  # type: ignore[no-untyped-def]
         mock_phonopy = mock_phonopy_cls.return_value
 
         # Mock imaginary frequencies (negative values)
@@ -64,7 +64,7 @@ class TestPhononCalculator:
         structure = Atoms("Fe", positions=[[0, 0, 0]], cell=[2.8, 2.8, 2.8], pbc=True)
         potential_path = Path("pot.yace")
 
-        mock_phonopy.get_supercells_with_displacements.return_value = [structure.copy()]
+        mock_phonopy.get_supercells_with_displacements.return_value = [structure.copy()]  # type: ignore[no-untyped-call]
 
         is_stable, plot = calculator.check_stability(structure, potential_path)
 

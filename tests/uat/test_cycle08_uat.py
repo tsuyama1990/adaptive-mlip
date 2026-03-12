@@ -38,7 +38,10 @@ def test_scenario_phase1_distillation() -> None:
             f.write("dummy")
 
         import pyacemaker.domain_models.defaults
-        with patch.object(pyacemaker.domain_models.defaults, "DEFAULT_POTENTIALS_DIR", str(pot_dir.resolve())):
+
+        with patch.object(
+            pyacemaker.domain_models.defaults, "DEFAULT_POTENTIALS_DIR", str(pot_dir.resolve())
+        ):
             mace_manager = MACEManager(str(model_file))
 
         atoms1 = Atoms("Fe", cell=[2, 2, 2], pbc=True)
@@ -52,7 +55,7 @@ def test_scenario_phase1_distillation() -> None:
 
         # 2. Only structures below threshold are extracted
         for atoms in results:
-            c_gamma = atoms.get_array("c_gamma")
+            c_gamma = atoms.get_array("c_gamma")  # type: ignore[no-untyped-call]
             assert (c_gamma <= 0.1).all()  # MACE mock produces up to 0.1
 
 
@@ -72,7 +75,10 @@ def test_scenario_phase3_cutout() -> None:
             f.write("dummy")
 
         import pyacemaker.domain_models.defaults
-        with patch.object(pyacemaker.domain_models.defaults, "DEFAULT_POTENTIALS_DIR", str(pot_dir.resolve())):
+
+        with patch.object(
+            pyacemaker.domain_models.defaults, "DEFAULT_POTENTIALS_DIR", str(pot_dir.resolve())
+        ):
             mace_manager = MACEManager(str(model_file))
     dft_manager = MagicMock(spec=DFTManager)
 
@@ -99,12 +105,12 @@ def test_scenario_phase3_cutout() -> None:
     cluster = extract_intelligent_cluster(atoms, target_atoms, config)
 
     # Check physical repair
-    weights = cluster.get_array("force_weight")
+    weights = cluster.get_array("force_weight")  # type: ignore[no-untyped-call]
     assert 1.0 in weights
 
     # Depending on neighbor cutoff distance and atom setup, H may or may not be added
     # We test that the functionality executes successfully.
-    symbols = cluster.get_chemical_symbols()
+    symbols = cluster.get_chemical_symbols()  # type: ignore[no-untyped-call]
     assert len(symbols) > 0
 
 
