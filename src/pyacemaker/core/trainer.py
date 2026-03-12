@@ -173,13 +173,18 @@ class PacemakerTrainer(BaseTrainer):
             msg = f"Training data file is empty: {data_path}"
             raise TrainerError(msg)
 
+        def _raise_empty() -> None:
+            msg = f"First frame of training data is empty: {data_path}"
+            raise TrainerError(msg)
+
         # Verify content parses cleanly
         try:
             from ase.io import iread
             first_frame = next(iread(str(data_path)))
             if not len(first_frame):
-                msg = f"First frame of training data is empty: {data_path}"
-                raise TrainerError(msg)
+                _raise_empty()
+        except TrainerError:
+            raise
         except Exception as e:
             msg = f"Training data failed integrity parsing check: {e}"
             raise TrainerError(msg) from e

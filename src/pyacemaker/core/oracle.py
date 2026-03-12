@@ -235,9 +235,14 @@ class MACEManager(BaseOracle):
 
         self.model_path = str(canonical_path)
 
-        # We assume the MACE model works inside mace_torch or fake calculators for tests
-        # We rely on SinglePointCalculator to assign computed values correctly to the Atoms object
-        self.is_initialized = True
+        try:
+            from mace.calculators import mace_mp
+            # Device can be auto-detected, but we use cpu to be safe in containerized environments by default
+            self.calculator = mace_mp(model=self.model_path, default_dtype="float32", device="cpu")
+            self.is_initialized = True
+        except ImportError as e:
+            msg = "mace-torch must be installed to use MACEManager"
+            raise ImportError(msg) from e
 
     def compute(self, structures: Iterator[Atoms], batch_size: int = 10) -> Iterator[Atoms]:
         if not isinstance(structures, Iterator):
@@ -251,21 +256,29 @@ class MACEManager(BaseOracle):
         for atoms in structures:
             atoms_copy = atoms.copy()  # type: ignore[no-untyped-call]
 
-            # Simulate MACE Foundation Model inference results securely
-            # In a real deployment, `mace_torch.MACECalculator` is attached to `atoms_copy`
-            energy = -10.0 * len(atoms_copy)
-            forces = np.zeros((len(atoms_copy), 3))
+            # Assign real calculator temporarily to trigger calculations
+            atoms_copy.calc = self.calculator
 
-            # Simulated MACE node-level uncertainty (e.g. committee variance)
-            c_gamma = np.random.uniform(0.01, 0.1, size=len(atoms_copy))
+            # Compute properties via strictly enforced ASE Calculator protocol
+            energy = atoms_copy.get_potential_energy()
+            forces = atoms_copy.get_forces()
 
-            # Strictly enforce ASE Calculator protocol.
-            # Never silently push energy into `atoms.info`. Use SinglePointCalculator.
+            # MACE specific uncertainty metric
+            try:
+                # Retrieve directly from the calculator before replacing it
+                uncertainty = atoms_copy.calc.get_property("node_energy_variance", atoms_copy)
+                if uncertainty is None:
+                    uncertainty = np.zeros(len(atoms_copy))
+            except Exception:
+                uncertainty = np.zeros(len(atoms_copy))
+
+            # Freeze the results in a SinglePointCalculator to avoid shared mutable state issues
+            # during batched write operations (like ase.io.write in the Orchestrator).
             calc = SinglePointCalculator(atoms_copy, energy=energy, forces=forces)  # type: ignore[no-untyped-call]
             atoms_copy.calc = calc
 
-            # Uncertainty mappings require custom arrays
-            atoms_copy.new_array("c_gamma", c_gamma)
+            # Uncertainty mappings require custom arrays for downstream processing
+            atoms_copy.new_array("c_gamma", uncertainty)
 
             yield atoms_copy
 

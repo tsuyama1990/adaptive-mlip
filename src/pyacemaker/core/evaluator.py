@@ -13,6 +13,10 @@ class TwoTierEvaluator:
         self.smooth_steps = smooth_steps
         self.consecutive_exceedances = 0
 
+    def _raise_extraction_error(self) -> None:
+        msg = "Failed to extract max_g variable from LAMMPS."
+        raise RuntimeError(msg)
+
     def evaluate(self, lmp: "Any") -> None:
         """
         Evaluate logic called by LAMMPS via fix python/invoke.
@@ -32,10 +36,10 @@ class TwoTierEvaluator:
                     time.sleep(0.1 * (2 ** attempt)) # exponential backoff
 
             if max_gamma is None:
-                msg = "Failed to extract max_g variable from LAMMPS."
-                raise RuntimeError(msg)
+                self._raise_extraction_error()
+                return  # For type checker
 
-            if max_gamma > self.threshold_call_dft:
+            if float(max_gamma) > self.threshold_call_dft:
                 self.consecutive_exceedances += 1
                 logger.debug(
                     f"TwoTierEvaluator: max_gamma ({max_gamma:.4f}) > threshold ({self.threshold_call_dft}). Consecutive: {self.consecutive_exceedances}/{self.smooth_steps}"
