@@ -2,59 +2,64 @@
 platform linux -- Python 3.12.13, pytest-9.0.2, pluggy-1.6.0
 rootdir: /app
 configfile: pyproject.toml
+testpaths: tests
 plugins: cov-7.0.0, anyio-4.12.1
-collected 255 items
+collected 260 items
 
 tests/e2e/test_engine_integration.py ..                                  [  0%]
 tests/e2e/test_orchestrator.py .......                                   [  3%]
 tests/e2e/test_orchestrator_loop.py ...                                  [  4%]
 tests/integration/test_pacemaker_integration.py ..                       [  5%]
 tests/integration/test_scenarios.py .                                    [  5%]
-tests/uat/test_cycle01_uat.py ...                                        [  7%]
+tests/uat/test_cycle01_uat.py ...                                        [  6%]
 tests/uat/test_cycle02_uat.py ..                                         [  7%]
-tests/uat/test_cycle03_uat.py ...                                        [  9%]
+tests/uat/test_cycle03_uat.py ...                                        [  8%]
 tests/uat/test_cycle04_uat.py ...                                        [ 10%]
 tests/uat/test_cycle06_uat.py ..                                         [ 10%]
 tests/uat/test_cycle07_uat.py ..                                         [ 11%]
 tests/uat/test_cycle08_uat.py ...                                        [ 12%]
 tests/unit/test_active_set.py .....                                      [ 14%]
 tests/unit/test_active_set_anchor.py ....                                [ 16%]
-tests/unit/test_delta.py ....                                            [ 18%]
+tests/unit/test_delta.py ....                                            [ 17%]
 tests/unit/test_domain_models.py .................                       [ 24%]
-tests/unit/test_domain_models_dft.py ...........                         [ 29%]
+tests/unit/test_domain_models_dft.py ...........                         [ 28%]
 tests/unit/test_domain_models_eon.py ....                                [ 30%]
 tests/unit/test_domain_models_md.py ...........                          [ 34%]
 tests/unit/test_domain_models_md_new.py ..                               [ 35%]
-tests/unit/test_domain_models_scenario.py ..                             [ 36%]
-tests/unit/test_domain_models_training.py .......                        [ 39%]
+tests/unit/test_domain_models_scenario.py ..                             [ 35%]
+tests/unit/test_domain_models_training.py .......                        [ 38%]
 tests/unit/test_domain_models_validation.py ....                         [ 40%]
-tests/unit/test_elastic.py ....                                          [ 42%]
-tests/unit/test_embedding.py .......                                     [ 45%]
-tests/unit/test_engine.py .......                                        [ 47%]
+tests/unit/test_elastic.py ....                                          [ 41%]
+tests/unit/test_embedding.py .......                                     [ 44%]
+tests/unit/test_engine.py .......                                        [ 46%]
+tests/unit/test_engine_crash.py .                                        [ 47%]
+tests/unit/test_engine_file_contention.py .                              [ 47%]
+tests/unit/test_engine_halt_interrupt.py .                               [ 48%]
 tests/unit/test_engine_halt_step.py ..                                   [ 48%]
-tests/unit/test_engine_relax.py ...                                      [ 49%]
+tests/unit/test_engine_relax.py F..                                      [ 50%]
 tests/unit/test_eon_driver.py .....                                      [ 51%]
-tests/unit/test_evaluator.py ...                                         [ 52%]
-tests/unit/test_extraction.py ..                                         [ 53%]
-tests/unit/test_factory.py ..                                            [ 54%]
-tests/unit/test_generator.py ......                                      [ 56%]
-tests/unit/test_generator_local.py ..                                    [ 57%]
-tests/unit/test_io.py ........                                           [ 60%]
+tests/unit/test_evaluator.py ....                                        [ 53%]
+tests/unit/test_extraction.py ..                                         [ 54%]
+tests/unit/test_factory.py ..                                            [ 55%]
+tests/unit/test_generator.py ......                                      [ 57%]
+tests/unit/test_generator_local.py ..                                    [ 58%]
+tests/unit/test_io.py ........                                           [ 61%]
 tests/unit/test_io_manager.py ..                                         [ 61%]
-tests/unit/test_lammps_driver.py ...........                             [ 65%]
+tests/unit/test_lammps_driver.py ...........                             [ 66%]
 tests/unit/test_lammps_driver_security.py ...                            [ 67%]
 tests/unit/test_lammps_generator.py ...                                  [ 68%]
 tests/unit/test_lammps_generator_reorder.py ..                           [ 69%]
-tests/unit/test_loop.py .....F.                                          [ 71%]
-tests/unit/test_main.py ...                                              [ 72%]
+tests/unit/test_lammps_generator_soft_start.py .                         [ 69%]
+tests/unit/test_loop.py .......                                          [ 72%]
+tests/unit/test_main.py ...                                              [ 73%]
 tests/unit/test_oracle.py ........                                       [ 76%]
 tests/unit/test_oracle_streaming.py .                                    [ 76%]
-tests/unit/test_path_validation.py ....F                                 [ 78%]
-tests/unit/test_perturbations.py ...                                     [ 79%]
+tests/unit/test_path_validation.py .....                                 [ 78%]
+tests/unit/test_perturbations.py ...                                     [ 80%]
 tests/unit/test_phonons.py ..                                            [ 80%]
-tests/unit/test_policies_new.py ....                                     [ 81%]
+tests/unit/test_policies_new.py ....                                     [ 82%]
 tests/unit/test_policy_factory.py ...                                    [ 83%]
-tests/unit/test_process.py ....                                          [ 84%]
+tests/unit/test_process.py ....                                          [ 85%]
 tests/unit/test_qe_driver.py .......                                     [ 87%]
 tests/unit/test_report.py ..                                             [ 88%]
 tests/unit/test_scenarios_fept_mgo.py ......                             [ 90%]
@@ -64,133 +69,53 @@ tests/unit/test_validator.py ....                                        [ 95%]
 tests/unit/test_validator_security.py ...........                        [100%]
 
 =================================== FAILURES ===================================
-__________________ test_loop_state_validation_path_traversal ___________________
+___________________________ test_lammps_engine_relax ___________________________
 
-tmp_path = PosixPath('/tmp/pytest-of-jules/pytest-14/test_loop_state_validation_pat2')
+mock_md_config = MDConfig(temperature=300.0, pressure=1.0, timestep=0.001, n_steps=1000, thermo_freq=10, dump_freq=100, minimize=False,...ut_outer=2.5), fix_halt=False, uncertainty_threshold=5.0, check_interval=10, ramping=None, mc=None, soft_start_steps=0)
+mock_driver_relax = <MagicMock name='LammpsDriver' id='140714292361312'>
+tmp_path = PosixPath('/tmp/pytest-of-jules/pytest-15/test_lammps_engine_relax0')
 
-    def test_loop_state_validation_path_traversal(tmp_path: Path) -> None:
-        """Test validation fails if potential path is outside project root."""
-        # Create project structure
-        project_dir = tmp_path / "project"
-        project_dir.mkdir()
+    def test_lammps_engine_relax(
+        mock_md_config: MDConfig, mock_driver_relax: Any, tmp_path: Path
+    ) -> None:
+        # Setup mock driver
+        driver_class = mock_driver_relax
+        driver_instance = driver_class.return_value
 
-        outside_dir = tmp_path / "outside"
-        outside_dir.mkdir()
-        unsafe_file = outside_dir / "unsafe.yace"
-        unsafe_file.touch()
+        # Mock return of get_atoms
+        relaxed_atoms = Atoms("He", positions=[[0, 0, 0]], cell=[10, 10, 10], pbc=True)
+        driver_instance.get_atoms.return_value = relaxed_atoms
 
-        # We need to change CWD to project_dir for the test to work
-        cwd = Path.cwd()
-        os.chdir(project_dir)
-        try:
-            # LoopState resolves path.
-            # We need to force a path that is NOT in /tmp (if possible)
-            # or rely on the mock if we are in /tmp.
+        engine = LammpsEngine(mock_md_config)
+        initial_atoms = Atoms("He", positions=[[0.1, 0.1, 0.1]], cell=[10, 10, 10], pbc=True)
 
-            with pytest.MonkeyPatch.context() as mp:
-                # Mock gettempdir to fail the whitelist check
-                mp.setattr(tempfile, "gettempdir", lambda: "/nonexistent_temp")
+        # Create dummy potential file
+        pot_path = tmp_path / "potential.yace"
+        pot_path.touch()
 
-                with pytest.raises(ValueError, match="outside allowed roots"):
->                   LoopState(current_potential=unsafe_file)
-E                   pydantic_core._pydantic_core.ValidationError: 1 validation error for LoopState
-E                   current_potential
-E                     Value error, Path attempts to access external root: /tmp/pytest-of-jules/pytest-14/test_loop_state_validation_pat2/outside/unsafe.yace [type=value_error, input_value=PosixPath('/tmp/pytest-of...t2/outside/unsafe.yace'), input_type=PosixPath]
-E                       For further information visit https://errors.pydantic.dev/2.12/v/value_error
+        # Capture script content during execution
+        script_content = []
 
-tests/unit/test_loop.py:79: ValidationError
+        def capture_script(path: str) -> None:
+            script_content.append(Path(path).read_text())
 
-During handling of the above exception, another exception occurred:
+        driver_instance.run_file.side_effect = capture_script
 
-tmp_path = PosixPath('/tmp/pytest-of-jules/pytest-14/test_loop_state_validation_pat2')
+        # Call relax
+        result_atoms = engine.relax(initial_atoms, pot_path)
 
-    def test_loop_state_validation_path_traversal(tmp_path: Path) -> None:
-        """Test validation fails if potential path is outside project root."""
-        # Create project structure
-        project_dir = tmp_path / "project"
-        project_dir.mkdir()
+        # Verify result
+        assert result_atoms == relaxed_atoms
+        assert result_atoms.get_chemical_symbols() == ["He"]  # type: ignore[no-untyped-call]
 
-        outside_dir = tmp_path / "outside"
-        outside_dir.mkdir()
-        unsafe_file = outside_dir / "unsafe.yace"
-        unsafe_file.touch()
+        # Verify script content
+        assert len(script_content) == 1
+        script = script_content[0]
 
-        # We need to change CWD to project_dir for the test to work
-        cwd = Path.cwd()
-        os.chdir(project_dir)
-        try:
-            # LoopState resolves path.
-            # We need to force a path that is NOT in /tmp (if possible)
-            # or rely on the mock if we are in /tmp.
+>       assert "minimize" in script
+E       AssertionError: assert 'minimize' in ''
 
-            with pytest.MonkeyPatch.context() as mp:
-                # Mock gettempdir to fail the whitelist check
-                mp.setattr(tempfile, "gettempdir", lambda: "/nonexistent_temp")
-
->               with pytest.raises(ValueError, match="outside allowed roots"):
-                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-E               AssertionError: Regex pattern did not match.
-E                 Expected regex: 'outside allowed roots'
-E                 Actual message: "1 validation error for LoopState\ncurrent_potential\n  Value error, Path attempts to access external root: /tmp/pytest-of-jules/pytest-14/test_loop_state_validation_pat2/outside/unsafe.yace [type=value_error, input_value=PosixPath('/tmp/pytest-of...t2/outside/unsafe.yace'), input_type=PosixPath]\n    For further information visit https://errors.pydantic.dev/2.12/v/value_error"
-
-tests/unit/test_loop.py:78: AssertionError
-___________________ test_validate_path_safe_outside_allowed ____________________
-
-    def test_validate_path_safe_outside_allowed() -> None:
-        # /etc/passwd is outside allowed
-        if Path("/etc/passwd").exists():
-            with pytest.raises(ValueError, match="Path traversal detected"):
->               validate_path_safe(Path("/etc/passwd"))
-
-tests/unit/test_path_validation.py:41:
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
-
-path = PosixPath('/etc/passwd')
-
-    def validate_path_safe(path: Path) -> Path:  # noqa: C901
-        """
-        Ensures path is safe using strict resolution and character allowlisting.
-        Centralized utility for path validation.
-
-        Args:
-            path: The path to validate.
-
-        Returns:
-            The resolved Path object.
-
-        Raises:
-            ValueError: If the path contains dangerous characters, traversal attempts,
-                        or resolves outside allowed directories (CWD, temp, /dev/shm).
-        """
-        s = str(path)
-
-        # Check for dangerous patterns in string representation BEFORE resolve
-        if ".." in s:
-            msg = f"Path traversal attempt detected (parent directory reference): {path}"
-            raise ValueError(msg)
-
-        # Check absolute path prefixes to ensure we don't start with dangerous roots not in allowed directly
-        tmp_path_str = tempfile.gettempdir()
-        shm_path_str = DEFAULT_RAM_DISK_PATH
-        if path.is_absolute() and not str(path).startswith((tmp_path_str, shm_path_str, str(Path.cwd().resolve()))):
-            msg = f"Path attempts to access external root: {path}"
->           raise ValueError(msg)
-E           ValueError: Path attempts to access external root: /etc/passwd
-
-src/pyacemaker/utils/path.py:34: ValueError
-
-During handling of the above exception, another exception occurred:
-
-    def test_validate_path_safe_outside_allowed() -> None:
-        # /etc/passwd is outside allowed
-        if Path("/etc/passwd").exists():
->           with pytest.raises(ValueError, match="Path traversal detected"):
-                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-E           AssertionError: Regex pattern did not match.
-E             Expected regex: 'Path traversal detected'
-E             Actual message: 'Path attempts to access external root: /etc/passwd'
-
-tests/unit/test_path_validation.py:40: AssertionError
+tests/unit/test_engine_relax.py:55: AssertionError
 =============================== warnings summary ===============================
 tests/e2e/test_orchestrator_loop.py::test_run_loop_iteration_halt
   /app/.venv/lib/python3.12/site-packages/e3nn/o3/_wigner.py:10: UserWarning: Environment variable TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD detected, since the`weights_only` argument was not explicitly passed to `torch.load`, forcing weights_only=False.
@@ -214,6 +139,111 @@ tests/uat/test_cycle01_uat.py::test_scenario_01_02_guardrails_check_cutoff
     PydanticSerializationUnexpectedValue(Expected `TrainingConfig` - serialized value may not be as expected [field_name='training', input_value={'cutoff_radius': -1.0}, input_type=dict])
     return self.__pydantic_serializer__.to_python(
 
+tests/unit/test_engine_file_contention.py::test_engine_file_contention
+  /app/.venv/lib/python3.12/site-packages/_pytest/threadexception.py:58: PytestUnhandledThreadExceptionWarning: Exception in thread Thread-3 (worker)
+
+  Traceback (most recent call last):
+    File "/app/src/pyacemaker/interfaces/lammps_driver.py", line 35, in __init__
+      self.lmp = lammps(cmdargs=cmdargs)
+                 ^^^^^^^^^^^^^^^^^^^^^^^
+    File "/app/.venv/lib/python3.12/site-packages/lammps/core.py", line 228, in __init__
+      self.lib = CDLL(libpath,RTLD_GLOBAL)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/ctypes/__init__.py", line 379, in __init__
+      self._handle = _dlopen(self._name, mode)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^
+  OSError: libmpi.so.12: cannot open shared object file: No such file or directory
+
+  The above exception was the direct cause of the following exception:
+
+  Traceback (most recent call last):
+    File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/threading.py", line 1075, in _bootstrap_inner
+      self.run()
+    File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/threading.py", line 1012, in run
+      self._target(*self._args, **self._kwargs)
+    File "/app/tests/unit/test_engine_file_contention.py", line 50, in worker
+      engine.run(atoms, potential)
+    File "/app/src/pyacemaker/core/engine.py", line 196, in run
+      driver = LammpsDriver(lammps_args)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/app/src/pyacemaker/interfaces/lammps_driver.py", line 39, in __init__
+      raise RuntimeError(msg) from e
+  RuntimeError: Failed to initialize LAMMPS: libmpi.so.12: cannot open shared object file: No such file or directory
+
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+    warnings.warn(pytest.PytestUnhandledThreadExceptionWarning(msg))
+
+tests/unit/test_engine_file_contention.py::test_engine_file_contention
+  /app/.venv/lib/python3.12/site-packages/_pytest/threadexception.py:58: PytestUnhandledThreadExceptionWarning: Exception in thread Thread-8 (worker)
+
+  Traceback (most recent call last):
+    File "/app/src/pyacemaker/interfaces/lammps_driver.py", line 35, in __init__
+      self.lmp = lammps(cmdargs=cmdargs)
+                 ^^^^^^^^^^^^^^^^^^^^^^^
+    File "/app/.venv/lib/python3.12/site-packages/lammps/core.py", line 228, in __init__
+      self.lib = CDLL(libpath,RTLD_GLOBAL)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/ctypes/__init__.py", line 379, in __init__
+      self._handle = _dlopen(self._name, mode)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^
+  OSError: libmpi.so.12: cannot open shared object file: No such file or directory
+
+  The above exception was the direct cause of the following exception:
+
+  Traceback (most recent call last):
+    File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/threading.py", line 1075, in _bootstrap_inner
+      self.run()
+    File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/threading.py", line 1012, in run
+      self._target(*self._args, **self._kwargs)
+    File "/app/tests/unit/test_engine_file_contention.py", line 50, in worker
+      engine.run(atoms, potential)
+    File "/app/src/pyacemaker/core/engine.py", line 196, in run
+      driver = LammpsDriver(lammps_args)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/app/src/pyacemaker/interfaces/lammps_driver.py", line 39, in __init__
+      raise RuntimeError(msg) from e
+  RuntimeError: Failed to initialize LAMMPS: libmpi.so.12: cannot open shared object file: No such file or directory
+
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+    warnings.warn(pytest.PytestUnhandledThreadExceptionWarning(msg))
+
+tests/unit/test_engine_file_contention.py::test_engine_file_contention
+  /app/.venv/lib/python3.12/site-packages/_pytest/threadexception.py:58: PytestUnhandledThreadExceptionWarning: Exception in thread Thread-6 (worker)
+
+  Traceback (most recent call last):
+    File "/app/src/pyacemaker/interfaces/lammps_driver.py", line 35, in __init__
+      self.lmp = lammps(cmdargs=cmdargs)
+                 ^^^^^^^^^^^^^^^^^^^^^^^
+    File "/app/.venv/lib/python3.12/site-packages/lammps/core.py", line 228, in __init__
+      self.lib = CDLL(libpath,RTLD_GLOBAL)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/ctypes/__init__.py", line 379, in __init__
+      self._handle = _dlopen(self._name, mode)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^
+  OSError: libmpi.so.12: cannot open shared object file: No such file or directory
+
+  The above exception was the direct cause of the following exception:
+
+  Traceback (most recent call last):
+    File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/threading.py", line 1075, in _bootstrap_inner
+      self.run()
+    File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/threading.py", line 1012, in run
+      self._target(*self._args, **self._kwargs)
+    File "/app/tests/unit/test_engine_file_contention.py", line 50, in worker
+      engine.run(atoms, potential)
+    File "/app/src/pyacemaker/core/engine.py", line 196, in run
+      driver = LammpsDriver(lammps_args)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/app/src/pyacemaker/interfaces/lammps_driver.py", line 39, in __init__
+      raise RuntimeError(msg) from e
+  RuntimeError: Failed to initialize LAMMPS: libmpi.so.12: cannot open shared object file: No such file or directory
+
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+    warnings.warn(pytest.PytestUnhandledThreadExceptionWarning(msg))
+
 tests/unit/test_io.py::test_write_lammps_streaming_basic
   /app/.venv/lib/python3.12/site-packages/ase/io/lammpsdata.py:72: FutureWarning: "style" is deprecated; please use "atom_style".
     warnings.warn(
@@ -230,12 +260,12 @@ src/pyacemaker/core/active_set.py               71     10    86%   46-47, 60-61,
 src/pyacemaker/core/base.py                     32      0   100%
 src/pyacemaker/core/config_generator.py         36      3    92%   56-58
 src/pyacemaker/core/directory_manager.py        20      0   100%
-src/pyacemaker/core/engine.py                  137     38    72%   50, 64-65, 71-72, 86, 88, 91-92, 110-111, 113-114, 120-121, 124-125, 127-128, 130-131, 149, 151, 153, 180, 195-200, 206-207, 220, 245-250, 272
-src/pyacemaker/core/evaluator.py                39      2    95%   35-36
-src/pyacemaker/core/exceptions.py                8      0   100%
+src/pyacemaker/core/engine.py                  158     46    71%   51, 65-66, 72-73, 90, 92, 96-102, 104-105, 123-124, 126-127, 133-134, 137-138, 140-141, 143-144, 162, 164, 166, 193, 213-218, 224-225, 243-246, 272-277, 299
+src/pyacemaker/core/evaluator.py                59      5    92%   38-39, 76-77, 81
+src/pyacemaker/core/exceptions.py               14      0   100%
 src/pyacemaker/core/generator.py                53     11    79%   36-39, 59, 62, 97, 107, 113, 115, 138
 src/pyacemaker/core/io_manager.py               74     30    59%   58-71, 78-81, 106-107, 110-115, 124-125, 129, 133-141
-src/pyacemaker/core/lammps_generator.py        166     35    79%   39-40, 107-127, 143-159, 168, 187-194, 282-283
+src/pyacemaker/core/lammps_generator.py        174     31    82%   42-44, 151-167, 176, 195-202, 324-337
 src/pyacemaker/core/loop.py                     70      6    91%   56, 63, 79-82, 85
 src/pyacemaker/core/m3gnet_wrapper.py           20      6    70%   26-27, 33-35, 52-54
 src/pyacemaker/core/oracle.py                  157     17    89%   180-185, 230-231, 233-234, 244, 286-287, 290-291, 299, 341-343
@@ -252,7 +282,7 @@ src/pyacemaker/domain_models/defaults.py       131      0   100%
 src/pyacemaker/domain_models/dft.py             36      4    89%   79-80, 87-88
 src/pyacemaker/domain_models/eon.py             34      4    88%   66-69
 src/pyacemaker/domain_models/logging.py         31      9    71%   24-25, 31, 39, 45-47, 50-51
-src/pyacemaker/domain_models/md.py             134     25    81%   40, 62-63, 82-83, 119-120, 125-126, 128-129, 133-134, 136-137, 234-235, 241-242, 250-251, 258-259, 261-262
+src/pyacemaker/domain_models/md.py             136     25    82%   40, 62-63, 82-83, 122-123, 128-129, 131-132, 136-137, 139-140, 242-243, 249-250, 258-259, 266-267, 269-270
 src/pyacemaker/domain_models/scenario.py         7      0   100%
 src/pyacemaker/domain_models/structure.py       71      4    94%   97-98, 116-117
 src/pyacemaker/domain_models/training.py        46      0   100%
@@ -266,7 +296,7 @@ src/pyacemaker/interfaces/process.py            14      5    64%   12, 22-29
 src/pyacemaker/interfaces/qe_driver.py          48      2    96%   113-114
 src/pyacemaker/logger.py                        22      1    95%   42
 src/pyacemaker/main.py                          47      9    81%   21-24, 49-50, 59-60, 74
-src/pyacemaker/orchestrator.py                 365    111    70%   106-109, 164, 198-215, 223, 227-228, 241-245, 264, 268-269, 299-300, 305, 317-319, 324-325, 338, 359-361, 370-398, 414, 418, 423, 452-502, 517-518, 531-532, 540-546, 563-587, 599-609, 628, 632, 639-640, 648-656, 673, 677, 680-681, 692-696, 740-743, 777
+src/pyacemaker/orchestrator.py                 364    111    70%   106-109, 164, 198-215, 223, 227-228, 241-245, 264, 268-269, 299-300, 305, 317-319, 324-325, 338, 358-360, 369-397, 413, 417, 422, 451-501, 516-517, 530-531, 539-545, 562-586, 598-608, 627, 631, 638-639, 647-655, 672, 676, 679-680, 691-695, 739-742, 776
 src/pyacemaker/scenarios/__init__.py             3      0   100%
 src/pyacemaker/scenarios/base_scenario.py       12      1    92%   20
 src/pyacemaker/scenarios/fept_mgo.py           148     28    81%   80, 162-165, 170-172, 181-182, 195-196, 203, 216, 221-222, 225-226, 233, 237, 245-258, 266-268
@@ -281,10 +311,9 @@ src/pyacemaker/utils/phonons.py                 51      2    96%   51, 69
 src/pyacemaker/utils/process.py                 32      6    81%   76-83
 src/pyacemaker/utils/structure.py                6      2    67%   19-20
 --------------------------------------------------------------------------
-TOTAL                                         3313    622    81%
+TOTAL                                         3369    629    81%
 =========================== short test summary info ============================
-FAILED tests/unit/test_loop.py::test_loop_state_validation_path_traversal - A...
-FAILED tests/unit/test_path_validation.py::test_validate_path_safe_outside_allowed
-================== 2 failed, 253 passed, 9 warnings in 20.50s ==================
+FAILED tests/unit/test_engine_relax.py::test_lammps_engine_relax - AssertionE...
+================= 1 failed, 259 passed, 12 warnings in 14.65s ==================
 /app/.venv/lib/python3.12/site-packages/coverage/inorout.py:561: CoverageWarning: Module dev_src was never imported. (module-not-imported); see https://coverage.readthedocs.io/en/7.13.4/messages.html#warning-module-not-imported
   self.warn(f"Module {pkg} was never imported.", slug="module-not-imported")

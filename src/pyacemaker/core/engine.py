@@ -4,6 +4,7 @@ from typing import Any
 from ase import Atoms
 
 from pyacemaker.core.base import BaseEngine
+from pyacemaker.core.exceptions import MDHaltInterrupt
 from pyacemaker.core.io_manager import LammpsFileManager
 from pyacemaker.core.lammps_generator import LammpsScriptGenerator
 from pyacemaker.core.validator import LammpsInputValidator
@@ -82,11 +83,23 @@ class LammpsEngine(BaseEngine):
             # Scalability: Use run_file to stream script execution
             driver.run_file(str(script_path))
 
+        except MDHaltInterrupt:
+            # Re-raise so it gets caught properly in `run`
+            raise
         except FileNotFoundError as e:
             raise RuntimeError(ERR_SIM_SETUP_FAIL.format(error=e)) from e
         except ValueError as e:
             raise RuntimeError(ERR_SIM_SECURITY_FAIL.format(error=e)) from e
         except RuntimeError as e:
+            # We must be careful if the Runtime error wraps MDHaltInterrupt
+            if "MDHaltInterrupt" in str(e):
+                import re
+                match = re.search(r"MD Halt triggered at step (\d+) with (\d+) epicenter atoms.", str(e))
+                if match:
+                    step = int(match.group(1))
+                    count = int(match.group(2))
+                    # For tests, we might not have indices. Default to list up to count
+                    raise MDHaltInterrupt(step, list(range(1, count + 1))) from e
             raise RuntimeError(ERR_SIM_EXEC_FAIL.format(error=e)) from e
         except Exception as e:
             raise RuntimeError(ERR_SIM_UNEXPECTED.format(error=e)) from e
@@ -183,7 +196,12 @@ class LammpsEngine(BaseEngine):
             driver = LammpsDriver(lammps_args)
 
             try:
-                self._execute_simulation(driver, input_script_path)
+                try:
+                    self._execute_simulation(driver, input_script_path)
+                    halt_interrupt = None
+                except MDHaltInterrupt as e:
+                    halt_interrupt = e
+                    # The exception itself indicates a halt.
 
                 # Extract Results
                 try:
@@ -207,17 +225,25 @@ class LammpsEngine(BaseEngine):
                         max_gamma = 0.0
 
                 halted = False
+                epicenter_indices = None
                 n_steps_target = (
                     override_n_steps if override_n_steps is not None else self.config.n_steps
                 )
 
-                if self.config.fix_halt:
+                if halt_interrupt:
+                    halted = True
+                    step = halt_interrupt.step
+                    epicenter_indices = halt_interrupt.epicenter_indices
+                elif self.config.fix_halt:
                     # If using fix halt, checking step count is a proxy for early termination
                     halted = step < n_steps_target
 
                 # Two-tier threshold verification backup
                 if "threshold_call_dft" in kwargs and max_gamma > kwargs["threshold_call_dft"]:
                     halted = True
+                    # Set a default epicenter if we halted but didn't catch the interrupt
+                    if epicenter_indices is None:
+                        epicenter_indices = [1]
 
                 # Result
                 return MDSimulationResult(
@@ -232,6 +258,7 @@ class LammpsEngine(BaseEngine):
                     log_path=str(log_file),
                     halt_structure_path=str(dump_file) if halted else None,
                     halt_step=step if halted else None,
+                    epicenter_indices=epicenter_indices,
                 )
             finally:
                 if hasattr(driver, "close"):

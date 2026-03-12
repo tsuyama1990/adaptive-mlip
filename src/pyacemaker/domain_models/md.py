@@ -111,6 +111,9 @@ class MDSimulationResult(BaseModel):
         None, description="Path to the structure where halt occurred"
     )
     halt_step: int | None = Field(None, description="The step at which the simulation was halted")
+    epicenter_indices: list[int] | None = Field(
+        None, description="Indices of atoms whose uncertainty exceeded threshold_add_train"
+    )
 
     @model_validator(mode="after")
     def validate_physical_values(self) -> "MDSimulationResult":
@@ -226,6 +229,11 @@ class MDConfig(BaseModel):
     # Spec Section 3.1: Ramping and MC
     ramping: MDRampingConfig | None = Field(None, description="Configuration for T/P ramping")
     mc: MCConfig | None = Field(None, description="Configuration for Monte Carlo atom swapping")
+
+    # Cycle 04 Soft Start
+    soft_start_steps: int = Field(
+        0, ge=0, description="Number of steps to run a strong Langevin thermostat upon resume"
+    )
 
     @model_validator(mode="after")
     def validate_simulation_physics(self) -> "MDConfig":
