@@ -44,13 +44,15 @@ def test_scenario_phase1_distillation() -> None:
         atoms1 = Atoms("Fe", cell=[2, 2, 2], pbc=True)
         atoms2 = Atoms("Pt", cell=[2, 2, 2], pbc=True)
 
-        results = list(mace_manager.compute(iter([atoms1, atoms2])))
+        results: list[Atoms] = list(mace_manager.compute(iter([atoms1, atoms2])))
 
         assert len(results) == 2
         # We assert the calculator holds energy and forces, as we moved away from info/arrays mock
         assert results[0].calc is not None
-        assert results[0].get_potential_energy() is not None  # type: ignore[no-untyped-call]
-        assert results[0].get_forces() is not None  # type: ignore[no-untyped-call]
+        energy = results[0].get_potential_energy()  # type: ignore[no-untyped-call]
+        assert energy is not None
+        forces = results[0].get_forces()  # type: ignore[no-untyped-call]
+        assert forces is not None
 
         for atoms in results:
             c_gamma = atoms.get_array("c_gamma")  # type: ignore[no-untyped-call]
@@ -91,7 +93,7 @@ def test_scenario_phase3_cutout() -> None:
         target_atoms = [0]
 
         with patch("pyacemaker.utils.extraction._pre_relax_buffer", return_value=atoms):
-            cluster = extract_intelligent_cluster(
+            cluster: Atoms = extract_intelligent_cluster(
                 atoms, target_atoms, config, calculator=getattr(mace_manager, "calc", None)
             )
 
