@@ -33,9 +33,9 @@ class TwoTierEvaluator:
 
             if max_gamma is None:
                 msg = "Failed to extract max_g variable from LAMMPS."
-                raise ValueError(msg)
+                raise RuntimeError(msg)
 
-            if max_gamma is not None and max_gamma > self.threshold_call_dft:
+            if max_gamma > self.threshold_call_dft:
                 self.consecutive_exceedances += 1
                 logger.debug(
                     f"TwoTierEvaluator: max_gamma ({max_gamma:.4f}) > threshold ({self.threshold_call_dft}). Consecutive: {self.consecutive_exceedances}/{self.smooth_steps}"
