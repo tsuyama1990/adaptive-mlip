@@ -61,7 +61,7 @@ def _passivate_surface(cluster: Atoms, element: str = "H") -> Atoms:
         mask = i_indices == idx
         n_neighbors = np.sum(mask)
 
-        symbol = cluster_copy.get_chemical_symbols()[idx] # type: ignore[no-untyped-call]
+        symbol = cluster_copy.get_chemical_symbols()[idx]
 
         # Simple heuristic for expected coordination based on valency
         expected_coord = 6 # Typical for many transition metals and oxides in bulk
