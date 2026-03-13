@@ -37,7 +37,8 @@ def test_generator_hybrid_potential(tmp_path: Path) -> None:
         timestep=0.001,
         n_steps=1000,
         hybrid_potential=True,
-        hybrid_params=HybridParams(zbl_cut_inner=1.0, zbl_cut_outer=1.5),
+        zbl_cut_inner=1.0,
+        zbl_cut_outer=1.5,
     )
     generator = LammpsScriptGenerator(config)
 

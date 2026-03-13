@@ -60,9 +60,10 @@ class PacemakerTrainer(BaseTrainer):
         """
         Mixes a replay buffer with the new active learning data and runs incremental delta learning.
         """
+        import itertools
         from pathlib import Path
 
-        from ase.io import read, write
+        from ase.io import iread, write
 
         # We need a dynamic path to history, we assume it's stored alongside the new data
         # or in the default config directory
@@ -72,12 +73,15 @@ class PacemakerTrainer(BaseTrainer):
 
         replay_buffer = self.get_replay_buffer(strategy_config.replay_buffer_size, history_path)
 
-        new_data = list(read(new_data_path, index=":"))
-        combined_data = new_data + replay_buffer
+        # Use streaming to combine data, averting OOM issues with large datasets
+        new_data_stream = iread(new_data_path, index=":")
+        combined_data_stream = itertools.chain(new_data_stream, replay_buffer)
 
-        # Write to a temporary file, then train
+        # Write to a temporary file using the generator, then train
         temp_file = Path(new_data_path).parent / "combined_train_data.extxyz"
-        write(temp_file, combined_data, format="extxyz")
+
+        # Write consumes the generator efficiently without materializing all frames at once
+        write(temp_file, combined_data_stream, format="extxyz")  # type: ignore[arg-type]
 
         try:
             return self.train(temp_file, initial_potential)

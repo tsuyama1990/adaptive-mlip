@@ -11,6 +11,8 @@ def driver():
         return LammpsDriver()
 
 
+from pyacemaker.utils.validation import validate_lammps_command
+
 def test_validate_command_safe(driver):
     """Test safe commands pass validation."""
     safe_cmds = [
@@ -23,7 +25,7 @@ def test_validate_command_safe(driver):
         "run 1000",
     ]
     for cmd in safe_cmds:
-        driver._validate_command(cmd)
+        validate_lammps_command(cmd)
 
 
 def test_validate_command_unsafe_chars(driver):
@@ -37,9 +39,9 @@ def test_validate_command_unsafe_chars(driver):
     ]
     for cmd in unsafe_cmds:
         with pytest.raises(
-            ValueError, match="contains forbidden characters|forbidden command|unrecognized command"
+            ValueError, match="contains explicitly blocked shell metacharacters|contains forbidden characters|forbidden command|unrecognized command"
         ):
-            driver._validate_command(cmd)
+            validate_lammps_command(cmd)
 
 
 def test_validate_command_shell_token(driver):
@@ -47,4 +49,4 @@ def test_validate_command_shell_token(driver):
     # shell command is valid LAMMPS command but dangerous
     cmd = "shell cd /tmp"
     with pytest.raises(ValueError, match="unrecognized command"):
-        driver._validate_command(cmd)
+        validate_lammps_command(cmd)

@@ -78,10 +78,9 @@ class LammpsScriptGenerator:
         """Generates hybrid PACE + ZBL potential commands."""
         species_str = " ".join(elements)
         quoted_pot = self._quote(str(potential_path))
-        params = self.config.hybrid_params
 
         buffer.write(
-            f"pair_style hybrid/overlay pace zbl {params.zbl_cut_inner} {params.zbl_cut_outer}\n"
+            f"pair_style hybrid/overlay pace zbl {self.config.zbl_cut_inner} {self.config.zbl_cut_outer}\n"
         )
         buffer.write(f"pair_coeff * * pace {quoted_pot} {species_str}\n")
 

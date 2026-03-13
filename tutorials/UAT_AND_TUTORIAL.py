@@ -65,7 +65,7 @@ def __3(
 
         mo.output.append(f"Evaluated Fe BCC with MACE. Energy: {res.info.get('energy')} eV")
         mo.output.append(
-            f"Calculated uncertainty (c_gamma max): {res.get_array('c_gamma').max():.4f}"
+            f"Calculated uncertainty (c_gamma max): {res.get_array('c_gamma').max():.4f}"  # type: ignore[no-untyped-call]
         )
 
     return distillation_config, mace, res, Path
@@ -85,7 +85,7 @@ def __4(mo: Any, execute_real_physics: Any, bulk: Any, np: Any) -> tuple[Any, An
         passivation_element="H",
     )
 
-    mgo = bulk("MgO", "rocksalt", a=4.21).repeat((3, 3, 3))
+    mgo = bulk("MgO", "rocksalt", a=4.21).repeat((3, 3, 3))  # type: ignore[no-untyped-call]
     del mgo[0]
 
     target_atoms = [0]
@@ -97,7 +97,7 @@ def __4(mo: Any, execute_real_physics: Any, bulk: Any, np: Any) -> tuple[Any, An
             f"Successfully extracted and passivated cluster. Size: {len(cluster)} atoms."
         )
         mo.output.append(
-            f"Weights assigned: core={len(np.where(cluster.get_array('force_weight') == 1.0)[0])}"
+            f"Weights assigned: core={len(np.where(cluster.get_array('force_weight') == 1.0)[0])}"  # type: ignore[no-untyped-call]
         )
     except Exception as e:
         mo.output.append(f"Error extracting cluster: {e}")

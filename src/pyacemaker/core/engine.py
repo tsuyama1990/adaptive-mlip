@@ -8,10 +8,6 @@ from pyacemaker.core.io_manager import LammpsFileManager
 from pyacemaker.core.lammps_generator import LammpsScriptGenerator
 from pyacemaker.core.validator import LammpsInputValidator
 from pyacemaker.domain_models.constants import (
-    ERR_SIM_EXEC_FAIL,
-    ERR_SIM_SECURITY_FAIL,
-    ERR_SIM_SETUP_FAIL,
-    ERR_SIM_UNEXPECTED,
     ERR_STRUCTURE_NONE,
     LAMMPS_SCREEN_ARG,
 )
@@ -66,34 +62,16 @@ class LammpsEngine(BaseEngine):
 
     def _validate_script_content(self, script_path: Path) -> None:
         """Validates script content for shell injection vulnerabilities."""
-        max_size = 1024 * 1024  # 1MB limit
-        if script_path.stat().st_size > max_size:
-            msg = f"Script file size exceeds maximum limit of 1MB: {script_path}"
-            raise ValueError(msg)
+        from pyacemaker.utils.validation import validate_lammps_script_file
 
-        from pyacemaker.domain_models.constants import LAMMPS_SCREEN_ARG
-        from pyacemaker.interfaces.lammps_driver import LammpsDriver
-
-        driver = LammpsDriver(
-            cmdargs=["-screen", LAMMPS_SCREEN_ARG]
-        )  # Get access to validation logic safely
-
-        with script_path.open("r", encoding="utf-8") as f:
-            for line_idx, line in enumerate(f):
-                line_str = line.strip()
-                if not line_str or line_str.startswith("#"):
-                    continue
-                # Reuse the robust validation logic from LammpsDriver directly
-                try:
-                    driver._validate_command(line_str)
-                except ValueError as e:
-                    msg = f"Forbidden command detected in LAMMPS script line {line_idx + 1} ({script_path}): {e}"
-                    raise ValueError(msg) from e
+        validate_lammps_script_file(script_path)
 
     def _execute_simulation(self, driver: LammpsDriver, script_path: Path) -> None:
         """
         Executes the simulation script with standardized error handling.
         """
+        from pyacemaker.core.error_handler import LammpsErrorHandler
+
         try:
             self._ensure_script_readable(script_path)
             self._validate_script_content(script_path)
@@ -101,14 +79,8 @@ class LammpsEngine(BaseEngine):
             # Scalability: Use run_file to stream script execution
             driver.run_file(str(script_path))
 
-        except FileNotFoundError as e:
-            raise RuntimeError(ERR_SIM_SETUP_FAIL.format(error=e)) from e
-        except ValueError as e:
-            raise RuntimeError(ERR_SIM_SECURITY_FAIL.format(error=e)) from e
-        except RuntimeError as e:
-            raise RuntimeError(ERR_SIM_EXEC_FAIL.format(error=e)) from e
         except Exception as e:
-            raise RuntimeError(ERR_SIM_UNEXPECTED.format(error=e)) from e
+            LammpsErrorHandler.handle(e)
 
     def _validate_resume_params(self, kwargs: dict[str, Any]) -> tuple[int | None, int | None]:
         """Validates keyword arguments for resuming and overriding steps."""

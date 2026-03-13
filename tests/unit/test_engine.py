@@ -111,9 +111,8 @@ def test_lammps_engine_halted(mock_md_config: MDConfig, mock_driver: Any, tmp_pa
 def test_lammps_engine_hybrid_potential(
     mock_md_config: MDConfig, mock_driver: Any, tmp_path: Path
 ) -> None:
-    hybrid_params = HybridParams(zbl_cut_inner=1.0, zbl_cut_outer=1.5)
     config = mock_md_config.model_copy(
-        update={"hybrid_potential": True, "hybrid_params": hybrid_params}
+        update={"hybrid_potential": True, "zbl_cut_inner": 1.0, "zbl_cut_outer": 1.5}
     )
 
     engine = LammpsEngine(config)

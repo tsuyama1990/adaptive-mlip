@@ -214,31 +214,11 @@ class MACEManager(BaseOracle):
     """
 
     def __init__(self, model_path: str) -> None:
-
         from pyacemaker.domain_models.defaults import DEFAULT_POTENTIALS_DIR
+        from pyacemaker.utils.security import validate_path_containment
 
-        # Verify containment: ensure the path falls inside the accepted allowed_base_dir.
-        # This prevents traversal attacks (e.g., passing "../../../etc/passwd").
-
-        # We must strictly resolve the path before checking containment to safely unpack all symlinks.
-        try:
-            canonical_path = Path(model_path).resolve(strict=True)
-        except FileNotFoundError as e:
-            msg = f"MACE model path does not exist: {model_path}"
-            raise FileNotFoundError(msg) from e
-
-        # Also canonicalize the allowed directory to properly evaluate containment.
-        allowed_dir = Path(DEFAULT_POTENTIALS_DIR).resolve(strict=True)
-
-        # Proceed with strict containment check on resolved paths
-        if not canonical_path.is_relative_to(allowed_dir):
-            msg = f"MACE model path {canonical_path} is outside allowed directory {allowed_dir}"
-            raise ValueError(msg)
-
-        if not canonical_path.is_file():
-            msg = f"MACE model path must be a file: {canonical_path}"
-            raise ValueError(msg)
-
+        # Securely validate containment
+        canonical_path = validate_path_containment(model_path, DEFAULT_POTENTIALS_DIR)
         self.model_path = str(canonical_path)
 
         # Initialize MACE properly
