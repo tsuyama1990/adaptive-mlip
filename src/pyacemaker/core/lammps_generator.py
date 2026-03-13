@@ -142,9 +142,11 @@ class LammpsScriptGenerator:
         buffer.write(f"compute gamma all pace {quoted_pot}\n")
         buffer.write("compute max_gamma all reduce max c_gamma\n")
         buffer.write("variable max_g equal c_max_gamma\n")
+
+        # We replace `fix halt` with `fix python/invoke` using TwoTierEvaluator
+        # This calls the `eval_uncertainty` python function every `check_interval` steps
         buffer.write(
-            f"fix halt_check all halt {self.config.check_interval} "
-            f"v_max_g > {self.config.uncertainty_threshold} error continue\n"
+            f"fix py_halt all python/invoke {self.config.check_interval} post_force eval_uncertainty\n"
         )
 
     def _gen_mc(self, buffer: TextIO, elements: list[str]) -> None:
@@ -265,6 +267,10 @@ class LammpsScriptGenerator:
         # Output setup MUST come before run
         self._gen_output_setup(buffer, dump_file)
 
+        # Inject Python TwoTierEvaluator
+        if self.config.fix_halt:
+            buffer.write("python eval_uncertainty invoke here\n")
+
         # Write velocity and run conditionally
         # If resume is true, these are skipped/handled externally
 
@@ -288,6 +294,7 @@ class LammpsScriptGenerator:
         dump_file: Path,
         elements: list[str],
         resume_step: int,
+        override_n_steps: int | None = None,
     ) -> None:
         """
         Writes a script specifically for resuming from a restart file.
@@ -300,11 +307,19 @@ class LammpsScriptGenerator:
         self._gen_settings(buffer)
         self._gen_watchdog(buffer, potential_path)
         self._gen_output_setup(buffer, dump_file)
+
+        # Inject Python TwoTierEvaluator
+        if self.config.fix_halt:
+            buffer.write("python eval_uncertainty invoke here\n")
+
         self._gen_execution(buffer, elements)
 
         # We do NOT write velocity create here because it is read from restart
         # Calculate remaining steps
-        steps_left = max(0, self.config.n_steps - resume_step)
+        if override_n_steps is not None:
+            steps_left = override_n_steps
+        else:
+            steps_left = max(0, self.config.n_steps - resume_step)
 
         # Master-Slave resume logic
         buffer.write("reset_timestep ${step}\n")  # step is read from restart

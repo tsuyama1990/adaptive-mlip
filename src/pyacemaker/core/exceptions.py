@@ -22,6 +22,10 @@ class EngineError(PyAceError):
     """MD Engine related errors."""
 
 
+class MDHaltInterrupt(Exception):  # noqa: N818
+    """Interrupt raised to safely halt MD via TwoTierEvaluator."""
+
+
 class ActiveSetError(PyAceError):
     """Active set selection errors."""
 

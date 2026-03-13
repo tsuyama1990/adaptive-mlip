@@ -41,7 +41,7 @@ def _pre_relax_buffer(cluster: Atoms, fmax: float = 0.05, steps: int = 50) -> At
     return cluster_copy  # type: ignore[no-any-return]
 
 
-def _passivate_surface(cluster: Atoms, element: str = "H") -> Atoms:
+def _passivate_surface(cluster: Atoms, element: str = "H") -> Atoms:  # noqa: C901, PLR0912
     """
     Passivates the surface of the cluster by adding dummy atoms (e.g. H) to undercoordinated atoms.
     Uses covalent radii to determine missing bonds.
@@ -74,11 +74,14 @@ def _passivate_surface(cluster: Atoms, element: str = "H") -> Atoms:
             expected_coord = 6
         elif symbol in ["Fe", "Pt"]:
             expected_coord = 8  # BCC/FCC bulk roughly
+        elif symbol in ["H"]:
+            expected_coord = 1
 
-        if n_neighbors < expected_coord:
-            # We add a dummy atom in the direction of the "missing" bonds.
+        missing_bonds = expected_coord - int(n_neighbors)
+        if missing_bonds > 0:
+            # We add dummy atoms in the direction of the "missing" bonds.
             # A simple approach is to find the center of mass of the existing neighbors
-            # and place the passivating atom on the opposite side.
+            # and place the passivating atom(s) on the opposite side, slightly perturbed if multiple.
             neighbors_vecs = D_vectors[mask]
 
             # Use deterministic random generator
@@ -87,23 +90,29 @@ def _passivate_surface(cluster: Atoms, element: str = "H") -> Atoms:
             if len(neighbors_vecs) > 0:
                 # Vector pointing away from the center of mass of neighbors
                 com_vec = np.mean(neighbors_vecs, axis=0)
-                offset = -com_vec
-
-                norm = np.linalg.norm(offset)
+                base_offset = -com_vec
+                norm = np.linalg.norm(base_offset)
                 if norm > 1e-5:
-                    offset = offset / norm * 1.0  # 1.0 Angstrom bond length for H
+                    base_offset = base_offset / norm * 1.0  # 1.0 Angstrom bond length for H
                 else:
-                    offset = rng.normal(size=3)
-                    offset = offset / np.linalg.norm(offset) * 1.0
+                    base_offset = rng.normal(size=3)
+                    base_offset = base_offset / np.linalg.norm(base_offset) * 1.0
             else:
                 # No neighbors, just place it somewhere
-                offset = rng.normal(size=3)
-                offset = offset / np.linalg.norm(offset) * 1.0
+                base_offset = rng.normal(size=3)
+                base_offset = base_offset / np.linalg.norm(base_offset) * 1.0
 
             pos = cluster_copy.positions[idx]
-            new_pos = pos + offset
 
-            new_atoms.append(Atoms(element, positions=[new_pos]))
+            for b in range(missing_bonds):
+                # Add slight perturbations if adding multiple bonds to the same atom
+                # to avoid placing them exactly on top of each other
+                perturbation = rng.normal(scale=0.1, size=3) if b > 0 else np.zeros(3)
+                offset = base_offset + perturbation
+                offset = offset / np.linalg.norm(offset) * 1.0  # Re-normalize to 1.0A
+                new_pos = pos + offset
+
+                new_atoms.append(Atoms(element, positions=[new_pos]))
 
     if new_atoms:
         for new_atom in new_atoms:
@@ -158,11 +167,19 @@ def extract_intelligent_cluster(
     for target_idx in target_atoms:
         weights[idx_map[target_idx]] = 1.0
 
+    # Initialize all weights to 0.0 for buffer
+    # Core atoms get 1.0
     for i, (_src_idx, neighbor_idx) in enumerate(
         zip(source_indices, neighbors_indices, strict=False)
     ):
         if distances[i] <= config.core_radius + 1e-6:
             weights[idx_map[neighbor_idx]] = 1.0
+        elif (
+            distances[i] <= config.core_radius + config.buffer_radius + 1e-6
+            and weights[idx_map[neighbor_idx]] != 1.0
+        ):
+            # Explicitly ensure buffer atoms remain 0.0 unless they are also core
+            weights[idx_map[neighbor_idx]] = 0.0
 
     # Create the cluster atoms
     cluster_positions = structure.positions[cluster_indices]

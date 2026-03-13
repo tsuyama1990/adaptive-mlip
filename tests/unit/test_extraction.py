@@ -63,3 +63,53 @@ def test_extract_local_region_pbc() -> None:
 
     weights = cluster.get_array("force_weight")  # type: ignore[no-untyped-call]
     assert np.all(weights == 1.0)  # All are within radius
+
+
+def test_passivate_surface() -> None:
+    import numpy as np
+    from ase import Atoms
+
+    from pyacemaker.utils.extraction import _passivate_surface
+
+    # Create an isolated oxygen atom (expected coord 2)
+    atoms = Atoms("O", positions=[[0, 0, 0]])
+    atoms.new_array("force_weight", np.array([0.0]))
+
+    passivated = _passivate_surface(atoms, element="H")
+
+    assert len(passivated) == 3  # 1 O + 2 H
+    symbols = passivated.get_chemical_symbols()
+    assert symbols.count("H") == 2
+
+    weights = passivated.get_array("force_weight")
+    assert len(weights) == 3
+    assert np.all(weights == 0.0)  # Dummy atoms get weight 0.0
+
+    # Check if we can add to a partially coordinated atom
+    atoms = Atoms("O", positions=[[0, 0, 0]])
+    atoms += Atoms("H", positions=[[1.0, 0, 0]])
+    atoms.new_array("force_weight", np.array([0.0, 0.0]))
+
+    passivated = _passivate_surface(atoms, element="H")
+    assert len(passivated) == 3  # 1 O + 1 existing H + 1 new H
+
+
+def test_extract_intelligent_cluster() -> None:
+    from pyacemaker.domain_models.workflow import CutoutConfig
+    from pyacemaker.utils.extraction import extract_intelligent_cluster
+
+    atoms = bulk("Cu", "sc", a=2.5).repeat((3, 3, 3))
+
+    config = CutoutConfig(
+        core_radius=2.6, buffer_radius=1.0, enable_pre_relaxation=False, enable_passivation=False
+    )
+
+    cluster = extract_intelligent_cluster(atoms, target_atoms=[13], config=config)
+
+    assert len(cluster) == 19
+    weights = cluster.get_array("force_weight")
+    n_core = np.sum(weights == 1.0)
+    n_buffer = np.sum(weights == 0.0)
+
+    assert n_core == 7
+    assert n_buffer == 12

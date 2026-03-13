@@ -4,6 +4,7 @@ from typing import Any
 from ase import Atoms
 
 from pyacemaker.core.base import BaseEngine
+from pyacemaker.core.exceptions import MDHaltInterrupt
 from pyacemaker.core.io_manager import LammpsFileManager
 from pyacemaker.core.lammps_generator import LammpsScriptGenerator
 from pyacemaker.core.validator import LammpsInputValidator
@@ -12,7 +13,45 @@ from pyacemaker.domain_models.constants import (
     LAMMPS_SCREEN_ARG,
 )
 from pyacemaker.domain_models.md import MDConfig, MDSimulationResult
+from pyacemaker.domain_models.workflow import ActiveLearningThresholds
 from pyacemaker.interfaces.lammps_driver import LammpsDriver
+
+
+class TwoTierEvaluator:
+    """
+    Evaluates MD uncertainty across consecutive steps.
+    Raises MDHaltInterrupt to pause the simulation if threshold is exceeded for multiple steps.
+    Designed to be called via LAMMPS `fix python/invoke`.
+    """
+
+    def __init__(self, thresholds: ActiveLearningThresholds) -> None:
+        self.thresholds = thresholds
+        self.consecutive_exceedances = 0
+
+    def __call__(self, lmp: Any) -> None:
+        """
+        Callback executed by LAMMPS.
+        """
+        import logging
+
+        logger = logging.getLogger(__name__)
+
+        try:
+            # Safely extract c_max_gamma
+            # lmp is the LAMMPS python object instance
+            max_gamma = float(lmp.extract_variable("max_g", None, 0))
+        except Exception:
+            logger.exception("Failed to extract max_g in evaluator")
+            raise
+
+        if max_gamma > self.thresholds.threshold_call_dft:
+            self.consecutive_exceedances += 1
+            if self.consecutive_exceedances >= self.thresholds.smooth_steps:
+                self.consecutive_exceedances = 0  # Reset for future
+                msg = f"Uncertainty {max_gamma} exceeded threshold {self.thresholds.threshold_call_dft} for {self.thresholds.smooth_steps} consecutive steps."
+                raise MDHaltInterrupt(msg)
+        else:
+            self.consecutive_exceedances = 0
 
 
 class LammpsEngine(BaseEngine):
@@ -85,20 +124,23 @@ class LammpsEngine(BaseEngine):
     def _validate_resume_params(self, kwargs: dict[str, Any]) -> tuple[int | None, int | None]:
         """Validates keyword arguments for resuming and overriding steps."""
         resume_step = kwargs.get("resume_from_step")
+        override_n_steps = kwargs.get("override_n_steps")
+
         if resume_step is not None:
             if not isinstance(resume_step, int) or resume_step < 0:
                 msg = "resume_from_step must be a non-negative integer"
                 raise ValueError(msg)
             if resume_step > self.config.n_steps:
-                msg = "resume_from_step cannot exceed configured n_steps"
+                msg = f"resume_from_step {resume_step} cannot exceed configured n_steps {self.config.n_steps}"
                 raise ValueError(msg)
 
-        override_n_steps = kwargs.get("override_n_steps")
-        if override_n_steps is not None and (
-            not isinstance(override_n_steps, int) or override_n_steps < 0
-        ):
-            msg = "override_n_steps must be a non-negative integer"
-            raise ValueError(msg)
+        if override_n_steps is not None:
+            if not isinstance(override_n_steps, int) or override_n_steps < 0:
+                msg = "override_n_steps must be a non-negative integer"
+                raise ValueError(msg)
+            if resume_step is not None and resume_step + override_n_steps > self.config.n_steps:
+                msg = f"Combined resume_step {resume_step} and override_n_steps {override_n_steps} exceed original simulation steps {self.config.n_steps}"
+                raise ValueError(msg)
 
         return resume_step, override_n_steps
 
@@ -110,12 +152,46 @@ class LammpsEngine(BaseEngine):
         dump_file: Path,
         elements: list[str],
         resume_step: int | None,
+        override_n_steps: int | None = None,
+        thresholds: ActiveLearningThresholds | None = None,
     ) -> tuple[Path, Path]:
         """Prepares input and restart scripts within the working directory."""
         input_script_path = temp_dir / "input.lmp"
         restart_path = temp_dir / "restart.lmp"
 
-        with input_script_path.open("w") as f:
+        if self.config.fix_halt and thresholds is not None:
+            # Write dynamic Python evaluator script for LAMMPS
+            evaluator_path = temp_dir / "evaluator_script.py"
+
+            with evaluator_path.open("w") as f:
+                f.write(
+                    f"""
+import sys
+from pathlib import Path
+
+# Need to ensure the pyacemaker package is in the Python path
+sys.path.insert(0, str(Path(r"{Path.cwd().resolve()}")))
+
+from pyacemaker.core.engine import TwoTierEvaluator
+from pyacemaker.domain_models.workflow import ActiveLearningThresholds
+
+thresholds = ActiveLearningThresholds(
+    threshold_call_dft={thresholds.threshold_call_dft},
+    threshold_add_train={thresholds.threshold_add_train},
+    smooth_steps={thresholds.smooth_steps}
+)
+eval_uncertainty = TwoTierEvaluator(thresholds)
+"""
+                )
+
+            # LAMMPS python/invoke needs the python file loaded
+            with input_script_path.open("w") as f:
+                f.write(f'python eval_uncertainty file {evaluator_path.resolve()} format "v"\n')
+        else:
+            with input_script_path.open("w") as f:
+                pass  # Just touch the file
+
+        with input_script_path.open("a") as f:
             if resume_step is not None and resume_step > 0:
                 # Do NOT create the file here. LAMMPS `read_restart` demands a valid, pre-existing binary file.
                 # Silent empty creation causes LAMMPS to crash.
@@ -125,7 +201,7 @@ class LammpsEngine(BaseEngine):
                     raise FileNotFoundError(msg)
 
                 self.generator.write_script_resume(
-                    f, potential_path, restart_path, dump_file, elements, resume_step
+                    f, potential_path, restart_path, dump_file, elements, resume_step, override_n_steps
                 )
             else:
                 self.generator.write_script(f, potential_path, data_file, dump_file, elements)
@@ -191,6 +267,7 @@ class LammpsEngine(BaseEngine):
         Kwargs:
             resume_from_step (int): Step to resume MD from.
             override_n_steps (int): Override number of steps to run.
+            thresholds (ActiveLearningThresholds): Thresholds for dynamic pause.
         """
         if structure is None:
             raise ValueError(ERR_STRUCTURE_NONE)
@@ -204,7 +281,14 @@ class LammpsEngine(BaseEngine):
         with ctx:
             temp_dir = Path(ctx.name) if hasattr(ctx, "name") else data_file.parent
             input_script_path, _ = self._prepare_script(
-                temp_dir, potential_path, data_file, dump_file, elements, resume_step
+                temp_dir,
+                potential_path,
+                data_file,
+                dump_file,
+                elements,
+                resume_step,
+                override_n_steps,
+                kwargs.get("thresholds"),
             )
 
             lammps_args = ["-screen", LAMMPS_SCREEN_ARG, "-log", str(log_file)]

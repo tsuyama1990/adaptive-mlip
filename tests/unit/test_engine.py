@@ -73,8 +73,61 @@ def test_lammps_engine_run(mock_md_config: MDConfig, mock_driver: Any, tmp_path:
     assert len(script_content) == 1
     script = script_content[0]
 
-    assert "fix halt" in script
+    assert "python eval_uncertainty invoke here" in script
     assert "read_data" in script
+
+
+def test_two_tier_evaluator() -> None:
+    import types
+
+    from pyacemaker.core.engine import TwoTierEvaluator
+    from pyacemaker.core.exceptions import MDHaltInterrupt
+    from pyacemaker.domain_models.workflow import ActiveLearningThresholds
+
+    thresholds = ActiveLearningThresholds(
+        threshold_call_dft=0.05, smooth_steps=3, threshold_add_train=0.02
+    )
+    evaluator = TwoTierEvaluator(thresholds)
+
+    mock_lmp = types.SimpleNamespace()
+
+    # Step 1: Spike (Ignored)
+    mock_lmp.extract_variable = lambda name, *args: 0.06 if name == "max_g" else 0.0
+    evaluator(mock_lmp)
+    assert evaluator.consecutive_exceedances == 1
+
+    # Step 2: Drop (Reset)
+    mock_lmp.extract_variable = lambda name, *args: 0.02 if name == "max_g" else 0.0
+    evaluator(mock_lmp)
+    assert evaluator.consecutive_exceedances == 0
+
+    # Step 3, 4, 5: Consecutive Exceedances (Halt)
+    mock_lmp.extract_variable = lambda name, *args: 0.06 if name == "max_g" else 0.0
+    evaluator(mock_lmp)
+    evaluator(mock_lmp)
+    with pytest.raises(MDHaltInterrupt):
+        evaluator(mock_lmp)
+
+    assert evaluator.consecutive_exceedances == 0  # Reset after raise
+
+
+def test_lammps_engine_resume_validation(mock_md_config: MDConfig, tmp_path: Path) -> None:
+    engine = LammpsEngine(mock_md_config)
+    atoms = Atoms("H", cell=[10, 10, 10], pbc=True)
+    pot_path = tmp_path / "pot.yace"
+    pot_path.touch()
+
+    # Resume > n_steps
+    with pytest.raises(ValueError, match="cannot exceed configured n_steps"):
+        engine.run(atoms, pot_path, resume_from_step=1500)
+
+    # Combined > n_steps
+    with pytest.raises(ValueError, match="exceed original simulation steps"):
+        engine.run(atoms, pot_path, resume_from_step=500, override_n_steps=600)
+
+    # Test valid combination (doesn't raise validation error, but will raise file not found since restart doesn't exist)
+    with pytest.raises(FileNotFoundError):
+        engine.run(atoms, pot_path, resume_from_step=500, override_n_steps=400)
 
 
 def test_lammps_engine_halted(mock_md_config: MDConfig, mock_driver: Any, tmp_path: Path) -> None:
@@ -242,5 +295,7 @@ def test_run_driver_failure(mock_md_config: MDConfig, mock_driver: Any, tmp_path
     pot_path.touch()
 
     # Updated error message expectation
-    with pytest.raises(RuntimeError, match="Simulation security check failed|Simulation execution failed"):
+    with pytest.raises(
+        RuntimeError, match="Simulation security check failed|Simulation execution failed"
+    ):
         engine.run(atoms, pot_path)

@@ -59,6 +59,7 @@ ALLOWED_LAMMPS_COMMANDS = {
     "min_modify",
     "variable",
     "write_restart",
+    "python",
 }
 
 BLOCKED_PATTERN = re.compile(r"[;&|\$`<>\n\r\"'\\]")
