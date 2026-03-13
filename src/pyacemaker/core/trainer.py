@@ -152,12 +152,18 @@ class PacemakerTrainer(BaseTrainer):
 
         import re
 
-        for key, val in pacemaker_config.items():
-            if isinstance(val, str) and re.search(
-                r"(\bexec\b|\bsystem\b|\bos\.|;|\||>|<|&|`|\$|\n|\r|\\)", val
-            ):
-                msg = f"Malicious content detected in configuration value for key '{key}'"
-                raise TrainerError(msg)
+        def _recursive_sanitize(config_dict: dict[str, Any]) -> None:
+            """Recursively scans a dictionary to ensure no YAML injection vectors exist."""
+            for key, val in config_dict.items():
+                if isinstance(val, dict):
+                    _recursive_sanitize(val)
+                elif isinstance(val, str) and re.search(
+                    r"(\bexec\b|\bsystem\b|\bos\.|;|\||>|<|&|`|\$|\n|\r|\"|'|\\)", val
+                ):
+                    msg = f"Malicious content detected in configuration value for key '{key}'"
+                    raise TrainerError(msg)
+
+        _recursive_sanitize(pacemaker_config)
 
         dump_yaml(pacemaker_config, input_yaml_path)
 

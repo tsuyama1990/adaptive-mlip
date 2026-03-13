@@ -38,7 +38,7 @@ class LammpsScriptGenerator:
 
         # Add basic shell character blocking first to prevent trivial injection attempts
         # before OS stat/path-resolution even happens.
-        if re.search(r"[;&|\`$<>\n\r\"'\\]", path):
+        if re.search(r"[;&|\\$`<>\n\r\"'\\()\[\]\{\}\|\*\?\~\^\<\>\&\|\`\$]", path):
             msg = f"Path contains blocked shell metacharacters: {path}"
             raise ValueError(msg)
 
@@ -58,6 +58,27 @@ class LammpsScriptGenerator:
         # We explicitly prevent known traversal patterns
         if ".." in canonical_path:
             msg = f"Path traversal detected: {canonical_path}"
+            raise ValueError(msg)
+
+        # Explicitly verify containment from the already resolved secure base paths
+        import tempfile
+
+        from pyacemaker.domain_models.constants import DEFAULT_RAM_DISK_PATH
+
+        allowed_roots = [
+            Path.cwd().resolve(),
+            Path(tempfile.gettempdir()).resolve(),
+            Path(DEFAULT_RAM_DISK_PATH).resolve(),
+        ]
+
+        is_safe = False
+        for root in allowed_roots:
+            if canonical_path_obj.is_relative_to(root):
+                is_safe = True
+                break
+
+        if not is_safe:
+            msg = f"Path traversal detected: {canonical_path_obj} is outside allowed roots"
             raise ValueError(msg)
 
         # Use shlex.quote for shell safety

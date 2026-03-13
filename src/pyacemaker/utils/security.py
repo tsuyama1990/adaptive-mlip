@@ -25,15 +25,6 @@ def validate_path_containment(target_path: str | Path, allowed_base_dir: str | P
 
     try:
         canonical_path = target_p.resolve(strict=True)
-
-        # Check all parent directories up to root for symlinks to prevent traversal via intermediate symlinks
-        current = canonical_path
-        while current != current.parent:
-            if current.is_symlink():
-                msg = f"Intermediate symlinks are not allowed for security reasons: {current}"
-                raise ValueError(msg)
-            current = current.parent
-
     except FileNotFoundError as e:
         msg = f"Path does not exist: {target_path}"
         raise FileNotFoundError(msg) from e
@@ -43,6 +34,15 @@ def validate_path_containment(target_path: str | Path, allowed_base_dir: str | P
     if not canonical_path.is_relative_to(canonical_allowed_dir):
         msg = f"Path {canonical_path} is outside allowed directory {canonical_allowed_dir}"
         raise ValueError(msg)
+
+    # Check all parent directories up to root for symlinks AFTER resolution and containment check
+    # to prevent traversal via intermediate symlinks that might bounce in and out of the allowed dir.
+    current = canonical_path
+    while current != current.parent:
+        if current.is_symlink():
+            msg = f"Intermediate symlinks are not allowed for security reasons: {current}"
+            raise ValueError(msg)
+        current = current.parent
 
     if not canonical_path.is_file():
         msg = f"Path must be a file: {canonical_path}"

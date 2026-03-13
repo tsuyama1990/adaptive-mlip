@@ -157,7 +157,11 @@ class LammpsEngine(BaseEngine):
             step = int(driver.extract_variable("step"))
             forces = driver.get_forces().tolist()
             stress = driver.get_stress().tolist()
-        except Exception:
+        except (ValueError, TypeError, AttributeError, RuntimeError) as e:
+            import logging
+
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Failed to extract basic results from LAMMPS: {e}")
             energy = 0.0
             temperature = 0.0
             step = 0
@@ -168,7 +172,11 @@ class LammpsEngine(BaseEngine):
         if self.config.fix_halt:
             try:
                 max_gamma = driver.extract_variable("max_g")
-            except Exception:
+            except (ValueError, TypeError, AttributeError, RuntimeError) as e:
+                import logging
+
+                logger = logging.getLogger(__name__)
+                logger.warning(f"Failed to extract max_g from LAMMPS: {e}")
                 max_gamma = 0.0
 
         halted = False

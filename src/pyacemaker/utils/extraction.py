@@ -81,6 +81,9 @@ def _passivate_surface(cluster: Atoms, element: str = "H") -> Atoms:
             # and place the passivating atom on the opposite side.
             neighbors_vecs = D_vectors[mask]
 
+            # Use deterministic random generator
+            rng = np.random.default_rng(seed=42)
+
             if len(neighbors_vecs) > 0:
                 # Vector pointing away from the center of mass of neighbors
                 com_vec = np.mean(neighbors_vecs, axis=0)
@@ -90,11 +93,11 @@ def _passivate_surface(cluster: Atoms, element: str = "H") -> Atoms:
                 if norm > 1e-5:
                     offset = offset / norm * 1.0  # 1.0 Angstrom bond length for H
                 else:
-                    offset = np.random.randn(3)
+                    offset = rng.normal(size=3)
                     offset = offset / np.linalg.norm(offset) * 1.0
             else:
                 # No neighbors, just place it somewhere
-                offset = np.random.randn(3)
+                offset = rng.normal(size=3)
                 offset = offset / np.linalg.norm(offset) * 1.0
 
             pos = cluster_copy.positions[idx]
