@@ -15,6 +15,10 @@ def _pre_relax_buffer(cluster: Atoms, fmax: float = 0.05, steps: int = 50) -> At
     # Create a copy to prevent modifying the original incorrectly
     cluster_copy = cluster.copy()  # type: ignore[no-untyped-call]
 
+    if not cluster_copy.has("force_weight"):
+        msg = "Cluster must have 'force_weight' array."
+        raise ValueError(msg)
+
     # Identify core atoms
     weights = cluster_copy.get_array("force_weight")
     core_indices = np.where(weights == 1.0)[0]
@@ -130,6 +134,11 @@ def _passivate_surface(cluster: Atoms, element: str = "H") -> Atoms:
     """
     from ase.data import chemical_symbols
 
+    from pyacemaker.utils.validation import validate_structure
+
+    # Security validation before passivation logic to prevent processing malformed structures
+    validate_structure(cluster)
+
     if element not in chemical_symbols:
         msg = f"Invalid passivation element: {element}"
         raise ValueError(msg)
@@ -163,7 +172,10 @@ def extract_intelligent_cluster(  # noqa: C901
     relaxing the buffer and passivating the surface.
     """
     if not target_atoms:
-        return structure.copy()  # type: ignore[no-untyped-call, no-any-return]
+        cluster = structure.copy()  # type: ignore[no-untyped-call]
+        weights = np.zeros(len(cluster))
+        cluster.new_array("force_weight", weights)
+        return cluster  # type: ignore[no-any-return]
 
     for target_idx in target_atoms:
         if target_idx < 0 or target_idx >= len(structure):

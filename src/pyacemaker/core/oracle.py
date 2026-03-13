@@ -28,6 +28,10 @@ def _run_calculator_process(
 ) -> tuple[Any, Exception | None]:
     """Top-level helper to run a single calculation attempt. Returns calculator and any exception for ProcessPoolExecutor."""
     try:
+        from pyacemaker.utils.validation import validate_structure
+
+        validate_structure(atoms)
+
         # Create new calculator for clean state
         # Use provided temporary directory to prevent file collisions and race conditions
         calc = driver.get_calculator(atoms, config.model_copy(), directory=calc_dir)
@@ -80,9 +84,6 @@ class DFTManager(BaseOracle):
         """
         Computes DFT properties for stream of structures.
         """
-        if isinstance(structures, (list, tuple)):
-            raise TypeError(ERR_ORACLE_ITERATOR)
-
         if not isinstance(structures, Iterator):
             raise TypeError(ERR_ORACLE_ITERATOR)
 
@@ -243,19 +244,17 @@ class MACEManager(BaseOracle):
             model_path: Path to the MACE model file.
             calculator: Optional pre-initialized calculator instance for dependency injection.
         """
-        self.model_path = model_path
+        from pyacemaker.domain_models.defaults import DEFAULT_POTENTIALS_DIR
+        from pyacemaker.utils.security import validate_path_containment
+
+        # Securely validate containment REGARDLESS of calculator injection
+        canonical_path = validate_path_containment(model_path, DEFAULT_POTENTIALS_DIR)
+        self.model_path = str(canonical_path)
 
         if calculator is not None:
             self.calc = calculator
             self.is_initialized = True
             return
-
-        from pyacemaker.domain_models.defaults import DEFAULT_POTENTIALS_DIR
-        from pyacemaker.utils.security import validate_path_containment
-
-        # Securely validate containment
-        canonical_path = validate_path_containment(model_path, DEFAULT_POTENTIALS_DIR)
-        self.model_path = str(canonical_path)
 
         # Initialize MACE properly
         import torch
@@ -269,7 +268,9 @@ class MACEManager(BaseOracle):
                 torch.cuda.init()  # type: ignore[no-untyped-call]
                 device = "cuda"
             except Exception as e:
-                logger.warning(f"CUDA is available but failed to initialize: {e}. Falling back to CPU.")
+                logger.warning(
+                    f"CUDA is available but failed to initialize: {e}. Falling back to CPU."
+                )
 
         # Load the model directly without fallback.
         # This complies with the principle of explicit configuration.

@@ -1,5 +1,5 @@
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 from ase import Atoms
@@ -9,10 +9,9 @@ from pyacemaker.domain_models.validation import ValidationConfig, ValidationResu
 
 
 def test_lammps_input_validator_structure() -> None:
-    with patch("pyacemaker.utils.validation.validate_structure") as mock_val:
-        atoms = Atoms("H")
-        LammpsInputValidator.validate_structure(atoms)
-        mock_val.assert_called_once_with(atoms)
+    # Test valid structure passes without exceptions directly
+    atoms = Atoms("H", cell=[10, 10, 10], pbc=True)
+    LammpsInputValidator.validate_structure(atoms)
 
 
 def test_lammps_input_validator_potential(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -76,7 +75,10 @@ def test_lammps_input_validator_path_traversal(
     with pytest.raises(ValueError, match="Path traversal attempt detected"):
         LammpsInputValidator.validate_potential(str(traversal_path))
 
-def test_lammps_input_validator_symlink_attack(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+
+def test_lammps_input_validator_symlink_attack(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     pot_dir = tmp_path / "potentials"
     monkeypatch.setattr("pyacemaker.domain_models.defaults.DEFAULT_POTENTIALS_DIR", str(pot_dir))
     pot_dir.mkdir(parents=True, exist_ok=True)
