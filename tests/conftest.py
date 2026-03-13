@@ -12,7 +12,6 @@ from ase.calculators.calculator import Calculator, CalculatorSetupError
 
 from pyacemaker.domain_models import (
     DFTConfig,
-    HybridParams,
     MDConfig,
     StructureConfig,
     TrainingConfig,
@@ -122,7 +121,8 @@ def mock_md_config() -> MDConfig:
         timestep=0.001,
         n_steps=1000,
         hybrid_potential=True,
-        hybrid_params=HybridParams(zbl_cut_inner=2.0, zbl_cut_outer=2.5),
+        zbl_cut_inner=2.0,
+        zbl_cut_outer=2.5,
     )
 
 
@@ -330,6 +330,8 @@ def create_test_config_dict(**overrides: Any) -> ConfigDictType:
             "pressure": 1.0,
             "timestep": 0.001,
             "n_steps": 1000,
+            "zbl_cut_inner": 1.0,
+            "zbl_cut_outer": 1.5,
             "uncertainty_threshold": DEFAULT_OTF_UNCERTAINTY_THRESHOLD,
             "check_interval": DEFAULT_CHECKPOINT_INTERVAL,
         },

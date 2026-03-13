@@ -37,23 +37,23 @@ def test_md_config_valid() -> None:
     )
     assert config.temperature == 300.0
     assert config.hybrid_potential is True
-    assert isinstance(config.hybrid_params, HybridParams)
+    assert config.zbl_cut_inner > 0
     assert config.dump_freq == 100
     assert config.thermo_freq == 10
 
 
 def test_md_config_with_hybrid_params() -> None:
-    """Tests MDConfig with custom HybridParams."""
-    hybrid_params = HybridParams(zbl_cut_inner=1.0, zbl_cut_outer=1.5)
+    """Tests MDConfig with custom ZBL Cutoffs."""
     config = MDConfig(
         temperature=300.0,
         pressure=1.0,
         timestep=0.001,
         n_steps=1000,
         hybrid_potential=True,
-        hybrid_params=hybrid_params,
+        zbl_cut_inner=1.0,
+        zbl_cut_outer=1.5,
     )
-    assert config.hybrid_params.zbl_cut_inner == 1.0
+    assert config.zbl_cut_inner == 1.0
 
 
 def test_md_config_invalid_temperature() -> None:

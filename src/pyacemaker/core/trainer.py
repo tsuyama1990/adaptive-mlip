@@ -26,7 +26,7 @@ class PacemakerTrainer(BaseTrainer):
         """
         Fetches up to `size` past data points to retain for training.
         This prevents catastrophic forgetting.
-        Uses ase.io.iread for efficient memory streaming and actual random sampling.
+        Uses ase.io.iread with true reservoir sampling for streaming memory safety.
         """
         import random
         from pathlib import Path
@@ -37,19 +37,24 @@ class PacemakerTrainer(BaseTrainer):
         if not path.exists():
             return []
 
-        # Stream all atoms using iread, collect into list for random sampling
-        # If history gets incredibly huge, reservoir sampling would be better,
-        # but list casting meets the immediate non-mocking requirement.
+        # Ensure deterministic sampling by seeding with config seed
+        seed = self.config.seed if self.config.seed is not None else 42
+        rng = random.Random(seed)  # noqa: S311
+
+        reservoir: list[Any] = []
         try:
             atoms_iter = iread(path, format="extxyz")
-            all_atoms = list(atoms_iter)
+            for i, item in enumerate(atoms_iter):
+                if i < size:
+                    reservoir.append(item)
+                else:
+                    j = rng.randint(0, i)
+                    if j < size:
+                        reservoir[j] = item
         except Exception:
-            return []
+            return reservoir
 
-        if len(all_atoms) <= size:
-            return all_atoms
-
-        return random.sample(all_atoms, size)
+        return reservoir
 
     def incremental_train(
         self,
@@ -60,23 +65,28 @@ class PacemakerTrainer(BaseTrainer):
         """
         Mixes a replay buffer with the new active learning data and runs incremental delta learning.
         """
+        import itertools
         from pathlib import Path
 
-        from ase.io import read, write
+        from ase.io import iread, write
 
         # We need a dynamic path to history, we assume it's stored alongside the new data
         # or in the default config directory
         from pyacemaker.domain_models.defaults import DEFAULT_DATA_DIR
+
         history_path = Path(DEFAULT_DATA_DIR) / "training_history.extxyz"
 
         replay_buffer = self.get_replay_buffer(strategy_config.replay_buffer_size, history_path)
 
-        new_data = list(read(new_data_path, index=":"))
-        combined_data = new_data + replay_buffer
+        # Use streaming to combine data, averting OOM issues with large datasets
+        new_data_stream = iread(new_data_path, index=":")
+        combined_data_stream = itertools.chain(new_data_stream, replay_buffer)
 
-        # Write to a temporary file, then train
+        # Write to a temporary file using the generator, then train
         temp_file = Path(new_data_path).parent / "combined_train_data.extxyz"
-        write(temp_file, combined_data, format="extxyz")
+
+        # Write consumes the generator efficiently without materializing all frames at once
+        write(temp_file, combined_data_stream, format="extxyz")  # type: ignore[arg-type]
 
         try:
             return self.train(temp_file, initial_potential)
@@ -84,7 +94,7 @@ class PacemakerTrainer(BaseTrainer):
             if temp_file.exists():
                 temp_file.unlink()
 
-    def train(
+    def train(  # noqa: C901
         self, training_data_path: str | Path, initial_potential: str | Path | None = None
     ) -> Any:
         """
@@ -125,12 +135,35 @@ class PacemakerTrainer(BaseTrainer):
             msg = "Generated Pacemaker config is not a valid dictionary."
             raise TrainerError(msg)
 
+        from pydantic import BaseModel, ConfigDict
+
+        class PacemakerConfigSchema(BaseModel):
+            model_config = ConfigDict(extra="allow")
+            cutoff: float | None = None
+            seed: int | None = None
+
+            # Simple broad validation as pacemaker config is dynamic
+
+        try:
+            PacemakerConfigSchema.model_validate(pacemaker_config)
+        except Exception as e:
+            msg = f"Generated Pacemaker config failed schema validation: {e}"
+            raise TrainerError(msg) from e
+
         import re
 
-        for key, val in pacemaker_config.items():
-            if isinstance(val, str) and re.search(r"(\bexec\b|\bsystem\b|\bos\.|;|\||>|<|&|`|\$|\n|\r|\\)", val):
-                msg = f"Malicious content detected in configuration value for key '{key}'"
-                raise TrainerError(msg)
+        def _recursive_sanitize(config_dict: dict[str, Any]) -> None:
+            """Recursively scans a dictionary to ensure no YAML injection vectors exist."""
+            for key, val in config_dict.items():
+                if isinstance(val, dict):
+                    _recursive_sanitize(val)
+                elif isinstance(val, str) and re.search(
+                    r"(\bexec\b|\bsystem\b|\bos\.|;|\||>|<|&|`|\$|\n|\r|\"|'|\\)", val
+                ):
+                    msg = f"Malicious content detected in configuration value for key '{key}'"
+                    raise TrainerError(msg)
+
+        _recursive_sanitize(pacemaker_config)
 
         dump_yaml(pacemaker_config, input_yaml_path)
 
@@ -184,9 +217,9 @@ class FinetuneManager:
 
     def finetune(self, dataset_path: str | Path) -> str:
         """
-        Implements the actual fine-tuning logic for the MACE model readout layer.
+        Implements actual fine-tuning logic for the MACE model.
         """
-        from ase.io import read
+        from ase.io import iread
 
         # Validate path
         dataset_path = Path(dataset_path)
@@ -194,17 +227,43 @@ class FinetuneManager:
             msg = f"Dataset not found: {dataset_path}"
             raise FileNotFoundError(msg)
 
-        # Verify structure is readable (real implementation validation)
-        _ = list(read(dataset_path, index=":"))
+        # Verify structure is readable efficiently
+        _ = next(iread(dataset_path, index=":"))
 
-        # In a complete implementation we would utilize mace.cli.run_train or torch optimization loops.
-        # As instructed by the architecture evaluation: "Provide a proper mock implementation that simulates the behavior"
-        # Since full finetuning requires heavy dependency mapping and GPU resources,
-        # we will simulate the MACE output model path here to satisfy architectural wiring without dummy exceptions.
         output_model = dataset_path.parent / "awakened_mace_model.model"
 
-        # Simulate writing a model checkpoint
+        if not shutil.which("mace_run_train"):
+            msg = "Executable 'mace_run_train' not found in PATH."
+            raise TrainerError(msg)
+
+        # Execute real MACE fine-tuning
+        cmd = [
+            "mace_run_train",
+            f"--name={output_model.stem}",
+            f"--train_file={dataset_path}",
+            f"--checkpoints_dir={dataset_path.parent}",
+            "--model=MACE",
+            "--max_num_epochs=5",  # very brief fine-tuning
+            "--device=cuda",
+            "--error_table=MACE_error_table",
+        ]
+
+        try:
+            run_command(cmd)
+        except subprocess.CalledProcessError as e:
+            msg = f"MACE fine-tuning failed with exit code {e.returncode}: {e}"
+            raise TrainerError(msg) from e
+        except Exception as e:
+            msg = f"MACE fine-tuning failed unexpectedly: {e}"
+            raise TrainerError(msg) from e
+
+        # MACE saves as {name}_compiled.model by default when complete
+        compiled_model = dataset_path.parent / f"{output_model.stem}_compiled.model"
+        if compiled_model.exists():
+            shutil.move(compiled_model, output_model)
+
         if not output_model.exists():
-            output_model.write_text("simulated_mace_checkpoint")
+            msg = f"MACE model file was not created at {output_model}"
+            raise TrainerError(msg)
 
         return str(output_model)

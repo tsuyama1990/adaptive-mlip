@@ -36,11 +36,10 @@ class LammpsScriptGenerator:
         import os
         import re
 
-
-        # Add basic shell character blocking first to prevent trivial injection attempts
-        # before OS stat/path-resolution even happens.
-        if re.search(r"[;&|\`$<>\n\r]", path):
-            msg = f"Path contains blocked shell metacharacters: {path}"
+        # Implement a strict whitelist approach before path-resolution even happens.
+        # Only allow alphanumeric, underscore, hyphen, dot, and slash.
+        if not re.match(r"^[a-zA-Z0-9_\-\.\/]+$", path):
+            msg = f"Path contains blocked characters (must be strictly alphanumeric, dot, slash, dash, underscore): {path}"
             raise ValueError(msg)
 
         # Sanitize input path
@@ -61,6 +60,27 @@ class LammpsScriptGenerator:
             msg = f"Path traversal detected: {canonical_path}"
             raise ValueError(msg)
 
+        # Explicitly verify containment from the already resolved secure base paths
+        import tempfile
+
+        from pyacemaker.domain_models.constants import DEFAULT_RAM_DISK_PATH
+
+        allowed_roots = [
+            Path.cwd().resolve(),
+            Path(tempfile.gettempdir()).resolve(),
+            Path(DEFAULT_RAM_DISK_PATH).resolve(),
+        ]
+
+        is_safe = False
+        for root in allowed_roots:
+            if canonical_path_obj.is_relative_to(root):
+                is_safe = True
+                break
+
+        if not is_safe:
+            msg = f"Path traversal detected: {canonical_path_obj} is outside allowed roots"
+            raise ValueError(msg)
+
         # Use shlex.quote for shell safety
         return shlex.quote(str(canonical_path_obj))
 
@@ -79,10 +99,9 @@ class LammpsScriptGenerator:
         """Generates hybrid PACE + ZBL potential commands."""
         species_str = " ".join(elements)
         quoted_pot = self._quote(str(potential_path))
-        params = self.config.hybrid_params
 
         buffer.write(
-            f"pair_style hybrid/overlay pace zbl {params.zbl_cut_inner} {params.zbl_cut_outer}\n"
+            f"pair_style hybrid/overlay pace zbl {self.config.zbl_cut_inner} {self.config.zbl_cut_outer}\n"
         )
         buffer.write(f"pair_coeff * * pace {quoted_pot} {species_str}\n")
 
@@ -288,7 +307,7 @@ class LammpsScriptGenerator:
         steps_left = max(0, self.config.n_steps - resume_step)
 
         # Master-Slave resume logic
-        buffer.write("reset_timestep ${step}\n") # step is read from restart
+        buffer.write("reset_timestep ${step}\n")  # step is read from restart
         buffer.write(f"run {steps_left}\n")
         self._gen_post_run_diagnostics(buffer)
 

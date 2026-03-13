@@ -8,7 +8,7 @@ from pyacemaker.domain_models.workflow import CutoutConfig
 from pyacemaker.utils.embedding import embed_cluster
 
 
-def _pre_relax_buffer(cluster: Atoms) -> Atoms:
+def _pre_relax_buffer(cluster: Atoms, fmax: float = 0.05, steps: int = 50) -> Atoms:
     """
     Relaxes the buffer region (force_weight == 0.0) while keeping the core fixed.
     """
@@ -36,7 +36,7 @@ def _pre_relax_buffer(cluster: Atoms) -> Atoms:
 
     with Path(os.devnull).open("w") as devnull:
         opt = LBFGS(cluster_copy, logfile=devnull)
-        opt.run(fmax=0.05, steps=50)  # type: ignore[no-untyped-call]
+        opt.run(fmax=fmax, steps=steps)  # type: ignore[no-untyped-call]
 
     return cluster_copy  # type: ignore[no-any-return]
 
@@ -51,7 +51,7 @@ def _passivate_surface(cluster: Atoms, element: str = "H") -> Atoms:
     cluster_copy = cluster.copy()  # type: ignore[no-untyped-call]
 
     # Calculate covalent radii sums for cutoffs
-    cutoffs = natural_cutoffs(cluster_copy, mult=1.2) # type: ignore[no-untyped-call]
+    cutoffs = natural_cutoffs(cluster_copy, mult=1.2)  # type: ignore[no-untyped-call]
     i_indices, j_indices, D_vectors = neighbor_list("ijD", cluster_copy, cutoff=cutoffs)  # type: ignore[no-untyped-call]
 
     weights = cluster_copy.get_array("force_weight")
@@ -67,19 +67,22 @@ def _passivate_surface(cluster: Atoms, element: str = "H") -> Atoms:
         symbol = cluster_copy.get_chemical_symbols()[idx]
 
         # Simple heuristic for expected coordination based on valency
-        expected_coord = 6 # Typical for many transition metals and oxides in bulk
+        expected_coord = 6  # Typical for many transition metals and oxides in bulk
         if symbol in ["O"]:
             expected_coord = 2
         elif symbol in ["Mg"]:
             expected_coord = 6
         elif symbol in ["Fe", "Pt"]:
-            expected_coord = 8 # BCC/FCC bulk roughly
+            expected_coord = 8  # BCC/FCC bulk roughly
 
         if n_neighbors < expected_coord:
             # We add a dummy atom in the direction of the "missing" bonds.
             # A simple approach is to find the center of mass of the existing neighbors
             # and place the passivating atom on the opposite side.
             neighbors_vecs = D_vectors[mask]
+
+            # Use deterministic random generator
+            rng = np.random.default_rng(seed=42)
 
             if len(neighbors_vecs) > 0:
                 # Vector pointing away from the center of mass of neighbors
@@ -90,11 +93,11 @@ def _passivate_surface(cluster: Atoms, element: str = "H") -> Atoms:
                 if norm > 1e-5:
                     offset = offset / norm * 1.0  # 1.0 Angstrom bond length for H
                 else:
-                    offset = np.random.randn(3)
+                    offset = rng.normal(size=3)
                     offset = offset / np.linalg.norm(offset) * 1.0
             else:
                 # No neighbors, just place it somewhere
-                offset = np.random.randn(3)
+                offset = rng.normal(size=3)
                 offset = offset / np.linalg.norm(offset) * 1.0
 
             pos = cluster_copy.positions[idx]
@@ -183,7 +186,11 @@ def extract_intelligent_cluster(
         cluster.new_array("c_gamma", cluster_c_gamma)  # type: ignore[no-untyped-call]
 
     if config.enable_pre_relaxation:
-        cluster = _pre_relax_buffer(cluster)
+        cluster = _pre_relax_buffer(
+            cluster,
+            fmax=config.pre_relaxation_fmax,
+            steps=config.pre_relaxation_steps,
+        )
 
     if config.enable_passivation:
         cluster = _passivate_surface(cluster, element=config.passivation_element)

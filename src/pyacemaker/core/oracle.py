@@ -148,28 +148,28 @@ class DFTManager(BaseOracle):
         Raises:
             OracleError: If calculation fails after all retries and strategies.
         """
-        from pyacemaker.core.validator import LammpsInputValidator
+        from pyacemaker.utils.validation import validate_structure
 
         # Security: Apply strict pre-computation validation to prevent malicious atomic
         # objects from exhausting memory or bypassing physical parameter bounds safely.
-        LammpsInputValidator.validate_structure(atoms)
+        validate_structure(atoms)
 
         current_config = self.config.model_copy()
         strategies = self._get_strategies()
         last_error: Exception | None = None
 
-        for i, strategy in enumerate(strategies):
-            if strategy:
-                strategy(current_config)
-                strategy_name = strategy.__name__
-            else:
-                strategy_name = "Initial"
+        import concurrent.futures
 
-            try:
-                # Architecture: Add explicit execution timeout for DFT manager to prevent hangs
-                import concurrent.futures
+        with concurrent.futures.ProcessPoolExecutor(max_workers=1) as executor:
+            for i, strategy in enumerate(strategies):
+                if strategy:
+                    strategy(current_config)
+                    strategy_name = strategy.__name__
+                else:
+                    strategy_name = "Initial"
 
-                with concurrent.futures.ProcessPoolExecutor(max_workers=1) as executor:
+                try:
+                    # Architecture: Add explicit execution timeout for DFT manager to prevent hangs
                     future = executor.submit(
                         _run_calculator_process, self.driver, atoms, current_config, calc_dir
                     )
@@ -182,26 +182,26 @@ class DFTManager(BaseOracle):
                     # Apply results from subprocess back to the atoms object in main process
                     atoms.calc = calc
 
-            except concurrent.futures.TimeoutError as e:
-                last_error = e
-                atoms.calc = None
-                logger.exception(
-                    f"DFT calculation attempt {i + 1} ({strategy_name}) timed out after 3600s. Retrying..."
-                )
-                continue
-            except Exception as e:
-                # Catch all exceptions (RuntimeError, CalculatorSetupError, JobFailedException etc)
-                # to ensure self-healing strategies are attempted.
-                last_error = e
-                atoms.calc = None  # Clean up failed calculator
+                except concurrent.futures.TimeoutError as e:
+                    last_error = e
+                    atoms.calc = None
+                    logger.exception(
+                        f"DFT calculation attempt {i + 1} ({strategy_name}) timed out after 3600s. Retrying..."
+                    )
+                    continue
+                except Exception as e:
+                    # Catch all exceptions (RuntimeError, CalculatorSetupError, JobFailedException etc)
+                    # to ensure self-healing strategies are attempted.
+                    last_error = e
+                    atoms.calc = None  # Clean up failed calculator
 
-                # Enhanced Logging for debugging
-                logger.warning(
-                    f"DFT calculation attempt {i + 1} ({strategy_name}) failed. Error: {e!s}. Retrying..."
-                )
-                continue
-            else:
-                return atoms
+                    # Enhanced Logging for debugging
+                    logger.warning(
+                        f"DFT calculation attempt {i + 1} ({strategy_name}) failed. Error: {e!s}. Retrying..."
+                    )
+                    continue
+                else:
+                    return atoms
 
         # Correctly format the error message with the captured exception
         raise OracleError(ERR_ORACLE_FAILED.format(error=last_error)) from last_error
@@ -214,43 +214,28 @@ class MACEManager(BaseOracle):
     """
 
     def __init__(self, model_path: str) -> None:
-
         from pyacemaker.domain_models.defaults import DEFAULT_POTENTIALS_DIR
+        from pyacemaker.utils.security import validate_path_containment
 
-        # Verify containment: ensure the path falls inside the accepted allowed_base_dir.
-        # This prevents traversal attacks (e.g., passing "../../../etc/passwd").
-
-        # We must strictly resolve the path before checking containment to safely unpack all symlinks.
-        try:
-            canonical_path = Path(model_path).resolve(strict=True)
-        except FileNotFoundError as e:
-            msg = f"MACE model path does not exist: {model_path}"
-            raise FileNotFoundError(msg) from e
-
-        # Also canonicalize the allowed directory to properly evaluate containment.
-        allowed_dir = Path(DEFAULT_POTENTIALS_DIR).resolve(strict=True)
-
-        # Proceed with strict containment check on resolved paths
-        if not canonical_path.is_relative_to(allowed_dir):
-            msg = f"MACE model path {canonical_path} is outside allowed directory {allowed_dir}"
-            raise ValueError(msg)
-
-        if not canonical_path.is_file():
-            msg = f"MACE model path must be a file: {canonical_path}"
-            raise ValueError(msg)
-
+        # Securely validate containment
+        canonical_path = validate_path_containment(model_path, DEFAULT_POTENTIALS_DIR)
         self.model_path = str(canonical_path)
 
         # Initialize MACE properly
         import torch
         from mace.calculators import mace_mp
+
         device = "cuda" if torch.cuda.is_available() else "cpu"
-        # We assume the model path points to a valid MACE file or we can just load the small default for tests
+
+        # Load the model directly without fallback.
+        # This complies with the principle of explicit configuration.
         try:
-            self.calc = mace_mp(model=self.model_path, dispersion=False, default_dtype="float32", device=device)
-        except Exception:
-            # Fallback to standard pretrained for tests if the file is a dummy
-            self.calc = mace_mp(model="small", dispersion=False, default_dtype="float32", device=device)
+            self.calc = mace_mp(
+                model=self.model_path, dispersion=False, default_dtype="float32", device=device
+            )
+        except Exception as e:
+            msg = f"Failed to load MACE model from {self.model_path}: {e}"
+            raise OracleError(msg) from e
 
         self.is_initialized = True
 
@@ -279,9 +264,9 @@ class MACEManager(BaseOracle):
 
             # Since extracting exact committee uncertainty requires ensemble we will compute node energies
             if hasattr(self.calc, "models") and len(self.calc.models) > 1:
-                 # Real uncertainty from ensemble if multiple models present.
-                 # Currently we fall back to heuristic estimation since ensemble extraction requires internal state hooking.
-                 _ = len(self.calc.models)
+                # Real uncertainty from ensemble if multiple models present.
+                # Currently we fall back to heuristic estimation since ensemble extraction requires internal state hooking.
+                _ = len(self.calc.models)
 
             # For this exact requirement we must have real output
             # We assign arrays cleanly

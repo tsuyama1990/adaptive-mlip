@@ -35,7 +35,8 @@ def trainer(config: TrainingConfig) -> PacemakerTrainer:
 @pytest.fixture
 def mock_shutil_which() -> Generator[MagicMock, None, None]:
     with patch("shutil.which") as mock:
-        mock.return_value = "/usr/bin/pace_train"
+        # Allow both pace_train and mace_run_train for tests
+        mock.side_effect = lambda cmd: f"/usr/bin/{cmd}"
         yield mock
 
 
@@ -151,3 +152,28 @@ def test_train_initial_potential_missing(
 
     with pytest.raises(TrainerError, match="Initial potential not found"):
         trainer.train(data_path, initial_potential=initial_pot)
+
+
+def test_finetune_manager(tmp_path: Path, mock_shutil_which: MagicMock) -> None:
+    """Test FinetuneManager executes correctly."""
+    from pyacemaker.core.trainer import FinetuneManager
+
+    data_path = tmp_path / "train.xyz"
+    write(data_path, Atoms("H", positions=[[0, 0, 0]]))
+
+    manager = FinetuneManager()
+
+    with patch("pyacemaker.core.trainer.run_command") as mock_run:
+        # Simulate output file creation by run_command
+        def create_mock_output(cmd: list[str]) -> None:
+            # Command argument f"--name={output_model.stem}"
+            model_path = data_path.parent / "awakened_mace_model.model"
+            model_path.touch()
+
+        mock_run.side_effect = create_mock_output
+
+        result = manager.finetune(data_path)
+        assert result == str(data_path.parent / "awakened_mace_model.model")
+        mock_run.assert_called_once()
+        cmd = mock_run.call_args[0][0]
+        assert cmd[0] == "mace_run_train"

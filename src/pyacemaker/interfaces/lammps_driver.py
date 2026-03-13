@@ -1,12 +1,9 @@
 import logging
-import re
 from pathlib import Path
 
 import numpy as np
 from ase import Atoms
 from lammps import lammps
-
-from pyacemaker.domain_models.constants import LAMMPS_SAFE_CMD_PATTERN
 
 logger = logging.getLogger(__name__)
 
@@ -16,9 +13,6 @@ class LammpsDriver:
     Wrapper for the LAMMPS Python interface.
     Handles initialization and data extraction.
     """
-
-    # Whitelist of allowed characters in LAMMPS commands
-    SAFE_CMD_PATTERN = re.compile(LAMMPS_SAFE_CMD_PATTERN)
 
     def __init__(self, cmdargs: list[str] | None = None) -> None:
         """
@@ -38,80 +32,6 @@ class LammpsDriver:
             msg = f"Failed to initialize LAMMPS: {e}"
             raise RuntimeError(msg) from e
 
-    def _validate_command(self, cmd: str) -> None:
-        """Validates a single command against security rules."""
-        if not self.SAFE_CMD_PATTERN.match(cmd):
-            msg = f"Command contains forbidden characters: {cmd}"
-            raise ValueError(msg)
-
-        # Additional explicit blocklist check against dangerous shell injection characters
-        # Just in case SAFE_CMD_PATTERN is bypassed or redefined improperly
-        import re
-        blocked_pattern = re.compile(r"[;&|\`<>\n\r]")
-        if blocked_pattern.search(cmd):
-            msg = f"Command contains explicitly blocked shell metacharacters: {cmd}"
-            raise ValueError(msg)
-
-        tokens = cmd.split()
-        if not tokens:
-            return
-
-        first_token = tokens[0]
-
-        # For unit testing mocking purposes, accept variable logic. But standard UAT may also inject unsupported mock tokens.
-        # Since this strict validation is breaking the mocked unit test `test_lammps_driver_run_forbidden_command` that assumes any random string like "invalid_command" works unless `shell` or unsafe chars.
-        # But wait, the audit explicitly requires this whitelist:
-        # "Implement a comprehensive command whitelist for LAMMPS. Only allow known safe commands like 'units', 'boundary', 'pair_style', 'pair_coeff', 'fix', 'dump', 'run', etc."
-        # We must keep it to pass the audit, but we need to ensure tests passing dummy commands are updated.
-        allowed_commands = {
-            "clear",
-            "units",
-            "dimension",
-            "boundary",
-            "atom_style",
-            "atom_modify",
-            "lattice",
-            "region",
-            "create_box",
-            "create_atoms",
-            "read_data",
-            "read_restart",
-            "mass",
-            "velocity",
-            "pair_style",
-            "pair_coeff",
-            "pair_modify",
-            "neighbor",
-            "neigh_modify",
-            "compute",
-            "fix",
-            "unfix",
-            "uncompute",
-            "thermo",
-            "thermo_style",
-            "thermo_modify",
-            "dump",
-            "dump_modify",
-            "undump",
-            "timestep",
-            "reset_timestep",
-            "run",
-            "minimize",
-            "min_style",
-            "min_modify",
-            "variable",
-            "print",
-            "write_restart",
-        }
-
-        if first_token not in allowed_commands:
-            msg = f"Script contains forbidden or unrecognized command: '{first_token}'"
-            raise ValueError(msg)
-
-        if "shell" in tokens:
-            msg = "Script contains forbidden command 'shell'."
-            raise ValueError(msg)
-
     def run(self, script: str) -> None:
         """
         Execute a LAMMPS script provided as a string.
@@ -126,10 +46,12 @@ class LammpsDriver:
             msg = "Script contains non-ASCII characters, which may be unsafe."
             raise ValueError(msg)
 
+        from pyacemaker.utils.validation import validate_lammps_command
+
         for line in script.split("\n"):
             cmd = line.strip()
             if cmd:
-                self._validate_command(cmd)
+                validate_lammps_command(cmd)
                 self.lmp.command(cmd)
 
     def run_file(self, filepath: str | Path) -> None:
@@ -145,33 +67,21 @@ class LammpsDriver:
             msg = f"Input script not found: {path}"
             raise FileNotFoundError(msg)
 
-        # Basic security check: scan file for 'shell' command?
-        # Reading file defeats the purpose of streaming if we read it all.
-        # But for security, we might need to scan.
-        # However, if we trust the generator, we can skip.
-        # Given "Security" requirement, let's stream read and validate.
-        # But lammps.file() executes the file. It doesn't validate line by line in Python.
-        # If we use lammps.file(), we bypass _validate_command unless we pre-scan.
-        # Pre-scanning line by line is O(N) IO but O(1) memory.
+        from pyacemaker.utils.validation import validate_lammps_command
 
-        # Security: Read the entire file into memory to avoid TOCTOU attacks
-        # Validate all content atomically before executing anything.
-        content = path.read_text(encoding="utf-8")
-
-        commands_to_execute = []
-        for line in content.splitlines():
-            cmd = line.strip()
-            if cmd.startswith("#"):
-                continue
-            if cmd:
-                cmd = cmd.split("#")[0].strip()
+        # Stream lines one by one, validating right before execution
+        # to avoid OOM for large scripts and TOCTOU vulnerabilities.
+        with path.open("r", encoding="utf-8") as f:
+            for line in f:
+                cmd = line.strip()
+                if cmd.startswith("#"):
+                    continue
                 if cmd:
-                    self._validate_command(cmd)
-                    commands_to_execute.append(cmd)
-
-        # If we reach here, all commands are valid and atomic. Execute them.
-        for cmd in commands_to_execute:
-            self.lmp.command(cmd)
+                    # Handle inline comments efficiently
+                    cmd = cmd.split("#")[0].strip()
+                    if cmd:
+                        validate_lammps_command(cmd)
+                        self.lmp.command(cmd)
 
     def extract_variable(self, name: str) -> float:
         """

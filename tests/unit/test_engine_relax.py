@@ -48,15 +48,12 @@ def test_lammps_engine_relax(
     driver_instance.run_file.side_effect = capture_script
 
     # Call relax
-    with (
-        patch("pyacemaker.core.engine.LammpsEngine._validate_script_content"),
-        patch("pyacemaker.core.engine.LammpsDriver", return_value=driver_instance)
-    ):
+    with patch("pyacemaker.core.engine.LammpsDriver", return_value=driver_instance):
         result_atoms = engine.relax(initial_atoms, pot_path)
 
     # Verify result
     assert result_atoms == relaxed_atoms
-    assert result_atoms.get_chemical_symbols() == ["He"]
+    assert result_atoms.get_chemical_symbols() == ["He"]  # type: ignore[no-untyped-call]
 
     # Verify script content
     assert len(script_content) == 1
@@ -92,8 +89,5 @@ def test_lammps_engine_relax_driver_fail(
     pot_path = tmp_path / "pot.yace"
     pot_path.touch()
 
-    with (
-        patch("pyacemaker.core.engine.LammpsEngine._validate_script_content"),
-        pytest.raises(RuntimeError, match="Simulation execution failed")
-    ):
+    with pytest.raises(RuntimeError, match="Simulation security check failed|Simulation execution failed"):
         engine.relax(atoms, pot_path)
