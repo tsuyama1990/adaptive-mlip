@@ -32,7 +32,7 @@ class StrainMode(StrEnum):
 
 
 class StructureConfig(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", strict=True)
 
     elements: list[str] = Field(..., min_length=1, description="List of elements in the system")
     supercell_size: list[int] = Field(
@@ -48,7 +48,8 @@ class StructureConfig(BaseModel):
 
     # Deprecated single policy field, kept for compatibility.
     # It syncs with the first element of active_policies.
-    policy_name: ExplorationPolicy | None = Field(
+    # To support dynamic coercion from strings when strict=True, we use Union
+    policy_name: ExplorationPolicy | str | None = Field(
         default=None, description="Deprecated: Use active_policies instead."
     )
 
@@ -120,10 +121,14 @@ class StructureConfig(BaseModel):
     @model_validator(mode="after")
     def sync_policy_fields(self) -> "StructureConfig":
         """Syncs policy_name and active_policies for backward compatibility."""
-        if self.policy_name is not None and self.policy_name not in self.active_policies:
-            # If policy_name is set (e.g. from config file), ensure it's in active_policies
-            # Overwrite active_policies to respect legacy config
-            self.active_policies = [self.policy_name]
+        if self.policy_name is not None:
+            # Convert string to Enum if needed
+            if isinstance(self.policy_name, str):
+                self.policy_name = ExplorationPolicy(self.policy_name)
+            if self.policy_name not in self.active_policies:
+                # If policy_name is set (e.g. from config file), ensure it's in active_policies
+                # Overwrite active_policies to respect legacy config
+                self.active_policies = [self.policy_name]
 
         # Ensure policy_name is set for legacy readers
         if self.active_policies and self.policy_name is None:
