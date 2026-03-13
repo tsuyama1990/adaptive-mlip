@@ -13,16 +13,21 @@ src_path = Path(__file__).parent.parent.parent.resolve()
 if str(src_path) not in sys.path:
     sys.path.insert(0, str(src_path))
 
+import threading  # noqa: E402
+
 from pyacemaker.core.engine import TwoTierEvaluator  # noqa: E402
 from pyacemaker.domain_models.workflow import ActiveLearningThresholds  # noqa: E402
 
-# Global evaluator instance initialized once per LAMMPS process
-eval_uncertainty = None
+# Thread-local storage for evaluator instance to prevent race conditions
+_local_state = threading.local()
+
+
+def _get_evaluator() -> TwoTierEvaluator | None:
+    return getattr(_local_state, "eval_uncertainty", None)
 
 
 def init_evaluator(lmp: object) -> None:
-    global eval_uncertainty  # noqa: PLW0603
-    if eval_uncertainty is not None:
+    if _get_evaluator() is not None:
         return
 
     # Extract the configuration path securely from the LAMMPS variable
@@ -39,11 +44,12 @@ def init_evaluator(lmp: object) -> None:
     # Perform strict Pydantic model validation on loaded JSON structure
     # to entirely prevent arbitrary execution or injection bugs
     thresholds = ActiveLearningThresholds.model_validate(data, strict=True)
-    eval_uncertainty = TwoTierEvaluator(thresholds)
+    _local_state.eval_uncertainty = TwoTierEvaluator(thresholds)
 
 
 def eval_wrapper(lmp: object) -> None:
     """Wrapper to safely call eval_uncertainty from LAMMPS."""
+    eval_uncertainty = _get_evaluator()
     if eval_uncertainty is None:
         msg = "Evaluator not initialized. Ensure init_evaluator is called."
         raise RuntimeError(msg)

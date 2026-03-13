@@ -41,14 +41,92 @@ def _pre_relax_buffer(cluster: Atoms, fmax: float = 0.05, steps: int = 50) -> At
     return cluster_copy  # type: ignore[no-any-return]
 
 
-def _passivate_surface(cluster: Atoms, element: str = "H") -> Atoms:  # noqa: C901, PLR0912
+def _get_expected_coordination(symbol: str) -> int:
+    """Returns simple heuristic expected coordination based on valency."""
+    if symbol == "O":
+        return 2
+    if symbol == "Mg":
+        return 6
+    if symbol in ["Fe", "Pt"]:
+        return 8  # BCC/FCC bulk roughly
+    if symbol == "H":
+        return 1
+    return 6  # Typical for many transition metals and oxides in bulk
+
+
+def _calculate_passivation_positions(
+    idx: int, pos: np.ndarray, neighbors_vecs: np.ndarray, missing_bonds: int
+) -> list[np.ndarray]:
+    """Calculates deterministic positions for new passivating atoms."""
+    # Use standard reproducible PRNG for deterministic scientific calculations
+    # using a fixed seed combined with the unique atom index for variety
+    rng = np.random.default_rng(seed=42 + idx)
+
+    if len(neighbors_vecs) > 0:
+        # Vector pointing away from the center of mass of neighbors
+        com_vec = np.mean(neighbors_vecs, axis=0)
+        base_offset = -com_vec
+        norm = np.linalg.norm(base_offset)
+        if norm > 1e-5:
+            base_offset = base_offset / norm * 1.0  # 1.0 Angstrom bond length for H
+        else:
+            base_offset = rng.normal(size=3)
+            base_offset = base_offset / np.linalg.norm(base_offset) * 1.0
+    else:
+        # No neighbors, just place it somewhere
+        base_offset = rng.normal(size=3)
+        base_offset = base_offset / np.linalg.norm(base_offset) * 1.0
+
+    new_positions = []
+    for b in range(missing_bonds):
+        # Add slight perturbations if adding multiple bonds to the same atom
+        # to avoid placing them exactly on top of each other
+        perturbation = rng.normal(scale=0.1, size=3) if b > 0 else np.zeros(3)
+        offset = base_offset + perturbation
+        offset = offset / np.linalg.norm(offset) * 1.0  # Re-normalize to 1.0A
+        new_positions.append(pos + offset)
+
+    return new_positions
+
+
+def _detect_and_add_passivation_atoms(cluster: Atoms, element: str) -> list[Atoms]:
+    """Identifies undercoordinated atoms and returns a list of new passivating atoms to add."""
+    from ase.neighborlist import natural_cutoffs
+
+    cutoffs = natural_cutoffs(cluster, mult=1.2)  # type: ignore[no-untyped-call]
+    i_indices, j_indices, D_vectors = neighbor_list("ijD", cluster, cutoff=cutoffs)  # type: ignore[no-untyped-call]
+
+    weights = cluster.get_array("force_weight")  # type: ignore[no-untyped-call]
+    buffer_indices = np.where(weights == 0.0)[0]
+    new_atoms = []
+
+    symbols = cluster.get_chemical_symbols()  # type: ignore[no-untyped-call]
+
+    for idx in buffer_indices:
+        mask = i_indices == idx
+        n_neighbors = int(np.sum(mask))
+
+        symbol = symbols[idx]
+        expected_coord = _get_expected_coordination(symbol)
+        missing_bonds = expected_coord - n_neighbors
+
+        if missing_bonds > 0:
+            neighbors_vecs = D_vectors[mask]
+            pos = cluster.positions[idx]
+            new_positions = _calculate_passivation_positions(idx, pos, neighbors_vecs, missing_bonds)
+
+            for new_pos in new_positions:
+                new_atoms.append(Atoms(element, positions=[new_pos]))
+
+    return new_atoms
+
+
+def _passivate_surface(cluster: Atoms, element: str = "H") -> Atoms:
     """
     Passivates the surface of the cluster by adding dummy atoms (e.g. H) to undercoordinated atoms.
     Uses covalent radii to determine missing bonds.
     """
-
     from ase.data import chemical_symbols
-    from ase.neighborlist import natural_cutoffs
 
     if element not in chemical_symbols:
         msg = f"Invalid passivation element: {element}"
@@ -56,76 +134,14 @@ def _passivate_surface(cluster: Atoms, element: str = "H") -> Atoms:  # noqa: C9
 
     cluster_copy = cluster.copy()  # type: ignore[no-untyped-call]
 
-    # Calculate covalent radii sums for cutoffs
-    cutoffs = natural_cutoffs(cluster_copy, mult=1.2)  # type: ignore[no-untyped-call]
-    i_indices, j_indices, D_vectors = neighbor_list("ijD", cluster_copy, cutoff=cutoffs)  # type: ignore[no-untyped-call]
-
-    weights = cluster_copy.get_array("force_weight")
-    buffer_indices = np.where(weights == 0.0)[0]
-
-    new_atoms = []
-
-    for idx in buffer_indices:
-        # Number of neighbors for this atom
-        mask = i_indices == idx
-        n_neighbors = np.sum(mask)
-
-        symbol = cluster_copy.get_chemical_symbols()[idx]
-
-        # Simple heuristic for expected coordination based on valency
-        expected_coord = 6  # Typical for many transition metals and oxides in bulk
-        if symbol in ["O"]:
-            expected_coord = 2
-        elif symbol in ["Mg"]:
-            expected_coord = 6
-        elif symbol in ["Fe", "Pt"]:
-            expected_coord = 8  # BCC/FCC bulk roughly
-        elif symbol in ["H"]:
-            expected_coord = 1
-
-        missing_bonds = expected_coord - int(n_neighbors)
-        if missing_bonds > 0:
-            # We add dummy atoms in the direction of the "missing" bonds.
-            # A simple approach is to find the center of mass of the existing neighbors
-            # and place the passivating atom(s) on the opposite side, slightly perturbed if multiple.
-            neighbors_vecs = D_vectors[mask]
-
-            # Use standard reproducible PRNG for deterministic scientific calculations
-            # using a fixed seed combined with the unique atom index for variety
-            rng = np.random.default_rng(seed=42 + idx)
-
-            if len(neighbors_vecs) > 0:
-                # Vector pointing away from the center of mass of neighbors
-                com_vec = np.mean(neighbors_vecs, axis=0)
-                base_offset = -com_vec
-                norm = np.linalg.norm(base_offset)
-                if norm > 1e-5:
-                    base_offset = base_offset / norm * 1.0  # 1.0 Angstrom bond length for H
-                else:
-                    base_offset = rng.normal(size=3)
-                    base_offset = base_offset / np.linalg.norm(base_offset) * 1.0
-            else:
-                # No neighbors, just place it somewhere
-                base_offset = rng.normal(size=3)
-                base_offset = base_offset / np.linalg.norm(base_offset) * 1.0
-
-            pos = cluster_copy.positions[idx]
-
-            for b in range(missing_bonds):
-                # Add slight perturbations if adding multiple bonds to the same atom
-                # to avoid placing them exactly on top of each other
-                perturbation = rng.normal(scale=0.1, size=3) if b > 0 else np.zeros(3)
-                offset = base_offset + perturbation
-                offset = offset / np.linalg.norm(offset) * 1.0  # Re-normalize to 1.0A
-                new_pos = pos + offset
-
-                new_atoms.append(Atoms(element, positions=[new_pos]))
+    new_atoms = _detect_and_add_passivation_atoms(cluster_copy, element)
 
     if new_atoms:
         for new_atom in new_atoms:
             cluster_copy += new_atom
 
         # Update force_weight array to include the new passivated atoms (with weight 0.0)
+        weights = cluster_copy.get_array("force_weight")[:len(cluster)]
         new_weights = np.append(weights, np.zeros(len(new_atoms)))
         cluster_copy.set_array("force_weight", new_weights)
 

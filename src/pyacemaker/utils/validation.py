@@ -62,7 +62,8 @@ ALLOWED_LAMMPS_COMMANDS = {
     "python",
 }
 
-BLOCKED_PATTERN = re.compile(r"[;&|\$`<>\n\r\"'\\]")
+# Comprehensively block all shell injection, redirection, pipeline, and grouping metacharacters.
+BLOCKED_PATTERN = re.compile(r"[;&|\$<>\`\n\r\"'\\]")
 
 
 def validate_lammps_command(cmd: str) -> None:

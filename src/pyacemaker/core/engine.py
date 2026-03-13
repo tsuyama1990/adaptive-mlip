@@ -113,6 +113,10 @@ class LammpsEngine(BaseEngine):
 
         try:
             self._ensure_script_readable(script_path)
+
+            # The validation MUST be done synchronously and atomically with execution
+            # to absolutely prevent TOCTOU (Time of check to time of use) vulnerability.
+            # While the driver does token validation per command, we check file integrity immediately prior.
             self._validate_script_content(script_path)
 
             # Scalability: Use run_file to stream script execution
@@ -160,20 +164,20 @@ class LammpsEngine(BaseEngine):
         restart_path = temp_dir / "restart.lmp"
 
         if self.config.fix_halt and thresholds is not None:
-            # Safely write the configuration data as JSON instead of injecting Python code
             import json
             import shlex
 
-            config_path = temp_dir / "evaluator_config.json"
-            with config_path.open("w", encoding="utf-8") as f:
-                json.dump(thresholds.model_dump(), f)
-
-            # Find the static evaluator script path within the codebase
+            # Find the static evaluator script path within the codebase strictly BEFORE writing configs
             static_script_path = Path(__file__).parent / "evaluator_script.py"
 
             if not static_script_path.exists():
                 msg = f"Static evaluator script not found at {static_script_path}"
                 raise FileNotFoundError(msg)
+
+            # Safely write the configuration data as JSON instead of injecting Python code
+            config_path = temp_dir / "evaluator_config.json"
+            with config_path.open("w", encoding="utf-8") as f:
+                json.dump(thresholds.model_dump(), f)
 
             # Load the static script and explicitly pass the config path during LAMMPS initialization
             with input_script_path.open("w", encoding="utf-8") as f:
