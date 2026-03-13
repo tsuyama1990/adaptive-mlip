@@ -34,30 +34,15 @@ class LammpsScriptGenerator:
         Validates path against canonical directories.
         """
         import os
-        import re
 
-        # Implement a strict whitelist approach before path-resolution even happens.
-        # Only allow alphanumeric, underscore, hyphen, dot, and slash.
-        if not re.match(r"^[a-zA-Z0-9_\-\.\/]+$", path):
-            msg = f"Path contains blocked characters (must be strictly alphanumeric, dot, slash, dash, underscore): {path}"
-            raise ValueError(msg)
+        # Resolve canonically to absolute path BEFORE validation
+        # This resolves all symlinks, ../, and ./ to the absolute path
+        canonical_path = os.path.realpath(path)
+        canonical_path_obj = Path(canonical_path).resolve(strict=False)
 
-        # Sanitize input path
-        safe_path = validate_path_safe(Path(path))
-
-        # In test environments we often create temporary paths outside the standard default paths,
-        # so we will loosely accept the path if it exists or if the parent exists,
-        # BUT for security, we resolve it canonically to prevent directory traversal
-        canonical_path = os.path.realpath(str(safe_path))
-        canonical_path_obj = Path(canonical_path)
-
+        # Ensure the path or its parent exists
         if not canonical_path_obj.exists() and not canonical_path_obj.parent.exists():
             msg = f"Path {canonical_path} is invalid or has an invalid parent directory."
-            raise ValueError(msg)
-
-        # We explicitly prevent known traversal patterns
-        if ".." in canonical_path:
-            msg = f"Path traversal detected: {canonical_path}"
             raise ValueError(msg)
 
         # Explicitly verify containment from the already resolved secure base paths
@@ -71,18 +56,35 @@ class LammpsScriptGenerator:
             Path(DEFAULT_RAM_DISK_PATH).resolve(),
         ]
 
+        # Security Check: Compare exact paths or ensure absolute path logic directly
+        # Since a file within a directory wouldn't be '==' to the directory, we iterate
+        # through parents to safely confirm an allowed root.
         is_safe = False
-        for root in allowed_roots:
-            if canonical_path_obj.is_relative_to(root):
+        if not canonical_path_obj.is_absolute():
+            msg = f"Path must be absolute: {canonical_path_obj}"
+            raise ValueError(msg)
+
+        # Check if the path or any of its parents matches an allowed root exactly
+        current = canonical_path_obj
+        while True:
+            if any(current == root for root in allowed_roots):
                 is_safe = True
                 break
+            parent = current.parent
+            if parent == current:
+                break
+            current = parent
 
         if not is_safe:
             msg = f"Path traversal detected: {canonical_path_obj} is outside allowed roots"
             raise ValueError(msg)
 
+        # Sanitize resolved input path using our comprehensive path validation
+        # Now that we're certain of its location, we validate its name
+        safe_path = validate_path_safe(canonical_path_obj)
+
         # Use shlex.quote for shell safety
-        return shlex.quote(str(canonical_path_obj))
+        return shlex.quote(str(safe_path))
 
     def _gen_potential_pure(
         self, buffer: TextIO, potential_path: Path, elements: list[str]
@@ -142,9 +144,11 @@ class LammpsScriptGenerator:
         buffer.write(f"compute gamma all pace {quoted_pot}\n")
         buffer.write("compute max_gamma all reduce max c_gamma\n")
         buffer.write("variable max_g equal c_max_gamma\n")
+
+        # We replace `fix halt` with `fix python/invoke` using TwoTierEvaluator
+        # This calls the `eval_wrapper` python function every `check_interval` steps
         buffer.write(
-            f"fix halt_check all halt {self.config.check_interval} "
-            f"v_max_g > {self.config.uncertainty_threshold} error continue\n"
+            f"fix py_halt all python/invoke {self.config.check_interval} post_force eval_wrapper\n"
         )
 
     def _gen_mc(self, buffer: TextIO, elements: list[str]) -> None:
@@ -265,6 +269,10 @@ class LammpsScriptGenerator:
         # Output setup MUST come before run
         self._gen_output_setup(buffer, dump_file)
 
+        # Inject Python TwoTierEvaluator
+        if self.config.fix_halt:
+            buffer.write("python eval_wrapper invoke here\n")
+
         # Write velocity and run conditionally
         # If resume is true, these are skipped/handled externally
 
@@ -288,6 +296,7 @@ class LammpsScriptGenerator:
         dump_file: Path,
         elements: list[str],
         resume_step: int,
+        override_n_steps: int | None = None,
     ) -> None:
         """
         Writes a script specifically for resuming from a restart file.
@@ -300,11 +309,19 @@ class LammpsScriptGenerator:
         self._gen_settings(buffer)
         self._gen_watchdog(buffer, potential_path)
         self._gen_output_setup(buffer, dump_file)
+
+        # Inject Python TwoTierEvaluator
+        if self.config.fix_halt:
+            buffer.write("python eval_wrapper invoke here\n")
+
         self._gen_execution(buffer, elements)
 
         # We do NOT write velocity create here because it is read from restart
         # Calculate remaining steps
-        steps_left = max(0, self.config.n_steps - resume_step)
+        if override_n_steps is not None:
+            steps_left = override_n_steps
+        else:
+            steps_left = max(0, self.config.n_steps - resume_step)
 
         # Master-Slave resume logic
         buffer.write("reset_timestep ${step}\n")  # step is read from restart

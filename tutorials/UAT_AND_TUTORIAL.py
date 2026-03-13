@@ -1,157 +1,204 @@
-import sys
-from pathlib import Path
+import typing
 from typing import Any
 
 import marimo
 
-sys.path.append(str(Path(__file__).parent.parent / "src"))
-
 __generated_with = "0.20.4"
-app = marimo.App()
+app = marimo.App(width="medium")
 
 
 @app.cell
-def __uuid() -> tuple[Any, Any, Any, Any, Any]:
-    import tempfile
+def init() -> typing.Any:
+    import sys
     from pathlib import Path
+
+    sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+
+    import tempfile
+    import types
+    from pathlib import Path
+    from unittest.mock import patch
 
     import marimo as mo
     import numpy as np
+    from ase import Atoms
     from ase.build import bulk
 
-    return mo, bulk, tempfile, np, Path
-
-
-@app.cell
-def __1(mo: Any) -> None:
-    mo.md(
-        """
-        # PyAceMaker - NextGen Hierarchical Distillation Tutorial
-        This interactive notebook demonstrates the absolute core workflows
-        of the highly robust PyAceMaker active learning orchestration architecture.
-        """
-    )
-
-
-@app.cell
-def __2(mo: Any) -> tuple[Any]:
-    execute_real_physics = mo.ui.checkbox(label="Execute Real HPC Physics (Disable Mocking)")
-    return (execute_real_physics,)
-
-
-@app.cell
-def __3(
-    mo: Any, execute_real_physics: Any, bulk: Any, tempfile: Any, Path: Any
-) -> tuple[Any, Any, Any, Any]:
-    from pyacemaker.core.oracle import MACEManager
-    from pyacemaker.domain_models.defaults import DEFAULT_POTENTIALS_DIR
-    from pyacemaker.domain_models.workflow import DistillationConfig
-
-    mo.md("## Scenario UAT-01: Zero-Shot Distillation Baseline Generation")
-
-    distillation_config = DistillationConfig(enable=True, uncertainty_threshold=0.05)
-
-    with tempfile.TemporaryDirectory() as _tmp:
-        # MACEManager explicitly checks containment against DEFAULT_POTENTIALS_DIR
-        # To make it pass naturally, we supply a file inside DEFAULT_POTENTIALS_DIR
-        Path(DEFAULT_POTENTIALS_DIR).mkdir(parents=True, exist_ok=True)
-        model_path = Path(DEFAULT_POTENTIALS_DIR) / "small.model"
-        model_path.touch()
-
-        mace = MACEManager(str(model_path))
-        fe_bcc = bulk("Fe", "bcc")
-
-        res = next(mace.compute(iter([fe_bcc])))
-
-        mo.output.append(f"Evaluated Fe BCC with MACE. Energy: {res.info.get('energy')} eV")
-        mo.output.append(
-            f"Calculated uncertainty (c_gamma max): {res.get_array('c_gamma').max():.4f}"  # type: ignore[no-untyped-call]
-        )
-
-    return distillation_config, mace, res, Path
-
-
-@app.cell
-def __4(mo: Any, execute_real_physics: Any, bulk: Any, np: Any) -> tuple[Any, Any, Any]:
-    mo.md("## Scenario UAT-02: Intelligent Cutout and Safe Passivation")
-    from pyacemaker.domain_models.workflow import CutoutConfig
+    from pyacemaker.core.engine import LammpsEngine, TwoTierEvaluator
+    from pyacemaker.core.exceptions import MDHaltInterrupt
+    from pyacemaker.domain_models.md import MDConfig
+    from pyacemaker.domain_models.workflow import ActiveLearningThresholds, CutoutConfig
     from pyacemaker.utils.extraction import extract_intelligent_cluster
 
-    config = CutoutConfig(
-        core_radius=3.0,
-        buffer_radius=2.0,
-        enable_pre_relaxation=True,
-        enable_passivation=True,
-        passivation_element="H",
+    mo.md("# PYACEMAKER Cycle 03: Advanced Workflow Demonstration")
+    return (
+        ActiveLearningThresholds,
+        Atoms,
+        CutoutConfig,
+        LammpsEngine,
+        MDConfig,
+        MDHaltInterrupt,
+        Path,
+        TwoTierEvaluator,
+        bulk,
+        extract_intelligent_cluster,
+        mo,
+        np,
+        patch,
+        tempfile,
+        types,
     )
-
-    mgo = bulk("MgO", "rocksalt", a=4.21).repeat((3, 3, 3))
-    del mgo[0]
-
-    target_atoms = [0]
-
-    mo.output.append("Extracting cluster with Pre-Relaxation and Passivation...")
-    try:
-        cluster = extract_intelligent_cluster(mgo, target_atoms, config)
-        mo.output.append(
-            f"Successfully extracted and passivated cluster. Size: {len(cluster)} atoms."
-        )
-        mo.output.append(
-            f"Weights assigned: core={len(np.where(cluster.get_array('force_weight') == 1.0)[0])}"  # type: ignore[no-untyped-call]
-        )
-    except Exception as e:
-        mo.output.append(f"Error extracting cluster: {e}")
-        cluster = None
-
-    return config, mgo, cluster
 
 
 @app.cell
-def __5(
-    mo: Any, execute_real_physics: Any, bulk: Any, tempfile: Any, Path: Any
-) -> tuple[Any, Any, Any, Any]:
-    mo.md("## Scenario UAT-03: Seamless Time-Continuous MD Resume")
-
-    from pyacemaker.domain_models.md import MDConfig
-
-    fe = bulk("Fe", "bcc").repeat((2, 2, 2))
-
-    md_config = MDConfig(
-        temperature=300.0,
-        pressure=0.0,
-        timestep=0.001,
-        n_steps=100,
-        check_interval=10,
-        fix_halt=False,
-        minimize=False,
+def text_1(mo: Any) -> Any:
+    return mo.md(
+        "## Scenario UAT-01 & 03: The Two-Tier Evaluator & Seamless Resume\nThis demonstrates the noise-filtering logic that prevents premature halts and how a seamless resume works."
     )
 
-    with tempfile.TemporaryDirectory() as _tmp:
-        dummy_pot = Path(_tmp) / "dummy.yace"
-        dummy_pot.touch()
 
-        from pyacemaker.core.lammps_generator import LammpsScriptGenerator
+@app.cell
+def cell_2(
+    ActiveLearningThresholds: Any,
+    TwoTierEvaluator: Any,
+    MDHaltInterrupt: Any,
+    mo: Any,
+    types: Any,
+) -> Any:
+    thresholds = ActiveLearningThresholds(
+        threshold_call_dft=0.05, smooth_steps=3, threshold_add_train=0.02
+    )
+    evaluator = TwoTierEvaluator(thresholds)
+    mock_lmp = types.SimpleNamespace()
 
-        gen = LammpsScriptGenerator(md_config)
+    output = []
 
-        restart_path = Path(_tmp) / "restart.lmp"
-        input_path = Path(_tmp) / "input.lmp"
-        dump_path = Path(_tmp) / "dump.traj"
+    # Step 1
+    mock_lmp.extract_variable = lambda name, *args: 0.06 if name == "max_g" else 0.0
+    evaluator(mock_lmp)
+    output.append(
+        f"Step 1: Spike to 0.06. Consecutive exceedances: {evaluator.consecutive_exceedances}"
+    )
 
-        with input_path.open("w") as f:
-            gen.write_script_resume(f, dummy_pot, restart_path, dump_path, ["Fe"], resume_step=50)
+    # Step 2
+    mock_lmp.extract_variable = lambda name, *args: 0.02 if name == "max_g" else 0.0
+    evaluator(mock_lmp)
+    output.append(
+        f"Step 2: Drop to 0.02. Consecutive exceedances: {evaluator.consecutive_exceedances}"
+    )
 
-        script_content = input_path.read_text()
+    # Step 3, 4, 5
+    mock_lmp.extract_variable = lambda name, *args: 0.06 if name == "max_g" else 0.0
+    evaluator(mock_lmp)
+    output.append(
+        f"Step 3: Spike to 0.06. Consecutive exceedances: {evaluator.consecutive_exceedances}"
+    )
+    evaluator(mock_lmp)
+    output.append(
+        f"Step 4: Spike to 0.06. Consecutive exceedances: {evaluator.consecutive_exceedances}"
+    )
 
-        mo.output.append("LAMMPS Resume Script Generation Verified:")
-        mo.output.append("```")
-        mo.output.append(script_content)
-        mo.output.append("```")
-        mo.output.append(
-            "As shown, `velocity all create` is explicitly skipped and `reset_timestep` is used."
-        )
+    try:
+        evaluator(mock_lmp)
+    except MDHaltInterrupt as e:
+        output.append(f"Step 5: {e}")
 
-    return fe, md_config, gen, script_content
+    mo.md("### Results:\n" + "\n".join([f"- {line}" for line in output]))
+    return evaluator, mock_lmp, output, thresholds
+
+
+@app.cell
+def cell_3(
+    MDConfig: Any,
+    LammpsEngine: Any,
+    Atoms: Any,
+    np: Any,
+    Path: Any,
+    tempfile: Any,
+    mo: Any,
+    patch: Any,
+) -> Any:
+    # Scenario: Seamless Resume
+    config = MDConfig(n_steps=2000, fix_halt=False, temperature=300.0, pressure=1.0, timestep=0.001)
+    engine = LammpsEngine(config)
+    atoms = Atoms("H", cell=[10, 10, 10], pbc=True)
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        pot_path = Path(tmp_dir) / "pot.yace"
+        pot_path.touch()
+
+        script_content = []
+
+        # Mocking external lammps interactions here as instructed for the tutorial
+        with (
+            patch("pyacemaker.core.engine.LammpsDriver") as mock_driver,
+            patch("pyacemaker.core.engine.Path.exists", return_value=True),
+            patch("pyacemaker.core.engine.Path.stat") as mock_stat,
+            patch("pyacemaker.core.validator.Path.is_file", return_value=True),
+            patch("pyacemaker.core.validator.validate_path_safe", return_value=pot_path),
+            patch("pyacemaker.utils.path.validate_path_safe", return_value=pot_path),
+            patch("pyacemaker.core.lammps_generator.validate_path_safe", return_value=pot_path),
+            patch("pyacemaker.core.engine.LammpsEngine._validate_script_content"),
+            patch("pyacemaker.core.lammps_generator.Path.is_relative_to", return_value=True),
+            patch("pyacemaker.core.engine.LammpsEngine._execute_simulation") as mock_exec,
+            patch("pyacemaker.core.engine.LammpsEngine._extract_results") as mock_extract,
+        ):
+
+            def side_effect_exec(driver: Any, script_path: Any) -> None:
+                script_content.append(script_path.read_text())
+
+            mock_exec.side_effect = side_effect_exec
+            mock_stat.return_value.st_size = 100
+            mock_extract.return_value = None
+
+            # Simulate Resume from step 1500
+            engine.run(atoms, pot_path, resume_from_step=1500)
+
+    mo.md(f"### Generated Resume Script Fragment:\n```lammps\n{script_content[0]}\n```")
+    return (
+        atoms,
+        config,
+        engine,
+        mock_driver,
+        mock_exec,
+        mock_stat,
+        pot_path,
+        script_content,
+        side_effect_exec,
+        tmp_dir,
+    )
+
+
+@app.cell
+def text_2(mo: Any) -> Any:
+    return mo.md(
+        "## Scenario UAT-02: Intelligent Cutout and Safe Passivation\nDemonstrates precision isolation of atomic regions."
+    )
+
+
+@app.cell
+def cell_4(
+    CutoutConfig: Any,
+    bulk: Any,
+    extract_intelligent_cluster: Any,
+    mo: Any,
+    np: Any,
+) -> Any:
+    atoms_sc = bulk("Cu", "sc", a=2.5).repeat((3, 3, 3))
+    cutout_config = CutoutConfig(
+        core_radius=2.6, buffer_radius=1.0, enable_pre_relaxation=False, enable_passivation=False
+    )
+
+    cluster = extract_intelligent_cluster(atoms_sc, target_atoms=[13], config=cutout_config)
+    weights = cluster.get_array("force_weight")
+
+    n_core = np.sum(weights == 1.0)
+    n_buffer = np.sum(weights == 0.0)
+
+    mo.md(
+        f"### Cutout Results:\n- Extracted Core Atoms (Weight 1.0): {n_core}\n- Extracted Buffer Atoms (Weight 0.0): {n_buffer}\n- Total: {len(cluster)}"
+    )
+    return atoms_sc, cluster, cutout_config, n_buffer, n_core, weights
 
 
 if __name__ == "__main__":

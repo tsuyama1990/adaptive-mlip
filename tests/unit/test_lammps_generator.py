@@ -85,4 +85,4 @@ def test_generator_watchdog(tmp_path: Path) -> None:
     expected_pot = shlex.quote(str(pot_path))
     assert f"compute gamma all pace {expected_pot}" in script
     assert "compute max_gamma all reduce max c_gamma" in script
-    assert "fix halt_check all halt 10 v_max_g > 5.0 error continue" in script
+    assert "fix py_halt all python/invoke 10 post_force eval_wrapper" in script

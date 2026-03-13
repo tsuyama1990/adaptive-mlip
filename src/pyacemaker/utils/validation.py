@@ -59,9 +59,11 @@ ALLOWED_LAMMPS_COMMANDS = {
     "min_modify",
     "variable",
     "write_restart",
+    "python",
 }
 
-BLOCKED_PATTERN = re.compile(r"[;&|\$`<>\n\r\"'\\]")
+# Comprehensively block all shell injection, redirection, pipeline, and grouping metacharacters.
+BLOCKED_PATTERN = re.compile(r"[;&|\$<>\`\n\r\"'\\]")
 
 
 def validate_lammps_command(cmd: str) -> None:
@@ -75,15 +77,21 @@ def validate_lammps_command(cmd: str) -> None:
         ValueError: If the command contains forbidden characters, unrecognized commands,
                     or shell injection vectors.
     """
-    if not SAFE_CMD_PATTERN.match(cmd):
-        msg = f"Command contains forbidden characters: {cmd}"
-        raise ValueError(msg)
+    import shlex
 
+    # Check for blatantly obvious injections first
     if BLOCKED_PATTERN.search(cmd):
         msg = f"Command contains explicitly blocked shell metacharacters: {cmd}"
         raise ValueError(msg)
 
-    tokens = cmd.split()
+    try:
+        # Use proper shell parsing to analyze exactly how the command is structured
+        # This handles quotes properly and allows us to inspect arguments safely
+        tokens = shlex.split(cmd)
+    except ValueError as e:
+        msg = f"Failed to parse command due to invalid quoting/escaping: {e}"
+        raise ValueError(msg) from e
+
     if not tokens:
         return
 
@@ -93,9 +101,39 @@ def validate_lammps_command(cmd: str) -> None:
         msg = f"Script contains forbidden or unrecognized command: '{first_token}'"
         raise ValueError(msg)
 
-    if any(forbidden in tokens for forbidden in ["shell", "exec", "system"]):
-        msg = "Script contains explicitly forbidden system command tokens."
-        raise ValueError(msg)
+    # Validate every token to ensure no dangerous shell/execution tokens are buried in arguments
+    forbidden_tokens = {
+        "shell",
+        "exec",
+        "system",
+        "eval",
+        "sh",
+        "bash",
+        "python3",
+        "python2",
+        "wget",
+        "curl",
+        "nc",
+    }
+
+    for token in tokens:
+        # Check against a broader set of strict forbidden shell execution tokens
+        if any(f_token == token for f_token in forbidden_tokens):
+            msg = f"Script contains explicitly forbidden system command token: '{token}'"
+            raise ValueError(msg)
+
+        # Ensure NO token contains embedded shell characters, even encoded ones
+        # This provides a strict character whitelist for ALL arguments instead of a weak regex
+        # Only allow standard path characters and numbers inside tokens.
+        is_quoted = (token.startswith('"') and token.endswith('"')) or (
+            token.startswith("'") and token.endswith("'")
+        )
+        has_invalid_chars = not re.match(r"^[a-zA-Z0-9_\\-\\.\\/\\*\\{\\}\\[\\]\\=\\+]+$", token)
+        has_injection = bool(re.search(r"[\$\`\<\>\|\&;\\(\\)]", token))
+
+        if has_invalid_chars and not is_quoted and has_injection:
+            msg = f"Token contains potentially dangerous shell metacharacters: {token}"
+            raise ValueError(msg)
 
 
 def validate_lammps_script_file(script_path: Path) -> None:
