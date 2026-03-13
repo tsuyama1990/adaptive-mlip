@@ -38,7 +38,7 @@ class LammpsScriptGenerator:
 
         # Add basic shell character blocking first to prevent trivial injection attempts
         # before OS stat/path-resolution even happens.
-        if re.search(r"[;&|\`$<>\n\r]", path):
+        if re.search(r"[;&|\`$<>\n\r\"'\\]", path):
             msg = f"Path contains blocked shell metacharacters: {path}"
             raise ValueError(msg)
 

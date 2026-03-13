@@ -67,7 +67,9 @@ class CutoutConfig(BaseModel):
     core_radius: float = Field(4.0, description="Radius for Force Weight 1.0")
     buffer_radius: float = Field(3.0, description="Thickness of additional relaxation buffer layer")
     enable_pre_relaxation: bool = True
-    pre_relaxation_fmax: float = Field(0.05, description="Force maximum tolerance for pre-relaxation")
+    pre_relaxation_fmax: float = Field(
+        0.05, description="Force maximum tolerance for pre-relaxation"
+    )
     pre_relaxation_steps: int = Field(50, description="Maximum steps for pre-relaxation")
     enable_passivation: bool = True
     passivation_element: str = "H"

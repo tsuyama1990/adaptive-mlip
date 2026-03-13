@@ -3,7 +3,7 @@ from io import StringIO
 from pathlib import Path
 
 from pyacemaker.core.lammps_generator import LammpsScriptGenerator
-from pyacemaker.domain_models.md import HybridParams, MDConfig
+from pyacemaker.domain_models.md import MDConfig
 
 
 def test_generator_pure_pace(tmp_path: Path) -> None:

@@ -71,6 +71,7 @@ def test_uat_02_01_single_point_calculation(
 
     # 2. Action: Run DFTManager with mocked driver via dependency injection
     from unittest.mock import MagicMock
+
     mock_driver_instance = MagicMock()
     mock_driver_instance.get_calculator.side_effect = lambda atoms, config, **kwargs: (
         MockCalculator(fail_count=0, test_energy=TEST_ENERGY_H2O)
@@ -102,6 +103,7 @@ def test_uat_02_02_self_healing(
 
     # 2. Action: Run DFTManager with failure via dependency injection
     from unittest.mock import MagicMock
+
     mock_driver_instance = MagicMock()
 
     # Mock failure on first attempt, success on second

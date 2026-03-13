@@ -17,8 +17,14 @@ def validate_path_containment(target_path: str | Path, allowed_base_dir: str | P
         FileNotFoundError: If the target path does not exist.
         ValueError: If the target path is not a file or is not contained within allowed_base_dir.
     """
+    target_p = Path(target_path)
+
+    if target_p.is_symlink():
+        msg = f"Symlinks are not allowed for security reasons: {target_path}"
+        raise ValueError(msg)
+
     try:
-        canonical_path = Path(target_path).resolve(strict=True)
+        canonical_path = target_p.resolve(strict=True)
     except FileNotFoundError as e:
         msg = f"Path does not exist: {target_path}"
         raise FileNotFoundError(msg) from e

@@ -26,7 +26,7 @@ class PacemakerTrainer(BaseTrainer):
         """
         Fetches up to `size` past data points to retain for training.
         This prevents catastrophic forgetting.
-        Uses ase.io.iread for efficient memory streaming and actual random sampling.
+        Uses ase.io.iread with true reservoir sampling for streaming memory safety.
         """
         import random
         from pathlib import Path
@@ -37,19 +37,20 @@ class PacemakerTrainer(BaseTrainer):
         if not path.exists():
             return []
 
-        # Stream all atoms using iread, collect into list for random sampling
-        # If history gets incredibly huge, reservoir sampling would be better,
-        # but list casting meets the immediate non-mocking requirement.
+        reservoir: list[Any] = []
         try:
             atoms_iter = iread(path, format="extxyz")
-            all_atoms = list(atoms_iter)
+            for i, item in enumerate(atoms_iter):
+                if i < size:
+                    reservoir.append(item)
+                else:
+                    j = random.randint(0, i)  # noqa: S311
+                    if j < size:
+                        reservoir[j] = item
         except Exception:
-            return []
+            return reservoir
 
-        if len(all_atoms) <= size:
-            return all_atoms
-
-        return random.sample(all_atoms, size)
+        return reservoir
 
     def incremental_train(
         self,
@@ -191,9 +192,9 @@ class FinetuneManager:
 
     def finetune(self, dataset_path: str | Path) -> str:
         """
-        Implements the actual fine-tuning logic for the MACE model readout layer.
+        Implements actual fine-tuning logic for the MACE model.
         """
-        from ase.io import read
+        from ase.io import iread
 
         # Validate path
         dataset_path = Path(dataset_path)
@@ -201,17 +202,43 @@ class FinetuneManager:
             msg = f"Dataset not found: {dataset_path}"
             raise FileNotFoundError(msg)
 
-        # Verify structure is readable (real implementation validation)
-        _ = list(read(dataset_path, index=":"))
+        # Verify structure is readable efficiently
+        _ = next(iread(dataset_path, index=":"))
 
-        # In a complete implementation we would utilize mace.cli.run_train or torch optimization loops.
-        # As instructed by the architecture evaluation: "Provide a proper mock implementation that simulates the behavior"
-        # Since full finetuning requires heavy dependency mapping and GPU resources,
-        # we will simulate the MACE output model path here to satisfy architectural wiring without dummy exceptions.
         output_model = dataset_path.parent / "awakened_mace_model.model"
 
-        # Simulate writing a model checkpoint
+        if not shutil.which("mace_run_train"):
+            msg = "Executable 'mace_run_train' not found in PATH."
+            raise TrainerError(msg)
+
+        # Execute real MACE fine-tuning
+        cmd = [
+            "mace_run_train",
+            f"--name={output_model.stem}",
+            f"--train_file={dataset_path}",
+            f"--checkpoints_dir={dataset_path.parent}",
+            "--model=MACE",
+            "--max_num_epochs=5",  # very brief fine-tuning
+            "--device=cuda",
+            "--error_table=MACE_error_table",
+        ]
+
+        try:
+            run_command(cmd)
+        except subprocess.CalledProcessError as e:
+            msg = f"MACE fine-tuning failed with exit code {e.returncode}: {e}"
+            raise TrainerError(msg) from e
+        except Exception as e:
+            msg = f"MACE fine-tuning failed unexpectedly: {e}"
+            raise TrainerError(msg) from e
+
+        # MACE saves as {name}_compiled.model by default when complete
+        compiled_model = dataset_path.parent / f"{output_model.stem}_compiled.model"
+        if compiled_model.exists():
+            shutil.move(compiled_model, output_model)
+
         if not output_model.exists():
-            output_model.write_text("simulated_mace_checkpoint")
+            msg = f"MACE model file was not created at {output_model}"
+            raise TrainerError(msg)
 
         return str(output_model)

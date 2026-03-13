@@ -148,11 +148,11 @@ class DFTManager(BaseOracle):
         Raises:
             OracleError: If calculation fails after all retries and strategies.
         """
-        from pyacemaker.core.validator import LammpsInputValidator
+        from pyacemaker.utils.validation import validate_structure
 
         # Security: Apply strict pre-computation validation to prevent malicious atomic
         # objects from exhausting memory or bypassing physical parameter bounds safely.
-        LammpsInputValidator.validate_structure(atoms)
+        validate_structure(atoms)
 
         current_config = self.config.model_copy()
         strategies = self._get_strategies()

@@ -85,7 +85,7 @@ def __4(mo: Any, execute_real_physics: Any, bulk: Any, np: Any) -> tuple[Any, An
         passivation_element="H",
     )
 
-    mgo = bulk("MgO", "rocksalt", a=4.21).repeat((3, 3, 3))  # type: ignore[no-untyped-call]
+    mgo = bulk("MgO", "rocksalt", a=4.21).repeat((3, 3, 3))
     del mgo[0]
 
     target_atoms = [0]

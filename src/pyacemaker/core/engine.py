@@ -117,8 +117,13 @@ class LammpsEngine(BaseEngine):
 
         with input_script_path.open("w") as f:
             if resume_step is not None and resume_step > 0:
-                if not restart_path.exists():
-                    restart_path.touch()
+                # Prevent race conditions during concurrent execution by creating the file atomically
+                # Using 'x' mode ensures it's created only if it doesn't exist, safely handling concurrency.
+                try:
+                    with restart_path.open("x"):
+                        pass
+                except FileExistsError:
+                    pass
 
                 self.generator.write_script_resume(
                     f, potential_path, restart_path, dump_file, elements, resume_step

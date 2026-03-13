@@ -1,23 +1,13 @@
 from pathlib import Path
 from typing import Any
 
-import numpy as np
 from ase import Atoms
-from ase.data import atomic_numbers
 
 from pyacemaker.domain_models.constants import (
     ERR_POTENTIAL_NOT_FOUND,
     ERR_VAL_POT_NONE,
     ERR_VAL_POT_NOT_FILE,
     ERR_VAL_REQ_STRUCT,
-    ERR_VAL_STRUCT_DUMMY_ELEM,
-    ERR_VAL_STRUCT_EMPTY,
-    ERR_VAL_STRUCT_NAN_POS,
-    ERR_VAL_STRUCT_NONE,
-    ERR_VAL_STRUCT_TYPE,
-    ERR_VAL_STRUCT_UNKNOWN_SYM,
-    ERR_VAL_STRUCT_VOL_FAIL,
-    ERR_VAL_STRUCT_ZERO_VOL,
 )
 from pyacemaker.domain_models.validation import ValidationConfig, ValidationResult
 from pyacemaker.utils.elastic import ElasticCalculator
@@ -32,53 +22,13 @@ class LammpsInputValidator:
     """
 
     @staticmethod
-    def validate_structure(structure: Any) -> None:  # noqa: C901
+    def validate_structure(structure: Any) -> None:
         """
-        Validates the atomic structure.
-
-        Args:
-            structure: Input structure object.
-
-        Raises:
-            ValueError: If structure is invalid, empty, or contains unknown elements.
-            TypeError: If input is not an ASE Atoms object.
+        Validates the atomic structure using shared utility.
         """
-        if structure is None:
-            raise ValueError(ERR_VAL_STRUCT_NONE)
+        from pyacemaker.utils.validation import validate_structure
 
-        if not isinstance(structure, Atoms):
-            raise TypeError(ERR_VAL_STRUCT_TYPE.format(type=type(structure)))
-
-        if len(structure) == 0:
-            raise ValueError(ERR_VAL_STRUCT_EMPTY)
-
-        # Validate structure physical properties
-        try:
-            vol = structure.get_volume()  # type: ignore[no-untyped-call]
-        except Exception as e:
-            # get_volume might fail if no cell is set
-            raise ValueError(ERR_VAL_STRUCT_VOL_FAIL.format(error=e)) from e
-
-        if vol <= 1e-9:
-            raise ValueError(ERR_VAL_STRUCT_ZERO_VOL)
-
-        # Validate positions are numeric and finite
-        pos = structure.get_positions()  # type: ignore[no-untyped-call]
-        if not np.isfinite(pos).all():
-            raise ValueError(ERR_VAL_STRUCT_NAN_POS)
-
-        # Validate elements against atomic_numbers
-        symbols = set(structure.get_chemical_symbols())  # type: ignore[no-untyped-call]
-        for s in symbols:
-            # Script injection and sanitization check:
-            if not isinstance(s, str) or not s.isalpha() or len(s) > 2:
-                msg = f"Chemical symbol contains invalid characters or types: {s}"
-                raise ValueError(msg)
-
-            if s not in atomic_numbers:
-                raise ValueError(ERR_VAL_STRUCT_UNKNOWN_SYM.format(symbol=s))
-            if atomic_numbers[s] == 0:
-                raise ValueError(ERR_VAL_STRUCT_DUMMY_ELEM.format(symbol=s))
+        validate_structure(structure)
 
     @staticmethod
     def validate_potential(potential: Any) -> Path:

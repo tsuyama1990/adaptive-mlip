@@ -12,7 +12,6 @@ from ase.calculators.calculator import Calculator, CalculatorSetupError
 
 from pyacemaker.domain_models import (
     DFTConfig,
-    HybridParams,
     MDConfig,
     StructureConfig,
     TrainingConfig,
