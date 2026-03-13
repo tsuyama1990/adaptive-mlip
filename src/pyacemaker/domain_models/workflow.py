@@ -132,6 +132,30 @@ class WorkflowConfig(BaseModel):
         default=DEFAULT_POTENTIALS_DIR, description="Directory for storing trained potentials"
     )
 
+    production_dir: str = Field(
+        default="production", description="Directory to deploy the final validated potential"
+    )
+
+    resume_n_steps: PositiveInt = Field(
+        default=1000, description="Number of steps to execute when resuming MD softly"
+    )
+
+    potential_filename_template: str = Field(
+        default="generation_{iteration:03d}.yace", description="Template for versioned potentials"
+    )
+
+    candidates_filename: str = Field(
+        default="candidates.xyz", description="Filename for generated structure candidates"
+    )
+
+    potential_filename: str = Field(
+        default="potential.yace", description="Filename for the active potential"
+    )
+
+    training_filename: str = Field(
+        default="training_data.xyz", description="Filename for the labeled training data"
+    )
+
     otf: OTFConfig = Field(default_factory=OTFConfig, description="Configuration for OTF loop.")
 
     distillation: DistillationConfig = Field(

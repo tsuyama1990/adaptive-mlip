@@ -16,22 +16,12 @@ from pyacemaker.core.trainer import FinetuneManager
 from pyacemaker.core.validator import Validator
 from pyacemaker.domain_models import PyAceConfig
 from pyacemaker.domain_models.defaults import (
-    DEFAULT_PRODUCTION_DIR,
-    DEFAULT_RESUME_N_STEPS,
-    FILENAME_CANDIDATES,
-    FILENAME_POTENTIAL,
-    FILENAME_TRAINING,
-    LOG_INIT_MODULES,
-    LOG_ITERATION_COMPLETED,
-    LOG_MODULE_INIT_FAIL,
-    LOG_MODULES_INIT_SUCCESS,
     LOG_POTENTIAL_TRAINED,
     LOG_PROJECT_INIT,
     LOG_START_ITERATION,
     LOG_START_LOOP,
     LOG_WORKFLOW_COMPLETED,
     LOG_WORKFLOW_CRASHED,
-    TEMPLATE_POTENTIAL_FILE,
 )
 from pyacemaker.domain_models.md import MDSimulationResult
 from pyacemaker.factory import ModuleFactory
@@ -88,7 +78,7 @@ class Orchestrator:
         Raises:
             OrchestratorError: If module initialization fails.
         """
-        self.logger.info(LOG_INIT_MODULES)
+        self.logger.info(self.config.logging.messages.init_modules)
         try:
             # Create modules using factory
             (
@@ -102,10 +92,10 @@ class Orchestrator:
 
         except Exception as e:
             self.logger.exception("Failed to initialize modules")
-            msg = LOG_MODULE_INIT_FAIL.format(error=e)
+            msg = self.config.logging.messages.module_init_fail.format(error=e)
             raise OrchestratorError(msg) from e
 
-        self.logger.info(LOG_MODULES_INIT_SUCCESS)
+        self.logger.info(self.config.logging.messages.modules_init_success)
 
     def _stream_write(
         self,
@@ -176,7 +166,7 @@ class Orchestrator:
             return
 
         n_candidates = dist_config.sampling_structures_per_system if dist_config else self.config.workflow.n_candidates
-        training_file = paths["training"] / FILENAME_TRAINING
+        training_file = paths["training"] / self.config.workflow.training_filename
 
         try:
             self.logger.info("Phase 1: Starting Zero-Shot Distillation combinatorial generation...")
@@ -216,7 +206,7 @@ class Orchestrator:
         if not self.trainer:
             return None
 
-        training_file = paths["training"] / FILENAME_TRAINING
+        training_file = paths["training"] / self.config.workflow.training_filename
         if not training_file.exists():
             self.logger.warning("No training data found, skipping training.")
             return None
@@ -259,7 +249,7 @@ class Orchestrator:
         try:
             # Try to get from candidates of previous iteration or iteration 0
             iter0_paths = self.dir_manager.setup_iteration(0)
-            cand_file = iter0_paths["candidates"] / FILENAME_CANDIDATES
+            cand_file = iter0_paths["candidates"] / self.config.workflow.candidates_filename
             if cand_file.exists():
                 # Use next() on iread to get just the first frame efficiently
                 return next(iread(str(cand_file), index=0))
@@ -341,7 +331,7 @@ class Orchestrator:
         labelled_gen = self.oracle.compute(selected_gen)
 
         # Append to training data
-        training_file = paths["training"] / FILENAME_TRAINING
+        training_file = paths["training"] / self.config.workflow.training_filename
         batch_size = self.config.workflow.batch_size
 
         return self._stream_write(labelled_gen, training_file, batch_size=batch_size, append=True)
@@ -415,7 +405,7 @@ class Orchestrator:
             )
 
             # 4. ACE Incremental Update (Delta Learning)
-            training_file = paths["training"] / FILENAME_TRAINING
+            training_file = paths["training"] / self.config.workflow.training_filename
 
             # Execute incremental_train to mix new data with replay buffer and update weights from previous step
             if hasattr(self.trainer, "incremental_train") and callable(
@@ -446,7 +436,7 @@ class Orchestrator:
 
     def _deploy_potential(self, iteration: int) -> Path:
         """Deploys the current potential to the potentials directory."""
-        potential_filename = TEMPLATE_POTENTIAL_FILE.format(iteration=iteration)
+        potential_filename = self.config.workflow.potential_filename_template.format(iteration=iteration)
         deployed_potential = self.potentials_dir / potential_filename
 
         if self.state_manager.current_potential:
@@ -479,7 +469,7 @@ class Orchestrator:
                 run_kwargs["resume_from_step"] = initial_structure.info["halt_step"]
 
                 # Soft start logic for resume: run fewer steps initially to thermalize
-                default_n_steps = DEFAULT_RESUME_N_STEPS
+                default_n_steps = getattr(self.config.workflow, "resume_n_steps", 1000)
                 if hasattr(self.engine, "config") and hasattr(self.engine.config, "n_steps"):
                     default_n_steps = self.engine.config.n_steps
                 run_kwargs["override_n_steps"] = min(
@@ -522,7 +512,7 @@ class Orchestrator:
                     self.logger.info(f"Potential refined to: {new_potential}")
         else:
             self.logger.info(
-                LOG_ITERATION_COMPLETED.format(iteration=self.state_manager.iteration + 1)
+                self.config.logging.messages.iteration_completed.format(iteration=self.state_manager.iteration + 1)
             )
 
     def _adapt_strategy(self, result: MDSimulationResult) -> None:  # noqa: C901
@@ -653,9 +643,9 @@ class Orchestrator:
         Performs comprehensive physical property inspection: Born stability (elastic constants),
         phonon dispersion (imaginary frequencies), and Equation of State (EOS).
         """
-        production_dir = Path(DEFAULT_PRODUCTION_DIR)
+        production_dir = Path(self.config.workflow.production_dir)
         production_dir.mkdir(exist_ok=True)
-        potential_target = production_dir / FILENAME_POTENTIAL
+        potential_target = production_dir / self.config.workflow.potential_filename
 
         if self.state_manager.current_potential:
             shutil.copy(self.state_manager.current_potential, potential_target)

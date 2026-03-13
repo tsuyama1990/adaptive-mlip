@@ -1,6 +1,7 @@
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
+from unittest.mock import MagicMock
 
 import numpy as np
 import pytest
@@ -54,6 +55,12 @@ class FakeTrainer(BaseTrainer):
 
     def train(
         self, training_data_path: str | Path, initial_potential: str | Path | None = None
+    ) -> Any:
+        self.output_path.touch()
+        return self.output_path
+
+    def incremental_train(
+        self, new_data_path: str | Path, strategy_config: Any, initial_potential: str | Path | None = None
     ) -> Any:
         self.output_path.touch()
         return self.output_path
@@ -137,10 +144,6 @@ def test_orchestrator_refinement_logic(tmp_path: Path) -> None:
     orch.oracle = FakeOracle()
     refined_pot = tmp_path / "refined.yace"
     orch.trainer = FakeTrainer(refined_pot)
-    # mock incremental_train with a mock that returns the path instead of failing
-    from unittest.mock import MagicMock
-
-    orch.trainer.incremental_train = MagicMock(return_value=refined_pot)
 
     # 5. Create Simulation Result
     result = MDSimulationResult(

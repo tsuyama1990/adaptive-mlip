@@ -3,11 +3,39 @@ from pathlib import Path
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
+from pyacemaker.domain_models.defaults import (
+    LOG_INIT_MODULES,
+    LOG_ITERATION_COMPLETED,
+    LOG_MODULE_INIT_FAIL,
+    LOG_MODULES_INIT_SUCCESS,
+)
+
+
+class LogMessagesConfig(BaseModel):
+    """Configurable log messages for the orchestrator."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    init_modules: str = Field(default=LOG_INIT_MODULES, description="Message for module init start")
+    iteration_completed: str = Field(
+        default=LOG_ITERATION_COMPLETED, description="Message for iteration completion"
+    )
+    module_init_fail: str = Field(
+        default=LOG_MODULE_INIT_FAIL, description="Message for module init failure"
+    )
+    modules_init_success: str = Field(
+        default=LOG_MODULES_INIT_SUCCESS, description="Message for successful module init"
+    )
+
+
 class LoggingConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     level: str = Field(
         default="INFO", pattern="^(DEBUG|INFO|WARNING|ERROR|CRITICAL)$", description="Logging level"
+    )
+    messages: LogMessagesConfig = Field(
+        default_factory=LogMessagesConfig, description="Configurable log messages"
     )
     log_file: str | None = Field(default="pyacemaker.log", description="Path to the log file")
     max_bytes: int = Field(
