@@ -16,13 +16,18 @@ def test_lammps_input_validator_structure() -> None:
 
 
 def test_lammps_input_validator_potential(tmp_path: Path) -> None:
-    pot_path = tmp_path / "pot.yace"
+    # Use actual paths in default potential dir to satisfy validate_path_safe
+    from pyacemaker.domain_models.defaults import DEFAULT_POTENTIALS_DIR
+    pot_dir = Path(DEFAULT_POTENTIALS_DIR)
+    pot_dir.mkdir(parents=True, exist_ok=True)
+    pot_path = pot_dir / "pot.yace"
     pot_path.touch()
 
-    with patch("pyacemaker.core.validator.validate_path_safe", return_value=pot_path) as mock_val:
-        res = LammpsInputValidator.validate_potential(str(pot_path))
-        assert res == pot_path
-        mock_val.assert_called_once()
+    res = LammpsInputValidator.validate_potential(str(pot_path))
+    assert res.resolve() == pot_path.resolve()
+
+    # Clean up
+    pot_path.unlink()
 
 
 def test_lammps_input_validator_potential_none() -> None:
@@ -44,28 +49,26 @@ def test_lammps_input_validator_potential_not_file(tmp_path: Path) -> None:
     pot_dir = tmp_path / "pot_dir"
     pot_dir.mkdir()
 
-    with (
-        patch("pyacemaker.core.validator.validate_path_safe", return_value=pot_dir),
-        pytest.raises(ValueError, match="Potential path is not a file"),
-    ):
+    with patch("pyacemaker.core.validator.validate_path_safe", return_value=pot_dir), \
+         pytest.raises(ValueError, match="Potential path is not a file"):
         LammpsInputValidator.validate_potential(str(pot_dir))
 
 
 class TestValidator:
     @pytest.fixture
-    def mock_phonon_calc(self):
+    def mock_phonon_calc(self) -> MagicMock:
         return MagicMock()
 
     @pytest.fixture
-    def mock_elastic_calc(self):
+    def mock_elastic_calc(self) -> MagicMock:
         return MagicMock()
 
     @pytest.fixture
-    def mock_report_gen(self):
+    def mock_report_gen(self) -> MagicMock:
         return MagicMock()
 
     @pytest.fixture
-    def validator(self, mock_phonon_calc, mock_elastic_calc, mock_report_gen):
+    def validator(self, mock_phonon_calc: MagicMock, mock_elastic_calc: MagicMock, mock_report_gen: MagicMock) -> Validator:
         config = ValidationConfig()
         # Assuming Validator takes instances of calculators and report generator
         return Validator(
@@ -75,7 +78,7 @@ class TestValidator:
             report_generator=mock_report_gen,
         )
 
-    def test_validate_pass(self, validator, mock_phonon_calc, mock_elastic_calc, mock_report_gen):
+    def test_validate_pass(self, validator: Validator, mock_phonon_calc: MagicMock, mock_elastic_calc: MagicMock, mock_report_gen: MagicMock) -> None:
         mock_phonon_calc.check_stability.return_value = (True, "base64_phonon")
         mock_elastic_calc.calculate_properties.return_value = (
             True,
@@ -88,10 +91,12 @@ class TestValidator:
         output_path = Path("report.html")
         structure = Atoms("H", cell=[10, 10, 10], pbc=True)
 
-        # Mock _relax_structure to isolate
-        with patch.object(validator, "_relax_structure") as mock_relax:
-            mock_relax.return_value = structure
-            result = validator.validate(potential_path, output_path, structure=structure)
+        # Configure elastic calc engine to return structure properly for _relax_structure
+        mock_engine = MagicMock()
+        mock_elastic_calc.engine = mock_engine
+        mock_engine.relax.return_value = structure
+
+        result = validator.validate(potential_path, output_path, structure=structure)
 
         assert isinstance(result, ValidationResult)
         assert result.phonon_stable is True
@@ -104,7 +109,7 @@ class TestValidator:
         mock_report_gen.generate.assert_called_once()
         mock_report_gen.save.assert_called_once()
 
-    def test_validate_fail_phonon(self, validator, mock_phonon_calc, mock_elastic_calc):
+    def test_validate_fail_phonon(self, validator: Validator, mock_phonon_calc: MagicMock, mock_elastic_calc: MagicMock) -> None:
         mock_phonon_calc.check_stability.return_value = (False, "base64_phonon_unstable")
         mock_elastic_calc.calculate_properties.return_value = (
             True,
@@ -117,14 +122,16 @@ class TestValidator:
         output_path = Path("report.html")
         structure = Atoms("H", cell=[10, 10, 10], pbc=True)
 
-        with patch.object(validator, "_relax_structure") as mock_relax:
-            mock_relax.return_value = structure
-            result = validator.validate(potential_path, output_path, structure=structure)
+        mock_engine = MagicMock()
+        mock_elastic_calc.engine = mock_engine
+        mock_engine.relax.return_value = structure
+
+        result = validator.validate(potential_path, output_path, structure=structure)
 
         assert result.phonon_stable is False
         assert result.elastic_stable is True
 
-    def test_relax_structure(self, validator, mock_elastic_calc):
+    def test_relax_structure(self, validator: Validator, mock_elastic_calc: MagicMock) -> None:
         structure = MagicMock()
         pot_path = Path("pot.yace")
 
@@ -138,13 +145,22 @@ class TestValidator:
         assert relaxed == "relaxed_structure"
         mock_engine.relax.assert_called_once_with(structure, pot_path)
 
-    def test_validate_structure_invalid_element(self):
+    def test_validate_structure_invalid_element(self) -> None:
         """Test rejection of structure with invalid chemical symbol (dummy X)."""
         structure = Atoms("X", positions=[[0, 0, 0]], cell=[10, 10, 10], pbc=True)
         with pytest.raises(ValueError, match="dummy element"):
             LammpsInputValidator.validate_structure(structure)
 
-    def test_validator_no_structure(self, validator) -> None:
+        # Additional test cases to completely verify validation logic
+        empty_structure = Atoms()
+        with pytest.raises(ValueError, match="Structure is empty"):
+            LammpsInputValidator.validate_structure(empty_structure)
+
+        invalid_symbol_structure = Atoms(numbers=[0], positions=[[0, 0, 0]], cell=[10, 10, 10], pbc=True)
+        with pytest.raises(ValueError, match="dummy element"):
+            LammpsInputValidator.validate_structure(invalid_symbol_structure)
+
+    def test_validator_no_structure(self, validator: Validator) -> None:
         pot_path = Path("pot.yace")
         out_path = Path("report.html")
 

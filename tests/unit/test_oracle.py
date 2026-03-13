@@ -16,13 +16,13 @@ class DummyMaceCalc(Calculator):
     implemented_properties: list[str] = ["energy", "forces"]  # noqa: RUF012
 
     def __init__(self, **kwargs: Any) -> None:
-        super().__init__(**kwargs)
+        super().__init__(**kwargs)  # type: ignore[no-untyped-call]
         self.models = [1, 2] # Dummy to trigger node variance extraction block
 
     def calculate(self, atoms: Atoms | None = None, properties: list[str] | None = None, system_changes: list[str] = all_changes) -> None:
         if atoms is None:
             return
-        super().calculate(atoms, properties, system_changes)
+        super().calculate(atoms, properties, system_changes)  # type: ignore[no-untyped-call]
         n_atoms = len(atoms)
         self.results["energy"] = -10.0 * n_atoms
         self.results["forces"] = np.ones((n_atoms, 3)) * 0.1
@@ -74,8 +74,8 @@ def test_macemanager_compute_invalid_input(tmp_path: Path) -> None:
          patch("mace.calculators.mace_mp", return_value=DummyMaceCalc()):
         manager = MACEManager(str(model_path))
 
-        with pytest.raises(TypeError):
-            manager.compute([Atoms("H")]) # type: ignore[arg-type]
+        with pytest.raises(TypeError, match="Oracle failed to create iterator"):
+            manager.compute([Atoms("H")])  # type: ignore[arg-type]
 
 def test_tiered_oracle_initialization() -> None:
     mock_mace = MagicMock()
@@ -87,10 +87,10 @@ def test_tiered_oracle_initialization() -> None:
     assert oracle.dft == mock_dft
 
     with pytest.raises(ValueError, match="MACEManager must be provided"):
-        TieredOracle(mace_manager=None, dft_manager=mock_dft, thresholds=thresholds) # type: ignore[arg-type]
+        TieredOracle(mace_manager=None, dft_manager=mock_dft, thresholds=thresholds)  # type: ignore[arg-type]
 
     with pytest.raises(ValueError, match="DFTManager cannot be None"):
-        TieredOracle(mace_manager=mock_mace, dft_manager=None, thresholds=thresholds) # type: ignore[arg-type]
+        TieredOracle(mace_manager=mock_mace, dft_manager=None, thresholds=thresholds)  # type: ignore[arg-type]
 
 def test_tiered_oracle_compute_below_threshold() -> None:
     mock_mace = MagicMock()
@@ -98,7 +98,7 @@ def test_tiered_oracle_compute_below_threshold() -> None:
     thresholds = ActiveLearningThresholds(threshold_call_dft=0.05, threshold_add_train=0.02, smooth_steps=3)
 
     atoms_result = Atoms("H")
-    atoms_result.new_array("c_gamma", np.array([0.01])) # Below 0.05
+    atoms_result.new_array("c_gamma", np.array([0.01]))  # type: ignore[no-untyped-call]
 
     mock_mace.compute.return_value = iter([atoms_result])
 
@@ -118,7 +118,7 @@ def test_tiered_oracle_compute_above_threshold() -> None:
     thresholds = ActiveLearningThresholds(threshold_call_dft=0.05, threshold_add_train=0.02, smooth_steps=3)
 
     atoms_mace_result = Atoms("H")
-    atoms_mace_result.new_array("c_gamma", np.array([0.1])) # Above 0.05
+    atoms_mace_result.new_array("c_gamma", np.array([0.1]))  # type: ignore[no-untyped-call]
 
     atoms_dft_result = Atoms("H")
 
@@ -144,5 +144,5 @@ def test_tiered_oracle_compute_invalid_input() -> None:
     thresholds = ActiveLearningThresholds(threshold_call_dft=0.05, threshold_add_train=0.02, smooth_steps=3)
 
     oracle = TieredOracle(mace_manager=mock_mace, dft_manager=mock_dft, thresholds=thresholds)
-    with pytest.raises(TypeError):
-        oracle.compute([Atoms("H")]) # type: ignore[arg-type]
+    with pytest.raises(TypeError, match="Oracle failed to create iterator"):
+        oracle.compute([Atoms("H")])  # type: ignore[arg-type]
