@@ -2,7 +2,7 @@ import pytest
 from pydantic import ValidationError
 
 from pyacemaker.domain_models.md import (
-    HybridParams,
+    ZBLConfig,
     MCConfig,
     MDConfig,
     MDRampingConfig,
@@ -10,17 +10,17 @@ from pyacemaker.domain_models.md import (
 )
 
 
-def test_hybrid_params_valid() -> None:
-    """Tests valid HybridParams."""
-    params = HybridParams(zbl_cut_inner=1.5, zbl_cut_outer=2.0)
+def test_zbl_config_valid() -> None:
+    """Tests valid ZBLConfig."""
+    params = ZBLConfig(zbl_cut_inner=1.5, zbl_cut_outer=2.0)
     assert params.zbl_cut_inner == 1.5
     assert params.zbl_cut_outer == 2.0
 
 
-def test_hybrid_params_invalid() -> None:
-    """Tests invalid HybridParams (negative cutoff)."""
+def test_zbl_config_invalid() -> None:
+    """Tests invalid ZBLConfig (negative cutoff)."""
     with pytest.raises(ValidationError):
-        HybridParams(zbl_cut_inner=-1.0)
+        ZBLConfig(zbl_cut_inner=-1.0)
 
 
 def test_md_config_valid() -> None:
@@ -37,7 +37,7 @@ def test_md_config_valid() -> None:
     )
     assert config.temperature == 300.0
     assert config.hybrid_potential is True
-    assert config.zbl_cut_inner > 0
+    assert config.zbl.zbl_cut_inner > 0
     assert config.dump_freq == 100
     assert config.thermo_freq == 10
 
@@ -50,10 +50,9 @@ def test_md_config_with_hybrid_params() -> None:
         timestep=0.001,
         n_steps=1000,
         hybrid_potential=True,
-        zbl_cut_inner=1.0,
-        zbl_cut_outer=1.5,
+        zbl=ZBLConfig(zbl_cut_inner=1.0, zbl_cut_outer=1.5),
     )
-    assert config.zbl_cut_inner == 1.0
+    assert config.zbl.zbl_cut_inner == 1.0
 
 
 def test_md_config_invalid_temperature() -> None:

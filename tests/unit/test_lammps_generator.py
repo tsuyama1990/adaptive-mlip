@@ -31,14 +31,15 @@ def test_generator_pure_pace(tmp_path: Path) -> None:
 
 def test_generator_hybrid_potential(tmp_path: Path) -> None:
     """Tests script generation with hybrid potential."""
+    from pyacemaker.domain_models.md import ZBLConfig
+
     config = MDConfig(
         temperature=300.0,
         pressure=1.0,
         timestep=0.001,
         n_steps=1000,
         hybrid_potential=True,
-        zbl_cut_inner=1.0,
-        zbl_cut_outer=1.5,
+        zbl=ZBLConfig(zbl_cut_inner=1.0, zbl_cut_outer=1.5),
     )
     generator = LammpsScriptGenerator(config)
 

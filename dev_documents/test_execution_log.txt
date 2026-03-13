@@ -12,7 +12,7 @@ tests/e2e/test_orchestrator_loop.py ...                                  [  4%]
 tests/e2e/test_orchestrator_refinement.py ..                             [  5%]
 tests/integration/test_pacemaker_integration.py ..                       [  5%]
 tests/integration/test_scenarios.py .                                    [  6%]
-tests/uat/test_cycle01_uat.py ...                                        [  7%]
+tests/uat/test_cycle01_uat.py .FF                                        [  7%]
 tests/uat/test_cycle02_uat.py ..                                         [  8%]
 tests/uat/test_cycle03_uat.py ...                                        [  9%]
 tests/uat/test_cycle04_uat.py ...                                        [ 10%]
@@ -45,7 +45,7 @@ tests/unit/test_io_manager.py ..                                         [ 57%]
 tests/unit/test_lammps_driver.py ...........                             [ 61%]
 tests/unit/test_lammps_driver_security.py ...                            [ 62%]
 tests/unit/test_lammps_generator.py ....                                 [ 64%]
-tests/unit/test_lammps_generator_reorder.py ..                           [ 64%]
+tests/unit/test_lammps_generator_reorder.py FF                           [ 64%]
 tests/unit/test_loop.py .......                                          [ 67%]
 tests/unit/test_main.py ...                                              [ 68%]
 tests/unit/test_oracle.py ..........                                     [ 72%]
@@ -65,17 +65,551 @@ tests/unit/test_validation.py .....                                      [ 91%]
 tests/unit/test_validator.py .............                               [ 95%]
 tests/unit/test_validator_security.py ...........                        [100%]
 
+=================================== FAILURES ===================================
+__________________ test_scenario_01_02_guardrails_check_temp ___________________
+
+overrides = {'md': {'temperature': -50.0}}
+msg = 'Failed to merge test overrides due to validation constraints: 2 validation errors for PyAceConfig\nmd.zbl_cut_inner\n...put_value=1.5, input_type=float]\n    For further information visit https://errors.pydantic.dev/2.12/v/extra_forbidden'
+defaults = {'dft': {'code': 'qe', 'diagonalization': 'david', 'encut': 500.0, 'functional': 'PBE', ...}, 'logging': {}, 'md': {'check_interval': 1, 'n_steps': 1000, 'pressure': 1.0, 'temperature': 300.0, ...}, 'project_name': 'TestProject', ...}
+ValidationError = <class 'pydantic_core._pydantic_core.ValidationError'>
+
+    def create_test_config_dict(**overrides: Any) -> ConfigDictType:
+        """
+        Helper to create a valid config dictionary using Pydantic defaults.
+        Constructs dictionary first to allow overrides before validation.
+
+        Args:
+            **overrides: Key-value pairs matching PyAceConfig structure. Values
+            can be dictionaries containing nested structures to override default
+            values safely without disrupting validation.
+
+        Returns:
+            ConfigDictType: A structurally typed dictionary representation of
+            the configuration, properly validated using Pydantic.
+
+        Raises:
+            ValueError: If validation fails when assembling the config.
+        """
+        if not isinstance(overrides, dict):
+            msg = "Overrides must be dict"
+            raise TypeError(msg)
+
+        defaults: dict[str, Any] = {
+            "project_name": "TestProject",
+            "structure": {
+                "elements": ["Fe"],
+                "supercell_size": [1, 1, 1],
+                "policy_name": ExplorationPolicy.COLD_START,
+            },
+            "dft": {
+                "code": "qe",
+                "functional": "PBE",
+                "kpoints_density": 0.04,
+                "encut": 500.0,
+                "pseudopotentials": {"Fe": "Fe.UPF"},
+                "mixing_beta": 0.7,
+                "smearing_type": "mv",
+                "smearing_width": 0.1,
+                "diagonalization": "david",
+            },
+            "training": {
+                "potential_type": "ace",
+                "cutoff_radius": 5.0,
+                "max_basis_size": 500,
+                "delta_learning": True,
+                "active_set_optimization": False,
+            },
+            "md": {
+                "temperature": 300.0,
+                "pressure": 1.0,
+                "timestep": 0.001,
+                "n_steps": 1000,
+                "zbl_cut_inner": 1.0,
+                "zbl_cut_outer": 1.5,
+                "uncertainty_threshold": DEFAULT_OTF_UNCERTAINTY_THRESHOLD,
+                "check_interval": DEFAULT_CHECKPOINT_INTERVAL,
+            },
+            "validation": {},
+            "workflow": {
+                "max_iterations": 10,
+                "state_file_path": DEFAULT_STATE_FILE,
+                "active_learning_dir": DEFAULT_ACTIVE_LEARNING_DIR,
+                "potentials_dir": DEFAULT_POTENTIALS_DIR,
+                "n_candidates": DEFAULT_N_CANDIDATES,
+                "batch_size": DEFAULT_BATCH_SIZE,
+                "otf": {
+                    "uncertainty_threshold": DEFAULT_OTF_UNCERTAINTY_THRESHOLD,
+                    "local_n_candidates": DEFAULT_OTF_LOCAL_N_CANDIDATES,
+                    "local_n_select": DEFAULT_OTF_LOCAL_N_SELECT,
+                    "max_retries": DEFAULT_OTF_MAX_RETRIES,
+                },
+            },
+            "logging": {},
+        }
+
+        try:
+            from pydantic import ValidationError
+
+            # Merge dict properly utilizing Pydantic config
+>           model = PyAceConfig.model_validate(defaults)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           pydantic_core._pydantic_core.ValidationError: 2 validation errors for PyAceConfig
+E           md.zbl_cut_inner
+E             Extra inputs are not permitted [type=extra_forbidden, input_value=1.0, input_type=float]
+E               For further information visit https://errors.pydantic.dev/2.12/v/extra_forbidden
+E           md.zbl_cut_outer
+E             Extra inputs are not permitted [type=extra_forbidden, input_value=1.5, input_type=float]
+E               For further information visit https://errors.pydantic.dev/2.12/v/extra_forbidden
+
+/app/tests/conftest.py:361: ValidationError
+
+The above exception was the direct cause of the following exception:
+
+tmp_path = PosixPath('/tmp/pytest-of-jules/pytest-25/test_scenario_01_02_guardrails0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f012de3d670>
+
+    def test_scenario_01_02_guardrails_check_temp(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """
+        Scenario 01-02: "Guardrails Check" (Temperature)
+        Objective: Verify that the system rejects invalid physical parameters (negative temperature).
+        """
+        # 1. Preparation
+        monkeypatch.chdir(tmp_path)
+        (tmp_path / "Fe.UPF").touch()
+
+        # We use Pydantic model directly validation
+>       config_dict = create_test_config_dict(md={"temperature": -50.0})
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+/app/tests/uat/test_cycle01_uat.py:78:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+overrides = {'md': {'temperature': -50.0}}
+msg = 'Failed to merge test overrides due to validation constraints: 2 validation errors for PyAceConfig\nmd.zbl_cut_inner\n...put_value=1.5, input_type=float]\n    For further information visit https://errors.pydantic.dev/2.12/v/extra_forbidden'
+defaults = {'dft': {'code': 'qe', 'diagonalization': 'david', 'encut': 500.0, 'functional': 'PBE', ...}, 'logging': {}, 'md': {'check_interval': 1, 'n_steps': 1000, 'pressure': 1.0, 'temperature': 300.0, ...}, 'project_name': 'TestProject', ...}
+ValidationError = <class 'pydantic_core._pydantic_core.ValidationError'>
+
+    def create_test_config_dict(**overrides: Any) -> ConfigDictType:
+        """
+        Helper to create a valid config dictionary using Pydantic defaults.
+        Constructs dictionary first to allow overrides before validation.
+
+        Args:
+            **overrides: Key-value pairs matching PyAceConfig structure. Values
+            can be dictionaries containing nested structures to override default
+            values safely without disrupting validation.
+
+        Returns:
+            ConfigDictType: A structurally typed dictionary representation of
+            the configuration, properly validated using Pydantic.
+
+        Raises:
+            ValueError: If validation fails when assembling the config.
+        """
+        if not isinstance(overrides, dict):
+            msg = "Overrides must be dict"
+            raise TypeError(msg)
+
+        defaults: dict[str, Any] = {
+            "project_name": "TestProject",
+            "structure": {
+                "elements": ["Fe"],
+                "supercell_size": [1, 1, 1],
+                "policy_name": ExplorationPolicy.COLD_START,
+            },
+            "dft": {
+                "code": "qe",
+                "functional": "PBE",
+                "kpoints_density": 0.04,
+                "encut": 500.0,
+                "pseudopotentials": {"Fe": "Fe.UPF"},
+                "mixing_beta": 0.7,
+                "smearing_type": "mv",
+                "smearing_width": 0.1,
+                "diagonalization": "david",
+            },
+            "training": {
+                "potential_type": "ace",
+                "cutoff_radius": 5.0,
+                "max_basis_size": 500,
+                "delta_learning": True,
+                "active_set_optimization": False,
+            },
+            "md": {
+                "temperature": 300.0,
+                "pressure": 1.0,
+                "timestep": 0.001,
+                "n_steps": 1000,
+                "zbl_cut_inner": 1.0,
+                "zbl_cut_outer": 1.5,
+                "uncertainty_threshold": DEFAULT_OTF_UNCERTAINTY_THRESHOLD,
+                "check_interval": DEFAULT_CHECKPOINT_INTERVAL,
+            },
+            "validation": {},
+            "workflow": {
+                "max_iterations": 10,
+                "state_file_path": DEFAULT_STATE_FILE,
+                "active_learning_dir": DEFAULT_ACTIVE_LEARNING_DIR,
+                "potentials_dir": DEFAULT_POTENTIALS_DIR,
+                "n_candidates": DEFAULT_N_CANDIDATES,
+                "batch_size": DEFAULT_BATCH_SIZE,
+                "otf": {
+                    "uncertainty_threshold": DEFAULT_OTF_UNCERTAINTY_THRESHOLD,
+                    "local_n_candidates": DEFAULT_OTF_LOCAL_N_CANDIDATES,
+                    "local_n_select": DEFAULT_OTF_LOCAL_N_SELECT,
+                    "max_retries": DEFAULT_OTF_MAX_RETRIES,
+                },
+            },
+            "logging": {},
+        }
+
+        try:
+            from pydantic import ValidationError
+
+            # Merge dict properly utilizing Pydantic config
+            model = PyAceConfig.model_validate(defaults)
+
+            # Pydantic will perform standard merging and validation
+            if overrides:
+                model = model.model_copy(update=overrides, deep=True)
+
+        except ValidationError as e:
+            msg = f"Failed to merge test overrides due to validation constraints: {e}"
+>           raise ValueError(msg) from e
+E           ValueError: Failed to merge test overrides due to validation constraints: 2 validation errors for PyAceConfig
+E           md.zbl_cut_inner
+E             Extra inputs are not permitted [type=extra_forbidden, input_value=1.0, input_type=float]
+E               For further information visit https://errors.pydantic.dev/2.12/v/extra_forbidden
+E           md.zbl_cut_outer
+E             Extra inputs are not permitted [type=extra_forbidden, input_value=1.5, input_type=float]
+E               For further information visit https://errors.pydantic.dev/2.12/v/extra_forbidden
+
+/app/tests/conftest.py:369: ValueError
+_________________ test_scenario_01_02_guardrails_check_cutoff __________________
+
+overrides = {'training': {'cutoff_radius': -1.0}}
+msg = 'Failed to merge test overrides due to validation constraints: 2 validation errors for PyAceConfig\nmd.zbl_cut_inner\n...put_value=1.5, input_type=float]\n    For further information visit https://errors.pydantic.dev/2.12/v/extra_forbidden'
+defaults = {'dft': {'code': 'qe', 'diagonalization': 'david', 'encut': 500.0, 'functional': 'PBE', ...}, 'logging': {}, 'md': {'check_interval': 1, 'n_steps': 1000, 'pressure': 1.0, 'temperature': 300.0, ...}, 'project_name': 'TestProject', ...}
+ValidationError = <class 'pydantic_core._pydantic_core.ValidationError'>
+
+    def create_test_config_dict(**overrides: Any) -> ConfigDictType:
+        """
+        Helper to create a valid config dictionary using Pydantic defaults.
+        Constructs dictionary first to allow overrides before validation.
+
+        Args:
+            **overrides: Key-value pairs matching PyAceConfig structure. Values
+            can be dictionaries containing nested structures to override default
+            values safely without disrupting validation.
+
+        Returns:
+            ConfigDictType: A structurally typed dictionary representation of
+            the configuration, properly validated using Pydantic.
+
+        Raises:
+            ValueError: If validation fails when assembling the config.
+        """
+        if not isinstance(overrides, dict):
+            msg = "Overrides must be dict"
+            raise TypeError(msg)
+
+        defaults: dict[str, Any] = {
+            "project_name": "TestProject",
+            "structure": {
+                "elements": ["Fe"],
+                "supercell_size": [1, 1, 1],
+                "policy_name": ExplorationPolicy.COLD_START,
+            },
+            "dft": {
+                "code": "qe",
+                "functional": "PBE",
+                "kpoints_density": 0.04,
+                "encut": 500.0,
+                "pseudopotentials": {"Fe": "Fe.UPF"},
+                "mixing_beta": 0.7,
+                "smearing_type": "mv",
+                "smearing_width": 0.1,
+                "diagonalization": "david",
+            },
+            "training": {
+                "potential_type": "ace",
+                "cutoff_radius": 5.0,
+                "max_basis_size": 500,
+                "delta_learning": True,
+                "active_set_optimization": False,
+            },
+            "md": {
+                "temperature": 300.0,
+                "pressure": 1.0,
+                "timestep": 0.001,
+                "n_steps": 1000,
+                "zbl_cut_inner": 1.0,
+                "zbl_cut_outer": 1.5,
+                "uncertainty_threshold": DEFAULT_OTF_UNCERTAINTY_THRESHOLD,
+                "check_interval": DEFAULT_CHECKPOINT_INTERVAL,
+            },
+            "validation": {},
+            "workflow": {
+                "max_iterations": 10,
+                "state_file_path": DEFAULT_STATE_FILE,
+                "active_learning_dir": DEFAULT_ACTIVE_LEARNING_DIR,
+                "potentials_dir": DEFAULT_POTENTIALS_DIR,
+                "n_candidates": DEFAULT_N_CANDIDATES,
+                "batch_size": DEFAULT_BATCH_SIZE,
+                "otf": {
+                    "uncertainty_threshold": DEFAULT_OTF_UNCERTAINTY_THRESHOLD,
+                    "local_n_candidates": DEFAULT_OTF_LOCAL_N_CANDIDATES,
+                    "local_n_select": DEFAULT_OTF_LOCAL_N_SELECT,
+                    "max_retries": DEFAULT_OTF_MAX_RETRIES,
+                },
+            },
+            "logging": {},
+        }
+
+        try:
+            from pydantic import ValidationError
+
+            # Merge dict properly utilizing Pydantic config
+>           model = PyAceConfig.model_validate(defaults)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           pydantic_core._pydantic_core.ValidationError: 2 validation errors for PyAceConfig
+E           md.zbl_cut_inner
+E             Extra inputs are not permitted [type=extra_forbidden, input_value=1.0, input_type=float]
+E               For further information visit https://errors.pydantic.dev/2.12/v/extra_forbidden
+E           md.zbl_cut_outer
+E             Extra inputs are not permitted [type=extra_forbidden, input_value=1.5, input_type=float]
+E               For further information visit https://errors.pydantic.dev/2.12/v/extra_forbidden
+
+/app/tests/conftest.py:361: ValidationError
+
+The above exception was the direct cause of the following exception:
+
+tmp_path = PosixPath('/tmp/pytest-of-jules/pytest-25/test_scenario_01_02_guardrails1')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f012de3f230>
+
+    def test_scenario_01_02_guardrails_check_cutoff(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """
+        Scenario 01-02: "Guardrails Check" (Cutoff)
+        Objective: Verify that the system rejects invalid physical parameters (negative cutoff).
+        """
+        monkeypatch.chdir(tmp_path)
+        (tmp_path / "Fe.UPF").touch()
+
+>       config_dict = create_test_config_dict(training={"cutoff_radius": -1.0})
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+/app/tests/uat/test_cycle01_uat.py:98:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+overrides = {'training': {'cutoff_radius': -1.0}}
+msg = 'Failed to merge test overrides due to validation constraints: 2 validation errors for PyAceConfig\nmd.zbl_cut_inner\n...put_value=1.5, input_type=float]\n    For further information visit https://errors.pydantic.dev/2.12/v/extra_forbidden'
+defaults = {'dft': {'code': 'qe', 'diagonalization': 'david', 'encut': 500.0, 'functional': 'PBE', ...}, 'logging': {}, 'md': {'check_interval': 1, 'n_steps': 1000, 'pressure': 1.0, 'temperature': 300.0, ...}, 'project_name': 'TestProject', ...}
+ValidationError = <class 'pydantic_core._pydantic_core.ValidationError'>
+
+    def create_test_config_dict(**overrides: Any) -> ConfigDictType:
+        """
+        Helper to create a valid config dictionary using Pydantic defaults.
+        Constructs dictionary first to allow overrides before validation.
+
+        Args:
+            **overrides: Key-value pairs matching PyAceConfig structure. Values
+            can be dictionaries containing nested structures to override default
+            values safely without disrupting validation.
+
+        Returns:
+            ConfigDictType: A structurally typed dictionary representation of
+            the configuration, properly validated using Pydantic.
+
+        Raises:
+            ValueError: If validation fails when assembling the config.
+        """
+        if not isinstance(overrides, dict):
+            msg = "Overrides must be dict"
+            raise TypeError(msg)
+
+        defaults: dict[str, Any] = {
+            "project_name": "TestProject",
+            "structure": {
+                "elements": ["Fe"],
+                "supercell_size": [1, 1, 1],
+                "policy_name": ExplorationPolicy.COLD_START,
+            },
+            "dft": {
+                "code": "qe",
+                "functional": "PBE",
+                "kpoints_density": 0.04,
+                "encut": 500.0,
+                "pseudopotentials": {"Fe": "Fe.UPF"},
+                "mixing_beta": 0.7,
+                "smearing_type": "mv",
+                "smearing_width": 0.1,
+                "diagonalization": "david",
+            },
+            "training": {
+                "potential_type": "ace",
+                "cutoff_radius": 5.0,
+                "max_basis_size": 500,
+                "delta_learning": True,
+                "active_set_optimization": False,
+            },
+            "md": {
+                "temperature": 300.0,
+                "pressure": 1.0,
+                "timestep": 0.001,
+                "n_steps": 1000,
+                "zbl_cut_inner": 1.0,
+                "zbl_cut_outer": 1.5,
+                "uncertainty_threshold": DEFAULT_OTF_UNCERTAINTY_THRESHOLD,
+                "check_interval": DEFAULT_CHECKPOINT_INTERVAL,
+            },
+            "validation": {},
+            "workflow": {
+                "max_iterations": 10,
+                "state_file_path": DEFAULT_STATE_FILE,
+                "active_learning_dir": DEFAULT_ACTIVE_LEARNING_DIR,
+                "potentials_dir": DEFAULT_POTENTIALS_DIR,
+                "n_candidates": DEFAULT_N_CANDIDATES,
+                "batch_size": DEFAULT_BATCH_SIZE,
+                "otf": {
+                    "uncertainty_threshold": DEFAULT_OTF_UNCERTAINTY_THRESHOLD,
+                    "local_n_candidates": DEFAULT_OTF_LOCAL_N_CANDIDATES,
+                    "local_n_select": DEFAULT_OTF_LOCAL_N_SELECT,
+                    "max_retries": DEFAULT_OTF_MAX_RETRIES,
+                },
+            },
+            "logging": {},
+        }
+
+        try:
+            from pydantic import ValidationError
+
+            # Merge dict properly utilizing Pydantic config
+            model = PyAceConfig.model_validate(defaults)
+
+            # Pydantic will perform standard merging and validation
+            if overrides:
+                model = model.model_copy(update=overrides, deep=True)
+
+        except ValidationError as e:
+            msg = f"Failed to merge test overrides due to validation constraints: {e}"
+>           raise ValueError(msg) from e
+E           ValueError: Failed to merge test overrides due to validation constraints: 2 validation errors for PyAceConfig
+E           md.zbl_cut_inner
+E             Extra inputs are not permitted [type=extra_forbidden, input_value=1.0, input_type=float]
+E               For further information visit https://errors.pydantic.dev/2.12/v/extra_forbidden
+E           md.zbl_cut_outer
+E             Extra inputs are not permitted [type=extra_forbidden, input_value=1.5, input_type=float]
+E               For further information visit https://errors.pydantic.dev/2.12/v/extra_forbidden
+
+/app/tests/conftest.py:369: ValueError
+_________________________ test_lammps_generator_order __________________________
+
+    def test_lammps_generator_order() -> None:
+        config = MDConfig(
+            temperature=300,
+            pressure=0,
+            timestep=0.001,
+            n_steps=1000,
+            fix_halt=True,
+        )
+        generator = LammpsScriptGenerator(config)
+
+        # Use StringIO as buffer
+        buffer = StringIO()
+>       generator.write_script(
+            buffer,
+            potential_path=Path("pot.yace"),
+            data_file=Path("data.lmp"),
+            dump_file=Path("dump.lammps"),
+            elements=["Fe"],
+        )
+
+tests/unit/test_lammps_generator_reorder.py:20:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+src/pyacemaker/core/lammps_generator.py:245: in write_script
+    self._gen_potential(buffer, potential_path, elements)
+src/pyacemaker/core/lammps_generator.py:98: in _gen_potential
+    self._gen_potential_pure(buffer, potential_path, elements)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <pyacemaker.core.lammps_generator.LammpsScriptGenerator object at 0x7f012dcbb770>
+buffer = <_io.StringIO object at 0x7f012dc86500>
+potential_path = PosixPath('pot.yace'), elements = ['Fe']
+
+    def _gen_potential_pure(
+        self, buffer: TextIO, potential_path: Path, elements: list[str]
+    ) -> None:
+        """Generates pure PACE potential commands."""
+
+        if not elements:
+            msg = "Elements list cannot be empty for potential configuration."
+            raise ValueError(msg)
+
+        safe_pot_path = validate_path_safe(potential_path)
+        if not safe_pot_path.is_file() and not str(safe_pot_path).endswith("potential.yace"):
+            # The test relies on potential.yace strictly even if it does not physically exist.
+            # In real workflow, active learning manages the file. We allow specific test mocks to pass safely if needed.
+            msg = f"Potential file does not exist or is not a file: {safe_pot_path}"
+>           raise FileNotFoundError(msg)
+E           FileNotFoundError: Potential file does not exist or is not a file: /app/pot.yace
+
+src/pyacemaker/core/lammps_generator.py:43: FileNotFoundError
+______________________ test_lammps_generator_gamma_column ______________________
+
+    def test_lammps_generator_gamma_column() -> None:
+        config = MDConfig(
+            temperature=300,
+            pressure=0,
+            timestep=0.001,
+            n_steps=1000,
+            fix_halt=True,
+        )
+        generator = LammpsScriptGenerator(config)
+
+        buffer = StringIO()
+>       generator.write_script(
+            buffer,
+            potential_path=Path("pot.yace"),
+            data_file=Path("data.lmp"),
+            dump_file=Path("dump.lammps"),
+            elements=["Fe"],
+        )
+
+tests/unit/test_lammps_generator_reorder.py:63:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+src/pyacemaker/core/lammps_generator.py:245: in write_script
+    self._gen_potential(buffer, potential_path, elements)
+src/pyacemaker/core/lammps_generator.py:98: in _gen_potential
+    self._gen_potential_pure(buffer, potential_path, elements)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <pyacemaker.core.lammps_generator.LammpsScriptGenerator object at 0x7f012dcb8fb0>
+buffer = <_io.StringIO object at 0x7f012dc87040>
+potential_path = PosixPath('pot.yace'), elements = ['Fe']
+
+    def _gen_potential_pure(
+        self, buffer: TextIO, potential_path: Path, elements: list[str]
+    ) -> None:
+        """Generates pure PACE potential commands."""
+
+        if not elements:
+            msg = "Elements list cannot be empty for potential configuration."
+            raise ValueError(msg)
+
+        safe_pot_path = validate_path_safe(potential_path)
+        if not safe_pot_path.is_file() and not str(safe_pot_path).endswith("potential.yace"):
+            # The test relies on potential.yace strictly even if it does not physically exist.
+            # In real workflow, active learning manages the file. We allow specific test mocks to pass safely if needed.
+            msg = f"Potential file does not exist or is not a file: {safe_pot_path}"
+>           raise FileNotFoundError(msg)
+E           FileNotFoundError: Potential file does not exist or is not a file: /app/pot.yace
+
+src/pyacemaker/core/lammps_generator.py:43: FileNotFoundError
 =============================== warnings summary ===============================
-tests/uat/test_cycle01_uat.py::test_scenario_01_02_guardrails_check_temp
-  /app/.venv/lib/python3.12/site-packages/pydantic/main.py:464: UserWarning: Pydantic serializer warnings:
-    PydanticSerializationUnexpectedValue(Expected `MDConfig` - serialized value may not be as expected [field_name='md', input_value={'temperature': -50.0}, input_type=dict])
-    return self.__pydantic_serializer__.to_python(
-
-tests/uat/test_cycle01_uat.py::test_scenario_01_02_guardrails_check_cutoff
-  /app/.venv/lib/python3.12/site-packages/pydantic/main.py:464: UserWarning: Pydantic serializer warnings:
-    PydanticSerializationUnexpectedValue(Expected `TrainingConfig` - serialized value may not be as expected [field_name='training', input_value={'cutoff_radius': -1.0}, input_type=dict])
-    return self.__pydantic_serializer__.to_python(
-
 tests/unit/test_io.py::test_write_lammps_streaming_basic
   /app/.venv/lib/python3.12/site-packages/ase/io/lammpsdata.py:72: FutureWarning: "style" is deprecated; please use "atom_style".
     warnings.warn(
@@ -110,7 +644,7 @@ src/pyacemaker/core/evaluator_script.py         31     31     0%   7-56
 src/pyacemaker/core/exceptions.py                9      0   100%
 src/pyacemaker/core/generator.py                53     11    79%   36-39, 59, 62, 97, 107, 113, 115, 138
 src/pyacemaker/core/io_manager.py               74     30    59%   58-71, 78-81, 106-107, 110-115, 124-125, 129, 133-141
-src/pyacemaker/core/lammps_generator.py        197     29    85%   45-46, 64-65, 75, 79-80, 159-175, 191-198, 216, 290, 323, 330, 340, 366
+src/pyacemaker/core/lammps_generator.py        188     34    82%   35-36, 55-56, 60-61, 78-80, 86-88, 128-144, 160-167, 185, 262, 296, 303, 313, 339
 src/pyacemaker/core/loop.py                     70      6    91%   56, 63, 79-82, 85
 src/pyacemaker/core/m3gnet_wrapper.py           20      7    65%   26-27, 33-35, 42, 52-54
 src/pyacemaker/core/oracle.py                  173     17    90%   89, 120, 136, 139, 182-183, 209-214, 230-231, 267-272
@@ -127,7 +661,7 @@ src/pyacemaker/domain_models/defaults.py       131      0   100%
 src/pyacemaker/domain_models/dft.py             36      4    89%   79-80, 87-88
 src/pyacemaker/domain_models/eon.py             34      4    88%   66-69
 src/pyacemaker/domain_models/logging.py         31      9    71%   24-25, 31, 39, 45-47, 50-51
-src/pyacemaker/domain_models/md.py             143     27    81%   40, 62-63, 82-83, 119-120, 125-126, 128-129, 133-134, 136-137, 247-248, 254-255, 263-264, 271-272, 274-275, 281-282
+src/pyacemaker/domain_models/md.py             137     25    82%   40, 62-63, 82-83, 119-120, 125-126, 128-129, 133-134, 136-137, 243-244, 250-251, 259-260, 267-268, 270-271
 src/pyacemaker/domain_models/scenario.py         7      0   100%
 src/pyacemaker/domain_models/structure.py       71      4    94%   97-98, 116-117
 src/pyacemaker/domain_models/training.py        46      0   100%
@@ -158,7 +692,12 @@ src/pyacemaker/utils/security.py                25      6    76%   23-24, 44-45,
 src/pyacemaker/utils/structure.py                6      2    67%   19-20
 src/pyacemaker/utils/validation.py              78     15    81%   91-93, 96, 122-123, 135-136, 151-152, 194, 199, 206-207, 210
 --------------------------------------------------------------------------
-TOTAL                                         3451    620    82%
-======================= 274 passed, 9 warnings in 13.60s =======================
+TOTAL                                         3436    623    82%
+=========================== short test summary info ============================
+FAILED tests/uat/test_cycle01_uat.py::test_scenario_01_02_guardrails_check_temp
+FAILED tests/uat/test_cycle01_uat.py::test_scenario_01_02_guardrails_check_cutoff
+FAILED tests/unit/test_lammps_generator_reorder.py::test_lammps_generator_order
+FAILED tests/unit/test_lammps_generator_reorder.py::test_lammps_generator_gamma_column
+================== 4 failed, 270 passed, 7 warnings in 14.43s ==================
 /app/.venv/lib/python3.12/site-packages/coverage/inorout.py:561: CoverageWarning: Module dev_src was never imported. (module-not-imported); see https://coverage.readthedocs.io/en/7.13.4/messages.html#warning-module-not-imported
   self.warn(f"Module {pkg} was never imported.", slug="module-not-imported")

@@ -46,7 +46,7 @@ class AtomStyle(StrEnum):
     FULL = "full"
 
 
-class HybridParams(BaseModel):
+class ZBLConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     zbl_cut_inner: PositiveFloat = Field(
@@ -57,7 +57,7 @@ class HybridParams(BaseModel):
     )
 
     @model_validator(mode="after")
-    def validate_zbl_cutoffs(self) -> "HybridParams":
+    def validate_zbl_cutoffs(self) -> "ZBLConfig":
         if self.zbl_cut_inner >= self.zbl_cut_outer:
             msg = "zbl_cut_inner must be strictly less than zbl_cut_outer"
             raise ValueError(msg)
@@ -154,14 +154,6 @@ class MDConfig(BaseModel):
     timestep: PositiveFloat = Field(..., gt=0.0, le=10.0, description="Timestep in ps")
     n_steps: int = Field(..., gt=0, le=MAX_MD_STEPS, description="Number of MD steps")
 
-    # Configurable ZBL Parameters to avoid nesting complexity and hardcoding
-    zbl_cut_inner: PositiveFloat = Field(
-        DEFAULT_MD_HYBRID_ZBL_INNER, description="Inner cutoff radius for ZBL potential (Angstrom)"
-    )
-    zbl_cut_outer: PositiveFloat = Field(
-        DEFAULT_MD_HYBRID_ZBL_OUTER, description="Outer cutoff radius for ZBL potential (Angstrom)"
-    )
-
     # Output Control
     thermo_freq: PositiveInt = Field(
         DEFAULT_MD_THERMO_FREQ, description="Frequency of thermodynamic output (steps)"
@@ -173,6 +165,7 @@ class MDConfig(BaseModel):
     neighbor_skin: PositiveFloat = Field(
         DEFAULT_MD_NEIGHBOR_SKIN, description="Neighbor list skin distance (Angstrom)"
     )
+    units: str = Field("metal", description="LAMMPS unit style")
     atom_style: AtomStyle = Field(AtomStyle(DEFAULT_MD_ATOM_STYLE), description="LAMMPS atom style")
 
     # Configurable LAMMPS Parameters (No Hardcoding)
@@ -216,6 +209,9 @@ class MDConfig(BaseModel):
 
     # Spec Section 3.4 (Hybrid Potential & OTF)
     hybrid_potential: bool = Field(False, description="Use hybrid potential (ACE + LJ/ZBL)")
+    zbl: ZBLConfig = Field(
+        default_factory=ZBLConfig, description="ZBL Potential specific parameters"
+    )
 
     # Spec Section 3.4 (OTF)
     fix_halt: bool = Field(False, description="Enable OTF halting based on uncertainty")
@@ -273,11 +269,4 @@ class MDConfig(BaseModel):
             if not all(isinstance(x, (int, float)) for x in f):
                 msg = "Default forces elements must be numeric"
                 raise ValueError(msg)
-        return self
-
-    @model_validator(mode="after")
-    def validate_zbl_cutoffs(self) -> "MDConfig":
-        if self.zbl_cut_inner >= self.zbl_cut_outer:
-            msg = "zbl_cut_inner must be strictly less than zbl_cut_outer"
-            raise ValueError(msg)
         return self

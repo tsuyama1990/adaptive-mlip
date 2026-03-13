@@ -115,14 +115,15 @@ def mock_training_config() -> TrainingConfig:
 
 @pytest.fixture
 def mock_md_config() -> MDConfig:
+    from pyacemaker.domain_models.md import ZBLConfig
+
     return MDConfig(
         temperature=300.0,
         pressure=1.0,
         timestep=0.001,
         n_steps=1000,
         hybrid_potential=True,
-        zbl_cut_inner=2.0,
-        zbl_cut_outer=2.5,
+        zbl=ZBLConfig(zbl_cut_inner=2.0, zbl_cut_outer=2.5),
     )
 
 
