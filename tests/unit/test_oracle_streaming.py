@@ -23,7 +23,7 @@ def mock_dft_config(dummy_pseudopotentials_dir: Path, monkeypatch: pytest.Monkey
     )
 
 
-def test_dft_manager_streaming_behavior(mock_dft_config: DFTConfig) -> None:
+def test_dft_manager_streaming_behavior(mock_dft_config: DFTConfig, monkeypatch: pytest.MonkeyPatch) -> None:  # noqa: C901
     """
     Verify that DFTManager computes properties one by one (streaming)
     and does NOT consume the whole generator upfront.
@@ -39,11 +39,50 @@ def test_dft_manager_streaming_behavior(mock_dft_config: DFTConfig) -> None:
 
     # 2. Mock driver
     from tests.conftest import MockCalculator
-    from tests.unit.test_oracle import FakeDriver
+
+    # Redefine FakeDriver here so it can be pickled if needed or we just mock executor directly
+    class FakeDriver:
+        def __init__(self, calcs: MockCalculator) -> None:
+            self.calcs = calcs
+            self.call_count = 0
+
+        def get_calculator(
+            self, atoms: Atoms, config: DFTConfig, directory: str | None = None
+        ) -> MockCalculator:
+            self.call_count += 1
+            return self.calcs
 
     fake_driver = FakeDriver(calcs=MockCalculator(fail_count=0))
 
     manager = DFTManager(mock_dft_config, driver=fake_driver)  # type: ignore[arg-type]
+
+    # Use monkeypatch to patch ProcessPoolExecutor to run synchronously
+    class SynchronousExecutor:
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            pass
+
+        def __enter__(self) -> "SynchronousExecutor":
+            return self
+
+        def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+            pass
+
+        def submit(self, fn: Any, *args: Any, **kwargs: Any) -> Any:
+            class DummyFuture:
+                def __init__(self, res: Any, exc: Any) -> None:
+                    self._res = res
+                    self._exc = exc
+
+                def result(self, timeout: float | None = None) -> Any:
+                    return self._res, self._exc
+
+            try:
+                res, exc = fn(*args, **kwargs)
+                return DummyFuture(res, exc)
+            except Exception as e:
+                return DummyFuture(None, e)
+
+    monkeypatch.setattr("concurrent.futures.ProcessPoolExecutor", SynchronousExecutor)
 
     # 3. Call compute
     # This should return a generator immediately without hanging

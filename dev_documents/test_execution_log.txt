@@ -2,7 +2,6 @@
 platform linux -- Python 3.12.13, pytest-9.0.2, pluggy-1.6.0
 rootdir: /app
 configfile: pyproject.toml
-testpaths: tests
 plugins: cov-7.0.0, anyio-4.12.1
 collected 242 items
 
@@ -47,7 +46,7 @@ tests/unit/test_lammps_generator.py ...                                  [ 69%]
 tests/unit/test_lammps_generator_reorder.py ..                           [ 70%]
 tests/unit/test_loop.py .......                                          [ 73%]
 tests/unit/test_main.py ...                                              [ 74%]
-tests/unit/test_oracle_streaming.py F                                    [ 75%]
+tests/unit/test_oracle_streaming.py .                                    [ 75%]
 tests/unit/test_path_validation.py .....                                 [ 77%]
 tests/unit/test_perturbations.py ...                                     [ 78%]
 tests/unit/test_phonons.py ..                                            [ 79%]
@@ -62,31 +61,6 @@ tests/unit/test_trainer_pacemaker.py ......                              [ 93%]
 tests/unit/test_validator.py ....                                        [ 95%]
 tests/unit/test_validator_security.py ...........                        [100%]
 
-=================================== FAILURES ===================================
-_____________________ test_dft_manager_streaming_behavior ______________________
-
-mock_dft_config = DFTConfig(code='pw.x', functional='PBE', kpoints_density=0.04, encut=500.0, embedding_buffer=None, mixing_beta=0.7, sm...width=0.1, diagonalization='david', mixing_beta_factor=0.5, smearing_width_factor=2.0, pseudopotentials={'H': 'H.UPF'})
-
-    def test_dft_manager_streaming_behavior(mock_dft_config: DFTConfig) -> None:
-        """
-        Verify that DFTManager computes properties one by one (streaming)
-        and does NOT consume the whole generator upfront.
-        """
-
-        # 1. Create an infinite or large generator
-        def infinite_structures() -> Any:
-            i = 0
-            while True:
-                # Yield single atom each time
-                yield Atoms("H", positions=[[0, 0, 0]], cell=[10, 10, 10], pbc=True)
-                i += 1
-
-        # 2. Mock driver
-        from tests.conftest import MockCalculator
->       from tests.unit.test_oracle import FakeDriver
-E       ImportError: cannot import name 'FakeDriver' from 'tests.unit.test_oracle' (/app/tests/unit/test_oracle.py)
-
-/app/tests/unit/test_oracle_streaming.py:42: ImportError
 =============================== warnings summary ===============================
 tests/uat/test_cycle01_uat.py::test_scenario_01_02_guardrails_check_temp
   /app/.venv/lib/python3.12/site-packages/pydantic/main.py:464: UserWarning: Pydantic serializer warnings:
@@ -165,8 +139,6 @@ src/pyacemaker/utils/process.py                 32      6    81%   76-83
 src/pyacemaker/utils/structure.py                6      2    67%   19-20
 --------------------------------------------------------------------------
 TOTAL                                         3159    621    80%
-=========================== short test summary info ============================
-FAILED tests/unit/test_oracle_streaming.py::test_dft_manager_streaming_behavior
-================== 1 failed, 241 passed, 3 warnings in 3.66s ===================
+======================= 242 passed, 3 warnings in 4.05s ========================
 /app/.venv/lib/python3.12/site-packages/coverage/inorout.py:561: CoverageWarning: Module dev_src was never imported. (module-not-imported); see https://coverage.readthedocs.io/en/7.13.4/messages.html#warning-module-not-imported
   self.warn(f"Module {pkg} was never imported.", slug="module-not-imported")
