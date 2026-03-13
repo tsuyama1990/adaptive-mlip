@@ -17,15 +17,21 @@ class DummyMaceCalc(Calculator):
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)  # type: ignore[no-untyped-call]
-        self.models = [1, 2] # Dummy to trigger node variance extraction block
+        self.models = [1, 2]  # Dummy to trigger node variance extraction block
 
-    def calculate(self, atoms: Atoms | None = None, properties: list[str] | None = None, system_changes: list[str] = all_changes) -> None:
+    def calculate(
+        self,
+        atoms: Atoms | None = None,
+        properties: list[str] | None = None,
+        system_changes: list[str] = all_changes,
+    ) -> None:
         if atoms is None:
             return
         super().calculate(atoms, properties, system_changes)  # type: ignore[no-untyped-call]
         n_atoms = len(atoms)
         self.results["energy"] = -10.0 * n_atoms
         self.results["forces"] = np.ones((n_atoms, 3)) * 0.1
+
 
 def get_safe_test_model_path(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
     pot_dir = tmp_path / "potentials"
@@ -44,15 +50,21 @@ def test_macemanager_initialization(monkeypatch: pytest.MonkeyPatch, tmp_path: P
 
     model_path.unlink()
 
-def test_macemanager_initialization_failure(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+
+def test_macemanager_initialization_failure(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     model_path = get_safe_test_model_path(monkeypatch, tmp_path)
     model_path.touch()
 
-    with patch("mace.calculators.mace_mp", side_effect=Exception("Model failed to load")), \
-         pytest.raises(OracleError, match="Failed to load MACE model"):
+    with (
+        patch("mace.calculators.mace_mp", side_effect=Exception("Model failed to load")),
+        pytest.raises(OracleError, match="Failed to load MACE model"),
+    ):
         MACEManager(str(model_path))
 
     model_path.unlink()
+
 
 def test_macemanager_compute(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     model_path = get_safe_test_model_path(monkeypatch, tmp_path)
@@ -66,15 +78,16 @@ def test_macemanager_compute(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) ->
 
         computed_atoms = next(structures_iter)
         assert "energy" in computed_atoms.info
-        assert computed_atoms.has("forces")
-        assert computed_atoms.has("c_gamma")
+        assert computed_atoms.has("forces")  # type: ignore[no-untyped-call]
+        assert computed_atoms.has("c_gamma")  # type: ignore[no-untyped-call]
 
-        c_gamma = computed_atoms.get_array("c_gamma")
+        c_gamma = computed_atoms.get_array("c_gamma")  # type: ignore[no-untyped-call]
         assert len(c_gamma) == 2
         # np.linalg.norm(np.ones(3) * 0.1) * 0.01 = sqrt(3*0.01) * 0.01 = 0.001732
         assert np.allclose(c_gamma, 0.0017320508)
 
     model_path.unlink()
+
 
 def test_macemanager_compute_invalid_input(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     model_path = get_safe_test_model_path(monkeypatch, tmp_path)
@@ -88,10 +101,13 @@ def test_macemanager_compute_invalid_input(monkeypatch: pytest.MonkeyPatch, tmp_
 
     model_path.unlink()
 
+
 def test_tiered_oracle_initialization() -> None:
     mock_mace = MagicMock()
     mock_dft = MagicMock()
-    thresholds = ActiveLearningThresholds(threshold_call_dft=0.05, threshold_add_train=0.02, smooth_steps=3)
+    thresholds = ActiveLearningThresholds(
+        threshold_call_dft=0.05, threshold_add_train=0.02, smooth_steps=3
+    )
 
     oracle = TieredOracle(mace_manager=mock_mace, dft_manager=mock_dft, thresholds=thresholds)
     assert oracle.mace == mock_mace
@@ -103,10 +119,13 @@ def test_tiered_oracle_initialization() -> None:
     with pytest.raises(ValueError, match="DFTManager cannot be None"):
         TieredOracle(mace_manager=mock_mace, dft_manager=None, thresholds=thresholds)  # type: ignore[arg-type]
 
+
 def test_tiered_oracle_compute_below_threshold() -> None:
     mock_mace = MagicMock()
     mock_dft = MagicMock()
-    thresholds = ActiveLearningThresholds(threshold_call_dft=0.05, threshold_add_train=0.02, smooth_steps=3)
+    thresholds = ActiveLearningThresholds(
+        threshold_call_dft=0.05, threshold_add_train=0.02, smooth_steps=3
+    )
 
     atoms_result = Atoms("H")
     atoms_result.new_array("c_gamma", np.array([0.01]))  # type: ignore[no-untyped-call]
@@ -123,10 +142,13 @@ def test_tiered_oracle_compute_below_threshold() -> None:
     mock_mace.compute.assert_called_once()
     mock_dft.compute.assert_not_called()
 
+
 def test_tiered_oracle_compute_above_threshold() -> None:
     mock_mace = MagicMock()
     mock_dft = MagicMock()
-    thresholds = ActiveLearningThresholds(threshold_call_dft=0.05, threshold_add_train=0.02, smooth_steps=3)
+    thresholds = ActiveLearningThresholds(
+        threshold_call_dft=0.05, threshold_add_train=0.02, smooth_steps=3
+    )
 
     atoms_mace_result = Atoms("H")
     atoms_mace_result.new_array("c_gamma", np.array([0.1]))  # type: ignore[no-untyped-call]
@@ -143,16 +165,19 @@ def test_tiered_oracle_compute_above_threshold() -> None:
     result = next(result_iter)
 
     assert result == atoms_dft_result
-    assert result.has("c_gamma")
-    assert np.array_equal(result.get_array("c_gamma"), np.array([0.1]))
+    assert result.has("c_gamma")  # type: ignore[no-untyped-call]
+    assert np.array_equal(result.get_array("c_gamma"), np.array([0.1]))  # type: ignore[no-untyped-call]
 
     mock_mace.compute.assert_called_once()
     mock_dft.compute.assert_called_once()
 
+
 def test_tiered_oracle_compute_invalid_input() -> None:
     mock_mace = MagicMock()
     mock_dft = MagicMock()
-    thresholds = ActiveLearningThresholds(threshold_call_dft=0.05, threshold_add_train=0.02, smooth_steps=3)
+    thresholds = ActiveLearningThresholds(
+        threshold_call_dft=0.05, threshold_add_train=0.02, smooth_steps=3
+    )
 
     oracle = TieredOracle(mace_manager=mock_mace, dft_manager=mock_dft, thresholds=thresholds)
     with pytest.raises(TypeError, match="Oracle failed to create iterator"):

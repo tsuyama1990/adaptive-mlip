@@ -86,16 +86,20 @@ class DFTManager(BaseOracle):
         if not isinstance(structures, Iterator):
             raise TypeError(ERR_ORACLE_ITERATOR)
 
-        return self._compute_generator(structures, batch_size)
+        # batch_size is intentionally ignored here to prioritize O(1) streaming single-structure memory safety.
+        return self._compute_generator(structures)
 
-    def _compute_generator(self, structures: Iterator[Atoms], batch_size: int) -> Iterator[Atoms]:
+    def _compute_generator(self, structures: Iterator[Atoms]) -> Iterator[Atoms]:
         """Internal generator for streaming computations processing one-by-one without batch lists."""
         for i, atoms in enumerate(structures):
-            with tempfile.TemporaryDirectory() as work_dir:
-                work_path = Path(work_dir)
-                calc_dir = work_path / f"calc_{i}"
-                calc_dir.mkdir()
-                yield self._process_structure(atoms, str(calc_dir))
+            try:
+                with tempfile.TemporaryDirectory() as work_dir:
+                    work_path = Path(work_dir)
+                    calc_dir = work_path / f"calc_{i}"
+                    calc_dir.mkdir()
+                    yield self._process_structure(atoms, str(calc_dir))
+            finally:
+                pass  # Context manager guarantees cleanup, but try-finally explicitly documents intent
 
     def _process_structure(self, atoms: Atoms, calc_dir: str) -> Atoms:
         """
@@ -151,6 +155,8 @@ class DFTManager(BaseOracle):
         Raises:
             OracleError: If calculation fails after all retries and strategies.
         """
+        import time
+
         from pyacemaker.utils.validation import validate_structure
 
         # Security: Apply strict pre-computation validation to prevent malicious atomic
@@ -159,12 +165,20 @@ class DFTManager(BaseOracle):
 
         current_config = self.config.model_copy()
         strategies = self._get_strategies()
-        last_error: Exception | None = None
+        all_errors: list[str] = []
 
         import concurrent.futures
 
+        # Global timeout tracking
+        global_timeout = 14400  # 4 hours total
+        start_time = time.time()
+
         with concurrent.futures.ProcessPoolExecutor(max_workers=1) as executor:
             for i, strategy in enumerate(strategies):
+                if time.time() - start_time > global_timeout:
+                    all_errors.append("Global timeout exceeded.")
+                    break
+
                 if strategy:
                     strategy(current_config)
                     strategy_name = strategy.__name__
@@ -176,8 +190,11 @@ class DFTManager(BaseOracle):
                     future = executor.submit(
                         _run_calculator_process, self.driver, atoms, current_config, calc_dir
                     )
-                    # Set a hard limit of 3600 seconds per self-healing attempt
-                    calc, exception = future.result(timeout=3600)
+                    # Remaining global time or max single attempt time
+                    remaining_time = max(1, global_timeout - (time.time() - start_time))
+                    attempt_timeout = min(3600, remaining_time)
+
+                    calc, exception = future.result(timeout=attempt_timeout)
 
                     if exception:
                         self._handle_exception(exception)
@@ -185,17 +202,17 @@ class DFTManager(BaseOracle):
                     # Apply results from subprocess back to the atoms object in main process
                     atoms.calc = calc
 
-                except concurrent.futures.TimeoutError as e:
-                    last_error = e
+                except concurrent.futures.TimeoutError:
+                    all_errors.append(f"Attempt {i + 1} ({strategy_name}) timed out")
                     atoms.calc = None
                     logger.exception(
-                        f"DFT calculation attempt {i + 1} ({strategy_name}) timed out after 3600s. Retrying..."
+                        f"DFT calculation attempt {i + 1} ({strategy_name}) timed out. Retrying..."
                     )
                     continue
                 except Exception as e:
                     # Catch all exceptions (RuntimeError, CalculatorSetupError, JobFailedException etc)
                     # to ensure self-healing strategies are attempted.
-                    last_error = e
+                    all_errors.append(f"Attempt {i + 1} ({strategy_name}) failed: {e!s}")
                     atoms.calc = None  # Clean up failed calculator
 
                     # Enhanced Logging for debugging
@@ -206,8 +223,9 @@ class DFTManager(BaseOracle):
                 else:
                     return atoms
 
-        # Correctly format the error message with the captured exception
-        raise OracleError(ERR_ORACLE_FAILED.format(error=last_error)) from last_error
+        # Join all recorded errors correctly into one exception to preserve sequence data
+        aggregated_error_message = " | ".join(all_errors)
+        raise OracleError(ERR_ORACLE_FAILED.format(error=aggregated_error_message))
 
 
 class MACEManager(BaseOracle):
@@ -246,9 +264,9 @@ class MACEManager(BaseOracle):
         if not isinstance(structures, Iterator):
             raise TypeError(ERR_ORACLE_ITERATOR)
 
-        return self._compute_generator(structures, batch_size)
+        return self._compute_generator(structures)
 
-    def _compute_generator(self, structures: Iterator[Atoms], batch_size: int) -> Iterator[Atoms]:
+    def _compute_generator(self, structures: Iterator[Atoms]) -> Iterator[Atoms]:
         for atoms in structures:
             atoms_copy = atoms.copy()  # type: ignore[no-untyped-call]
 
@@ -314,9 +332,9 @@ class TieredOracle(BaseOracle):
         if not isinstance(structures, Iterator):
             raise TypeError(ERR_ORACLE_ITERATOR)
 
-        return self._compute_generator(structures, batch_size)
+        return self._compute_generator(structures)
 
-    def _compute_generator(self, structures: Iterator[Atoms], batch_size: int) -> Iterator[Atoms]:
+    def _compute_generator(self, structures: Iterator[Atoms]) -> Iterator[Atoms]:
         for atoms in structures:
             # First query MACE
             mace_result = next(self.mace.compute(iter([atoms])))

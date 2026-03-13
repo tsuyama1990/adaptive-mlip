@@ -113,7 +113,9 @@ def _detect_and_add_passivation_atoms(cluster: Atoms, element: str) -> list[Atom
         if missing_bonds > 0:
             neighbors_vecs = D_vectors[mask]
             pos = cluster.positions[idx]
-            new_positions = _calculate_passivation_positions(idx, pos, neighbors_vecs, missing_bonds)
+            new_positions = _calculate_passivation_positions(
+                idx, pos, neighbors_vecs, missing_bonds
+            )
 
             for new_pos in new_positions:
                 new_atoms.append(Atoms(element, positions=[new_pos]))
@@ -141,7 +143,7 @@ def _passivate_surface(cluster: Atoms, element: str = "H") -> Atoms:
             cluster_copy += new_atom
 
         # Update force_weight array to include the new passivated atoms (with weight 0.0)
-        weights = cluster_copy.get_array("force_weight")[:len(cluster)]
+        weights = cluster_copy.get_array("force_weight")[: len(cluster)]
         new_weights = np.append(weights, np.zeros(len(new_atoms)))
         cluster_copy.set_array("force_weight", new_weights)
 
