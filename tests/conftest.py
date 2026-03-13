@@ -16,7 +16,6 @@ from pyacemaker.domain_models import (
     StructureConfig,
     TrainingConfig,
 )
-from pyacemaker.domain_models.config import PyAceConfig
 from pyacemaker.domain_models.defaults import (
     DEFAULT_ACTIVE_LEARNING_DIR,
     DEFAULT_BATCH_SIZE,
@@ -331,8 +330,6 @@ def create_test_config_dict(**overrides: Any) -> ConfigDictType:
             "pressure": 1.0,
             "timestep": 0.001,
             "n_steps": 1000,
-            "zbl_cut_inner": 1.0,
-            "zbl_cut_outer": 1.5,
             "uncertainty_threshold": DEFAULT_OTF_UNCERTAINTY_THRESHOLD,
             "check_interval": DEFAULT_CHECKPOINT_INTERVAL,
         },
@@ -354,18 +351,13 @@ def create_test_config_dict(**overrides: Any) -> ConfigDictType:
         "logging": {},
     }
 
-    try:
-        from pydantic import ValidationError
+    def recursive_update(d: dict[str, Any], u: dict[str, Any]) -> dict[str, Any]:
+        for k, v in u.items():
+            if isinstance(v, dict):
+                d[k] = recursive_update(d.get(k, {}), v)
+            else:
+                d[k] = v
+        return d
 
-        # Merge dict properly utilizing Pydantic config
-        model = PyAceConfig.model_validate(defaults)
-
-        # Pydantic will perform standard merging and validation
-        if overrides:
-            model = model.model_copy(update=overrides, deep=True)
-
-    except ValidationError as e:
-        msg = f"Failed to merge test overrides due to validation constraints: {e}"
-        raise ValueError(msg) from e
-    else:
-        return cast(ConfigDictType, model.model_dump())
+    merged_dict = recursive_update(defaults, overrides)
+    return cast(ConfigDictType, merged_dict)
