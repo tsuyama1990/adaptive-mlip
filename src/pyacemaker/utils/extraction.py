@@ -13,6 +13,7 @@ def _pre_relax_buffer(cluster: Atoms, fmax: float = 0.05, steps: int = 50) -> At
     Relaxes the buffer region (force_weight == 0.0) while keeping the core fixed.
     """
     from pyacemaker.utils.validation import validate_structure
+
     validate_structure(cluster)
 
     # Create a copy to prevent modifying the original incorrectly
@@ -51,6 +52,7 @@ def _pre_relax_buffer(cluster: Atoms, fmax: float = 0.05, steps: int = 50) -> At
 def _get_expected_coordination(symbol: str) -> int:
     """Returns simple heuristic expected coordination based on valency."""
     from ase.data import chemical_symbols
+
     if symbol not in chemical_symbols:
         msg = f"Invalid chemical symbol: {symbol}"
         raise ValueError(msg)
@@ -112,6 +114,7 @@ def _calculate_passivation_positions(
 def _detect_and_add_passivation_atoms(cluster: Atoms, element: str) -> list[Atoms]:
     """Identifies undercoordinated atoms and returns a list of new passivating atoms to add."""
     from pyacemaker.utils.validation import validate_structure
+
     validate_structure(cluster)
 
     from ase.neighborlist import natural_cutoffs
@@ -191,6 +194,7 @@ def extract_intelligent_cluster(  # noqa: C901
     relaxing the buffer and passivating the surface.
     """
     from pyacemaker.utils.validation import validate_structure
+
     validate_structure(structure)
 
     if not target_atoms:
@@ -308,6 +312,7 @@ def extract_local_region(
         Atoms: The embedded cluster with 'force_weight' array in arrays.
     """
     from pyacemaker.utils.validation import validate_structure
+
     validate_structure(structure)
 
     if center_index < 0 or center_index >= len(structure):

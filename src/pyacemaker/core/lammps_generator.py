@@ -177,22 +177,11 @@ class LammpsScriptGenerator:
             f"{temp} ke no types {types_str}\n"
         )
 
-    def _gen_execution(self, buffer: TextIO, elements: list[str]) -> None:
-        """Generates minimization and MD run commands."""
-        if self.config.minimize:
-            buffer.write(
-                f"minimize {self.config.minimize_tol} {self.config.minimize_ftol} "
-                f"{self.config.minimize_steps} {self.config.minimize_max_iter}\n"
-            )
-
-        # MC
-        self._gen_mc(buffer, elements)
-
-        # Calculate damping parameters
+    def _gen_ensemble_fix(self, buffer: TextIO, resume_step: int = 0) -> None:
+        """Generates the main ensemble fix, optionally interpolating targets for resume."""
         tdamp = self.config.tdamp_factor * self.config.timestep
         pdamp = self.config.pdamp_factor * self.config.timestep
 
-        # Determine T/P start/end
         temp_start = self.config.temperature
         temp_end = self.config.temperature
         press_start = self.config.pressure
@@ -208,12 +197,31 @@ class LammpsScriptGenerator:
             if self.config.ramping.press_end is not None:
                 press_end = self.config.ramping.press_end
 
-        # Use configurable velocity seed ONLY if not resuming
-        # We handle this conditionally in the main write_script method now
+        # If resuming a ramp, we must mathematically interpolate the starting parameters
+        # based exactly on the fractional completion of the total simulation to prevent thermal shock.
+        if resume_step > 0 and self.config.n_steps > 0:
+            fraction = min(1.0, float(resume_step) / float(self.config.n_steps))
+
+            temp_start = temp_start + (temp_end - temp_start) * fraction
+            press_start = press_start + (press_end - press_start) * fraction
+
         buffer.write(
-            f"fix npt all npt temp {temp_start} {temp_end} {tdamp} "
+            f"fix main_ensemble all npt temp {temp_start} {temp_end} {tdamp} "
             f"iso {press_start} {press_end} {pdamp}\n"
         )
+
+    def _gen_execution(self, buffer: TextIO, elements: list[str]) -> None:
+        """Generates minimization and MD run commands."""
+        if self.config.minimize:
+            buffer.write(
+                f"minimize {self.config.minimize_tol} {self.config.minimize_ftol} "
+                f"{self.config.minimize_steps} {self.config.minimize_max_iter}\n"
+            )
+
+        # MC
+        self._gen_mc(buffer, elements)
+
+        self._gen_ensemble_fix(buffer)
         # Note: the run command is written dynamically depending on resume status
 
     def _gen_output_setup(self, buffer: TextIO, dump_file: Path) -> None:
@@ -314,17 +322,55 @@ class LammpsScriptGenerator:
         if self.config.fix_halt:
             buffer.write("python eval_wrapper invoke here\n")
 
-        self._gen_execution(buffer, elements)
+        # For resume, we need to carefully handle the ensemble to allow soft start
+        # and prevent temperature shock during ramps.
 
-        # We do NOT write velocity create here because it is read from restart
+        # We manually generate minimization and mc if needed
+        if self.config.minimize:
+            buffer.write(
+                f"minimize {self.config.minimize_tol} {self.config.minimize_ftol} "
+                f"{self.config.minimize_steps} {self.config.minimize_max_iter}\n"
+            )
+        self._gen_mc(buffer, elements)
+
+        # Soft start (Thermalization via Langevin) upon resume
+        if self.config.soft_start_steps > 0:
+            temp_start = self.config.temperature
+            if self.config.ramping and self.config.ramping.temp_start is not None:
+                temp_start = self.config.ramping.temp_start
+
+            damp = self.config.soft_start_langevin_damp
+            seed = self.config.velocity_seed
+
+            # Assuming the previous standard fix from restart is wiped or we explicitly disabled it
+            # The previous standard fix was just loaded from read_restart.
+            # Because we explicitly named it `main_ensemble`, we unfix it.
+            buffer.write("unfix main_ensemble\n")
+            buffer.write("fix soft_nve all nve\n")
+            buffer.write(
+                f"fix soft_langevin all langevin {temp_start} {temp_start} {damp} {seed}\n"
+            )
+            buffer.write(f"run {self.config.soft_start_steps}\n")
+
+            # Clean up soft start fixes
+            buffer.write("unfix soft_nve\n")
+            buffer.write("unfix soft_langevin\n")
+
+        # Now we apply the correct interpolated ensemble for the remaining time
+        self._gen_ensemble_fix(buffer, resume_step=resume_step)
+
         # Calculate remaining steps
         if override_n_steps is not None:
-            steps_left = override_n_steps
+            steps_left = max(0, override_n_steps - self.config.soft_start_steps)
         else:
-            steps_left = max(0, self.config.n_steps - resume_step)
+            steps_left = max(0, self.config.n_steps - resume_step - self.config.soft_start_steps)
 
         # Master-Slave resume logic
-        buffer.write("reset_timestep ${step}\n")  # step is read from restart
+        # reset_timestep is often required for rigorous trajectory continuity in some setups.
+        # But if we did soft start, it advances step. We let it naturally run the rest.
+        if self.config.soft_start_steps == 0:
+            buffer.write("reset_timestep ${step}\n")  # step is read from restart
+
         buffer.write(f"run {steps_left}\n")
         self._gen_post_run_diagnostics(buffer)
 

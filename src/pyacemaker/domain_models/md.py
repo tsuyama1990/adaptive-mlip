@@ -232,6 +232,14 @@ class MDConfig(BaseModel):
     ramping: MDRampingConfig | None = Field(None, description="Configuration for T/P ramping")
     mc: MCConfig | None = Field(None, description="Configuration for Monte Carlo atom swapping")
 
+    # Cycle 05: Seamless Resume Soft Start (Thermalization)
+    soft_start_steps: int = Field(
+        0, ge=0, description="Steps for strong Langevin thermalization upon resume"
+    )
+    soft_start_langevin_damp: float = Field(
+        0.1, gt=0.0, description="Damping parameter (ps) for soft start Langevin thermostat"
+    )
+
     @model_validator(mode="after")
     def validate_simulation_physics(self) -> "MDConfig":
         total_time = self.n_steps * self.timestep
