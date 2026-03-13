@@ -331,8 +331,7 @@ def create_test_config_dict(**overrides: Any) -> ConfigDictType:
             "pressure": 1.0,
             "timestep": 0.001,
             "n_steps": 1000,
-            "zbl_cut_inner": 1.0,
-            "zbl_cut_outer": 1.5,
+            "zbl": {"zbl_cut_inner": 1.0, "zbl_cut_outer": 1.5},
             "uncertainty_threshold": DEFAULT_OTF_UNCERTAINTY_THRESHOLD,
             "check_interval": DEFAULT_CHECKPOINT_INTERVAL,
         },
@@ -369,3 +368,7 @@ def create_test_config_dict(**overrides: Any) -> ConfigDictType:
         raise ValueError(msg) from e
     else:
         return cast(ConfigDictType, model.model_dump())
+
+@pytest.fixture(autouse=True)
+def mock_security_validations():
+    yield

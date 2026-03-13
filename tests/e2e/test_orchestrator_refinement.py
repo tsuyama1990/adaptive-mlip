@@ -1,3 +1,4 @@
+from unittest.mock import patch
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
@@ -73,7 +74,8 @@ class FakeActiveSetSelector(ActiveSetSelector):
             yield cands[i]
 
 
-def test_orchestrator_refinement_logic(tmp_path: Path) -> None:
+@patch('pyacemaker.orchestrator.FinetuneManager')
+def test_orchestrator_refinement_logic(mock_finetune, tmp_path: Path) -> None:
     # Create dummy UPF
     (tmp_path / "H.UPF").write_text("dummy UPF content")
 

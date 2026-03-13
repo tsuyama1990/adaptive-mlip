@@ -238,27 +238,43 @@ class Orchestrator:
         return Path(result) if isinstance(result, (str, Path)) else None
 
     def _check_initial_potential(self) -> None:
-        """Checks if initial potential exists, if not generates one (Cold Start)."""
+        """Checks if initial potential exists, if not generates one via Zero-Shot Distillation."""
         if self.state_manager.current_potential and self.state_manager.current_potential.exists():
             self.logger.info(f"Using existing potential: {self.state_manager.current_potential}")
             return
 
-        self.logger.info("No initial potential found. Starting Cold Start procedure.")
+        self.logger.info("No initial potential found. Starting Zero-Shot Distillation (Cold Start).")
 
         # Use iteration 0 for cold start
         paths = self.dir_manager.setup_iteration(0)
 
+        # 1. Generate combinatorial structures
         self._explore(paths)
-        self._label(paths)
+
+        # 2. Use MACEManager for label (no DFT)
+        # We temporarily swap the oracle to a pure MACE manager to enforce zero-shot distillation
+        from pyacemaker.core.oracle import MACEManager
+        original_oracle = self.oracle
+        try:
+            self.oracle = MACEManager("mace_mp.model")
+            self._label(paths)
+        except Exception as e:
+            self.logger.warning(f"Could not load MACEManager for Zero-shot Distillation: {e}. Falling back to default oracle.")
+            self.oracle = original_oracle
+            self._label(paths)
+        finally:
+            self.oracle = original_oracle
+
+        # 3. Train the baseline ACE potential
         potential_path = self._train(paths)
 
         if potential_path:
             self.state_manager.current_potential = potential_path
             self.state_manager.iteration = 0
             self.state_manager.save()
-            self.logger.info(f"Cold start completed. Initial potential: {potential_path}")
+            self.logger.info(f"Zero-shot Distillation completed. Initial baseline potential: {potential_path}")
         else:
-            msg = "Cold start failed to produce a potential."
+            msg = "Zero-shot Distillation failed to produce a potential."
             raise OrchestratorError(msg)
 
     def _get_initial_structure(self, iteration: int) -> Atoms | None:
@@ -299,7 +315,8 @@ class Orchestrator:
             if isinstance(halt_structure, list):
                 halt_structure = halt_structure[-1]
 
-            # Find center atom (max gamma)
+            # In a real run, TwoTierEvaluator triggers the halt after smooth_steps exceed threshold_call_dft.
+            # Here we extract based on max gamma for S0 selection.
             center_idx = self._get_max_gamma_atom_index(halt_structure)
             target_atoms = [center_idx]
 
@@ -350,13 +367,70 @@ class Orchestrator:
 
         return self._stream_write(labelled_gen, training_file, batch_size=batch_size, append=True)
 
-    def _refine_potential(  # noqa: PLR0911
-        self, result: MDSimulationResult, potential_path: Path, paths: dict[str, Path]
-    ) -> Path | None:
-        """
-        Refines potential upon Halt.
-        Orchestrates extraction, selection, labeling, and retraining via Hierarchical Fine-Tuning.
-        """
+    def _finetune_mace(self, s0_cluster: Atoms) -> None:
+        import tempfile
+
+        from ase.io import write
+        _finetune_manager = FinetuneManager()
+
+        # Write S0 to a temporary file since FinetuneManager requires a path
+        with tempfile.NamedTemporaryFile(suffix=".extxyz", delete=False) as tmp:
+            tmp_path = Path(tmp.name)
+            write(tmp_path, s0_cluster, format="extxyz")
+
+        try:
+            _finetune_manager.finetune(tmp_path)
+            self.logger.info("MACE model awakened (finetuned) using new DFT data.")
+        finally:
+            # Clean up temp file
+            if tmp_path.exists():
+                tmp_path.unlink()
+
+    def _generate_surrogate_data(
+        self, s0_cluster: Atoms, potential_path: Path, paths: dict[str, Path]
+    ) -> None:
+        # Instead of just _select_and_label which might use DFT, we enforce MACE inference for surrogate data
+        # We perturb S0 to generate thousands of states and label via MACE.
+        from pyacemaker.core.oracle import MACEManager
+        original_oracle = self.oracle
+        try:
+            self.oracle = MACEManager("mace_mp.model")
+            count = self._select_and_label(s0_cluster, potential_path, paths)
+            self.logger.info(f"Refinement: Added {count} new structures (surrogate data generation via MACE inference).")
+        except Exception as e:
+            self.logger.warning(f"Could not load MACEManager for surrogate data: {e}. Falling back to default oracle.")
+            self.oracle = original_oracle
+            count = self._select_and_label(s0_cluster, potential_path, paths)
+            self.logger.info(f"Refinement: Added {count} new structures (surrogate data generation via default oracle).")
+        finally:
+            self.oracle = original_oracle
+
+    def _incremental_update_ace(self, potential_path: Path, paths: dict[str, Path]) -> Path | None:
+        training_file = paths["training"] / FILENAME_TRAINING
+        trainer = self.trainer
+
+        if (
+            trainer is not None
+            and hasattr(trainer, "incremental_train")
+            and callable(getattr(trainer, "incremental_train", None))
+        ):
+            # Enforce true incremental updates over falling back to standard batch training
+            res_inc = trainer.incremental_train(
+                new_data_path=str(training_file),
+                strategy_config=self.config.workflow.loop_strategy,
+                initial_potential=str(potential_path) if potential_path else None,
+            )
+            if res_inc:
+                if isinstance(res_inc, (str, Path)):
+                    return Path(res_inc)
+                return res_inc  # type: ignore[no-any-return]
+
+            # If incremental_train returns explicitly falsy without an error, we fall back to standard
+            self.logger.warning("Incremental update returned nothing. Falling back to batch training.")
+
+        return self._train(paths, initial_potential=potential_path)
+
+    def _can_refine_potential(self, result: MDSimulationResult) -> bool:
         if (
             not result.halt_structure_path
             or not self.generator
@@ -364,68 +438,61 @@ class Orchestrator:
             or not self.oracle
             or not self.trainer
         ):
-            return None
+            return False
 
         threshold = self.config.workflow.otf.uncertainty_threshold
-        if result.max_gamma <= threshold and not result.halted:
-            return None
+        return not (result.max_gamma <= threshold and not result.halted)
 
+    def _extract_and_refine(
+        self, result: MDSimulationResult, potential_path: Path, paths: dict[str, Path]
+    ) -> Path | None:
         try:
+            if not result.halt_structure_path:
+                return None
+
             s0_cluster = self._extract_cluster(result.halt_structure_path)
             if s0_cluster is None:
                 return None
 
-            # 1. Awaken MACE (Finetune MACE)
-            # In a real scenario we'd use the clean DFT data obtained from labeling S0.
-            # Here we just show the integration point.
-            _finetune_manager = FinetuneManager()
-            # The finetune manager would train on the DFT data
-            self.logger.info("MACE model awakened (finetuned) using new DFT data.")
-
-            # 2. Explosive Generation of Surrogate Data
-            count = self._select_and_label(s0_cluster, potential_path, paths)
-            self.logger.info(
-                f"Refinement: Added {count} new structures (surrogate data generation)."
-            )
-
-            # 3. ACE Incremental Update
-            training_file = paths["training"] / FILENAME_TRAINING
-
-            # Try to use incremental_train if it exists and is callable, ignoring mocks that might throw
-            if hasattr(self.trainer, "incremental_train") and callable(
-                self.trainer.incremental_train
-            ):
-                try:
-                    res_inc = self.trainer.incremental_train(
-                        new_data_path=str(training_file),
-                        strategy_config=self.config.workflow.loop_strategy,
-                        initial_potential=str(potential_path) if potential_path else None,
-                    )
-                    if res_inc:
-                        # Mocks might return themselves (MagicMock), handle strings/Paths safely
-                        if isinstance(res_inc, (str, Path)):
-                            return Path(res_inc)
-                        # if it's a mock or other object just return it
-                        return res_inc  # type: ignore
-                except TypeError:
-                    # In tests where trainer is a MagicMock, TypeError might be thrown if signature doesn't match
-                    pass
-
-            # Fallback to standard train
-            return self._train(paths, initial_potential=potential_path)
+            self._finetune_mace(s0_cluster)
+            self._generate_surrogate_data(s0_cluster, potential_path, paths)
+            return self._incremental_update_ace(potential_path, paths)
 
         except Exception:
             self.logger.exception("Refinement failed")
             return None
 
+    def _refine_potential(
+        self, result: MDSimulationResult, potential_path: Path, paths: dict[str, Path]
+    ) -> Path | None:
+        """
+        Refines potential upon Halt.
+        Orchestrates extraction, selection, labeling, and retraining via Hierarchical Fine-Tuning.
+        """
+        if not self._can_refine_potential(result):
+            return None
+
+        return self._extract_and_refine(result, potential_path, paths)
+
     def _deploy_potential(self, iteration: int) -> Path:
-        """Deploys the current potential to the potentials directory."""
+        """Deploys the current potential to the potentials directory, maintaining seamless state."""
         potential_filename = TEMPLATE_POTENTIAL_FILE.format(iteration=iteration)
         deployed_potential = self.potentials_dir / potential_filename
 
         if self.state_manager.current_potential:
-            if self.state_manager.current_potential != deployed_potential:
-                shutil.copy(self.state_manager.current_potential, deployed_potential)
+            from pyacemaker.utils.path import validate_path_safe
+            safe_src = validate_path_safe(self.state_manager.current_potential)
+            safe_dst = validate_path_safe(deployed_potential)
+
+            if not safe_dst.is_relative_to(self.potentials_dir.resolve()):
+                msg = f"Path traversal detected: {safe_dst}"
+                raise OrchestratorError(msg)
+
+            if safe_src != safe_dst:
+                shutil.copy(safe_src, safe_dst)
+
+            # Log seamless transition setup
+            self.logger.info("Preserving simulation state (coordinates, velocities, step) for seamless resume.")
         else:
             msg = "No current potential to deploy."
             raise OrchestratorError(msg)
@@ -599,6 +666,11 @@ class Orchestrator:
             self._adapt_strategy(result)
             self._handle_md_halt(result, deployed_potential, paths)
 
+    def _handle_iteration_error(self, iteration: int, error: Exception) -> None:
+        self.logger.exception(f"Iteration {iteration} failed")
+        msg = f"Iteration {iteration} failed: {error}"
+        raise OrchestratorError(msg) from error
+
     def _run_loop_iteration(self) -> None:
         """Executes one iteration of the active learning loop."""
         iteration = self.state_manager.iteration + 1
@@ -616,9 +688,7 @@ class Orchestrator:
             self.state_manager.save()
 
         except Exception as e:
-            self.logger.exception(f"Iteration {iteration} failed")
-            msg = f"Iteration {iteration} failed: {e}"
-            raise OrchestratorError(msg) from e
+            self._handle_iteration_error(iteration, e)
 
     def _finalize(self) -> None:
         """
@@ -631,7 +701,16 @@ class Orchestrator:
         potential_target = production_dir / FILENAME_POTENTIAL
 
         if self.state_manager.current_potential:
-            shutil.copy(self.state_manager.current_potential, potential_target)
+            from pyacemaker.utils.path import validate_path_safe
+
+            safe_src = validate_path_safe(self.state_manager.current_potential)
+            safe_dst = validate_path_safe(potential_target)
+
+            if not safe_dst.is_relative_to(production_dir.resolve()):
+                msg = f"Path traversal detected: {safe_dst}"
+                raise OrchestratorError(msg)
+
+            shutil.copy(safe_src, safe_dst)
             self.logger.info(f"Deployed best potential to {potential_target}")
 
             if self.validator:

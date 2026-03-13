@@ -2,11 +2,11 @@ import pytest
 from pydantic import ValidationError
 
 from pyacemaker.domain_models.md import (
-    ZBLConfig,
     MCConfig,
     MDConfig,
     MDRampingConfig,
     MDSimulationResult,
+    ZBLConfig,
 )
 
 
