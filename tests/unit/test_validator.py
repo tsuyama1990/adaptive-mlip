@@ -8,6 +8,49 @@ from pyacemaker.core.validator import LammpsInputValidator, Validator
 from pyacemaker.domain_models.validation import ValidationConfig, ValidationResult
 
 
+def test_lammps_input_validator_structure() -> None:
+    with patch("pyacemaker.utils.validation.validate_structure") as mock_val:
+        atoms = Atoms("H")
+        LammpsInputValidator.validate_structure(atoms)
+        mock_val.assert_called_once_with(atoms)
+
+
+def test_lammps_input_validator_potential(tmp_path: Path) -> None:
+    pot_path = tmp_path / "pot.yace"
+    pot_path.touch()
+
+    with patch("pyacemaker.core.validator.validate_path_safe", return_value=pot_path) as mock_val:
+        res = LammpsInputValidator.validate_potential(str(pot_path))
+        assert res == pot_path
+        mock_val.assert_called_once()
+
+
+def test_lammps_input_validator_potential_none() -> None:
+    with pytest.raises(ValueError, match="Validator requires a potential"):
+        LammpsInputValidator.validate_potential(None)
+
+
+def test_lammps_input_validator_potential_not_exists(tmp_path: Path) -> None:
+    pot_path = tmp_path / "nonexistent.yace"
+
+    with (
+        patch("pyacemaker.core.validator.validate_path_safe", return_value=pot_path),
+        pytest.raises(FileNotFoundError, match="Potential file not found"),
+    ):
+        LammpsInputValidator.validate_potential(str(pot_path))
+
+
+def test_lammps_input_validator_potential_not_file(tmp_path: Path) -> None:
+    pot_dir = tmp_path / "pot_dir"
+    pot_dir.mkdir()
+
+    with (
+        patch("pyacemaker.core.validator.validate_path_safe", return_value=pot_dir),
+        pytest.raises(ValueError, match="Potential path is not a file"),
+    ):
+        LammpsInputValidator.validate_potential(str(pot_dir))
+
+
 class TestValidator:
     @pytest.fixture
     def mock_phonon_calc(self):
@@ -97,11 +140,13 @@ class TestValidator:
 
     def test_validate_structure_invalid_element(self):
         """Test rejection of structure with invalid chemical symbol (dummy X)."""
-        # 'X' is in atomic_numbers but Z=0
-        # Need pbc and cell for get_volume() check to pass first if we want to hit the element check.
-        # Or let volume check fail? But volume check raises "Failed to compute structure volume"
-        # We want to test element check specifically.
-        # So we provide a valid cell.
         structure = Atoms("X", positions=[[0, 0, 0]], cell=[10, 10, 10], pbc=True)
         with pytest.raises(ValueError, match="dummy element"):
             LammpsInputValidator.validate_structure(structure)
+
+    def test_validator_no_structure(self, validator) -> None:
+        pot_path = Path("pot.yace")
+        out_path = Path("report.html")
+
+        with pytest.raises(ValueError, match="Validator requires a structure"):
+            validator.validate(potential_path=pot_path, output_path=out_path, structure=None)
