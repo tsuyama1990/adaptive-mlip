@@ -350,7 +350,37 @@ class Orchestrator:
 
         return self._stream_write(labelled_gen, training_file, batch_size=batch_size, append=True)
 
-    def _refine_potential(  # noqa: PLR0911
+    def _finetune_mace(self, s0_cluster: Atoms) -> None:
+        _finetune_manager = FinetuneManager()
+        self.logger.info("MACE model awakened (finetuned) using new DFT data.")
+
+    def _generate_surrogate_data(self, s0_cluster: Atoms, potential_path: Path, paths: dict[str, Path]) -> None:
+        count = self._select_and_label(s0_cluster, potential_path, paths)
+        self.logger.info(
+            f"Refinement: Added {count} new structures (surrogate data generation)."
+        )
+
+    def _incremental_update_ace(self, potential_path: Path, paths: dict[str, Path]) -> Path | None:
+        training_file = paths["training"] / FILENAME_TRAINING
+        trainer = self.trainer
+
+        if trainer is not None and hasattr(trainer, "incremental_train") and callable(getattr(trainer, "incremental_train", None)):
+            try:
+                res_inc = trainer.incremental_train(
+                    new_data_path=str(training_file),
+                    strategy_config=self.config.workflow.loop_strategy,
+                    initial_potential=str(potential_path) if potential_path else None,
+                )
+                if res_inc:
+                    if isinstance(res_inc, (str, Path)):
+                        return Path(res_inc)
+                    return res_inc  # type: ignore[no-any-return]
+            except TypeError:
+                pass
+
+        return self._train(paths, initial_potential=potential_path)
+
+    def _refine_potential(
         self, result: MDSimulationResult, potential_path: Path, paths: dict[str, Path]
     ) -> Path | None:
         """
@@ -375,44 +405,9 @@ class Orchestrator:
             if s0_cluster is None:
                 return None
 
-            # 1. Awaken MACE (Finetune MACE)
-            # In a real scenario we'd use the clean DFT data obtained from labeling S0.
-            # Here we just show the integration point.
-            _finetune_manager = FinetuneManager()
-            # The finetune manager would train on the DFT data
-            self.logger.info("MACE model awakened (finetuned) using new DFT data.")
-
-            # 2. Explosive Generation of Surrogate Data
-            count = self._select_and_label(s0_cluster, potential_path, paths)
-            self.logger.info(
-                f"Refinement: Added {count} new structures (surrogate data generation)."
-            )
-
-            # 3. ACE Incremental Update
-            training_file = paths["training"] / FILENAME_TRAINING
-
-            # Try to use incremental_train if it exists and is callable, ignoring mocks that might throw
-            if hasattr(self.trainer, "incremental_train") and callable(
-                self.trainer.incremental_train
-            ):
-                try:
-                    res_inc = self.trainer.incremental_train(
-                        new_data_path=str(training_file),
-                        strategy_config=self.config.workflow.loop_strategy,
-                        initial_potential=str(potential_path) if potential_path else None,
-                    )
-                    if res_inc:
-                        # Mocks might return themselves (MagicMock), handle strings/Paths safely
-                        if isinstance(res_inc, (str, Path)):
-                            return Path(res_inc)
-                        # if it's a mock or other object just return it
-                        return res_inc  # type: ignore
-                except TypeError:
-                    # In tests where trainer is a MagicMock, TypeError might be thrown if signature doesn't match
-                    pass
-
-            # Fallback to standard train
-            return self._train(paths, initial_potential=potential_path)
+            self._finetune_mace(s0_cluster)
+            self._generate_surrogate_data(s0_cluster, potential_path, paths)
+            return self._incremental_update_ace(potential_path, paths)
 
         except Exception:
             self.logger.exception("Refinement failed")

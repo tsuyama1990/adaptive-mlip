@@ -181,7 +181,100 @@ def _passivate_surface(cluster: Atoms, element: str = "H") -> Atoms:
     return cluster_copy  # type: ignore[no-any-return]
 
 
-def extract_intelligent_cluster(  # noqa: C901
+def _compute_cluster_indices(
+    structure: Atoms, target_atoms: list[int], total_cutoff: float
+) -> tuple[list[int], dict[int, int], np.ndarray, np.ndarray, np.ndarray]:
+    from ase.neighborlist import neighbor_list
+
+    i_indices, j_indices, D_vectors = neighbor_list("ijD", structure, cutoff=total_cutoff)  # type: ignore[no-untyped-call]
+    mask = np.isin(i_indices, target_atoms)
+
+    neighbors_indices = j_indices[mask]
+    vectors = D_vectors[mask]
+    source_indices = i_indices[mask]
+
+    unique_cluster_indices = set(target_atoms)
+    unique_cluster_indices.update(neighbors_indices)
+
+    cluster_indices = list(unique_cluster_indices)
+    cluster_indices.sort()
+
+    idx_map = {orig_idx: new_idx for new_idx, orig_idx in enumerate(cluster_indices)}
+    return cluster_indices, idx_map, source_indices, neighbors_indices, vectors
+
+
+def _assign_weights(
+    target_atoms: list[int],
+    cluster_indices: list[int],
+    idx_map: dict[int, int],
+    source_indices: np.ndarray,
+    neighbors_indices: np.ndarray,
+    vectors: np.ndarray,
+    config: CutoutConfig,
+) -> np.ndarray:
+    weights = np.zeros(len(cluster_indices))
+    distances = np.linalg.norm(vectors, axis=1)
+
+    for target_idx in target_atoms:
+        weights[idx_map[target_idx]] = 1.0
+
+    for i, (_src_idx, neighbor_idx) in enumerate(
+        zip(source_indices, neighbors_indices, strict=False)
+    ):
+        if distances[i] <= config.core_radius + 1e-6:
+            weights[idx_map[neighbor_idx]] = 1.0
+        elif (
+            distances[i] <= config.core_radius + config.buffer_radius + 1e-6
+            and weights[idx_map[neighbor_idx]] != 1.0
+        ):
+            weights[idx_map[neighbor_idx]] = 0.0
+
+    return weights
+
+
+def _create_cluster_atoms(
+    structure: Atoms,
+    target_atoms: list[int],
+    cluster_indices: list[int],
+) -> Atoms:
+    cluster_positions = structure.positions[cluster_indices]
+
+    target_positions = structure.positions[target_atoms]
+    center_pos = np.mean(target_positions, axis=0)
+    cluster_positions = cluster_positions - center_pos
+
+    all_symbols = np.array(structure.get_chemical_symbols())  # type: ignore[no-untyped-call]
+    cluster_symbols = all_symbols[cluster_indices]
+
+    cluster = Atoms(symbols=cluster_symbols, positions=cluster_positions, pbc=False)
+
+    if structure.has("c_gamma"):  # type: ignore[no-untyped-call]
+        original_c_gamma = structure.get_array("c_gamma")  # type: ignore[no-untyped-call]
+        cluster_c_gamma = original_c_gamma[cluster_indices]
+        cluster.new_array("c_gamma", cluster_c_gamma)  # type: ignore[no-untyped-call]
+
+    return cluster
+
+
+def _post_process_cluster(cluster: Atoms, weights: np.ndarray, config: CutoutConfig) -> Atoms:
+    cluster.new_array("force_weight", weights)  # type: ignore[no-untyped-call]
+
+    if config.enable_pre_relaxation:
+        cluster = _pre_relax_buffer(
+            cluster,
+            fmax=config.pre_relaxation_fmax,
+            steps=config.pre_relaxation_steps,
+        )
+
+    if config.enable_passivation:
+        cluster = _passivate_surface(cluster, element=config.passivation_element)
+
+    from pyacemaker.utils.embedding import embed_cluster
+
+    return embed_cluster(cluster, buffer=5.0)
+
+
+def extract_intelligent_cluster(
     structure: Atoms, target_atoms: list[int], config: CutoutConfig
 ) -> Atoms:
     """
@@ -205,83 +298,17 @@ def extract_intelligent_cluster(  # noqa: C901
 
     total_cutoff = config.core_radius + config.buffer_radius
 
-    # We will compute the distances from all atoms to all target atoms
-    # Use ASE's neighbor_list for each target atom
+    cluster_indices, idx_map, source_indices, neighbors_indices, vectors = _compute_cluster_indices(
+        structure, target_atoms, total_cutoff
+    )
 
-    i_indices, j_indices, D_vectors = neighbor_list("ijD", structure, cutoff=total_cutoff)  # type: ignore[no-untyped-call]
+    weights = _assign_weights(
+        target_atoms, cluster_indices, idx_map, source_indices, neighbors_indices, vectors, config
+    )
 
-    mask = np.isin(i_indices, target_atoms)
+    cluster = _create_cluster_atoms(structure, target_atoms, cluster_indices)
 
-    neighbors_indices = j_indices[mask]
-    vectors = D_vectors[mask]
-    source_indices = i_indices[mask]
-
-    # We need a unique set of atoms to include in the cluster
-    unique_cluster_indices = set(target_atoms)
-    unique_cluster_indices.update(neighbors_indices)
-
-    cluster_indices = list(unique_cluster_indices)
-    cluster_indices.sort()  # Ensure deterministic order
-
-    # Mapping from original structure index to cluster index
-    idx_map = {orig_idx: new_idx for new_idx, orig_idx in enumerate(cluster_indices)}
-
-    # Now we assign weights
-    weights = np.zeros(len(cluster_indices))
-
-    # Core atoms are distance <= config.core_radius from ANY target atom
-    distances = np.linalg.norm(vectors, axis=1)
-
-    for target_idx in target_atoms:
-        weights[idx_map[target_idx]] = 1.0
-
-    # Initialize all weights to 0.0 for buffer
-    # Core atoms get 1.0
-    for i, (_src_idx, neighbor_idx) in enumerate(
-        zip(source_indices, neighbors_indices, strict=False)
-    ):
-        if distances[i] <= config.core_radius + 1e-6:
-            weights[idx_map[neighbor_idx]] = 1.0
-        elif (
-            distances[i] <= config.core_radius + config.buffer_radius + 1e-6
-            and weights[idx_map[neighbor_idx]] != 1.0
-        ):
-            # Explicitly ensure buffer atoms remain 0.0 unless they are also core
-            weights[idx_map[neighbor_idx]] = 0.0
-
-    # Create the cluster atoms
-    cluster_positions = structure.positions[cluster_indices]
-
-    # Center the cluster roughly around the mean of target atoms to avoid breaking
-    target_positions = structure.positions[target_atoms]
-    center_pos = np.mean(target_positions, axis=0)
-
-    cluster_positions = cluster_positions - center_pos
-
-    all_symbols = np.array(structure.get_chemical_symbols())  # type: ignore[no-untyped-call]
-    cluster_symbols = all_symbols[cluster_indices]
-
-    cluster = Atoms(symbols=cluster_symbols, positions=cluster_positions, pbc=False)
-
-    cluster.new_array("force_weight", weights)  # type: ignore[no-untyped-call]
-
-    if structure.has("c_gamma"):  # type: ignore[no-untyped-call]
-        original_c_gamma = structure.get_array("c_gamma")  # type: ignore[no-untyped-call]
-        cluster_c_gamma = original_c_gamma[cluster_indices]
-        cluster.new_array("c_gamma", cluster_c_gamma)  # type: ignore[no-untyped-call]
-
-    if config.enable_pre_relaxation:
-        cluster = _pre_relax_buffer(
-            cluster,
-            fmax=config.pre_relaxation_fmax,
-            steps=config.pre_relaxation_steps,
-        )
-
-    if config.enable_passivation:
-        cluster = _passivate_surface(cluster, element=config.passivation_element)
-
-    # Finally, embed the cluster into a cell
-    return embed_cluster(cluster, buffer=5.0)
+    return _post_process_cluster(cluster, weights, config)
 
 
 def extract_local_region(
