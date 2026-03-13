@@ -99,10 +99,10 @@ def test_macemanager_compute(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) ->
 
         computed_atoms = next(structures_iter)
         assert "energy" in computed_atoms.info
-        assert computed_atoms.has("forces")
-        assert computed_atoms.has("c_gamma")
+        assert computed_atoms.has("forces")  # type: ignore[no-untyped-call]
+        assert computed_atoms.has("c_gamma")  # type: ignore[no-untyped-call]
 
-        c_gamma = computed_atoms.get_array("c_gamma")
+        c_gamma = computed_atoms.get_array("c_gamma")  # type: ignore[no-untyped-call]
         assert len(c_gamma) == 2
         # np.linalg.norm(np.ones(3) * 0.1) * 0.01 = sqrt(3*0.01) * 0.01 = 0.001732
         assert np.allclose(c_gamma, 0.0017320508)
@@ -124,7 +124,7 @@ def test_macemanager_compute(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) ->
 
         manager_zero = MACEManager(str(model_path), calculator=ZeroMaceCalc())
         computed_atoms_zero = next(manager_zero.compute(iter([Atoms("H")])))
-        assert np.allclose(computed_atoms_zero.get_array("c_gamma"), 0.0)
+        assert np.allclose(computed_atoms_zero.get_array("c_gamma"), 0.0)  # type: ignore[no-untyped-call]
 
         # Edge case: huge forces
         class HugeMaceCalc(DummyMaceCalc):
@@ -136,13 +136,13 @@ def test_macemanager_compute(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) ->
             ) -> None:
                 if atoms is None:
                     return
-                super().calculate(atoms, properties, system_changes)
+                super().calculate(atoms, properties, system_changes)  # type: ignore[no-untyped-call]
                 n_atoms = len(atoms)
                 self.results["forces"] = np.ones((n_atoms, 3)) * 1e6
 
         manager_huge = MACEManager(str(model_path), calculator=HugeMaceCalc())
         computed_atoms_huge = next(manager_huge.compute(iter([Atoms("H")])))
-        huge_gamma = computed_atoms_huge.get_array("c_gamma")[0]
+        huge_gamma = computed_atoms_huge.get_array("c_gamma")[0]  # type: ignore[no-untyped-call]
         assert huge_gamma > 1000.0, "Huge forces should result in large uncertainty metric proxy"
 
     model_path.unlink()
@@ -156,7 +156,7 @@ def test_macemanager_compute_invalid_input(monkeypatch: pytest.MonkeyPatch, tmp_
         manager = MACEManager(str(model_path))
 
         with pytest.raises(TypeError, match="Oracle failed to create iterator"):
-            manager.compute([Atoms("H")])
+            manager.compute([Atoms("H")])  # type: ignore[arg-type]
 
     model_path.unlink()
 
@@ -173,10 +173,10 @@ def test_tiered_oracle_initialization() -> None:
     assert oracle.dft == mock_dft
 
     with pytest.raises(ValueError, match="MACEManager must be provided"):
-        TieredOracle(mace_manager=None, dft_manager=mock_dft, thresholds=thresholds)
+        TieredOracle(mace_manager=None, dft_manager=mock_dft, thresholds=thresholds)  # type: ignore[arg-type]
 
     with pytest.raises(ValueError, match="DFTManager cannot be None"):
-        TieredOracle(mace_manager=mock_mace, dft_manager=None, thresholds=thresholds)
+        TieredOracle(mace_manager=mock_mace, dft_manager=None, thresholds=thresholds)  # type: ignore[arg-type]
 
 
 def test_tiered_oracle_compute_below_threshold() -> None:
@@ -245,8 +245,8 @@ def test_tiered_oracle_compute_above_threshold() -> None:
     result = next(result_iter)
 
     assert result == atoms_dft_result
-    assert result.has("c_gamma")
-    assert np.array_equal(result.get_array("c_gamma"), np.array([0.1]))
+    assert result.has("c_gamma")  # type: ignore[no-untyped-call]
+    assert np.array_equal(result.get_array("c_gamma"), np.array([0.1]))  # type: ignore[no-untyped-call]
 
     mock_mace.compute.assert_called_once()
     mock_dft.compute.assert_called_once()
@@ -261,4 +261,4 @@ def test_tiered_oracle_compute_invalid_input() -> None:
 
     oracle = TieredOracle(mace_manager=mock_mace, dft_manager=mock_dft, thresholds=thresholds)
     with pytest.raises(TypeError, match="Oracle failed to create iterator"):
-        oracle.compute([Atoms("H")])
+        oracle.compute([Atoms("H")])  # type: ignore[arg-type]

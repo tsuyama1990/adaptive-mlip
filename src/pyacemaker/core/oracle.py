@@ -27,11 +27,12 @@ def _run_calculator_process(
     driver: QEDriver, atoms: Atoms, config: DFTConfig, calc_dir: str
 ) -> tuple[Any, Exception | None]:
     """Top-level helper to run a single calculation attempt. Returns calculator and any exception for ProcessPoolExecutor."""
+    from pyacemaker.utils.validation import validate_structure
+
+    # Security: Validate atoms structure before proceeding to computation
+    validate_structure(atoms)
+
     try:
-        from pyacemaker.utils.validation import validate_structure
-
-        validate_structure(atoms)
-
         # Create new calculator for clean state
         # Use provided temporary directory to prevent file collisions and race conditions
         calc = driver.get_calculator(atoms, config.model_copy(), directory=calc_dir)

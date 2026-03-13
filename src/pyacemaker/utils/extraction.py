@@ -12,6 +12,9 @@ def _pre_relax_buffer(cluster: Atoms, fmax: float = 0.05, steps: int = 50) -> At
     """
     Relaxes the buffer region (force_weight == 0.0) while keeping the core fixed.
     """
+    from pyacemaker.utils.validation import validate_structure
+    validate_structure(cluster)
+
     # Create a copy to prevent modifying the original incorrectly
     cluster_copy = cluster.copy()  # type: ignore[no-untyped-call]
 
@@ -47,6 +50,11 @@ def _pre_relax_buffer(cluster: Atoms, fmax: float = 0.05, steps: int = 50) -> At
 
 def _get_expected_coordination(symbol: str) -> int:
     """Returns simple heuristic expected coordination based on valency."""
+    from ase.data import chemical_symbols
+    if symbol not in chemical_symbols:
+        msg = f"Invalid chemical symbol: {symbol}"
+        raise ValueError(msg)
+
     if symbol == "O":
         return 2
     if symbol == "Mg":
@@ -62,6 +70,14 @@ def _calculate_passivation_positions(
     idx: int, pos: np.ndarray, neighbors_vecs: np.ndarray, missing_bonds: int
 ) -> list[np.ndarray]:
     """Calculates deterministic positions for new passivating atoms."""
+    # Validation
+    if pos.shape != (3,):
+        msg = f"Expected pos to have shape (3,), got {pos.shape}"
+        raise ValueError(msg)
+    if neighbors_vecs.ndim != 2 or neighbors_vecs.shape[1] != 3:
+        msg = f"Expected neighbors_vecs to have shape (N, 3), got {neighbors_vecs.shape}"
+        raise ValueError(msg)
+
     # Use standard reproducible PRNG for deterministic scientific calculations
     # using a fixed seed combined with the unique atom index for variety
     rng = np.random.default_rng(seed=42 + idx)
@@ -95,6 +111,9 @@ def _calculate_passivation_positions(
 
 def _detect_and_add_passivation_atoms(cluster: Atoms, element: str) -> list[Atoms]:
     """Identifies undercoordinated atoms and returns a list of new passivating atoms to add."""
+    from pyacemaker.utils.validation import validate_structure
+    validate_structure(cluster)
+
     from ase.neighborlist import natural_cutoffs
 
     cutoffs = natural_cutoffs(cluster, mult=1.2)  # type: ignore[no-untyped-call]
@@ -171,6 +190,9 @@ def extract_intelligent_cluster(  # noqa: C901
     Extracts an intelligent local cluster around multiple target atoms,
     relaxing the buffer and passivating the surface.
     """
+    from pyacemaker.utils.validation import validate_structure
+    validate_structure(structure)
+
     if not target_atoms:
         cluster = structure.copy()  # type: ignore[no-untyped-call]
         weights = np.zeros(len(cluster))
@@ -285,6 +307,9 @@ def extract_local_region(
     Returns:
         Atoms: The embedded cluster with 'force_weight' array in arrays.
     """
+    from pyacemaker.utils.validation import validate_structure
+    validate_structure(structure)
+
     if center_index < 0 or center_index >= len(structure):
         msg = f"Center atom index {center_index} is out of bounds for structure with {len(structure)} atoms."
         raise IndexError(msg)
