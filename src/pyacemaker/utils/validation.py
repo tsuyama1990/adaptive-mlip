@@ -14,7 +14,6 @@ from pyacemaker.domain_models.constants import (
     ERR_VAL_STRUCT_TYPE,
     ERR_VAL_STRUCT_UNKNOWN_SYM,
     ERR_VAL_STRUCT_VOL_FAIL,
-    ERR_VAL_STRUCT_ZERO_VOL,
 )
 
 LAMMPS_SAFE_CMD_PATTERN = r"^[a-zA-Z0-9_\s\.\/\-\+\*]+$"
@@ -184,14 +183,18 @@ def validate_structure(structure: Any) -> None:  # noqa: C901
         raise ValueError(ERR_VAL_STRUCT_EMPTY)
 
     # Validate structure physical properties
+    vol = 1.0  # Default valid volume
     try:
-        vol = structure.get_volume()  # type: ignore[no-untyped-call]
+        # Check volume only if it has a valid cell
+        if any(structure.pbc) or np.any(structure.cell):
+            vol = structure.get_volume()  # type: ignore[no-untyped-call]
     except Exception as e:
         # get_volume might fail if no cell is set
         raise ValueError(ERR_VAL_STRUCT_VOL_FAIL.format(error=e)) from e
 
     if vol <= 1e-9:
-        raise ValueError(ERR_VAL_STRUCT_ZERO_VOL)
+        msg = "Failed to compute structure volume"
+        raise ValueError(msg)
 
     # Validate positions are numeric and finite
     pos = structure.get_positions()  # type: ignore[no-untyped-call]

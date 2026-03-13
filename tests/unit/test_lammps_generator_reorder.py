@@ -5,7 +5,7 @@ from pyacemaker.core.lammps_generator import LammpsScriptGenerator
 from pyacemaker.domain_models.md import MDConfig
 
 
-def test_lammps_generator_order(tmp_path) -> None:
+def test_lammps_generator_order(tmp_path: Path) -> None:
     config = MDConfig(
         temperature=300,
         pressure=0,
@@ -51,7 +51,7 @@ def test_lammps_generator_order(tmp_path) -> None:
     assert thermo_idx < run_idx, f"thermo command is after run: thermo={thermo_idx}, run={run_idx}"
 
 
-def test_lammps_generator_gamma_column(tmp_path) -> None:
+def test_lammps_generator_gamma_column(tmp_path: Path) -> None:
     config = MDConfig(
         temperature=300,
         pressure=0,

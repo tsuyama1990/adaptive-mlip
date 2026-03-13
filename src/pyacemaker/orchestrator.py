@@ -354,17 +354,21 @@ class Orchestrator:
         _finetune_manager = FinetuneManager()
         self.logger.info("MACE model awakened (finetuned) using new DFT data.")
 
-    def _generate_surrogate_data(self, s0_cluster: Atoms, potential_path: Path, paths: dict[str, Path]) -> None:
+    def _generate_surrogate_data(
+        self, s0_cluster: Atoms, potential_path: Path, paths: dict[str, Path]
+    ) -> None:
         count = self._select_and_label(s0_cluster, potential_path, paths)
-        self.logger.info(
-            f"Refinement: Added {count} new structures (surrogate data generation)."
-        )
+        self.logger.info(f"Refinement: Added {count} new structures (surrogate data generation).")
 
     def _incremental_update_ace(self, potential_path: Path, paths: dict[str, Path]) -> Path | None:
         training_file = paths["training"] / FILENAME_TRAINING
         trainer = self.trainer
 
-        if trainer is not None and hasattr(trainer, "incremental_train") and callable(getattr(trainer, "incremental_train", None)):
+        if (
+            trainer is not None
+            and hasattr(trainer, "incremental_train")
+            and callable(getattr(trainer, "incremental_train", None))
+        ):
             try:
                 res_inc = trainer.incremental_train(
                     new_data_path=str(training_file),
@@ -380,13 +384,7 @@ class Orchestrator:
 
         return self._train(paths, initial_potential=potential_path)
 
-    def _refine_potential(
-        self, result: MDSimulationResult, potential_path: Path, paths: dict[str, Path]
-    ) -> Path | None:
-        """
-        Refines potential upon Halt.
-        Orchestrates extraction, selection, labeling, and retraining via Hierarchical Fine-Tuning.
-        """
+    def _can_refine_potential(self, result: MDSimulationResult) -> bool:
         if (
             not result.halt_structure_path
             or not self.generator
@@ -394,13 +392,18 @@ class Orchestrator:
             or not self.oracle
             or not self.trainer
         ):
-            return None
+            return False
 
         threshold = self.config.workflow.otf.uncertainty_threshold
-        if result.max_gamma <= threshold and not result.halted:
-            return None
+        return not (result.max_gamma <= threshold and not result.halted)
 
+    def _extract_and_refine(
+        self, result: MDSimulationResult, potential_path: Path, paths: dict[str, Path]
+    ) -> Path | None:
         try:
+            if not result.halt_structure_path:
+                return None
+
             s0_cluster = self._extract_cluster(result.halt_structure_path)
             if s0_cluster is None:
                 return None
@@ -413,14 +416,35 @@ class Orchestrator:
             self.logger.exception("Refinement failed")
             return None
 
+    def _refine_potential(
+        self, result: MDSimulationResult, potential_path: Path, paths: dict[str, Path]
+    ) -> Path | None:
+        """
+        Refines potential upon Halt.
+        Orchestrates extraction, selection, labeling, and retraining via Hierarchical Fine-Tuning.
+        """
+        if not self._can_refine_potential(result):
+            return None
+
+        return self._extract_and_refine(result, potential_path, paths)
+
     def _deploy_potential(self, iteration: int) -> Path:
         """Deploys the current potential to the potentials directory."""
         potential_filename = TEMPLATE_POTENTIAL_FILE.format(iteration=iteration)
         deployed_potential = self.potentials_dir / potential_filename
 
         if self.state_manager.current_potential:
-            if self.state_manager.current_potential != deployed_potential:
-                shutil.copy(self.state_manager.current_potential, deployed_potential)
+            from pyacemaker.utils.path import validate_path_safe
+
+            safe_src = validate_path_safe(self.state_manager.current_potential)
+            safe_dst = validate_path_safe(deployed_potential)
+
+            if not safe_dst.is_relative_to(self.potentials_dir.resolve()):
+                msg = f"Path traversal detected: {safe_dst}"
+                raise OrchestratorError(msg)
+
+            if safe_src != safe_dst:
+                shutil.copy(safe_src, safe_dst)
         else:
             msg = "No current potential to deploy."
             raise OrchestratorError(msg)
@@ -594,6 +618,11 @@ class Orchestrator:
             self._adapt_strategy(result)
             self._handle_md_halt(result, deployed_potential, paths)
 
+    def _handle_iteration_error(self, iteration: int, error: Exception) -> None:
+        self.logger.exception(f"Iteration {iteration} failed")
+        msg = f"Iteration {iteration} failed: {error}"
+        raise OrchestratorError(msg) from error
+
     def _run_loop_iteration(self) -> None:
         """Executes one iteration of the active learning loop."""
         iteration = self.state_manager.iteration + 1
@@ -611,9 +640,7 @@ class Orchestrator:
             self.state_manager.save()
 
         except Exception as e:
-            self.logger.exception(f"Iteration {iteration} failed")
-            msg = f"Iteration {iteration} failed: {e}"
-            raise OrchestratorError(msg) from e
+            self._handle_iteration_error(iteration, e)
 
     def _finalize(self) -> None:
         """
@@ -626,7 +653,16 @@ class Orchestrator:
         potential_target = production_dir / FILENAME_POTENTIAL
 
         if self.state_manager.current_potential:
-            shutil.copy(self.state_manager.current_potential, potential_target)
+            from pyacemaker.utils.path import validate_path_safe
+
+            safe_src = validate_path_safe(self.state_manager.current_potential)
+            safe_dst = validate_path_safe(potential_target)
+
+            if not safe_dst.is_relative_to(production_dir.resolve()):
+                msg = f"Path traversal detected: {safe_dst}"
+                raise OrchestratorError(msg)
+
+            shutil.copy(safe_src, safe_dst)
             self.logger.info(f"Deployed best potential to {potential_target}")
 
             if self.validator:
