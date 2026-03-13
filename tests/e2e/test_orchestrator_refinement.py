@@ -154,11 +154,15 @@ def test_orchestrator_refinement_logic(tmp_path: Path) -> None:
         halt_step=500,
     )
 
-    # 6. Run _refine_potential
+    # 6. Run _phase4_hierarchical_fine_tuning
     paths = {"training": tmp_path / "training"}
     paths["training"].mkdir(parents=True)
 
-    new_pot = orch._refine_potential(result, Path("old.yace"), paths)
+    # Mock FinetuneManager to avoid actually calling mace subprocess in test
+    with pytest.MonkeyPatch.context() as m:
+        mock_fm = MagicMock()
+        m.setattr("pyacemaker.orchestrator.FinetuneManager", mock_fm)
+        new_pot = orch._phase4_hierarchical_fine_tuning(result, Path("old.yace"), paths)
 
     assert new_pot == refined_pot
 
@@ -236,7 +240,7 @@ def test_orchestrator_refinement_extraction_failure(tmp_path: Path, caplog: Any)
         # Need to patch where it is IMPORTED in orchestrator.py
         m.setattr("pyacemaker.orchestrator.extract_intelligent_cluster", mock_fail)
 
-        new_pot = orch._refine_potential(result, Path("p"), {})
+        new_pot = orch._phase4_hierarchical_fine_tuning(result, Path("p"), {})
 
         assert new_pot is None
-        assert "Failed to extract local cluster" in caplog.text
+        assert "Phase 3: Failed to extract local cluster" in caplog.text

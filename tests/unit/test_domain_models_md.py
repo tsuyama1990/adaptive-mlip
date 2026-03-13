@@ -157,3 +157,29 @@ def test_md_config_with_ramping_and_mc() -> None:
     assert config.ramping.temp_start == 100.0
     assert config.mc is not None
     assert config.mc.swap_freq == 50
+
+
+def test_md_config_seamless_resume_params() -> None:
+    """Tests MDConfig integration with soft start logic for seamless resume."""
+    config = MDConfig(
+        temperature=300.0,
+        pressure=1.0,
+        timestep=0.001,
+        n_steps=1000,
+        soft_start_steps=100,
+        soft_start_langevin_damp=0.5,
+    )
+    assert config.soft_start_steps == 100
+    assert config.soft_start_langevin_damp == 0.5
+
+
+def test_md_config_invalid_soft_start() -> None:
+    """Tests validation for invalid soft start parameters."""
+    with pytest.raises(ValidationError):
+        MDConfig(
+            temperature=300.0,
+            pressure=1.0,
+            timestep=0.001,
+            n_steps=1000,
+            soft_start_steps=-10,  # invalid, must be >= 0
+        )

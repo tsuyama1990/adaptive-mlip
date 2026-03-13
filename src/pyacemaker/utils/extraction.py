@@ -11,6 +11,7 @@ from pyacemaker.utils.embedding import embed_cluster
 def _pre_relax_buffer(cluster: Atoms, fmax: float = 0.05, steps: int = 50) -> Atoms:
     """
     Relaxes the buffer region (force_weight == 0.0) while keeping the core fixed.
+    Uses the foundational MACE model explicitly for intelligent relaxation.
     """
     from pyacemaker.utils.validation import validate_structure
 
@@ -31,12 +32,21 @@ def _pre_relax_buffer(cluster: Atoms, fmax: float = 0.05, steps: int = 50) -> At
     constraint = FixAtoms(indices=core_indices)  # type: ignore[no-untyped-call]
     cluster_copy.set_constraint(constraint)
 
-    if cluster_copy.calc is None:
+    # Explicitly attach MACE Calculator as per Phase 3 specifications for foundational healing
+    try:
+        from mace.calculators import mace_mp
+        mace_calc = mace_mp(model="medium", default_dtype="float64", device="cpu")
+        cluster_copy.calc = mace_calc
+    except ImportError:
+        # Fallback to existing calculator if MACE isn't installed (e.g. tests without mace-torch)
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning("MACE not found. Falling back to existing calculator for pre-relaxation.")
         if getattr(cluster, "calc", None) is not None:
             cluster_copy.calc = cluster.calc
         else:
-            msg = "No calculator attached to structure for pre-relaxation."
-            raise ValueError(msg)
+            msg = "No calculator attached to structure and MACE is unavailable for pre-relaxation."
+            raise ValueError(msg) from None
 
     # Relax the buffer region
     import os

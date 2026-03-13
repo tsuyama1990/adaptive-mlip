@@ -341,6 +341,30 @@ def create_test_config_dict(**overrides: Any) -> ConfigDictType:
             "potentials_dir": DEFAULT_POTENTIALS_DIR,
             "n_candidates": DEFAULT_N_CANDIDATES,
             "batch_size": DEFAULT_BATCH_SIZE,
+            "distillation": {
+                "enable": True,
+                "mace_model_path": "mace-mp-0-medium",
+                "uncertainty_threshold": 0.05,
+                "sampling_structures_per_system": 1000,
+            },
+            "cutout": {
+                "core_radius": 4.0,
+                "buffer_radius": 3.0,
+                "enable_pre_relaxation": True,
+                "enable_passivation": True,
+                "passivation_element": "H",
+            },
+            "loop_strategy": {
+                "use_tiered_oracle": True,
+                "incremental_update": True,
+                "replay_buffer_size": 500,
+                "baseline_potential_type": "LJ",
+                "thresholds": {
+                    "threshold_call_dft": 0.05,
+                    "threshold_add_train": 0.02,
+                    "smooth_steps": 3,
+                },
+            },
             "otf": {
                 "uncertainty_threshold": DEFAULT_OTF_UNCERTAINTY_THRESHOLD,
                 "local_n_candidates": DEFAULT_OTF_LOCAL_N_CANDIDATES,
