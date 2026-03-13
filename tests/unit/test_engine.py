@@ -164,8 +164,9 @@ def test_lammps_engine_halted(mock_md_config: MDConfig, mock_driver: Any, tmp_pa
 def test_lammps_engine_hybrid_potential(
     mock_md_config: MDConfig, mock_driver: Any, tmp_path: Path
 ) -> None:
+    from pyacemaker.domain_models.md import ZBLConfig
     config = mock_md_config.model_copy(
-        update={"hybrid_potential": True, "zbl_cut_inner": 1.0, "zbl_cut_outer": 1.5}
+        update={"hybrid_potential": True, "zbl": ZBLConfig(zbl_cut_inner=1.0, zbl_cut_outer=1.5)}
     )
 
     engine = LammpsEngine(config)
