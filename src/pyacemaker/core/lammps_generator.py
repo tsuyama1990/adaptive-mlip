@@ -36,10 +36,10 @@ class LammpsScriptGenerator:
         import os
         import re
 
-        # Add basic shell character blocking first to prevent trivial injection attempts
-        # before OS stat/path-resolution even happens.
-        if re.search(r"[;&|\\$`<>\n\r\"'\\()\[\]\{\}\|\*\?\~\^\<\>\&\|\`\$]", path):
-            msg = f"Path contains blocked shell metacharacters: {path}"
+        # Implement a strict whitelist approach before path-resolution even happens.
+        # Only allow alphanumeric, underscore, hyphen, dot, and slash.
+        if not re.match(r"^[a-zA-Z0-9_\-\.\/]+$", path):
+            msg = f"Path contains blocked characters (must be strictly alphanumeric, dot, slash, dash, underscore): {path}"
             raise ValueError(msg)
 
         # Sanitize input path

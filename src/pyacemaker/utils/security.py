@@ -35,9 +35,10 @@ def validate_path_containment(target_path: str | Path, allowed_base_dir: str | P
         msg = f"Path {canonical_path} is outside allowed directory {canonical_allowed_dir}"
         raise ValueError(msg)
 
-    # Check all parent directories up to root for symlinks AFTER resolution and containment check
-    # to prevent traversal via intermediate symlinks that might bounce in and out of the allowed dir.
-    current = canonical_path
+    # Walk the un-resolved absolute path specifically to detect intermediate symlinks
+    # Resolving removes symlinks, so checking is_symlink() on a resolved path always returns False.
+    current = target_p.absolute()
+
     while current != current.parent:
         if current.is_symlink():
             msg = f"Intermediate symlinks are not allowed for security reasons: {current}"

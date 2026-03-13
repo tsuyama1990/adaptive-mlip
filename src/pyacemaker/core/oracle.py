@@ -226,16 +226,16 @@ class MACEManager(BaseOracle):
         from mace.calculators import mace_mp
 
         device = "cuda" if torch.cuda.is_available() else "cpu"
-        # We assume the model path points to a valid MACE file or we can just load the small default for tests
+
+        # Load the model directly without fallback.
+        # This complies with the principle of explicit configuration.
         try:
             self.calc = mace_mp(
                 model=self.model_path, dispersion=False, default_dtype="float32", device=device
             )
-        except Exception:
-            # Fallback to standard pretrained for tests if the file is a dummy
-            self.calc = mace_mp(
-                model="small", dispersion=False, default_dtype="float32", device=device
-            )
+        except Exception as e:
+            msg = f"Failed to load MACE model from {self.model_path}: {e}"
+            raise OracleError(msg) from e
 
         self.is_initialized = True
 

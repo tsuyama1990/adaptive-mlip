@@ -17,7 +17,7 @@ from pyacemaker.domain_models.constants import (
     ERR_VAL_STRUCT_ZERO_VOL,
 )
 
-LAMMPS_SAFE_CMD_PATTERN = r"^[a-zA-Z0-9_\s\.\/\(\)\[\]\{\}\-\+\*\^\$\|\\]+$"
+LAMMPS_SAFE_CMD_PATTERN = r"^[a-zA-Z0-9_\s\.\/\-\+\*]+$"
 
 SAFE_CMD_PATTERN = re.compile(LAMMPS_SAFE_CMD_PATTERN)
 
@@ -93,8 +93,8 @@ def validate_lammps_command(cmd: str) -> None:
         msg = f"Script contains forbidden or unrecognized command: '{first_token}'"
         raise ValueError(msg)
 
-    if "shell" in tokens:
-        msg = "Script contains forbidden command 'shell'."
+    if any(forbidden in tokens for forbidden in ["shell", "exec", "system"]):
+        msg = "Script contains explicitly forbidden system command tokens."
         raise ValueError(msg)
 
 

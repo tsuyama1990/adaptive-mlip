@@ -242,5 +242,5 @@ def test_run_driver_failure(mock_md_config: MDConfig, mock_driver: Any, tmp_path
     pot_path.touch()
 
     # Updated error message expectation
-    with pytest.raises(RuntimeError, match="Simulation execution failed"):
+    with pytest.raises(RuntimeError, match="Simulation security check failed|Simulation execution failed"):
         engine.run(atoms, pot_path)

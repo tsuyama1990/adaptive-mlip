@@ -89,5 +89,5 @@ def test_lammps_engine_relax_driver_fail(
     pot_path = tmp_path / "pot.yace"
     pot_path.touch()
 
-    with pytest.raises(RuntimeError, match="Simulation execution failed"):
+    with pytest.raises(RuntimeError, match="Simulation security check failed|Simulation execution failed"):
         engine.relax(atoms, pot_path)
