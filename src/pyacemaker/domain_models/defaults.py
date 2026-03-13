@@ -164,6 +164,13 @@ LAMMPS_SAFE_CMD_PATTERN = r"^[a-zA-Z0-9\s_\-\.\/=\"\*\${}]+$"
 LAMMPS_SCREEN_ARG = "-screen"
 LAMMPS_MIN_STYLE_CG = "cg"
 
+LAMMPS_CMD_PYTHON_INVOKE_WRAPPER = "python eval_wrapper invoke here"
+LAMMPS_CMD_RESET_TIMESTEP = "reset_timestep ${step}"
+LAMMPS_FIX_NAME_NPT = "main_ensemble"
+LAMMPS_FIX_NAME_HALT = "py_halt"
+LAMMPS_FIX_NAME_SOFT_NVE = "soft_nve"
+LAMMPS_FIX_NAME_SOFT_LANGEVIN = "soft_langevin"
+
 # Delta Learning
 DEFAULT_LJ_PARAMS: Final[dict[str, float]] = {"sigma": 2.5, "epsilon": 1.0, "cutoff": 5.0}
 FALLBACK_LJ_PARAMS: Final[dict[str, float]] = {"sigma": 2.0, "epsilon": 0.5, "cutoff": 4.0}

@@ -72,7 +72,7 @@ def test_passivate_surface() -> None:
     from pyacemaker.utils.extraction import _passivate_surface
 
     # Create an isolated oxygen atom (expected coord 2)
-    atoms = Atoms("O", positions=[[0, 0, 0]])
+    atoms = Atoms("O", positions=[[0, 0, 0]], cell=[10, 10, 10], pbc=False)
     atoms.new_array("force_weight", np.array([0.0]))  # type: ignore[no-untyped-call]
 
     passivated = _passivate_surface(atoms, element="H")
@@ -86,7 +86,7 @@ def test_passivate_surface() -> None:
     assert np.all(weights == 0.0)  # Dummy atoms get weight 0.0
 
     # Check if we can add to a partially coordinated atom
-    atoms = Atoms("O", positions=[[0, 0, 0]])
+    atoms = Atoms("O", positions=[[0, 0, 0]], cell=[10, 10, 10], pbc=False)
     atoms += Atoms("H", positions=[[1.0, 0, 0]])
     atoms.new_array("force_weight", np.array([0.0, 0.0]))  # type: ignore[no-untyped-call]
 

@@ -396,17 +396,17 @@ class Orchestrator:
                 self.trainer.incremental_train
             ):
                 try:
-                    res = self.trainer.incremental_train(
+                    res_inc = self.trainer.incremental_train(
                         new_data_path=str(training_file),
                         strategy_config=self.config.workflow.loop_strategy,
                         initial_potential=str(potential_path) if potential_path else None,
                     )
-                    if res:
+                    if res_inc:
                         # Mocks might return themselves (MagicMock), handle strings/Paths safely
-                        if isinstance(res, (str, Path)):
-                            return Path(res)
+                        if isinstance(res_inc, (str, Path)):
+                            return Path(res_inc)
                         # if it's a mock or other object just return it
-                        return res  # type: ignore
+                        return res_inc  # type: ignore
                 except TypeError:
                     # In tests where trainer is a MagicMock, TypeError might be thrown if signature doesn't match
                     pass

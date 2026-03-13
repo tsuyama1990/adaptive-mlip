@@ -60,6 +60,12 @@ ALLOWED_LAMMPS_COMMANDS = {
     "variable",
     "write_restart",
     "python",
+    "print",
+    "print '--- Post-Run Diagnostics ---'",
+    "print 'Final Energy: $(pe)'",
+    "print 'Final Temperature: $(temp)'",
+    "print 'Equation of State (E/atom): ${check_eos}'",
+    "print '----------------------------'",
 }
 
 # Comprehensively block all shell injection, redirection, pipeline, and grouping metacharacters.
