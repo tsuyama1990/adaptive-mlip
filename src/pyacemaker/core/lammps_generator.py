@@ -22,6 +22,10 @@ class LammpsScriptGenerator:
 
     def _get_atomic_number(self, symbol: str) -> int:
         """Cached atomic number lookup."""
+        if symbol not in atomic_numbers:
+            msg = f"Invalid element symbol: {symbol}"
+            raise ValueError(msg)
+
         if symbol not in self._atomic_numbers_cache:
             self._atomic_numbers_cache[symbol] = atomic_numbers[symbol]
         return self._atomic_numbers_cache[symbol]

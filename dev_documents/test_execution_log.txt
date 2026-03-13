@@ -165,8 +165,8 @@ E               For further information visit https://errors.pydantic.dev/2.12/v
 
 The above exception was the direct cause of the following exception:
 
-tmp_path = PosixPath('/tmp/pytest-of-jules/pytest-25/test_scenario_01_02_guardrails0')
-monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f012de3d670>
+tmp_path = PosixPath('/tmp/pytest-of-jules/pytest-26/test_scenario_01_02_guardrails0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fd829f0f4d0>
 
     def test_scenario_01_02_guardrails_check_temp(
         tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -386,8 +386,8 @@ E               For further information visit https://errors.pydantic.dev/2.12/v
 
 The above exception was the direct cause of the following exception:
 
-tmp_path = PosixPath('/tmp/pytest-of-jules/pytest-25/test_scenario_01_02_guardrails1')
-monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f012de3f230>
+tmp_path = PosixPath('/tmp/pytest-of-jules/pytest-26/test_scenario_01_02_guardrails1')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fd829f0c350>
 
     def test_scenario_01_02_guardrails_check_cutoff(
         tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -530,14 +530,14 @@ _________________________ test_lammps_generator_order __________________________
 
 tests/unit/test_lammps_generator_reorder.py:20:
 _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
-src/pyacemaker/core/lammps_generator.py:245: in write_script
+src/pyacemaker/core/lammps_generator.py:249: in write_script
     self._gen_potential(buffer, potential_path, elements)
-src/pyacemaker/core/lammps_generator.py:98: in _gen_potential
+src/pyacemaker/core/lammps_generator.py:102: in _gen_potential
     self._gen_potential_pure(buffer, potential_path, elements)
 _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
-self = <pyacemaker.core.lammps_generator.LammpsScriptGenerator object at 0x7f012dcbb770>
-buffer = <_io.StringIO object at 0x7f012dc86500>
+self = <pyacemaker.core.lammps_generator.LammpsScriptGenerator object at 0x7fd829c88410>
+buffer = <_io.StringIO object at 0x7fd829d625c0>
 potential_path = PosixPath('pot.yace'), elements = ['Fe']
 
     def _gen_potential_pure(
@@ -557,7 +557,7 @@ potential_path = PosixPath('pot.yace'), elements = ['Fe']
 >           raise FileNotFoundError(msg)
 E           FileNotFoundError: Potential file does not exist or is not a file: /app/pot.yace
 
-src/pyacemaker/core/lammps_generator.py:43: FileNotFoundError
+src/pyacemaker/core/lammps_generator.py:47: FileNotFoundError
 ______________________ test_lammps_generator_gamma_column ______________________
 
     def test_lammps_generator_gamma_column() -> None:
@@ -581,14 +581,14 @@ ______________________ test_lammps_generator_gamma_column ______________________
 
 tests/unit/test_lammps_generator_reorder.py:63:
 _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
-src/pyacemaker/core/lammps_generator.py:245: in write_script
+src/pyacemaker/core/lammps_generator.py:249: in write_script
     self._gen_potential(buffer, potential_path, elements)
-src/pyacemaker/core/lammps_generator.py:98: in _gen_potential
+src/pyacemaker/core/lammps_generator.py:102: in _gen_potential
     self._gen_potential_pure(buffer, potential_path, elements)
 _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
-self = <pyacemaker.core.lammps_generator.LammpsScriptGenerator object at 0x7f012dcb8fb0>
-buffer = <_io.StringIO object at 0x7f012dc87040>
+self = <pyacemaker.core.lammps_generator.LammpsScriptGenerator object at 0x7fd829c65c70>
+buffer = <_io.StringIO object at 0x7fd829d63100>
 potential_path = PosixPath('pot.yace'), elements = ['Fe']
 
     def _gen_potential_pure(
@@ -608,7 +608,7 @@ potential_path = PosixPath('pot.yace'), elements = ['Fe']
 >           raise FileNotFoundError(msg)
 E           FileNotFoundError: Potential file does not exist or is not a file: /app/pot.yace
 
-src/pyacemaker/core/lammps_generator.py:43: FileNotFoundError
+src/pyacemaker/core/lammps_generator.py:47: FileNotFoundError
 =============================== warnings summary ===============================
 tests/unit/test_io.py::test_write_lammps_streaming_basic
   /app/.venv/lib/python3.12/site-packages/ase/io/lammpsdata.py:72: FutureWarning: "style" is deprecated; please use "atom_style".
@@ -644,7 +644,7 @@ src/pyacemaker/core/evaluator_script.py         31     31     0%   7-56
 src/pyacemaker/core/exceptions.py                9      0   100%
 src/pyacemaker/core/generator.py                53     11    79%   36-39, 59, 62, 97, 107, 113, 115, 138
 src/pyacemaker/core/io_manager.py               74     30    59%   58-71, 78-81, 106-107, 110-115, 124-125, 129, 133-141
-src/pyacemaker/core/lammps_generator.py        188     34    82%   35-36, 55-56, 60-61, 78-80, 86-88, 128-144, 160-167, 185, 262, 296, 303, 313, 339
+src/pyacemaker/core/lammps_generator.py        191     36    81%   26-27, 39-40, 59-60, 64-65, 82-84, 90-92, 132-148, 164-171, 189, 266, 300, 307, 317, 343
 src/pyacemaker/core/loop.py                     70      6    91%   56, 63, 79-82, 85
 src/pyacemaker/core/m3gnet_wrapper.py           20      7    65%   26-27, 33-35, 42, 52-54
 src/pyacemaker/core/oracle.py                  173     17    90%   89, 120, 136, 139, 182-183, 209-214, 230-231, 267-272
@@ -682,7 +682,7 @@ src/pyacemaker/scenarios/fept_mgo.py           148     28    81%   80, 162-165, 
 src/pyacemaker/utils/delta.py                   20      3    85%   21, 37-38
 src/pyacemaker/utils/elastic.py                 80     52    35%   34-35, 46-137, 146, 154
 src/pyacemaker/utils/embedding.py               36      6    83%   41-42, 49-50, 61-62
-src/pyacemaker/utils/extraction.py             197     50    75%   15-49, 57-58, 63, 65, 68, 77-78, 80-81, 95-96, 165-166, 170-171, 201-204, 208-209, 279, 286, 319-320, 323-324, 327-328
+src/pyacemaker/utils/extraction.py             194     48    75%   15-49, 57-58, 63, 65, 68, 77-78, 80-81, 95-96, 165-166, 196-199, 203-204, 274, 281, 314-315, 318-319, 322-323
 src/pyacemaker/utils/io.py                      73      0   100%
 src/pyacemaker/utils/path.py                    38      4    89%   57-61
 src/pyacemaker/utils/perturbations.py           43      1    98%   77
@@ -698,6 +698,6 @@ FAILED tests/uat/test_cycle01_uat.py::test_scenario_01_02_guardrails_check_temp
 FAILED tests/uat/test_cycle01_uat.py::test_scenario_01_02_guardrails_check_cutoff
 FAILED tests/unit/test_lammps_generator_reorder.py::test_lammps_generator_order
 FAILED tests/unit/test_lammps_generator_reorder.py::test_lammps_generator_gamma_column
-================== 4 failed, 270 passed, 7 warnings in 14.43s ==================
+================== 4 failed, 270 passed, 7 warnings in 24.17s ==================
 /app/.venv/lib/python3.12/site-packages/coverage/inorout.py:561: CoverageWarning: Module dev_src was never imported. (module-not-imported); see https://coverage.readthedocs.io/en/7.13.4/messages.html#warning-module-not-imported
   self.warn(f"Module {pkg} was never imported.", slug="module-not-imported")

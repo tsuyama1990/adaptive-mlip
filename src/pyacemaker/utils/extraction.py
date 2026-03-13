@@ -161,12 +161,7 @@ def _passivate_surface(cluster: Atoms, element: str = "H") -> Atoms:
     # Security validation before passivation logic to prevent processing malformed structures
     validate_structure(cluster)
 
-    if element not in chemical_symbols:
-        msg = f"Invalid passivation element: {element}"
-        raise ValueError(msg)
-
-    # Validate that element is a real atom and not a dummy element with Z=0 (e.g. 'X')
-    if element in {"X", ""}:
+    if element not in chemical_symbols or element in {"X", ""}:
         msg = f"Passivation element must be a valid real atom, not {element}"
         raise ValueError(msg)
 
