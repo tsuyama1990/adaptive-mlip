@@ -12,7 +12,10 @@ from ase.calculators.calculator import PropertyNotImplementedError
 from pyacemaker.core.base import BaseOracle
 from pyacemaker.core.exceptions import OracleError
 from pyacemaker.domain_models import DFTConfig
-from pyacemaker.domain_models.constants import ERR_ORACLE_FAILED, ERR_ORACLE_ITERATOR
+from pyacemaker.domain_models.constants import (
+    ERR_ORACLE_FAILED,
+    ERR_ORACLE_ITERATOR,
+)
 from pyacemaker.domain_models.workflow import ActiveLearningThresholds
 from pyacemaker.interfaces.qe_driver import QEDriver
 from pyacemaker.utils.embedding import embed_cluster
@@ -78,10 +81,10 @@ class DFTManager(BaseOracle):
         Computes DFT properties for stream of structures.
         """
         if isinstance(structures, (list, tuple)):
-            raise TypeError(ERR_ORACLE_ITERATOR.format(type=type(structures)))
+            raise TypeError(ERR_ORACLE_ITERATOR)
 
         if not isinstance(structures, Iterator):
-            raise TypeError(ERR_ORACLE_ITERATOR.format(type=type(structures)))
+            raise TypeError(ERR_ORACLE_ITERATOR)
 
         return self._compute_generator(structures, batch_size)
 
@@ -241,7 +244,7 @@ class MACEManager(BaseOracle):
 
     def compute(self, structures: Iterator[Atoms], batch_size: int = 10) -> Iterator[Atoms]:
         if not isinstance(structures, Iterator):
-            raise TypeError(ERR_ORACLE_ITERATOR.format(type=type(structures)))
+            raise TypeError(ERR_ORACLE_ITERATOR)
 
         return self._compute_generator(structures, batch_size)
 
@@ -309,7 +312,7 @@ class TieredOracle(BaseOracle):
 
     def compute(self, structures: Iterator[Atoms], batch_size: int = 10) -> Iterator[Atoms]:
         if not isinstance(structures, Iterator):
-            raise TypeError(ERR_ORACLE_ITERATOR.format(type=type(structures)))
+            raise TypeError(ERR_ORACLE_ITERATOR)
 
         return self._compute_generator(structures, batch_size)
 

@@ -27,30 +27,38 @@ class DummyMaceCalc(Calculator):
         self.results["energy"] = -10.0 * n_atoms
         self.results["forces"] = np.ones((n_atoms, 3)) * 0.1
 
-def test_macemanager_initialization(tmp_path: Path) -> None:
-    model_path = tmp_path / "model.model"
+def get_safe_test_model_path(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
+    pot_dir = tmp_path / "potentials"
+    monkeypatch.setattr("pyacemaker.domain_models.defaults.DEFAULT_POTENTIALS_DIR", str(pot_dir))
+    pot_dir.mkdir(parents=True, exist_ok=True)
+    return pot_dir / "model.model"
+
+
+def test_macemanager_initialization(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    model_path = get_safe_test_model_path(monkeypatch, tmp_path)
     model_path.touch()
 
-    with patch("pyacemaker.utils.security.validate_path_containment", return_value=model_path), \
-         patch("mace.calculators.mace_mp", return_value=DummyMaceCalc()):
+    with patch("mace.calculators.mace_mp", return_value=DummyMaceCalc()):
         manager = MACEManager(str(model_path))
         assert manager.is_initialized
 
-def test_macemanager_initialization_failure(tmp_path: Path) -> None:
-    model_path = tmp_path / "model.model"
+    model_path.unlink()
+
+def test_macemanager_initialization_failure(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    model_path = get_safe_test_model_path(monkeypatch, tmp_path)
     model_path.touch()
 
-    with patch("pyacemaker.utils.security.validate_path_containment", return_value=model_path), \
-         patch("mace.calculators.mace_mp", side_effect=Exception("Model failed to load")), \
+    with patch("mace.calculators.mace_mp", side_effect=Exception("Model failed to load")), \
          pytest.raises(OracleError, match="Failed to load MACE model"):
         MACEManager(str(model_path))
 
-def test_macemanager_compute(tmp_path: Path) -> None:
-    model_path = tmp_path / "model.model"
+    model_path.unlink()
+
+def test_macemanager_compute(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    model_path = get_safe_test_model_path(monkeypatch, tmp_path)
     model_path.touch()
 
-    with patch("pyacemaker.utils.security.validate_path_containment", return_value=model_path), \
-         patch("mace.calculators.mace_mp", return_value=DummyMaceCalc()):
+    with patch("mace.calculators.mace_mp", return_value=DummyMaceCalc()):
         manager = MACEManager(str(model_path))
 
         atoms = Atoms("H2", positions=[[0, 0, 0], [0, 0, 1]])
@@ -66,16 +74,19 @@ def test_macemanager_compute(tmp_path: Path) -> None:
         # np.linalg.norm(np.ones(3) * 0.1) * 0.01 = sqrt(3*0.01) * 0.01 = 0.001732
         assert np.allclose(c_gamma, 0.0017320508)
 
-def test_macemanager_compute_invalid_input(tmp_path: Path) -> None:
-    model_path = tmp_path / "model.model"
+    model_path.unlink()
+
+def test_macemanager_compute_invalid_input(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    model_path = get_safe_test_model_path(monkeypatch, tmp_path)
     model_path.touch()
 
-    with patch("pyacemaker.utils.security.validate_path_containment", return_value=model_path), \
-         patch("mace.calculators.mace_mp", return_value=DummyMaceCalc()):
+    with patch("mace.calculators.mace_mp", return_value=DummyMaceCalc()):
         manager = MACEManager(str(model_path))
 
         with pytest.raises(TypeError, match="Oracle failed to create iterator"):
             manager.compute([Atoms("H")])  # type: ignore[arg-type]
+
+    model_path.unlink()
 
 def test_tiered_oracle_initialization() -> None:
     mock_mace = MagicMock()

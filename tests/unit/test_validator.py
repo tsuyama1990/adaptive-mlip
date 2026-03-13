@@ -15,10 +15,11 @@ def test_lammps_input_validator_structure() -> None:
         mock_val.assert_called_once_with(atoms)
 
 
-def test_lammps_input_validator_potential(tmp_path: Path) -> None:
-    # Use actual paths in default potential dir to satisfy validate_path_safe
-    from pyacemaker.domain_models.defaults import DEFAULT_POTENTIALS_DIR
-    pot_dir = Path(DEFAULT_POTENTIALS_DIR)
+def test_lammps_input_validator_potential(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    # Safely mock the default directory to the temporary path
+    pot_dir = tmp_path / "potentials"
+    monkeypatch.setattr("pyacemaker.domain_models.defaults.DEFAULT_POTENTIALS_DIR", str(pot_dir))
+
     pot_dir.mkdir(parents=True, exist_ok=True)
     pot_path = pot_dir / "pot.yace"
     pot_path.touch()
@@ -35,24 +36,33 @@ def test_lammps_input_validator_potential_none() -> None:
         LammpsInputValidator.validate_potential(None)
 
 
-def test_lammps_input_validator_potential_not_exists(tmp_path: Path) -> None:
-    pot_path = tmp_path / "nonexistent.yace"
+def test_lammps_input_validator_potential_not_exists(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    pot_dir = tmp_path / "potentials"
+    monkeypatch.setattr("pyacemaker.domain_models.defaults.DEFAULT_POTENTIALS_DIR", str(pot_dir))
+    pot_dir.mkdir(parents=True, exist_ok=True)
+    pot_path = pot_dir / "nonexistent.yace"
 
-    with (
-        patch("pyacemaker.core.validator.validate_path_safe", return_value=pot_path),
-        pytest.raises(FileNotFoundError, match="Potential file not found"),
-    ):
+    with pytest.raises(FileNotFoundError, match="Potential file not found"):
         LammpsInputValidator.validate_potential(str(pot_path))
 
 
-def test_lammps_input_validator_potential_not_file(tmp_path: Path) -> None:
-    pot_dir = tmp_path / "pot_dir"
-    pot_dir.mkdir()
+def test_lammps_input_validator_potential_not_file(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    pot_dir = tmp_path / "potentials"
+    monkeypatch.setattr("pyacemaker.domain_models.defaults.DEFAULT_POTENTIALS_DIR", str(pot_dir))
+    pot_dir.mkdir(parents=True, exist_ok=True)
+    pot_sub_dir = pot_dir / "pot_dir"
+    pot_sub_dir.mkdir(exist_ok=True)
 
-    with patch("pyacemaker.core.validator.validate_path_safe", return_value=pot_dir), \
-         pytest.raises(ValueError, match="Potential path is not a file"):
-        LammpsInputValidator.validate_potential(str(pot_dir))
+    with pytest.raises(ValueError, match="Potential path is not a file"):
+        LammpsInputValidator.validate_potential(str(pot_sub_dir))
 
+    # Clean up
+    pot_sub_dir.rmdir()
+
+
+TEST_POTENTIAL_FILENAME = "pot.yace"
+TEST_CELL = [10, 10, 10]
+TEST_ELEM = "H"
 
 class TestValidator:
     @pytest.fixture
@@ -87,9 +97,9 @@ class TestValidator:
             "base64_elastic",
         )
 
-        potential_path = Path("pot.yace")
+        potential_path = Path(TEST_POTENTIAL_FILENAME)
         output_path = Path("report.html")
-        structure = Atoms("H", cell=[10, 10, 10], pbc=True)
+        structure = Atoms(TEST_ELEM, cell=TEST_CELL, pbc=True)
 
         # Configure elastic calc engine to return structure properly for _relax_structure
         mock_engine = MagicMock()
@@ -133,7 +143,7 @@ class TestValidator:
 
     def test_relax_structure(self, validator: Validator, mock_elastic_calc: MagicMock) -> None:
         structure = MagicMock()
-        pot_path = Path("pot.yace")
+        pot_path = Path(TEST_POTENTIAL_FILENAME)
 
         # mock_elastic_calc.engine is accessed in _relax_structure
         mock_engine = MagicMock()
@@ -147,7 +157,7 @@ class TestValidator:
 
     def test_validate_structure_invalid_element(self) -> None:
         """Test rejection of structure with invalid chemical symbol (dummy X)."""
-        structure = Atoms("X", positions=[[0, 0, 0]], cell=[10, 10, 10], pbc=True)
+        structure = Atoms("X", positions=[[0, 0, 0]], cell=TEST_CELL, pbc=True)
         with pytest.raises(ValueError, match="dummy element"):
             LammpsInputValidator.validate_structure(structure)
 
@@ -156,12 +166,12 @@ class TestValidator:
         with pytest.raises(ValueError, match="Structure is empty"):
             LammpsInputValidator.validate_structure(empty_structure)
 
-        invalid_symbol_structure = Atoms(numbers=[0], positions=[[0, 0, 0]], cell=[10, 10, 10], pbc=True)
+        invalid_symbol_structure = Atoms(numbers=[0], positions=[[0, 0, 0]], cell=TEST_CELL, pbc=True)
         with pytest.raises(ValueError, match="dummy element"):
             LammpsInputValidator.validate_structure(invalid_symbol_structure)
 
     def test_validator_no_structure(self, validator: Validator) -> None:
-        pot_path = Path("pot.yace")
+        pot_path = Path(TEST_POTENTIAL_FILENAME)
         out_path = Path("report.html")
 
         with pytest.raises(ValueError, match="Validator requires a structure"):
