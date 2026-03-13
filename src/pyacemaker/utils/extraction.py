@@ -134,6 +134,11 @@ def _passivate_surface(cluster: Atoms, element: str = "H") -> Atoms:
         msg = f"Invalid passivation element: {element}"
         raise ValueError(msg)
 
+    # Validate that element is a real atom and not a dummy element with Z=0 (e.g. 'X')
+    if element in {"X", ""}:
+        msg = f"Passivation element must be a valid real atom, not {element}"
+        raise ValueError(msg)
+
     cluster_copy = cluster.copy()  # type: ignore[no-untyped-call]
 
     new_atoms = _detect_and_add_passivation_atoms(cluster_copy, element)
@@ -150,7 +155,7 @@ def _passivate_surface(cluster: Atoms, element: str = "H") -> Atoms:
     return cluster_copy  # type: ignore[no-any-return]
 
 
-def extract_intelligent_cluster(
+def extract_intelligent_cluster(  # noqa: C901
     structure: Atoms, target_atoms: list[int], config: CutoutConfig
 ) -> Atoms:
     """
@@ -159,6 +164,11 @@ def extract_intelligent_cluster(
     """
     if not target_atoms:
         return structure.copy()  # type: ignore[no-untyped-call, no-any-return]
+
+    for target_idx in target_atoms:
+        if target_idx < 0 or target_idx >= len(structure):
+            msg = f"Target atom index {target_idx} is out of bounds for structure with {len(structure)} atoms."
+            raise IndexError(msg)
 
     total_cutoff = config.core_radius + config.buffer_radius
 
@@ -263,6 +273,18 @@ def extract_local_region(
     Returns:
         Atoms: The embedded cluster with 'force_weight' array in arrays.
     """
+    if center_index < 0 or center_index >= len(structure):
+        msg = f"Center atom index {center_index} is out of bounds for structure with {len(structure)} atoms."
+        raise IndexError(msg)
+
+    if radius < 0.0:
+        msg = f"Radius must be non-negative, got {radius}"
+        raise ValueError(msg)
+
+    if buffer < 0.0:
+        msg = f"Buffer must be non-negative, got {buffer}"
+        raise ValueError(msg)
+
     total_cutoff = radius + buffer
 
     # Use ASE's neighbor_list to find neighbors respecting PBC

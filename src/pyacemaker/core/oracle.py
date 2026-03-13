@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 
 def _run_calculator_process(
-    driver: Any, atoms: Atoms, config: DFTConfig, calc_dir: str
+    driver: QEDriver, atoms: Atoms, config: DFTConfig, calc_dir: str
 ) -> tuple[Any, Exception | None]:
     """Top-level helper to run a single calculation attempt. Returns calculator and any exception for ProcessPoolExecutor."""
     try:
@@ -173,7 +173,8 @@ class DFTManager(BaseOracle):
         global_timeout = 14400  # 4 hours total
         start_time = time.time()
 
-        with concurrent.futures.ProcessPoolExecutor(max_workers=1) as executor:
+        # ThreadPoolExecutor is more appropriate for I/O-bound external process invocations
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
             for i, strategy in enumerate(strategies):
                 if time.time() - start_time > global_timeout:
                     all_errors.append("Global timeout exceeded.")
@@ -234,7 +235,21 @@ class MACEManager(BaseOracle):
     Provides energy, forces, and uncertainty estimation.
     """
 
-    def __init__(self, model_path: str) -> None:
+    def __init__(self, model_path: str, calculator: Any | None = None) -> None:
+        """
+        Initializes the MACEManager.
+
+        Args:
+            model_path: Path to the MACE model file.
+            calculator: Optional pre-initialized calculator instance for dependency injection.
+        """
+        self.model_path = model_path
+
+        if calculator is not None:
+            self.calc = calculator
+            self.is_initialized = True
+            return
+
         from pyacemaker.domain_models.defaults import DEFAULT_POTENTIALS_DIR
         from pyacemaker.utils.security import validate_path_containment
 
@@ -246,7 +261,15 @@ class MACEManager(BaseOracle):
         import torch
         from mace.calculators import mace_mp
 
-        device = "cuda" if torch.cuda.is_available() else "cpu"
+        # Ensure graceful fallback and explicit capability checking for GPU
+        device = "cpu"
+        if torch.cuda.is_available():
+            try:
+                # Basic check to ensure CUDA can actually be initialized correctly
+                torch.cuda.init()  # type: ignore[no-untyped-call]
+                device = "cuda"
+            except Exception as e:
+                logger.warning(f"CUDA is available but failed to initialize: {e}. Falling back to CPU.")
 
         # Load the model directly without fallback.
         # This complies with the principle of explicit configuration.

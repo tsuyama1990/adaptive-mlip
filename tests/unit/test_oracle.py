@@ -85,6 +85,34 @@ def test_macemanager_compute(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) ->
         assert len(c_gamma) == 2
         # np.linalg.norm(np.ones(3) * 0.1) * 0.01 = sqrt(3*0.01) * 0.01 = 0.001732
         assert np.allclose(c_gamma, 0.0017320508)
+        assert np.all(c_gamma >= 0.0), "Uncertainty must be non-negative"
+
+        # Edge case: zero forces
+        class ZeroMaceCalc(DummyMaceCalc):
+            def calculate(self, atoms: Atoms | None = None, properties: list[str] | None = None, system_changes: list[str] = all_changes) -> None:
+                if atoms is None:
+                    return
+                super().calculate(atoms, properties, system_changes)  # type: ignore[no-untyped-call]
+                n_atoms = len(atoms)
+                self.results["forces"] = np.zeros((n_atoms, 3))
+
+        manager_zero = MACEManager(str(model_path), calculator=ZeroMaceCalc())
+        computed_atoms_zero = next(manager_zero.compute(iter([Atoms("H")])))
+        assert np.allclose(computed_atoms_zero.get_array("c_gamma"), 0.0)  # type: ignore[no-untyped-call]
+
+        # Edge case: huge forces
+        class HugeMaceCalc(DummyMaceCalc):
+            def calculate(self, atoms: Atoms | None = None, properties: list[str] | None = None, system_changes: list[str] = all_changes) -> None:
+                if atoms is None:
+                    return
+                super().calculate(atoms, properties, system_changes)  # type: ignore[no-untyped-call]
+                n_atoms = len(atoms)
+                self.results["forces"] = np.ones((n_atoms, 3)) * 1e6
+
+        manager_huge = MACEManager(str(model_path), calculator=HugeMaceCalc())
+        computed_atoms_huge = next(manager_huge.compute(iter([Atoms("H")])))
+        huge_gamma = computed_atoms_huge.get_array("c_gamma")[0]  # type: ignore[no-untyped-call]
+        assert huge_gamma > 1000.0, "Huge forces should result in large uncertainty metric proxy"
 
     model_path.unlink()
 
@@ -140,6 +168,24 @@ def test_tiered_oracle_compute_below_threshold() -> None:
 
     assert result == atoms_result
     mock_mace.compute.assert_called_once()
+    mock_dft.compute.assert_not_called()
+
+def test_tiered_oracle_compute_boundary_threshold() -> None:
+    mock_mace = MagicMock()
+    mock_dft = MagicMock()
+    # Exact boundary edge case
+    thresholds = ActiveLearningThresholds(threshold_call_dft=0.05, threshold_add_train=0.02, smooth_steps=3)
+
+    atoms_mace_result = Atoms("H")
+    atoms_mace_result.new_array("c_gamma", np.array([0.05]))  # type: ignore[no-untyped-call]
+
+    mock_mace.compute.return_value = iter([atoms_mace_result])
+    oracle = TieredOracle(mace_manager=mock_mace, dft_manager=mock_dft, thresholds=thresholds)
+
+    result = next(oracle.compute(iter([Atoms("H")])))
+
+    # Should NOT fall back to DFT because it is <= threshold (not strictly >)
+    assert result == atoms_mace_result
     mock_dft.compute.assert_not_called()
 
 

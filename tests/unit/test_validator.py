@@ -76,6 +76,26 @@ def test_lammps_input_validator_path_traversal(
     with pytest.raises(ValueError, match="Path traversal attempt detected"):
         LammpsInputValidator.validate_potential(str(traversal_path))
 
+def test_lammps_input_validator_symlink_attack(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    pot_dir = tmp_path / "potentials"
+    monkeypatch.setattr("pyacemaker.domain_models.defaults.DEFAULT_POTENTIALS_DIR", str(pot_dir))
+    pot_dir.mkdir(parents=True, exist_ok=True)
+
+    # Create a secret file outside
+    secret_file = tmp_path / "secret.txt"
+    secret_file.touch()
+
+    # Create a symlink inside pointing to the secret file
+    symlink_path = pot_dir / "symlink.yace"
+    try:
+        symlink_path.symlink_to(secret_file)
+    except OSError:
+        # Symlinks might not be supported on all environments, skip if so
+        pytest.skip("Symlinks not supported on this filesystem")
+
+    with pytest.raises(ValueError, match="Symlink path traversal attacks detected"):
+        LammpsInputValidator.validate_potential(str(symlink_path))
+
 
 TEST_POTENTIAL_FILENAME = "pot.yace"
 TEST_CELL = [10, 10, 10]
@@ -210,6 +230,15 @@ class TestValidator:
         mock_elastic_calc.engine = EngineDouble()
 
         with pytest.raises(RuntimeError, match="Phonon calculation failed"):
+            validator.validate(potential_path, output_path, structure=structure)
+
+        # Simulate Report failure
+        mock_phonon_calc.check_stability.side_effect = None
+        mock_phonon_calc.check_stability.return_value = (True, "base64")
+        mock_elastic_calc.calculate_properties.return_value = (True, {"C11": 100}, 50, "base64")
+        mock_report_gen.generate.side_effect = Exception("Report Generation Error")
+
+        with pytest.raises(Exception, match="Report Generation Error"):
             validator.validate(potential_path, output_path, structure=structure)
 
     def test_validate_structure_invalid_element(self) -> None:
