@@ -159,6 +159,6 @@ src/pyacemaker/utils/structure.py                6      2    67%   19-20
 src/pyacemaker/utils/validation.py              78     15    81%   91-93, 96, 122-123, 135-136, 151-152, 194, 199, 206-207, 210
 --------------------------------------------------------------------------
 TOTAL                                         3451    620    82%
-======================= 274 passed, 9 warnings in 14.92s =======================
+======================= 274 passed, 9 warnings in 13.60s =======================
 /app/.venv/lib/python3.12/site-packages/coverage/inorout.py:561: CoverageWarning: Module dev_src was never imported. (module-not-imported); see https://coverage.readthedocs.io/en/7.13.4/messages.html#warning-module-not-imported
   self.warn(f"Module {pkg} was never imported.", slug="module-not-imported")
