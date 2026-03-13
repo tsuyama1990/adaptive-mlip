@@ -1,3 +1,6 @@
+import typing
+from typing import Any
+
 import marimo
 
 __generated_with = "0.20.4"
@@ -5,7 +8,7 @@ app = marimo.App(width="medium")
 
 
 @app.cell
-def __():
+def init() -> typing.Any:
     import sys
     from pathlib import Path
 
@@ -48,20 +51,20 @@ def __():
 
 
 @app.cell
-def __(mo):
-    mo.md(
+def text_1(mo: Any) -> Any:
+    return mo.md(
         "## Scenario UAT-01 & 03: The Two-Tier Evaluator & Seamless Resume\nThis demonstrates the noise-filtering logic that prevents premature halts and how a seamless resume works."
     )
 
 
 @app.cell
-def __(
-    ActiveLearningThresholds,
-    TwoTierEvaluator,
-    MDHaltInterrupt,
-    mo,
-    types,
-):
+def cell_2(
+    ActiveLearningThresholds: Any,
+    TwoTierEvaluator: Any,
+    MDHaltInterrupt: Any,
+    mo: Any,
+    types: Any,
+) -> Any:
     thresholds = ActiveLearningThresholds(
         threshold_call_dft=0.05, smooth_steps=3, threshold_add_train=0.02
     )
@@ -105,16 +108,16 @@ def __(
 
 
 @app.cell
-def __(
-    MDConfig,
-    LammpsEngine,
-    Atoms,
-    np,
-    Path,
-    tempfile,
-    mo,
-    patch,
-):
+def cell_3(
+    MDConfig: Any,
+    LammpsEngine: Any,
+    Atoms: Any,
+    np: Any,
+    Path: Any,
+    tempfile: Any,
+    mo: Any,
+    patch: Any,
+) -> Any:
     # Scenario: Seamless Resume
     config = MDConfig(n_steps=2000, fix_halt=False, temperature=300.0, pressure=1.0, timestep=0.001)
     engine = LammpsEngine(config)
@@ -141,7 +144,7 @@ def __(
             patch("pyacemaker.core.engine.LammpsEngine._extract_results") as mock_extract,
         ):
 
-            def side_effect_exec(driver, script_path):
+            def side_effect_exec(driver: Any, script_path: Any) -> None:
                 script_content.append(script_path.read_text())
 
             mock_exec.side_effect = side_effect_exec
@@ -167,20 +170,20 @@ def __(
 
 
 @app.cell
-def __(mo):
-    mo.md(
+def text_2(mo: Any) -> Any:
+    return mo.md(
         "## Scenario UAT-02: Intelligent Cutout and Safe Passivation\nDemonstrates precision isolation of atomic regions."
     )
 
 
 @app.cell
-def __(
-    CutoutConfig,
-    bulk,
-    extract_intelligent_cluster,
-    mo,
-    np,
-):
+def cell_4(
+    CutoutConfig: Any,
+    bulk: Any,
+    extract_intelligent_cluster: Any,
+    mo: Any,
+    np: Any,
+) -> Any:
     atoms_sc = bulk("Cu", "sc", a=2.5).repeat((3, 3, 3))
     cutout_config = CutoutConfig(
         core_radius=2.6, buffer_radius=1.0, enable_pre_relaxation=False, enable_passivation=False

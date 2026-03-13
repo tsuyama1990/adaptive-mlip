@@ -1,5 +1,6 @@
 import types
 from pathlib import Path
+from typing import Any
 from unittest.mock import patch
 
 import numpy as np
@@ -52,7 +53,7 @@ def test_uat_03_02_intelligent_cutout() -> None:
     Objective: Verify intelligent cutout force weights.
     Behavior 02: The Intelligent Cutout must perfectly assign force weights based on radii.
     """
-    atoms = bulk("Cu", "sc", a=2.5).repeat((3, 3, 3))
+    atoms = bulk("Cu", "sc", a=2.5).repeat((3, 3, 3))  # type: ignore[no-untyped-call]
 
     config = CutoutConfig(
         core_radius=2.6, buffer_radius=1.0, enable_pre_relaxation=False, enable_passivation=False
@@ -61,7 +62,7 @@ def test_uat_03_02_intelligent_cutout() -> None:
     # Epicenter at index 13
     cluster = extract_intelligent_cluster(atoms, target_atoms=[13], config=config)
 
-    weights = cluster.get_array("force_weight")
+    weights = cluster.get_array("force_weight")  # type: ignore[no-untyped-call]
 
     # Verify core atoms (dist <= 2.6) have weight 1.0
     n_core = np.sum(weights == 1.0)
@@ -72,7 +73,7 @@ def test_uat_03_02_intelligent_cutout() -> None:
     assert n_buffer == 12  # 12 next-nearest neighbors
 
 
-def test_uat_03_03_seamless_md_resume(tmp_path) -> None:
+def test_uat_03_03_seamless_md_resume(tmp_path: Path) -> None:
     """
     Scenario ID: UAT-03-03
     Objective: Verify seamless continuous MD resume logic preserves trajectory parameters.
@@ -114,7 +115,7 @@ def test_uat_03_03_seamless_md_resume(tmp_path) -> None:
             patch("pyacemaker.core.engine.LammpsEngine._execute_simulation") as mock_exec,
         ):
 
-            def side_effect_exec(driver, script_path):
+            def side_effect_exec(driver: Any, script_path: Path) -> None:
                 script_content.append(script_path.read_text())
 
             mock_exec.side_effect = side_effect_exec
@@ -130,4 +131,4 @@ def test_uat_03_03_seamless_md_resume(tmp_path) -> None:
     # Verify seamless resume parameters
     assert "read_restart" in script
     assert "reset_timestep ${step}" in script
-    assert "run 400" in script # overridden steps
+    assert "run 400" in script  # overridden steps

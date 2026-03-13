@@ -160,33 +160,40 @@ class LammpsEngine(BaseEngine):
         restart_path = temp_dir / "restart.lmp"
 
         if self.config.fix_halt and thresholds is not None:
-            # Write dynamic Python evaluator script for LAMMPS
-            evaluator_path = temp_dir / "evaluator_script.py"
+            # Safely write the configuration data as JSON instead of injecting Python code
+            import json
+            import shlex
 
-            with evaluator_path.open("w") as f:
+            config_path = temp_dir / "evaluator_config.json"
+            with config_path.open("w", encoding="utf-8") as f:
+                json.dump(thresholds.model_dump(), f)
+
+            # Find the static evaluator script path within the codebase
+            static_script_path = Path(__file__).parent / "evaluator_script.py"
+
+            if not static_script_path.exists():
+                msg = f"Static evaluator script not found at {static_script_path}"
+                raise FileNotFoundError(msg)
+
+            # Load the static script and explicitly pass the config path during LAMMPS initialization
+            with input_script_path.open("w", encoding="utf-8") as f:
+                # Load the static evaluator script
                 f.write(
-                    f"""
+                    f'python eval_wrapper file {shlex.quote(str(static_script_path.resolve()))} format "v"\n'
+                )
+                # Dynamically write a safe setup python block that invokes the init function
+                # with the config path, establishing state cleanly.
+                safe_config_path = shlex.quote(str(config_path.resolve())).strip("'\"")
+                f.write(f"""
+python __evaluator_setup__ here \\"\\"\\"
 import sys
 from pathlib import Path
-
-# Need to ensure the pyacemaker package is in the Python path
-sys.path.insert(0, str(Path(r"{Path.cwd().resolve()}")))
-
-from pyacemaker.core.engine import TwoTierEvaluator
-from pyacemaker.domain_models.workflow import ActiveLearningThresholds
-
-thresholds = ActiveLearningThresholds(
-    threshold_call_dft={thresholds.threshold_call_dft},
-    threshold_add_train={thresholds.threshold_add_train},
-    smooth_steps={thresholds.smooth_steps}
-)
-eval_uncertainty = TwoTierEvaluator(thresholds)
-"""
-                )
-
-            # LAMMPS python/invoke needs the python file loaded
-            with input_script_path.open("w") as f:
-                f.write(f'python eval_uncertainty file {evaluator_path.resolve()} format "v"\n')
+sys.path.insert(0, '{Path(__file__).parent.parent.parent.resolve()}')
+import pyacemaker.core.evaluator_script as ev
+ev.init_evaluator('{safe_config_path}')
+\\"\\"\\"
+""")
+                f.write("python __evaluator_setup__ invoke here\n")
         else:
             with input_script_path.open("w") as f:
                 pass  # Just touch the file
@@ -201,7 +208,13 @@ eval_uncertainty = TwoTierEvaluator(thresholds)
                     raise FileNotFoundError(msg)
 
                 self.generator.write_script_resume(
-                    f, potential_path, restart_path, dump_file, elements, resume_step, override_n_steps
+                    f,
+                    potential_path,
+                    restart_path,
+                    dump_file,
+                    elements,
+                    resume_step,
+                    override_n_steps,
                 )
             else:
                 self.generator.write_script(f, potential_path, data_file, dump_file, elements)
@@ -213,6 +226,10 @@ eval_uncertainty = TwoTierEvaluator(thresholds)
         self, driver: LammpsDriver, kwargs: dict[str, Any], dump_file: Path, log_file: Path
     ) -> MDSimulationResult:
         """Extracts and formats simulation results from the driver."""
+        import logging
+
+        logger = logging.getLogger(__name__)
+
         try:
             energy = driver.extract_variable("pe")
             temperature = driver.extract_variable("temp")
@@ -220,26 +237,18 @@ eval_uncertainty = TwoTierEvaluator(thresholds)
             forces = driver.get_forces().tolist()
             stress = driver.get_stress().tolist()
         except (ValueError, TypeError, AttributeError, RuntimeError) as e:
-            import logging
-
-            logger = logging.getLogger(__name__)
-            logger.warning(f"Failed to extract basic results from LAMMPS: {e}")
-            energy = 0.0
-            temperature = 0.0
-            step = 0
-            forces = [[0.0, 0.0, 0.0]]
-            stress = [0.0] * 6
+            msg = f"Critical extraction failure: Failed to extract basic results from LAMMPS: {e}"
+            logger.exception(msg)
+            raise RuntimeError(msg) from e
 
         max_gamma = 0.0
         if self.config.fix_halt:
             try:
                 max_gamma = driver.extract_variable("max_g")
             except (ValueError, TypeError, AttributeError, RuntimeError) as e:
-                import logging
-
-                logger = logging.getLogger(__name__)
-                logger.warning(f"Failed to extract max_g from LAMMPS: {e}")
-                max_gamma = 0.0
+                msg = f"Critical extraction failure: Failed to extract max_g from LAMMPS: {e}"
+                logger.exception(msg)
+                raise RuntimeError(msg) from e
 
         halted = False
         n_steps_target = kwargs.get("override_n_steps", self.config.n_steps)

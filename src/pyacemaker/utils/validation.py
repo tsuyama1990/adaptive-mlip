@@ -76,15 +76,21 @@ def validate_lammps_command(cmd: str) -> None:
         ValueError: If the command contains forbidden characters, unrecognized commands,
                     or shell injection vectors.
     """
-    if not SAFE_CMD_PATTERN.match(cmd):
-        msg = f"Command contains forbidden characters: {cmd}"
-        raise ValueError(msg)
+    import shlex
 
+    # Check for blatantly obvious injections first
     if BLOCKED_PATTERN.search(cmd):
         msg = f"Command contains explicitly blocked shell metacharacters: {cmd}"
         raise ValueError(msg)
 
-    tokens = cmd.split()
+    try:
+        # Use proper shell parsing to analyze exactly how the command is structured
+        # This handles quotes properly and allows us to inspect arguments safely
+        tokens = shlex.split(cmd)
+    except ValueError as e:
+        msg = f"Failed to parse command due to invalid quoting/escaping: {e}"
+        raise ValueError(msg) from e
+
     if not tokens:
         return
 
@@ -94,9 +100,31 @@ def validate_lammps_command(cmd: str) -> None:
         msg = f"Script contains forbidden or unrecognized command: '{first_token}'"
         raise ValueError(msg)
 
-    if any(forbidden in tokens for forbidden in ["shell", "exec", "system"]):
-        msg = "Script contains explicitly forbidden system command tokens."
-        raise ValueError(msg)
+    # Validate every token to ensure no dangerous shell/execution tokens are buried in arguments
+    forbidden_tokens = {
+        "shell",
+        "exec",
+        "system",
+        "eval",
+        "sh",
+        "bash",
+        "python3",
+        "python2",
+        "wget",
+        "curl",
+        "nc",
+    }
+
+    for token in tokens:
+        if token in forbidden_tokens:
+            msg = f"Script contains explicitly forbidden system command token: '{token}'"
+            raise ValueError(msg)
+
+        # Additional sanity check: no token should contain unescaped internal shell meta-characters
+        # Although shlex handles quoting, the underlying token could still contain things like $(...)
+        if bool(re.search(r"[\$\`\<\>\|\&;]", token)):
+            msg = f"Token contains potentially dangerous shell metacharacters: {token}"
+            raise ValueError(msg)
 
 
 def validate_lammps_script_file(script_path: Path) -> None:
