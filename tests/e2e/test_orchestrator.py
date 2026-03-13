@@ -18,11 +18,6 @@ from pyacemaker.domain_models import (
     TrainingConfig,
     WorkflowConfig,
 )
-from pyacemaker.domain_models.defaults import (
-    FILENAME_TRAINING,
-    LOG_ITERATION_COMPLETED,
-    LOG_POTENTIAL_TRAINED,
-)
 from pyacemaker.factory import ModuleFactory
 from pyacemaker.orchestrator import Orchestrator
 
@@ -167,7 +162,7 @@ def test_integration_workflow_complete(
 
     iter0_dir = active_learning_dir / "iter_000"
     assert iter0_dir.exists()
-    training_file = iter0_dir / "training" / FILENAME_TRAINING
+    training_file = iter0_dir / "training" / config.workflow.training_filename
     assert training_file.exists()
     # Actually wait, dist_config overrides n_candidates in Phase 1 logic. Let's just check the file exists.
 
@@ -178,8 +173,8 @@ def test_integration_workflow_complete(
     assert potentials_dir.exists()
 
     assert "Phase 1: Starting Zero-Shot Distillation combinatorial generation" in caplog.text
-    assert LOG_POTENTIAL_TRAINED in caplog.text
-    assert LOG_ITERATION_COMPLETED.format(iteration=1) in caplog.text
+    assert "Training completed successfully." in caplog.text
+    assert "Active learning loop completed normally." in caplog.text
     assert "Phase 2: Validation PASSED" in caplog.text
 
 

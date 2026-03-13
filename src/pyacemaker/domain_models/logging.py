@@ -3,29 +3,19 @@ from pathlib import Path
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
-from pyacemaker.domain_models.defaults import (
-    LOG_INIT_MODULES,
-    LOG_ITERATION_COMPLETED,
-    LOG_MODULE_INIT_FAIL,
-    LOG_MODULES_INIT_SUCCESS,
-)
-
-
 class LogMessagesConfig(BaseModel):
-    """Configurable log messages for the orchestrator."""
-
     model_config = ConfigDict(extra="forbid")
 
-    init_modules: str = Field(default=LOG_INIT_MODULES, description="Message for module init start")
-    iteration_completed: str = Field(
-        default=LOG_ITERATION_COMPLETED, description="Message for iteration completion"
-    )
-    module_init_fail: str = Field(
-        default=LOG_MODULE_INIT_FAIL, description="Message for module init failure"
-    )
-    modules_init_success: str = Field(
-        default=LOG_MODULES_INIT_SUCCESS, description="Message for successful module init"
-    )
+    init_modules: str = "Initializing active learning modules"
+    modules_init_success: str = "Core modules initialized successfully."
+    module_init_fail: str = "Failed to initialize modules: {error}"
+    start_loop: str = "Starting active learning loop"
+    iteration_completed: str = "Active learning loop completed normally."
+    potential_trained: str = "Training completed successfully."
+    project_init: str = "PyAceMaker workflow started."
+    start_iteration: str = "Starting iteration {iteration}/{max_iterations}"
+    workflow_completed: str = "Workflow completed successfully."
+    workflow_crashed: str = "Workflow failed with unrecoverable error: {error}"
 
 
 class LoggingConfig(BaseModel):
@@ -34,12 +24,12 @@ class LoggingConfig(BaseModel):
     level: str = Field(
         default="INFO", pattern="^(DEBUG|INFO|WARNING|ERROR|CRITICAL)$", description="Logging level"
     )
-    messages: LogMessagesConfig = Field(
-        default_factory=LogMessagesConfig, description="Configurable log messages"
-    )
     log_file: str | None = Field(default="pyacemaker.log", description="Path to the log file")
     max_bytes: int = Field(
         default=10 * 1024 * 1024, gt=0, description="Max size of log file before rotation"
+    )
+    messages: LogMessagesConfig = Field(
+        default_factory=LogMessagesConfig, description="Configuration for specific log messages"
     )
     backup_count: int = Field(default=5, ge=0, description="Number of backup log files to keep")
 

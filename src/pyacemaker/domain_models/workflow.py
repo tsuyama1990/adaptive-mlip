@@ -12,6 +12,7 @@ from pyacemaker.domain_models.defaults import (
     DEFAULT_OTF_MAX_RETRIES,
     DEFAULT_OTF_UNCERTAINTY_THRESHOLD,
     DEFAULT_POTENTIALS_DIR,
+    DEFAULT_PRODUCTION_DIR,
     DEFAULT_STATE_FILE,
 )
 
@@ -131,29 +132,23 @@ class WorkflowConfig(BaseModel):
     potentials_dir: str = Field(
         default=DEFAULT_POTENTIALS_DIR, description="Directory for storing trained potentials"
     )
-
     production_dir: str = Field(
-        default="production", description="Directory to deploy the final validated potential"
+        default=DEFAULT_PRODUCTION_DIR, description="Directory for production deployment"
     )
-
-    resume_n_steps: PositiveInt = Field(
-        default=1000, description="Number of steps to execute when resuming MD softly"
-    )
-
-    potential_filename_template: str = Field(
-        default="generation_{iteration:03d}.yace", description="Template for versioned potentials"
-    )
-
-    candidates_filename: str = Field(
-        default="candidates.xyz", description="Filename for generated structure candidates"
-    )
-
-    potential_filename: str = Field(
-        default="potential.yace", description="Filename for the active potential"
-    )
-
     training_filename: str = Field(
-        default="training_data.xyz", description="Filename for the labeled training data"
+        default="training.xyz", description="Filename for the active learning training dataset"
+    )
+    candidates_filename: str = Field(
+        default="candidates.xyz", description="Filename for candidate structures generated"
+    )
+    potential_filename: str = Field(
+        default="best.yace", description="Filename for the best resulting ACE potential"
+    )
+    template_potential_filename: str = Field(
+        default="template.yace", description="Filename for the template potential used for init"
+    )
+    resume_n_steps: PositiveInt = Field(
+        default=5000, description="Default number of steps for MD simulation resume"
     )
 
     otf: OTFConfig = Field(default_factory=OTFConfig, description="Configuration for OTF loop.")

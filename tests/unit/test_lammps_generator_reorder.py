@@ -78,6 +78,7 @@ def test_lammps_generator_gamma_column(tmp_path: Path) -> None:
     dump_line = next(line for line in script.splitlines() if line.startswith("dump"))
     assert "c_gamma" in dump_line, "c_gamma not found in dump command"
 
+
 def test_lammps_generator_resume_script(tmp_path: Path) -> None:
     config = MDConfig(
         temperature=300,
@@ -108,7 +109,7 @@ def test_lammps_generator_resume_script(tmp_path: Path) -> None:
     assert "read_restart /app/restart.lammps" in script
     assert "python eval_wrapper invoke here" in script
     assert "fix soft_langevin all langevin 300.0 300.0 0.2" in script
-    assert "run 50" in script # the soft start run
+    assert "run 50" in script  # the soft start run
     assert "unfix main_ensemble" in script
     assert "unfix soft_langevin" in script
-    assert "run 150" in script # override_n_steps (200) - soft_start_steps (50) = 150
+    assert "run 150" in script  # override_n_steps (200) - soft_start_steps (50) = 150

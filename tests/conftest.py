@@ -339,14 +339,8 @@ def create_test_config_dict(**overrides: Any) -> ConfigDictType:
             "state_file_path": DEFAULT_STATE_FILE,
             "active_learning_dir": DEFAULT_ACTIVE_LEARNING_DIR,
             "potentials_dir": DEFAULT_POTENTIALS_DIR,
-            "production_dir": "production",
             "n_candidates": DEFAULT_N_CANDIDATES,
             "batch_size": DEFAULT_BATCH_SIZE,
-            "resume_n_steps": 1000,
-            "potential_filename_template": "generation_{iteration:03d}.yace",
-            "candidates_filename": "candidates.xyz",
-            "potential_filename": "potential.yace",
-            "training_filename": "training_data.xyz",
             "distillation": {
                 "enable": True,
                 "mace_model_path": "mace-mp-0-medium",
@@ -378,16 +372,7 @@ def create_test_config_dict(**overrides: Any) -> ConfigDictType:
                 "max_retries": DEFAULT_OTF_MAX_RETRIES,
             },
         },
-        "logging": {
-            "level": "INFO",
-            "log_file": "pyacemaker.log",
-            "messages": {
-                "init_modules": "Initializing modules...",
-                "iteration_completed": "Iteration {iteration} completed.",
-                "module_init_fail": "Module initialization failed: {error}",
-                "modules_init_success": "Modules initialized successfully."
-            }
-        },
+        "logging": {},
     }
 
     def recursive_update(d: dict[str, Any], u: dict[str, Any]) -> dict[str, Any]:

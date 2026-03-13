@@ -1,0 +1,174 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.13, pytest-9.0.2, pluggy-1.6.0 -- /app/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /app
+configfile: pyproject.toml
+plugins: cov-7.0.0, anyio-4.12.1
+collecting ... collected 1 item
+
+tests/e2e/test_orchestrator.py::test_integration_workflow_complete FAILED [100%]
+
+=================================== FAILURES ===================================
+______________________ test_integration_workflow_complete ______________________
+
+mock_config = PyAceConfig(project_name='TestProject', structure=StructureConfig(elements=['H'], supercell_size=[1, 1, 1], active_pol...lly.', workflow_crashed='Workflow failed with unrecoverable error: {error}'), backup_count=5), eon=None, scenario=None)
+tmp_path = PosixPath('/tmp/pytest-of-jules/pytest-58/test_integration_workflow_comp0')
+caplog = <_pytest.logging.LogCaptureFixture object at 0x7f872e16f080>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f872e0113d0>
+
+    def test_integration_workflow_complete(
+        mock_config: PyAceConfig, tmp_path: Path, caplog: Any, monkeypatch: Any
+    ) -> None:
+        """Comprehensive integration test for the full active learning loop."""
+        config = mock_config.model_copy()
+
+        # Mock validator returning PASS for Phase 2 test
+        mock_validator = MagicMock()
+        mock_val_res = MagicMock()
+        mock_val_res.phonon_stable = True
+        mock_val_res.elastic_stable = True
+        mock_validator.validate.return_value = mock_val_res
+
+        def mock_create_modules(cfg: PyAceConfig) -> tuple[Any, Any, Any, Any, Any, Any]:
+            return (
+                FakeGenerator(elements=cfg.structure.elements),
+                FakeOracle(),
+                FakeTrainer(output_dir=tmp_path),
+                FakeEngine(),
+                MagicMock(),
+                mock_validator,
+            )
+
+        monkeypatch.setattr(ModuleFactory, "create_modules", mock_create_modules)
+
+        orch = Orchestrator(config)
+        orch.run()
+
+        assert orch.loop_state.iteration == 2
+        assert orch.state_manager.state_file.exists()
+        assert "iteration" in orch.state_manager.state_file.read_text()
+
+        active_learning_dir = Path(config.workflow.active_learning_dir)
+        assert active_learning_dir.exists()
+
+        iter0_dir = active_learning_dir / "iter_000"
+        assert iter0_dir.exists()
+>       training_file = iter0_dir / "training" / FILENAME_TRAINING
+                                                 ^^^^^^^^^^^^^^^^^
+E       NameError: name 'FILENAME_TRAINING' is not defined
+
+/app/tests/e2e/test_orchestrator.py:165: NameError
+----------------------------- Captured stdout call -----------------------------
+2026-03-13 16:15:18,148 - TestProject - INFO - Loaded state from file. Resuming from iteration 0.
+2026-03-13 16:15:18,148 - TestProject - INFO - PyAceMaker workflow started.
+2026-03-13 16:15:18,149 - TestProject - INFO - Starting active learning loop
+2026-03-13 16:15:18,149 - TestProject - INFO - Initializing active learning modules
+2026-03-13 16:15:18,149 - TestProject - INFO - Core modules initialized successfully.
+2026-03-13 16:15:18,150 - TestProject - INFO - No initial potential found. Executing Phase 1: Zero-Shot Distillation.
+2026-03-13 16:15:18,151 - TestProject - INFO - Phase 1: Starting Zero-Shot Distillation combinatorial generation...
+2026-03-13 16:15:18,167 - TestProject - INFO - Phase 1: Generated and labelled 5 base structures for distillation.
+2026-03-13 16:15:18,168 - TestProject - INFO - Training completed successfully.
+2026-03-13 16:15:18,173 - TestProject - DEBUG - State saved: {'iteration': 0, 'status': <LoopStatus.RUNNING: 'RUNNING'>, 'current_potential': PosixPath('/tmp/pytest-of-jules/pytest-58/test_integration_workflow_comp0/fake_potential.yace')}
+2026-03-13 16:15:18,173 - TestProject - INFO - Phase 1 Distillation completed. Baseline potential: /tmp/pytest-of-jules/pytest-58/test_integration_workflow_comp0/fake_potential.yace
+2026-03-13 16:15:18,173 - TestProject - INFO - Starting iteration 1/2
+2026-03-13 16:15:18,175 - TestProject - INFO - Active learning loop completed normally.
+2026-03-13 16:15:18,178 - TestProject - DEBUG - State saved: {'iteration': 1, 'status': <LoopStatus.RUNNING: 'RUNNING'>, 'current_potential': PosixPath('/tmp/pytest-of-jules/pytest-58/test_integration_workflow_comp0/fake_potential.yace')}
+2026-03-13 16:15:18,179 - TestProject - INFO - Starting iteration 2/2
+2026-03-13 16:15:18,180 - TestProject - INFO - Active learning loop completed normally.
+2026-03-13 16:15:18,183 - TestProject - DEBUG - State saved: {'iteration': 2, 'status': <LoopStatus.RUNNING: 'RUNNING'>, 'current_potential': PosixPath('/tmp/pytest-of-jules/pytest-58/test_integration_workflow_comp0/fake_potential.yace')}
+2026-03-13 16:15:18,184 - TestProject - INFO - Deployed best potential to production/best.yace
+2026-03-13 16:15:18,185 - TestProject - INFO - Phase 2: Running comprehensive final validation (Elastic, Phonon, EOS)...
+2026-03-13 16:15:18,186 - TestProject - INFO - Phase 2: Validation PASSED. Report saved to production/validation_report.html
+2026-03-13 16:15:18,186 - TestProject - INFO - Phase 2: Running miniature MD stress test...
+2026-03-13 16:15:18,186 - TestProject - INFO - Phase 2: Miniature MD stress test passed successfully.
+2026-03-13 16:15:18,186 - TestProject - INFO - Workflow completed successfully.
+------------------------------ Captured log call -------------------------------
+INFO     TestProject:state_manager.py:27 Loaded state from file. Resuming from iteration 0.
+INFO     TestProject:orchestrator.py:63 PyAceMaker workflow started.
+INFO     TestProject:orchestrator.py:730 Starting active learning loop
+INFO     TestProject:orchestrator.py:79 Initializing active learning modules
+INFO     TestProject:orchestrator.py:96 Core modules initialized successfully.
+INFO     TestProject:orchestrator.py:234 No initial potential found. Executing Phase 1: Zero-Shot Distillation.
+INFO     TestProject:orchestrator.py:174 Phase 1: Starting Zero-Shot Distillation combinatorial generation...
+INFO     TestProject:orchestrator.py:204 Phase 1: Generated and labelled 5 base structures for distillation.
+INFO     TestProject:orchestrator.py:224 Training completed successfully.
+DEBUG    TestProject:state_manager.py:36 State saved: {'iteration': 0, 'status': <LoopStatus.RUNNING: 'RUNNING'>, 'current_potential': PosixPath('/tmp/pytest-of-jules/pytest-58/test_integration_workflow_comp0/fake_potential.yace')}
+INFO     TestProject:orchestrator.py:246 Phase 1 Distillation completed. Baseline potential: /tmp/pytest-of-jules/pytest-58/test_integration_workflow_comp0/fake_potential.yace
+INFO     TestProject:orchestrator.py:653 Starting iteration 1/2
+INFO     TestProject:orchestrator.py:535 Active learning loop completed normally.
+DEBUG    TestProject:state_manager.py:36 State saved: {'iteration': 1, 'status': <LoopStatus.RUNNING: 'RUNNING'>, 'current_potential': PosixPath('/tmp/pytest-of-jules/pytest-58/test_integration_workflow_comp0/fake_potential.yace')}
+INFO     TestProject:orchestrator.py:653 Starting iteration 2/2
+INFO     TestProject:orchestrator.py:535 Active learning loop completed normally.
+DEBUG    TestProject:state_manager.py:36 State saved: {'iteration': 2, 'status': <LoopStatus.RUNNING: 'RUNNING'>, 'current_potential': PosixPath('/tmp/pytest-of-jules/pytest-58/test_integration_workflow_comp0/fake_potential.yace')}
+INFO     TestProject:orchestrator.py:683 Deployed best potential to production/best.yace
+INFO     TestProject:orchestrator.py:691 Phase 2: Running comprehensive final validation (Elastic, Phonon, EOS)...
+INFO     TestProject:orchestrator.py:701 Phase 2: Validation PASSED. Report saved to production/validation_report.html
+INFO     TestProject:orchestrator.py:705 Phase 2: Running miniature MD stress test...
+INFO     TestProject:orchestrator.py:718 Phase 2: Miniature MD stress test passed successfully.
+INFO     TestProject:orchestrator.py:743 Workflow completed successfully.
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.13-final-0 _______________
+
+Name                                         Stmts   Miss  Cover   Missing
+--------------------------------------------------------------------------
+src/pyacemaker/__init__.py                       4      0   100%
+src/pyacemaker/core/__init__.py                  7      0   100%
+src/pyacemaker/core/active_set.py               71     57    20%   45-88, 95-111, 117-132, 136-141, 148-151
+src/pyacemaker/core/base.py                     30      0   100%
+src/pyacemaker/core/config_generator.py         36     23    36%   16, 29-43, 47-58, 62-63, 86-87, 100-101, 109-110
+src/pyacemaker/core/directory_manager.py        20      4    80%   39-42
+src/pyacemaker/core/engine.py                  169    142    16%   28-29, 35-54, 73-75, 84-94, 98-100, 104-106, 112-126, 130-149, 163-219, 225-255, 277-311, 318-323, 329-353
+src/pyacemaker/core/error_handler.py            13     13     0%   1-36
+src/pyacemaker/core/evaluator_script.py         31     31     0%   7-56
+src/pyacemaker/core/exceptions.py                9      0   100%
+src/pyacemaker/core/generator.py                53     39    26%   21-22, 36-39, 58-119, 137-154
+src/pyacemaker/core/io_manager.py               74     59    20%   24, 43-83, 89-141
+src/pyacemaker/core/lammps_generator.py        191    169    12%   19-21, 25-31, 38-51, 58-95, 99-102, 106-108, 113-123, 129-148, 155-181, 188-197, 202-224, 240-273, 288-352, 364-377
+src/pyacemaker/core/loop.py                     70     23    67%   30-41, 56, 63, 79-82, 85, 95-102
+src/pyacemaker/core/m3gnet_wrapper.py           20     15    25%   23-35, 38-54
+src/pyacemaker/core/oracle.py                  173    136    21%   30-52, 73-77, 88-92, 96-104, 119-124, 130, 133, 136, 139, 143-144, 160-231, 248-286, 289-292, 295-329, 344-354, 357-360, 363-385
+src/pyacemaker/core/policy.py                  110     83    25%   30-31, 47-48, 63-113, 131-170, 179, 189-207, 222-227, 242-245, 260-264
+src/pyacemaker/core/policy_factory.py           31     23    26%   37-65, 78-89
+src/pyacemaker/core/report.py                   12      4    67%   76-77, 81, 85
+src/pyacemaker/core/state_manager.py            34      5    85%   28-30, 37-38
+src/pyacemaker/core/trainer.py                 141    122    13%   22-23, 31-57, 68-95, 118-195, 199-210, 222-269
+src/pyacemaker/core/validator.py                44     27    39%   29-31, 49-65, 80-83, 90-91, 99-131
+src/pyacemaker/domain_models/__init__.py        11      0   100%
+src/pyacemaker/domain_models/config.py          22      0   100%
+src/pyacemaker/domain_models/constants.py       17      0   100%
+src/pyacemaker/domain_models/defaults.py       131      0   100%
+src/pyacemaker/domain_models/dft.py             36      8    78%   75-76, 79-80, 83-84, 87-88
+src/pyacemaker/domain_models/eon.py             34      9    74%   53-60, 66-69
+src/pyacemaker/domain_models/logging.py         44      9    80%   42-43, 49, 57, 63-65, 68-69
+src/pyacemaker/domain_models/md.py             137     27    80%   40, 62-63, 77-84, 119-120, 125-126, 128-129, 133-134, 136-137, 243-244, 250-251, 259-260, 267-268, 270-271
+src/pyacemaker/domain_models/scenario.py         7      0   100%
+src/pyacemaker/domain_models/structure.py       71     10    86%   97-98, 102-103, 108-109, 116-117, 126, 130
+src/pyacemaker/domain_models/training.py        46      6    87%   103-106, 119-120
+src/pyacemaker/domain_models/validation.py      17      0   100%
+src/pyacemaker/domain_models/workflow.py        66      4    94%   81-82, 84-85
+src/pyacemaker/factory.py                       32     17    47%   47-86
+src/pyacemaker/interfaces/__init__.py            5      0   100%
+src/pyacemaker/interfaces/eon_driver.py         74     55    26%   24-25, 32-40, 50, 60-88, 97-142, 154-164
+src/pyacemaker/interfaces/lammps_driver.py      80     66    18%   27-33, 45-55, 65-84, 96-97, 109-133, 142-148, 155-165
+src/pyacemaker/interfaces/process.py            14      5    64%   12, 22-29
+src/pyacemaker/interfaces/qe_driver.py          48     35    27%   37-82, 106-143
+src/pyacemaker/logger.py                        22      2    91%   26, 42
+src/pyacemaker/main.py                          47     47     0%   1-74
+src/pyacemaker/orchestrator.py                 357    177    50%   91-94, 145, 158, 163-164, 207-209, 214, 218-219, 231-232, 250-251, 256, 264, 268-270, 274-279, 287-309, 318-346, 350-361, 367-368, 374-398, 402-412, 416-430, 440-456, 467-468, 481-482, 490-496, 505-511, 518-533, 543-567, 571-600, 604-610, 623-635, 665-668, 714, 721-724, 745-747
+src/pyacemaker/scenarios/__init__.py             3      3     0%   1-4
+src/pyacemaker/scenarios/base_scenario.py       12     12     0%   1-23
+src/pyacemaker/scenarios/fept_mgo.py           148    148     0%   1-272
+src/pyacemaker/utils/delta.py                   20     15    25%   18-21, 36-62
+src/pyacemaker/utils/elastic.py                 80     64    20%   28-30, 34-35, 46-137, 141-146, 150-154
+src/pyacemaker/utils/embedding.py               36     31    14%   32-87
+src/pyacemaker/utils/extraction.py             212    194     8%   16-61, 66-80, 88-123, 128-161, 169-193, 200-211, 223-239, 246-262, 267-277, 287-313, 338-432
+src/pyacemaker/utils/io.py                      73     57    22%   27-32, 50-66, 77-78, 83-87, 103-163
+src/pyacemaker/utils/path.py                    38     34    11%   22-82
+src/pyacemaker/utils/phonons.py                 51     36    29%   27-30, 33, 47-51, 63-114
+src/pyacemaker/utils/process.py                 32     28    12%   32-83
+src/pyacemaker/utils/structure.py                6      4    33%   18-22
+--------------------------------------------------------------------------
+TOTAL                                         3372   2078    38%
+=========================== short test summary info ============================
+FAILED tests/e2e/test_orchestrator.py::test_integration_workflow_complete - N...
+============================== 1 failed in 0.66s ===============================

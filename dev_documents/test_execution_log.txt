@@ -116,13 +116,13 @@ src/pyacemaker/domain_models/constants.py       17      0   100%
 src/pyacemaker/domain_models/defaults.py       131      0   100%
 src/pyacemaker/domain_models/dft.py             36      4    89%   79-80, 87-88
 src/pyacemaker/domain_models/eon.py             34      4    88%   66-69
-src/pyacemaker/domain_models/logging.py         39      9    77%   52-53, 59, 67, 73-75, 78-79
+src/pyacemaker/domain_models/logging.py         44      9    80%   42-43, 49, 57, 63-65, 68-69
 src/pyacemaker/domain_models/md.py             137     25    82%   40, 62-63, 82-83, 119-120, 125-126, 128-129, 133-134, 136-137, 243-244, 250-251, 259-260, 267-268, 270-271
 src/pyacemaker/domain_models/scenario.py         7      0   100%
 src/pyacemaker/domain_models/structure.py       71      4    94%   97-98, 116-117
 src/pyacemaker/domain_models/training.py        46      0   100%
 src/pyacemaker/domain_models/validation.py      17      0   100%
-src/pyacemaker/domain_models/workflow.py        66      4    94%   80-81, 83-84
+src/pyacemaker/domain_models/workflow.py        66      4    94%   81-82, 84-85
 src/pyacemaker/factory.py                       32      3    91%   82-84
 src/pyacemaker/interfaces/__init__.py            5      0   100%
 src/pyacemaker/interfaces/eon_driver.py         74     12    84%   86, 133-142, 158, 162
@@ -131,14 +131,14 @@ src/pyacemaker/interfaces/process.py            14      5    64%   12, 22-29
 src/pyacemaker/interfaces/qe_driver.py          48      2    96%   113-114
 src/pyacemaker/logger.py                        22      1    95%   42
 src/pyacemaker/main.py                          47      9    81%   21-24, 49-50, 59-60, 74
-src/pyacemaker/orchestrator.py                 336     69    79%   93-96, 147, 160, 165-166, 207, 211-212, 241-242, 247, 255, 282, 310, 354, 362, 379-380, 394-396, 424-435, 446-447, 460-461, 469-475, 484-490, 503-512, 548-551, 560, 590-595, 634-637, 683, 686-687
+src/pyacemaker/orchestrator.py                 357     68    81%   91-94, 145, 158, 163-164, 214, 218-219, 250-251, 256, 264, 291, 319, 391-398, 404, 417, 427-428, 441, 454-456, 467-468, 481-482, 490-496, 505-511, 524-533, 550, 559-560, 562-567, 583, 591, 665-668, 714, 721-722
 src/pyacemaker/scenarios/__init__.py             3      0   100%
 src/pyacemaker/scenarios/base_scenario.py       12      1    92%   20
 src/pyacemaker/scenarios/fept_mgo.py           148     28    81%   80, 162-165, 170-172, 181-182, 195-196, 203, 216, 221-222, 225-226, 233, 237, 245-258, 266-268
 src/pyacemaker/utils/delta.py                   20      3    85%   21, 37-38
 src/pyacemaker/utils/elastic.py                 80     52    35%   34-35, 46-137, 146, 154
 src/pyacemaker/utils/embedding.py               36      6    83%   41-42, 49-50, 61-62
-src/pyacemaker/utils/extraction.py             201     55    73%   16-59, 67-68, 73, 75, 78, 87-88, 90-91, 105-106, 175-176, 206-209, 213-214, 284, 291, 324-325, 328-329, 332-333
+src/pyacemaker/utils/extraction.py             212     55    74%   16-61, 69-70, 75, 77, 80, 89-90, 92-93, 107-108, 177-178, 268, 275, 292-295, 299-300, 343-344, 347-348, 351-352
 src/pyacemaker/utils/io.py                      73      0   100%
 src/pyacemaker/utils/path.py                    38      4    89%   57-61
 src/pyacemaker/utils/perturbations.py           43      1    98%   77
@@ -148,7 +148,7 @@ src/pyacemaker/utils/security.py                25      6    76%   23-24, 44-45,
 src/pyacemaker/utils/structure.py                6      2    67%   19-20
 src/pyacemaker/utils/validation.py              78     15    81%   91-93, 96, 122-123, 135-136, 151-152, 194, 199, 206-207, 210
 --------------------------------------------------------------------------
-TOTAL                                         3481    635    82%
-======================= 277 passed, 7 warnings in 14.39s =======================
+TOTAL                                         3518    634    82%
+======================= 277 passed, 7 warnings in 13.56s =======================
 /app/.venv/lib/python3.12/site-packages/coverage/inorout.py:561: CoverageWarning: Module dev_src was never imported. (module-not-imported); see https://coverage.readthedocs.io/en/7.13.4/messages.html#warning-module-not-imported
   self.warn(f"Module {pkg} was never imported.", slug="module-not-imported")
