@@ -1,5 +1,5 @@
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 from ase import Atoms
@@ -8,21 +8,119 @@ from pyacemaker.core.validator import LammpsInputValidator, Validator
 from pyacemaker.domain_models.validation import ValidationConfig, ValidationResult
 
 
+def test_lammps_input_validator_structure() -> None:
+    # Test valid structure passes without exceptions directly
+    atoms = Atoms("H", cell=[10, 10, 10], pbc=True)
+    LammpsInputValidator.validate_structure(atoms)
+
+
+def test_lammps_input_validator_potential(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    # Safely mock the default directory to the temporary path
+    pot_dir = tmp_path / "potentials"
+    monkeypatch.setattr("pyacemaker.domain_models.defaults.DEFAULT_POTENTIALS_DIR", str(pot_dir))
+
+    pot_dir.mkdir(parents=True, exist_ok=True)
+    pot_path = pot_dir / "pot.yace"
+    pot_path.touch()
+
+    res = LammpsInputValidator.validate_potential(str(pot_path))
+    assert res.resolve() == pot_path.resolve()
+
+    # Clean up
+    pot_path.unlink()
+
+
+def test_lammps_input_validator_potential_none() -> None:
+    with pytest.raises(ValueError, match="Validator requires a potential"):
+        LammpsInputValidator.validate_potential(None)
+
+
+def test_lammps_input_validator_potential_not_exists(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    pot_dir = tmp_path / "potentials"
+    monkeypatch.setattr("pyacemaker.domain_models.defaults.DEFAULT_POTENTIALS_DIR", str(pot_dir))
+    pot_dir.mkdir(parents=True, exist_ok=True)
+    pot_path = pot_dir / "nonexistent.yace"
+
+    with pytest.raises(FileNotFoundError, match="Potential file not found"):
+        LammpsInputValidator.validate_potential(str(pot_path))
+
+
+def test_lammps_input_validator_potential_not_file(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    pot_dir = tmp_path / "potentials"
+    monkeypatch.setattr("pyacemaker.domain_models.defaults.DEFAULT_POTENTIALS_DIR", str(pot_dir))
+    pot_dir.mkdir(parents=True, exist_ok=True)
+    pot_sub_dir = pot_dir / "pot_dir"
+    pot_sub_dir.mkdir(exist_ok=True)
+
+    with pytest.raises(ValueError, match="Potential path is not a file"):
+        LammpsInputValidator.validate_potential(str(pot_sub_dir))
+
+    # Clean up
+    pot_sub_dir.rmdir()
+
+
+def test_lammps_input_validator_path_traversal(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    pot_dir = tmp_path / "potentials"
+    monkeypatch.setattr("pyacemaker.domain_models.defaults.DEFAULT_POTENTIALS_DIR", str(pot_dir))
+    pot_dir.mkdir(parents=True, exist_ok=True)
+
+    # Attempt path traversal
+    traversal_path = pot_dir / ".." / "malicious.yace"
+    with pytest.raises(ValueError, match="Path traversal attempt detected"):
+        LammpsInputValidator.validate_potential(str(traversal_path))
+
+
+def test_lammps_input_validator_symlink_attack(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    pot_dir = tmp_path / "potentials"
+    monkeypatch.setattr("pyacemaker.domain_models.defaults.DEFAULT_POTENTIALS_DIR", str(pot_dir))
+    pot_dir.mkdir(parents=True, exist_ok=True)
+
+    # Create a secret file outside
+    secret_file = tmp_path / "secret.txt"
+    secret_file.touch()
+
+    # Create a symlink inside pointing to the secret file
+    symlink_path = pot_dir / "symlink.yace"
+    try:
+        symlink_path.symlink_to(secret_file)
+    except OSError:
+        # Symlinks might not be supported on all environments, skip if so
+        pytest.skip("Symlinks not supported on this filesystem")
+
+    with pytest.raises(ValueError, match="Symlink path traversal attacks detected"):
+        LammpsInputValidator.validate_potential(str(symlink_path))
+
+
+TEST_POTENTIAL_FILENAME = "pot.yace"
+TEST_CELL = [10, 10, 10]
+TEST_ELEM = "H"
+
+
 class TestValidator:
     @pytest.fixture
-    def mock_phonon_calc(self):
+    def mock_phonon_calc(self) -> MagicMock:
         return MagicMock()
 
     @pytest.fixture
-    def mock_elastic_calc(self):
+    def mock_elastic_calc(self) -> MagicMock:
         return MagicMock()
 
     @pytest.fixture
-    def mock_report_gen(self):
+    def mock_report_gen(self) -> MagicMock:
         return MagicMock()
 
     @pytest.fixture
-    def validator(self, mock_phonon_calc, mock_elastic_calc, mock_report_gen):
+    def validator(
+        self, mock_phonon_calc: MagicMock, mock_elastic_calc: MagicMock, mock_report_gen: MagicMock
+    ) -> Validator:
         config = ValidationConfig()
         # Assuming Validator takes instances of calculators and report generator
         return Validator(
@@ -32,7 +130,13 @@ class TestValidator:
             report_generator=mock_report_gen,
         )
 
-    def test_validate_pass(self, validator, mock_phonon_calc, mock_elastic_calc, mock_report_gen):
+    def test_validate_pass(
+        self,
+        validator: Validator,
+        mock_phonon_calc: MagicMock,
+        mock_elastic_calc: MagicMock,
+        mock_report_gen: MagicMock,
+    ) -> None:
         mock_phonon_calc.check_stability.return_value = (True, "base64_phonon")
         mock_elastic_calc.calculate_properties.return_value = (
             True,
@@ -41,14 +145,19 @@ class TestValidator:
             "base64_elastic",
         )
 
-        potential_path = Path("pot.yace")
+        potential_path = Path(TEST_POTENTIAL_FILENAME)
         output_path = Path("report.html")
-        structure = Atoms("H", cell=[10, 10, 10], pbc=True)
+        structure = Atoms(TEST_ELEM, cell=TEST_CELL, pbc=True)
 
-        # Mock _relax_structure to isolate
-        with patch.object(validator, "_relax_structure") as mock_relax:
-            mock_relax.return_value = structure
-            result = validator.validate(potential_path, output_path, structure=structure)
+        # Configure elastic calc engine to return structure properly for _relax_structure
+        # Create a test double for the engine
+        class EngineDouble:
+            def relax(self, structure: Atoms, potential: Path) -> Atoms:
+                return structure
+
+        mock_elastic_calc.engine = EngineDouble()
+
+        result = validator.validate(potential_path, output_path, structure=structure)
 
         assert isinstance(result, ValidationResult)
         assert result.phonon_stable is True
@@ -61,7 +170,9 @@ class TestValidator:
         mock_report_gen.generate.assert_called_once()
         mock_report_gen.save.assert_called_once()
 
-    def test_validate_fail_phonon(self, validator, mock_phonon_calc, mock_elastic_calc):
+    def test_validate_fail_phonon(
+        self, validator: Validator, mock_phonon_calc: MagicMock, mock_elastic_calc: MagicMock
+    ) -> None:
         mock_phonon_calc.check_stability.return_value = (False, "base64_phonon_unstable")
         mock_elastic_calc.calculate_properties.return_value = (
             True,
@@ -70,38 +181,88 @@ class TestValidator:
             "base64_elastic",
         )
 
-        potential_path = Path("pot.yace")
+        potential_path = Path(TEST_POTENTIAL_FILENAME)
         output_path = Path("report.html")
-        structure = Atoms("H", cell=[10, 10, 10], pbc=True)
+        structure = Atoms(TEST_ELEM, cell=TEST_CELL, pbc=True)
 
-        with patch.object(validator, "_relax_structure") as mock_relax:
-            mock_relax.return_value = structure
-            result = validator.validate(potential_path, output_path, structure=structure)
+        class EngineDouble:
+            def relax(self, structure: Atoms, potential: Path) -> Atoms:
+                return structure
+
+        mock_elastic_calc.engine = EngineDouble()
+
+        result = validator.validate(potential_path, output_path, structure=structure)
 
         assert result.phonon_stable is False
         assert result.elastic_stable is True
 
-    def test_relax_structure(self, validator, mock_elastic_calc):
+    def test_relax_structure(self, validator: Validator, mock_elastic_calc: MagicMock) -> None:
         structure = MagicMock()
-        pot_path = Path("pot.yace")
+        pot_path = Path(TEST_POTENTIAL_FILENAME)
 
         # mock_elastic_calc.engine is accessed in _relax_structure
-        mock_engine = MagicMock()
-        mock_elastic_calc.engine = mock_engine
-        mock_engine.relax.return_value = "relaxed_structure"
+        class EngineDouble:
+            def relax(self, structure: Atoms, potential: Path) -> str:
+                return "relaxed_structure"
+
+        mock_elastic_calc.engine = EngineDouble()
 
         relaxed = validator._relax_structure(structure, pot_path)
 
         assert relaxed == "relaxed_structure"
-        mock_engine.relax.assert_called_once_with(structure, pot_path)
 
-    def test_validate_structure_invalid_element(self):
+    def test_validate_error_handling(
+        self,
+        validator: Validator,
+        mock_phonon_calc: MagicMock,
+        mock_elastic_calc: MagicMock,
+        mock_report_gen: MagicMock,
+    ) -> None:
+        # Simulate calculator failure
+        mock_phonon_calc.check_stability.side_effect = RuntimeError("Phonon calculation failed")
+
+        potential_path = Path(TEST_POTENTIAL_FILENAME)
+        output_path = Path("report.html")
+        structure = Atoms(TEST_ELEM, cell=TEST_CELL, pbc=True)
+
+        class EngineDouble:
+            def relax(self, structure: Atoms, potential: Path) -> Atoms:
+                return structure
+
+        mock_elastic_calc.engine = EngineDouble()
+
+        with pytest.raises(RuntimeError, match="Phonon calculation failed"):
+            validator.validate(potential_path, output_path, structure=structure)
+
+        # Simulate Report failure
+        mock_phonon_calc.check_stability.side_effect = None
+        mock_phonon_calc.check_stability.return_value = (True, "base64")
+        mock_elastic_calc.calculate_properties.return_value = (True, {"C11": 100}, 50, "base64")
+        mock_report_gen.generate.side_effect = Exception("Report Generation Error")
+
+        with pytest.raises(Exception, match="Report Generation Error"):
+            validator.validate(potential_path, output_path, structure=structure)
+
+    def test_validate_structure_invalid_element(self) -> None:
         """Test rejection of structure with invalid chemical symbol (dummy X)."""
-        # 'X' is in atomic_numbers but Z=0
-        # Need pbc and cell for get_volume() check to pass first if we want to hit the element check.
-        # Or let volume check fail? But volume check raises "Failed to compute structure volume"
-        # We want to test element check specifically.
-        # So we provide a valid cell.
-        structure = Atoms("X", positions=[[0, 0, 0]], cell=[10, 10, 10], pbc=True)
+        structure = Atoms("X", positions=[[0, 0, 0]], cell=TEST_CELL, pbc=True)
         with pytest.raises(ValueError, match="dummy element"):
             LammpsInputValidator.validate_structure(structure)
+
+        # Additional test cases to completely verify validation logic
+        empty_structure = Atoms()
+        with pytest.raises(ValueError, match="Structure is empty"):
+            LammpsInputValidator.validate_structure(empty_structure)
+
+        invalid_symbol_structure = Atoms(
+            numbers=[0], positions=[[0, 0, 0]], cell=TEST_CELL, pbc=True
+        )
+        with pytest.raises(ValueError, match="dummy element"):
+            LammpsInputValidator.validate_structure(invalid_symbol_structure)
+
+    def test_validator_no_structure(self, validator: Validator) -> None:
+        pot_path = Path(TEST_POTENTIAL_FILENAME)
+        out_path = Path("report.html")
+
+        with pytest.raises(ValueError, match="Validator requires a structure"):
+            validator.validate(potential_path=pot_path, output_path=out_path, structure=None)

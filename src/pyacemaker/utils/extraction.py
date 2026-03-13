@@ -12,8 +12,15 @@ def _pre_relax_buffer(cluster: Atoms, fmax: float = 0.05, steps: int = 50) -> At
     """
     Relaxes the buffer region (force_weight == 0.0) while keeping the core fixed.
     """
+    from pyacemaker.utils.validation import validate_structure
+    validate_structure(cluster)
+
     # Create a copy to prevent modifying the original incorrectly
     cluster_copy = cluster.copy()  # type: ignore[no-untyped-call]
+
+    if not cluster_copy.has("force_weight"):
+        msg = "Cluster must have 'force_weight' array."
+        raise ValueError(msg)
 
     # Identify core atoms
     weights = cluster_copy.get_array("force_weight")
@@ -43,6 +50,11 @@ def _pre_relax_buffer(cluster: Atoms, fmax: float = 0.05, steps: int = 50) -> At
 
 def _get_expected_coordination(symbol: str) -> int:
     """Returns simple heuristic expected coordination based on valency."""
+    from ase.data import chemical_symbols
+    if symbol not in chemical_symbols:
+        msg = f"Invalid chemical symbol: {symbol}"
+        raise ValueError(msg)
+
     if symbol == "O":
         return 2
     if symbol == "Mg":
@@ -58,6 +70,14 @@ def _calculate_passivation_positions(
     idx: int, pos: np.ndarray, neighbors_vecs: np.ndarray, missing_bonds: int
 ) -> list[np.ndarray]:
     """Calculates deterministic positions for new passivating atoms."""
+    # Validation
+    if pos.shape != (3,):
+        msg = f"Expected pos to have shape (3,), got {pos.shape}"
+        raise ValueError(msg)
+    if neighbors_vecs.ndim != 2 or neighbors_vecs.shape[1] != 3:
+        msg = f"Expected neighbors_vecs to have shape (N, 3), got {neighbors_vecs.shape}"
+        raise ValueError(msg)
+
     # Use standard reproducible PRNG for deterministic scientific calculations
     # using a fixed seed combined with the unique atom index for variety
     rng = np.random.default_rng(seed=42 + idx)
@@ -91,6 +111,9 @@ def _calculate_passivation_positions(
 
 def _detect_and_add_passivation_atoms(cluster: Atoms, element: str) -> list[Atoms]:
     """Identifies undercoordinated atoms and returns a list of new passivating atoms to add."""
+    from pyacemaker.utils.validation import validate_structure
+    validate_structure(cluster)
+
     from ase.neighborlist import natural_cutoffs
 
     cutoffs = natural_cutoffs(cluster, mult=1.2)  # type: ignore[no-untyped-call]
@@ -113,7 +136,9 @@ def _detect_and_add_passivation_atoms(cluster: Atoms, element: str) -> list[Atom
         if missing_bonds > 0:
             neighbors_vecs = D_vectors[mask]
             pos = cluster.positions[idx]
-            new_positions = _calculate_passivation_positions(idx, pos, neighbors_vecs, missing_bonds)
+            new_positions = _calculate_passivation_positions(
+                idx, pos, neighbors_vecs, missing_bonds
+            )
 
             for new_pos in new_positions:
                 new_atoms.append(Atoms(element, positions=[new_pos]))
@@ -128,8 +153,18 @@ def _passivate_surface(cluster: Atoms, element: str = "H") -> Atoms:
     """
     from ase.data import chemical_symbols
 
+    from pyacemaker.utils.validation import validate_structure
+
+    # Security validation before passivation logic to prevent processing malformed structures
+    validate_structure(cluster)
+
     if element not in chemical_symbols:
         msg = f"Invalid passivation element: {element}"
+        raise ValueError(msg)
+
+    # Validate that element is a real atom and not a dummy element with Z=0 (e.g. 'X')
+    if element in {"X", ""}:
+        msg = f"Passivation element must be a valid real atom, not {element}"
         raise ValueError(msg)
 
     cluster_copy = cluster.copy()  # type: ignore[no-untyped-call]
@@ -141,22 +176,33 @@ def _passivate_surface(cluster: Atoms, element: str = "H") -> Atoms:
             cluster_copy += new_atom
 
         # Update force_weight array to include the new passivated atoms (with weight 0.0)
-        weights = cluster_copy.get_array("force_weight")[:len(cluster)]
+        weights = cluster_copy.get_array("force_weight")[: len(cluster)]
         new_weights = np.append(weights, np.zeros(len(new_atoms)))
         cluster_copy.set_array("force_weight", new_weights)
 
     return cluster_copy  # type: ignore[no-any-return]
 
 
-def extract_intelligent_cluster(
+def extract_intelligent_cluster(  # noqa: C901
     structure: Atoms, target_atoms: list[int], config: CutoutConfig
 ) -> Atoms:
     """
     Extracts an intelligent local cluster around multiple target atoms,
     relaxing the buffer and passivating the surface.
     """
+    from pyacemaker.utils.validation import validate_structure
+    validate_structure(structure)
+
     if not target_atoms:
-        return structure.copy()  # type: ignore[no-untyped-call, no-any-return]
+        cluster = structure.copy()  # type: ignore[no-untyped-call]
+        weights = np.zeros(len(cluster))
+        cluster.new_array("force_weight", weights)
+        return cluster  # type: ignore[no-any-return]
+
+    for target_idx in target_atoms:
+        if target_idx < 0 or target_idx >= len(structure):
+            msg = f"Target atom index {target_idx} is out of bounds for structure with {len(structure)} atoms."
+            raise IndexError(msg)
 
     total_cutoff = config.core_radius + config.buffer_radius
 
@@ -261,6 +307,21 @@ def extract_local_region(
     Returns:
         Atoms: The embedded cluster with 'force_weight' array in arrays.
     """
+    from pyacemaker.utils.validation import validate_structure
+    validate_structure(structure)
+
+    if center_index < 0 or center_index >= len(structure):
+        msg = f"Center atom index {center_index} is out of bounds for structure with {len(structure)} atoms."
+        raise IndexError(msg)
+
+    if radius < 0.0:
+        msg = f"Radius must be non-negative, got {radius}"
+        raise ValueError(msg)
+
+    if buffer < 0.0:
+        msg = f"Buffer must be non-negative, got {buffer}"
+        raise ValueError(msg)
+
     total_cutoff = radius + buffer
 
     # Use ASE's neighbor_list to find neighbors respecting PBC
