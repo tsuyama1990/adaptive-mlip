@@ -56,11 +56,24 @@ class LammpsScriptGenerator:
             Path(DEFAULT_RAM_DISK_PATH).resolve(),
         ]
 
+        # Security Check: Compare exact paths or ensure absolute path logic directly
+        # Since a file within a directory wouldn't be '==' to the directory, we iterate
+        # through parents to safely confirm an allowed root.
         is_safe = False
-        for root in allowed_roots:
-            if canonical_path_obj.is_relative_to(root):
+        if not canonical_path_obj.is_absolute():
+            msg = f"Path must be absolute: {canonical_path_obj}"
+            raise ValueError(msg)
+
+        # Check if the path or any of its parents matches an allowed root exactly
+        current = canonical_path_obj
+        while True:
+            if any(current == root for root in allowed_roots):
                 is_safe = True
                 break
+            parent = current.parent
+            if parent == current:
+                break
+            current = parent
 
         if not is_safe:
             msg = f"Path traversal detected: {canonical_path_obj} is outside allowed roots"

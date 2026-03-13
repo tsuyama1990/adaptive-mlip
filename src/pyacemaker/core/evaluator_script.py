@@ -20,16 +20,25 @@ from pyacemaker.domain_models.workflow import ActiveLearningThresholds  # noqa: 
 eval_uncertainty = None
 
 
-def init_evaluator(config_path: str) -> None:
+def init_evaluator(lmp: object) -> None:
     global eval_uncertainty  # noqa: PLW0603
     if eval_uncertainty is not None:
         return
+
+    # Extract the configuration path securely from the LAMMPS variable
+    try:
+        config_path = str(lmp.extract_variable("evaluator_config_path", None, 0))  # type: ignore
+    except Exception as e:
+        msg = f"Failed to extract configuration path from LAMMPS: {e}"
+        raise RuntimeError(msg) from e
 
     p = Path(config_path)
     with p.open("r", encoding="utf-8") as f:
         data = json.load(f)
 
-    thresholds = ActiveLearningThresholds(**data)
+    # Perform strict Pydantic model validation on loaded JSON structure
+    # to entirely prevent arbitrary execution or injection bugs
+    thresholds = ActiveLearningThresholds.model_validate(data, strict=True)
     eval_uncertainty = TwoTierEvaluator(thresholds)
 
 

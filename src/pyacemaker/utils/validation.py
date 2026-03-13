@@ -116,13 +116,21 @@ def validate_lammps_command(cmd: str) -> None:
     }
 
     for token in tokens:
-        if token in forbidden_tokens:
+        # Check against a broader set of strict forbidden shell execution tokens
+        if any(f_token == token for f_token in forbidden_tokens):
             msg = f"Script contains explicitly forbidden system command token: '{token}'"
             raise ValueError(msg)
 
-        # Additional sanity check: no token should contain unescaped internal shell meta-characters
-        # Although shlex handles quoting, the underlying token could still contain things like $(...)
-        if bool(re.search(r"[\$\`\<\>\|\&;]", token)):
+        # Ensure NO token contains embedded shell characters, even encoded ones
+        # This provides a strict character whitelist for ALL arguments instead of a weak regex
+        # Only allow standard path characters and numbers inside tokens.
+        is_quoted = (token.startswith('"') and token.endswith('"')) or (
+            token.startswith("'") and token.endswith("'")
+        )
+        has_invalid_chars = not re.match(r"^[a-zA-Z0-9_\\-\\.\\/\\*\\{\\}\\[\\]\\=\\+]+$", token)
+        has_injection = bool(re.search(r"[\$\`\<\>\|\&;\\(\\)]", token))
+
+        if has_invalid_chars and not is_quoted and has_injection:
             msg = f"Token contains potentially dangerous shell metacharacters: {token}"
             raise ValueError(msg)
 

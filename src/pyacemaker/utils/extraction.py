@@ -41,12 +41,11 @@ def _pre_relax_buffer(cluster: Atoms, fmax: float = 0.05, steps: int = 50) -> At
     return cluster_copy  # type: ignore[no-any-return]
 
 
-def _passivate_surface(cluster: Atoms, element: str = "H") -> Atoms:  # noqa: C901, PLR0912, PLR0915
+def _passivate_surface(cluster: Atoms, element: str = "H") -> Atoms:  # noqa: C901, PLR0912
     """
     Passivates the surface of the cluster by adding dummy atoms (e.g. H) to undercoordinated atoms.
     Uses covalent radii to determine missing bonds.
     """
-    import secrets
 
     from ase.data import chemical_symbols
     from ase.neighborlist import natural_cutoffs
@@ -91,8 +90,9 @@ def _passivate_surface(cluster: Atoms, element: str = "H") -> Atoms:  # noqa: C9
             # and place the passivating atom(s) on the opposite side, slightly perturbed if multiple.
             neighbors_vecs = D_vectors[mask]
 
-            # Use cryptographically secure random generator
-            rng = np.random.default_rng(seed=secrets.randbits(32))
+            # Use standard reproducible PRNG for deterministic scientific calculations
+            # using a fixed seed combined with the unique atom index for variety
+            rng = np.random.default_rng(seed=42 + idx)
 
             if len(neighbors_vecs) > 0:
                 # Vector pointing away from the center of mass of neighbors

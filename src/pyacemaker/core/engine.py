@@ -177,23 +177,15 @@ class LammpsEngine(BaseEngine):
 
             # Load the static script and explicitly pass the config path during LAMMPS initialization
             with input_script_path.open("w", encoding="utf-8") as f:
-                # Load the static evaluator script
+                # Load the static evaluator script directly
                 f.write(
                     f'python eval_wrapper file {shlex.quote(str(static_script_path.resolve()))} format "v"\n'
                 )
-                # Dynamically write a safe setup python block that invokes the init function
-                # with the config path, establishing state cleanly.
-                safe_config_path = shlex.quote(str(config_path.resolve())).strip("'\"")
-                f.write(f"""
-python __evaluator_setup__ here \\"\\"\\"
-import sys
-from pathlib import Path
-sys.path.insert(0, '{Path(__file__).parent.parent.parent.resolve()}')
-import pyacemaker.core.evaluator_script as ev
-ev.init_evaluator('{safe_config_path}')
-\\"\\"\\"
-""")
-                f.write("python __evaluator_setup__ invoke here\n")
+                # Instead of executing an inline python block via LAMMPS with f-strings,
+                # we pass the configuration via a structured LAMMPS variable.
+                safe_config_path = shlex.quote(str(config_path.resolve()))
+                f.write(f"variable evaluator_config_path string {safe_config_path}\n")
+                f.write("python init_evaluator invoke here\n")
         else:
             with input_script_path.open("w") as f:
                 pass  # Just touch the file
