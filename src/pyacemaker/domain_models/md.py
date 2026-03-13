@@ -47,7 +47,7 @@ class AtomStyle(StrEnum):
 
 
 class ZBLConfig(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", strict=True)
 
     zbl_cut_inner: PositiveFloat = Field(
         DEFAULT_MD_HYBRID_ZBL_INNER, description="Inner cutoff radius for ZBL potential (Angstrom)"
@@ -65,7 +65,7 @@ class ZBLConfig(BaseModel):
 
 
 class MDRampingConfig(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", strict=True)
 
     temp_start: float | None = Field(None, ge=0.0, description="Starting temperature (K)")
     temp_end: float | None = Field(None, ge=0.0, description="Ending temperature (K)")
@@ -85,7 +85,7 @@ class MDRampingConfig(BaseModel):
 
 
 class MCConfig(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", strict=True)
 
     swap_freq: int = Field(..., gt=0, description="Frequency of MC swaps (steps)")
     swap_prob: float = Field(..., gt=0.0, le=1.0, description="Probability of swapping atoms")
@@ -93,7 +93,7 @@ class MCConfig(BaseModel):
 
 
 class MDSimulationResult(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", strict=True)
 
     energy: float = Field(..., description="Final potential energy of the system")
     forces: list[list[float]] = Field(..., description="Forces on atoms in the final frame")
@@ -144,7 +144,7 @@ class MDConfig(BaseModel):
     Configuration for Molecular Dynamics simulations.
     """
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", strict=True)
 
     # Basic Physics
     temperature: float = Field(..., ge=0.0, description="Simulation temperature in Kelvin")

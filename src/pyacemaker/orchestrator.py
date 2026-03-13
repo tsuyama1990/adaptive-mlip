@@ -350,9 +350,13 @@ class Orchestrator:
 
         return self._stream_write(labelled_gen, training_file, batch_size=batch_size, append=True)
 
-    def _finetune_mace(self, s0_cluster: Atoms) -> None:
-        _finetune_manager = FinetuneManager()
-        self.logger.info("MACE model awakened (finetuned) using new DFT data.")
+    def _finetune_mace(self, dataset_path: Path) -> Path:
+        finetune_manager = FinetuneManager()
+        awakened_mace_path = finetune_manager.finetune(dataset_path)
+        self.logger.info(
+            f"MACE model awakened (finetuned) using new DFT data: {awakened_mace_path}"
+        )
+        return Path(awakened_mace_path)
 
     def _generate_surrogate_data(
         self, s0_cluster: Atoms, potential_path: Path, paths: dict[str, Path]
@@ -397,19 +401,45 @@ class Orchestrator:
         threshold = self.config.workflow.otf.uncertainty_threshold
         return not (result.max_gamma <= threshold and not result.halted)
 
+    def _handle_missing_dft_manager(self) -> None:
+        msg = "DFTManager not found for S0 labeling."
+        raise OrchestratorError(msg)
+
     def _extract_and_refine(
         self, result: MDSimulationResult, potential_path: Path, paths: dict[str, Path]
     ) -> Path | None:
+        if not result.halt_structure_path:
+            return None
+
+        s0_cluster = self._extract_cluster(result.halt_structure_path)
+        if s0_cluster is None:
+            return None
+
         try:
-            if not result.halt_structure_path:
-                return None
+            # Label S0 with ground truth (DFT)
 
-            s0_cluster = self._extract_cluster(result.halt_structure_path)
-            if s0_cluster is None:
-                return None
+            dft_manager = self.oracle
+            if hasattr(self.oracle, "dft") and self.oracle.dft is not None:
+                dft_manager = self.oracle.dft
 
-            self._finetune_mace(s0_cluster)
-            self._generate_surrogate_data(s0_cluster, potential_path, paths)
+            if dft_manager is None:
+                self._handle_missing_dft_manager()
+
+            s0_labeled = next(dft_manager.compute(iter([s0_cluster])))  # type: ignore[union-attr]
+
+            # Save labeled S0 cluster to a temporary dataset for MACE finetuning
+            s0_path = paths["training"] / "s0_labeled.extxyz"
+            write(s0_path, s0_labeled, format="extxyz")
+
+            awakened_mace_path = self._finetune_mace(s0_path)
+
+            # Update TieredOracle's MACE model to the awakened one
+            if hasattr(self.oracle, "mace") and self.oracle.mace is not None:
+                from pyacemaker.core.oracle import MACEManager
+
+                self.oracle.mace = MACEManager(model_path=str(awakened_mace_path))
+
+            self._generate_surrogate_data(s0_labeled, potential_path, paths)
             return self._incremental_update_ace(potential_path, paths)
 
         except Exception:

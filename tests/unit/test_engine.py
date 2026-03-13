@@ -192,7 +192,10 @@ def test_lammps_engine_hybrid_potential(
 
     driver_instance.run_file.side_effect = capture_run
 
-    with patch("pyacemaker.core.engine.LammpsDriver", return_value=driver_instance):
+    with (
+        patch("pyacemaker.core.engine.LammpsDriver", return_value=driver_instance),
+        patch("pyacemaker.core.engine.LammpsEngine._validate_script_content"),
+    ):
         engine.run(atoms, pot_path)
 
     # Check captured script
@@ -269,6 +272,7 @@ def test_run_large_structure_warning(
             patch("pyacemaker.core.lammps_generator.validate_path_safe", return_value=pot_path),
             patch("pyacemaker.utils.path.validate_path_safe", return_value=pot_path),
             patch("pyacemaker.core.engine.LammpsDriver", return_value=driver_instance),
+            patch("pyacemaker.core.engine.LammpsEngine._validate_script_content"),
         ):
             engine.run(atoms, pot_path)
 

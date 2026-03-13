@@ -86,11 +86,13 @@ def test_defect_policy() -> None:
 
 
 def test_strain_policy() -> None:
+    from pyacemaker.domain_models.structure import StrainMode
+
     config = StructureConfig(
         elements=["Fe"],
         supercell_size=[2, 2, 2],
         policy_name=ExplorationPolicy.STRAIN,
-        strain_mode="volume",
+        strain_mode=StrainMode("volume"),
     )
     generator = StructureGenerator(config)
     structures = list(generator.generate(n_candidates=5))
