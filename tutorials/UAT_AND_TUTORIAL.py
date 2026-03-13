@@ -1,5 +1,6 @@
 import sys
 from pathlib import Path
+from typing import Any
 
 import marimo
 
@@ -8,9 +9,10 @@ sys.path.append(str(Path(__file__).parent.parent / "src"))
 __generated_with = "0.20.4"
 app = marimo.App()
 
-from typing import Any, Tuple
+
+
 @app.cell
-def __uuid() -> Tuple[Any, Any, Any, Any, Any]:
+def __uuid() -> tuple[Any, Any, Any, Any, Any]:
     import tempfile
     from pathlib import Path
 
@@ -30,12 +32,12 @@ def __1(mo: Any) -> None:
     )
 
 @app.cell
-def __2(mo: Any) -> Tuple[Any]:
+def __2(mo: Any) -> tuple[Any]:
     execute_real_physics = mo.ui.checkbox(label="Execute Real HPC Physics (Disable Mocking)")
     return execute_real_physics,
 
 @app.cell
-def __3(mo: Any, execute_real_physics: Any, bulk: Any, tempfile: Any, Path: Any) -> Tuple[Any, Any, Any, Any]:
+def __3(mo: Any, execute_real_physics: Any, bulk: Any, tempfile: Any, Path: Any) -> tuple[Any, Any, Any, Any]:
     from pyacemaker.core.oracle import MACEManager
     from pyacemaker.domain_models.defaults import DEFAULT_POTENTIALS_DIR
     from pyacemaker.domain_models.workflow import DistillationConfig
@@ -65,7 +67,7 @@ def __3(mo: Any, execute_real_physics: Any, bulk: Any, tempfile: Any, Path: Any)
     return distillation_config, mace, res, Path
 
 @app.cell
-def __4(mo: Any, execute_real_physics: Any, bulk: Any, np: Any) -> Tuple[Any, Any, Any]:
+def __4(mo: Any, execute_real_physics: Any, bulk: Any, np: Any) -> tuple[Any, Any, Any]:
     mo.md("## Scenario UAT-02: Intelligent Cutout and Safe Passivation")
     from pyacemaker.domain_models.workflow import CutoutConfig
     from pyacemaker.utils.extraction import extract_intelligent_cluster
@@ -95,7 +97,7 @@ def __4(mo: Any, execute_real_physics: Any, bulk: Any, np: Any) -> Tuple[Any, An
     return config, mgo, cluster
 
 @app.cell
-def __5(mo: Any, execute_real_physics: Any, bulk: Any, tempfile: Any, Path: Any) -> Tuple[Any, Any, Any, Any]:
+def __5(mo: Any, execute_real_physics: Any, bulk: Any, tempfile: Any, Path: Any) -> tuple[Any, Any, Any, Any]:
     mo.md("## Scenario UAT-03: Seamless Time-Continuous MD Resume")
 
     from pyacemaker.domain_models.md import MDConfig
