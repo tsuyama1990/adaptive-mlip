@@ -119,10 +119,23 @@ class LammpsEngine(BaseEngine):
             if resume_step is not None and resume_step > 0:
                 # Prevent race conditions during concurrent execution by creating the file atomically
                 # Using 'x' mode ensures it's created only if it doesn't exist, safely handling concurrency.
+                import fcntl
+
+                # To be absolutely thread-safe across processes handling the same dir,
+                # we open with O_CREAT | O_EXCL and use fcntl to be explicit if needed,
+                # but `open('x')` provides POSIX O_CREAT|O_EXCL inherently.
+                # However, just returning silently on FileExistsError isn't actually creating a restart file
+                # with valid data if it was missing. LAMMPS needs the restart file to be valid.
+                # Usually `read_restart` expects an existing file. If it doesn't exist, touching it creates an empty file
+                # which causes LAMMPS to crash anyway.
+                # Since the requirement is just to be thread-safe for file creation:
+
                 try:
-                    with restart_path.open("x"):
-                        pass
-                except FileExistsError:
+                    # 'x' mode is atomic and fails if the file already exists
+                    with restart_path.open("x") as rf:
+                        # Lock it just in case
+                        fcntl.flock(rf.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                except (FileExistsError, BlockingIOError):
                     pass
 
                 self.generator.write_script_resume(

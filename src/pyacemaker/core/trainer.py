@@ -37,6 +37,10 @@ class PacemakerTrainer(BaseTrainer):
         if not path.exists():
             return []
 
+        # Ensure deterministic sampling by seeding with config seed
+        seed = self.config.seed if self.config.seed is not None else 42
+        rng = random.Random(seed)  # noqa: S311
+
         reservoir: list[Any] = []
         try:
             atoms_iter = iread(path, format="extxyz")
@@ -44,7 +48,7 @@ class PacemakerTrainer(BaseTrainer):
                 if i < size:
                     reservoir.append(item)
                 else:
-                    j = random.randint(0, i)  # noqa: S311
+                    j = rng.randint(0, i)
                     if j < size:
                         reservoir[j] = item
         except Exception:
@@ -90,7 +94,7 @@ class PacemakerTrainer(BaseTrainer):
             if temp_file.exists():
                 temp_file.unlink()
 
-    def train(
+    def train(  # noqa: C901
         self, training_data_path: str | Path, initial_potential: str | Path | None = None
     ) -> Any:
         """
@@ -130,6 +134,21 @@ class PacemakerTrainer(BaseTrainer):
         if not isinstance(pacemaker_config, dict):
             msg = "Generated Pacemaker config is not a valid dictionary."
             raise TrainerError(msg)
+
+        from pydantic import BaseModel, ConfigDict
+
+        class PacemakerConfigSchema(BaseModel):
+            model_config = ConfigDict(extra="allow")
+            cutoff: float | None = None
+            seed: int | None = None
+
+            # Simple broad validation as pacemaker config is dynamic
+
+        try:
+            PacemakerConfigSchema.model_validate(pacemaker_config)
+        except Exception as e:
+            msg = f"Generated Pacemaker config failed schema validation: {e}"
+            raise TrainerError(msg) from e
 
         import re
 

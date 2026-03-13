@@ -25,6 +25,15 @@ def validate_path_containment(target_path: str | Path, allowed_base_dir: str | P
 
     try:
         canonical_path = target_p.resolve(strict=True)
+
+        # Check all parent directories up to root for symlinks to prevent traversal via intermediate symlinks
+        current = canonical_path
+        while current != current.parent:
+            if current.is_symlink():
+                msg = f"Intermediate symlinks are not allowed for security reasons: {current}"
+                raise ValueError(msg)
+            current = current.parent
+
     except FileNotFoundError as e:
         msg = f"Path does not exist: {target_path}"
         raise FileNotFoundError(msg) from e

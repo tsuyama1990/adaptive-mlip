@@ -158,6 +158,8 @@ class DFTManager(BaseOracle):
         strategies = self._get_strategies()
         last_error: Exception | None = None
 
+        import concurrent.futures
+
         for i, strategy in enumerate(strategies):
             if strategy:
                 strategy(current_config)
@@ -165,24 +167,25 @@ class DFTManager(BaseOracle):
             else:
                 strategy_name = "Initial"
 
+            executor = concurrent.futures.ProcessPoolExecutor(max_workers=1)
             try:
                 # Architecture: Add explicit execution timeout for DFT manager to prevent hangs
-                import concurrent.futures
+                future = executor.submit(
+                    _run_calculator_process, self.driver, atoms, current_config, calc_dir
+                )
+                # Set a hard limit of 3600 seconds per self-healing attempt
+                calc, exception = future.result(timeout=3600)
 
-                with concurrent.futures.ProcessPoolExecutor(max_workers=1) as executor:
-                    future = executor.submit(
-                        _run_calculator_process, self.driver, atoms, current_config, calc_dir
-                    )
-                    # Set a hard limit of 3600 seconds per self-healing attempt
-                    calc, exception = future.result(timeout=3600)
+                if exception:
+                    self._handle_exception(exception)
 
-                    if exception:
-                        self._handle_exception(exception)
-
-                    # Apply results from subprocess back to the atoms object in main process
-                    atoms.calc = calc
+                # Apply results from subprocess back to the atoms object in main process
+                atoms.calc = calc
 
             except concurrent.futures.TimeoutError as e:
+                # Explicit cleanup of zombie processes on timeout
+                if hasattr(executor, 'shutdown'):
+                    executor.shutdown(wait=False, cancel_futures=True)
                 last_error = e
                 atoms.calc = None
                 logger.exception(
@@ -192,6 +195,8 @@ class DFTManager(BaseOracle):
             except Exception as e:
                 # Catch all exceptions (RuntimeError, CalculatorSetupError, JobFailedException etc)
                 # to ensure self-healing strategies are attempted.
+                if hasattr(executor, 'shutdown'):
+                    executor.shutdown(wait=False, cancel_futures=True)
                 last_error = e
                 atoms.calc = None  # Clean up failed calculator
 
@@ -201,6 +206,8 @@ class DFTManager(BaseOracle):
                 )
                 continue
             else:
+                if hasattr(executor, 'shutdown'):
+                    executor.shutdown(wait=True)
                 return atoms
 
         # Correctly format the error message with the captured exception
