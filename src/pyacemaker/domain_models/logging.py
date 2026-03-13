@@ -3,6 +3,21 @@ from pathlib import Path
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
+class LogMessagesConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    init_modules: str = "Initializing active learning modules"
+    modules_init_success: str = "Core modules initialized successfully."
+    module_init_fail: str = "Failed to initialize modules: {error}"
+    start_loop: str = "Starting active learning loop"
+    iteration_completed: str = "Active learning loop completed normally."
+    potential_trained: str = "Training completed successfully."
+    project_init: str = "PyAceMaker workflow started."
+    start_iteration: str = "Starting iteration {iteration}/{max_iterations}"
+    workflow_completed: str = "Workflow completed successfully."
+    workflow_crashed: str = "Workflow failed with unrecoverable error: {error}"
+
+
 class LoggingConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -12,6 +27,9 @@ class LoggingConfig(BaseModel):
     log_file: str | None = Field(default="pyacemaker.log", description="Path to the log file")
     max_bytes: int = Field(
         default=10 * 1024 * 1024, gt=0, description="Max size of log file before rotation"
+    )
+    messages: LogMessagesConfig = Field(
+        default_factory=LogMessagesConfig, description="Configuration for specific log messages"
     )
     backup_count: int = Field(default=5, ge=0, description="Number of backup log files to keep")
 
