@@ -51,7 +51,7 @@ def _passivate_surface(cluster: Atoms, element: str = "H") -> Atoms:
     cluster_copy = cluster.copy()  # type: ignore[no-untyped-call]
 
     # Calculate covalent radii sums for cutoffs
-    cutoffs = natural_cutoffs(cluster_copy, mult=1.2) # type: ignore[no-untyped-call]
+    cutoffs = natural_cutoffs(cluster_copy, mult=1.2)  # type: ignore[no-untyped-call]
     i_indices, j_indices, D_vectors = neighbor_list("ijD", cluster_copy, cutoff=cutoffs)  # type: ignore[no-untyped-call]
 
     weights = cluster_copy.get_array("force_weight")
@@ -67,13 +67,13 @@ def _passivate_surface(cluster: Atoms, element: str = "H") -> Atoms:
         symbol = cluster_copy.get_chemical_symbols()[idx]
 
         # Simple heuristic for expected coordination based on valency
-        expected_coord = 6 # Typical for many transition metals and oxides in bulk
+        expected_coord = 6  # Typical for many transition metals and oxides in bulk
         if symbol in ["O"]:
             expected_coord = 2
         elif symbol in ["Mg"]:
             expected_coord = 6
         elif symbol in ["Fe", "Pt"]:
-            expected_coord = 8 # BCC/FCC bulk roughly
+            expected_coord = 8  # BCC/FCC bulk roughly
 
         if n_neighbors < expected_coord:
             # We add a dummy atom in the direction of the "missing" bonds.

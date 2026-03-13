@@ -73,9 +73,12 @@ class LammpsEngine(BaseEngine):
 
         from pyacemaker.domain_models.constants import LAMMPS_SCREEN_ARG
         from pyacemaker.interfaces.lammps_driver import LammpsDriver
-        driver = LammpsDriver(cmdargs=['-screen', LAMMPS_SCREEN_ARG]) # Get access to validation logic safely
 
-        with script_path.open('r', encoding='utf-8') as f:
+        driver = LammpsDriver(
+            cmdargs=["-screen", LAMMPS_SCREEN_ARG]
+        )  # Get access to validation logic safely
+
+        with script_path.open("r", encoding="utf-8") as f:
             for line_idx, line in enumerate(f):
                 line_str = line.strip()
                 if not line_str or line_str.startswith("#"):
@@ -84,7 +87,7 @@ class LammpsEngine(BaseEngine):
                 try:
                     driver._validate_command(line_str)
                 except ValueError as e:
-                    msg = f"Forbidden command detected in LAMMPS script line {line_idx+1} ({script_path}): {e}"
+                    msg = f"Forbidden command detected in LAMMPS script line {line_idx + 1} ({script_path}): {e}"
                     raise ValueError(msg) from e
 
     def _execute_simulation(self, driver: LammpsDriver, script_path: Path) -> None:
@@ -127,7 +130,15 @@ class LammpsEngine(BaseEngine):
 
         return resume_step, override_n_steps
 
-    def _prepare_script(self, temp_dir: Path, potential_path: Path, data_file: Path, dump_file: Path, elements: list[str], resume_step: int | None) -> tuple[Path, Path]:
+    def _prepare_script(
+        self,
+        temp_dir: Path,
+        potential_path: Path,
+        data_file: Path,
+        dump_file: Path,
+        elements: list[str],
+        resume_step: int | None,
+    ) -> tuple[Path, Path]:
         """Prepares input and restart scripts within the working directory."""
         input_script_path = temp_dir / "input.lmp"
         restart_path = temp_dir / "restart.lmp"
@@ -146,7 +157,9 @@ class LammpsEngine(BaseEngine):
 
         return input_script_path, restart_path
 
-    def _extract_results(self, driver: LammpsDriver, kwargs: dict[str, Any], dump_file: Path, log_file: Path) -> MDSimulationResult:
+    def _extract_results(
+        self, driver: LammpsDriver, kwargs: dict[str, Any], dump_file: Path, log_file: Path
+    ) -> MDSimulationResult:
         """Extracts and formats simulation results from the driver."""
         try:
             energy = driver.extract_variable("pe")
@@ -206,7 +219,9 @@ class LammpsEngine(BaseEngine):
 
         with ctx:
             temp_dir = Path(ctx.name) if hasattr(ctx, "name") else data_file.parent
-            input_script_path, _ = self._prepare_script(temp_dir, potential_path, data_file, dump_file, elements, resume_step)
+            input_script_path, _ = self._prepare_script(
+                temp_dir, potential_path, data_file, dump_file, elements, resume_step
+            )
 
             lammps_args = ["-screen", LAMMPS_SCREEN_ARG, "-log", str(log_file)]
 

@@ -67,6 +67,7 @@ class PacemakerTrainer(BaseTrainer):
         # We need a dynamic path to history, we assume it's stored alongside the new data
         # or in the default config directory
         from pyacemaker.domain_models.defaults import DEFAULT_DATA_DIR
+
         history_path = Path(DEFAULT_DATA_DIR) / "training_history.extxyz"
 
         replay_buffer = self.get_replay_buffer(strategy_config.replay_buffer_size, history_path)
@@ -128,7 +129,9 @@ class PacemakerTrainer(BaseTrainer):
         import re
 
         for key, val in pacemaker_config.items():
-            if isinstance(val, str) and re.search(r"(\bexec\b|\bsystem\b|\bos\.|;|\||>|<|&|`|\$|\n|\r|\\)", val):
+            if isinstance(val, str) and re.search(
+                r"(\bexec\b|\bsystem\b|\bos\.|;|\||>|<|&|`|\$|\n|\r|\\)", val
+            ):
                 msg = f"Malicious content detected in configuration value for key '{key}'"
                 raise TrainerError(msg)
 

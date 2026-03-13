@@ -50,7 +50,7 @@ def test_lammps_engine_relax(
     # Call relax
     with (
         patch("pyacemaker.core.engine.LammpsEngine._validate_script_content"),
-        patch("pyacemaker.core.engine.LammpsDriver", return_value=driver_instance)
+        patch("pyacemaker.core.engine.LammpsDriver", return_value=driver_instance),
     ):
         result_atoms = engine.relax(initial_atoms, pot_path)
 
@@ -94,6 +94,6 @@ def test_lammps_engine_relax_driver_fail(
 
     with (
         patch("pyacemaker.core.engine.LammpsEngine._validate_script_content"),
-        pytest.raises(RuntimeError, match="Simulation execution failed")
+        pytest.raises(RuntimeError, match="Simulation execution failed"),
     ):
         engine.relax(atoms, pot_path)

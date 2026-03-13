@@ -244,13 +244,18 @@ class MACEManager(BaseOracle):
         # Initialize MACE properly
         import torch
         from mace.calculators import mace_mp
+
         device = "cuda" if torch.cuda.is_available() else "cpu"
         # We assume the model path points to a valid MACE file or we can just load the small default for tests
         try:
-            self.calc = mace_mp(model=self.model_path, dispersion=False, default_dtype="float32", device=device)
+            self.calc = mace_mp(
+                model=self.model_path, dispersion=False, default_dtype="float32", device=device
+            )
         except Exception:
             # Fallback to standard pretrained for tests if the file is a dummy
-            self.calc = mace_mp(model="small", dispersion=False, default_dtype="float32", device=device)
+            self.calc = mace_mp(
+                model="small", dispersion=False, default_dtype="float32", device=device
+            )
 
         self.is_initialized = True
 
@@ -279,9 +284,9 @@ class MACEManager(BaseOracle):
 
             # Since extracting exact committee uncertainty requires ensemble we will compute node energies
             if hasattr(self.calc, "models") and len(self.calc.models) > 1:
-                 # Real uncertainty from ensemble if multiple models present.
-                 # Currently we fall back to heuristic estimation since ensemble extraction requires internal state hooking.
-                 _ = len(self.calc.models)
+                # Real uncertainty from ensemble if multiple models present.
+                # Currently we fall back to heuristic estimation since ensemble extraction requires internal state hooking.
+                _ = len(self.calc.models)
 
             # For this exact requirement we must have real output
             # We assign arrays cleanly

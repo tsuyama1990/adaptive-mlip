@@ -47,6 +47,7 @@ class LammpsDriver:
         # Additional explicit blocklist check against dangerous shell injection characters
         # Just in case SAFE_CMD_PATTERN is bypassed or redefined improperly
         import re
+
         blocked_pattern = re.compile(r"[;&|\`<>\n\r]")
         if blocked_pattern.search(cmd):
             msg = f"Command contains explicitly blocked shell metacharacters: {cmd}"

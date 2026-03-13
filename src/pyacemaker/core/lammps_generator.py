@@ -36,7 +36,6 @@ class LammpsScriptGenerator:
         import os
         import re
 
-
         # Add basic shell character blocking first to prevent trivial injection attempts
         # before OS stat/path-resolution even happens.
         if re.search(r"[;&|\`$<>\n\r]", path):
@@ -288,7 +287,7 @@ class LammpsScriptGenerator:
         steps_left = max(0, self.config.n_steps - resume_step)
 
         # Master-Slave resume logic
-        buffer.write("reset_timestep ${step}\n") # step is read from restart
+        buffer.write("reset_timestep ${step}\n")  # step is read from restart
         buffer.write(f"run {steps_left}\n")
         self._gen_post_run_diagnostics(buffer)
 

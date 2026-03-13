@@ -140,7 +140,7 @@ def test_lammps_engine_hybrid_potential(
 
     with (
         patch("pyacemaker.core.engine.LammpsEngine._validate_script_content"),
-        patch("pyacemaker.core.engine.LammpsDriver", return_value=driver_instance)
+        patch("pyacemaker.core.engine.LammpsDriver", return_value=driver_instance),
     ):
         engine.run(atoms, pot_path)
 
@@ -218,7 +218,7 @@ def test_run_large_structure_warning(
             patch("pyacemaker.core.lammps_generator.validate_path_safe", return_value=pot_path),
             patch("pyacemaker.utils.path.validate_path_safe", return_value=pot_path),
             patch("pyacemaker.core.engine.LammpsEngine._validate_script_content"),
-            patch("pyacemaker.core.engine.LammpsDriver", return_value=driver_instance)
+            patch("pyacemaker.core.engine.LammpsDriver", return_value=driver_instance),
         ):
             engine.run(atoms, pot_path)
 
@@ -249,6 +249,6 @@ def test_run_driver_failure(mock_md_config: MDConfig, mock_driver: Any, tmp_path
     # Updated error message expectation
     with (
         patch("pyacemaker.core.engine.LammpsEngine._validate_script_content"),
-        pytest.raises(RuntimeError, match="Simulation execution failed")
+        pytest.raises(RuntimeError, match="Simulation execution failed"),
     ):
         engine.run(atoms, pot_path)
