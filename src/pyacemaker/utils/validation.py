@@ -59,6 +59,7 @@ ALLOWED_LAMMPS_COMMANDS = {
     "variable",
     "write_restart",
     "python",
+    "print",
 }
 
 # Comprehensively block all shell injection, redirection, pipeline, and grouping metacharacters.

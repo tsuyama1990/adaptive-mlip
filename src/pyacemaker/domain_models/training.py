@@ -23,7 +23,7 @@ from pyacemaker.domain_models.defaults import (
 class PacemakerConfig(BaseModel):
     """Specific configuration for Pacemaker training."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", strict=True)
 
     # Embedding settings
     embedding_type: str = Field(
@@ -71,7 +71,7 @@ class PacemakerConfig(BaseModel):
 
 
 class TrainingConfig(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", strict=True)
 
     potential_type: str = Field(..., description="Type of potential to train")
     cutoff_radius: PositiveFloat = Field(..., description="Potential cutoff radius in Angstrom")
@@ -91,7 +91,7 @@ class TrainingConfig(BaseModel):
         default_factory=PacemakerConfig, description="Detailed Pacemaker configuration"
     )
 
-    # Mocking & Output (Audit Requirement)
+    # Training Control Parameters
     output_filename: str = Field(
         FILENAME_POTENTIAL, description="Filename for the trained potential"
     )

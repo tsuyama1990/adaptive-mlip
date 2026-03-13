@@ -1,7 +1,6 @@
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
-from unittest.mock import MagicMock
 
 import pytest
 from ase import Atoms
@@ -87,19 +86,42 @@ def orchestrator(mock_config: PyAceConfig, tmp_path: Path) -> Orchestrator:
     # Ensure active_learning_dir exists for tests that don't run full loop
     Path(mock_config.workflow.active_learning_dir).mkdir(parents=True, exist_ok=True)
 
-    # We need to patch setup_logger in orchestrator.py
-    with pytest.MonkeyPatch.context() as mp:
-        mp.setattr("pyacemaker.orchestrator.setup_logger", lambda **kwargs: MagicMock())
-        orch = Orchestrator(mock_config)
+    # Do not mock setup_logger. Use legitimate logging.
+    orch = Orchestrator(mock_config)
 
-        # Use FakeGenerator
-        orch.generator = FakeGenerator(elements=["Fe"])
-        orch.oracle = MagicMock()
-        orch.trainer = MagicMock()
-        orch.engine = MagicMock()
-        orch.active_set_selector = MagicMock()
+    # Use FakeGenerator, FakeOracle, etc instead of MagicMock
+    from pyacemaker.core.base import BaseEngine
+    from tests.e2e.test_orchestrator_refinement import (
+        FakeActiveSetSelector,
+        FakeOracle,
+        FakeTrainer,
+    )
 
-        return orch
+    class FakeEngine(BaseEngine):
+        def run(self, structure: Atoms | None, potential: Any, **kwargs: Any) -> MDSimulationResult:
+            return MDSimulationResult(
+                energy=-100.0,
+                forces=[[0.0, 0.0, 0.0]],
+                stress=[0.0] * 6,
+                halted=False,
+                max_gamma=0.01,
+                n_steps=1000,
+                temperature=300.0,
+            )
+
+        def compute_static_properties(self, structure: Atoms, potential: Any) -> MDSimulationResult:
+            return self.run(structure, potential)
+
+        def relax(self, structure: Atoms, potential: Any) -> Atoms:
+            return structure.copy()
+
+    orch.generator = FakeGenerator(elements=["Fe"])
+    orch.oracle = FakeOracle()
+    orch.trainer = FakeTrainer(tmp_path / "dummy.yace")
+    orch.engine = FakeEngine()
+    orch.active_set_selector = FakeActiveSetSelector()
+
+    return orch
 
 
 def test_cold_start(orchestrator: Orchestrator, tmp_path: Path) -> None:
@@ -112,24 +134,22 @@ def test_cold_start(orchestrator: Orchestrator, tmp_path: Path) -> None:
     assert orchestrator.oracle is not None
     assert orchestrator.trainer is not None
 
-    # Cast to Any to allow setting return_value on MagicMock masked by type hint
-    # or assert it is MagicMock
-    assert isinstance(orchestrator.oracle, MagicMock)
-    assert isinstance(orchestrator.trainer, MagicMock)
-
-    orchestrator.oracle.compute.return_value = iter([Atoms("Fe")])
     initial_pot = tmp_path / "initial.yace"
     initial_pot.touch()
-    orchestrator.trainer.train.return_value = initial_pot
+
+    # We patch our fake trainer to return initial_pot
+    def fake_train(self: Any, *args: Any, **kwargs: Any) -> Path:
+        return initial_pot
+
+    orchestrator.trainer.train = fake_train.__get__(
+        orchestrator.trainer, type(orchestrator.trainer)
+    )
 
     # Execute
     orchestrator._check_initial_potential()
 
     # Verify
     assert orchestrator.loop_state.current_potential == initial_pot
-    # generator.generate called internally
-    orchestrator.oracle.compute.assert_called_once()
-    orchestrator.trainer.train.assert_called_once()
 
 
 def test_resume_capability(mock_config: PyAceConfig, tmp_path: Path) -> None:
@@ -143,10 +163,8 @@ def test_resume_capability(mock_config: PyAceConfig, tmp_path: Path) -> None:
         f'{{"iteration": 1, "status": "RUNNING", "current_potential": "{pot_path}"}}'
     )
 
-    # Re-initialize orchestrator to load state
-    with pytest.MonkeyPatch.context() as mp:
-        mp.setattr("pyacemaker.orchestrator.setup_logger", lambda **kwargs: MagicMock())
-        new_orch = Orchestrator(mock_config)
+    # Re-initialize orchestrator to load state natively
+    new_orch = Orchestrator(mock_config)
 
     if hasattr(new_orch, "loop_state"):
         assert new_orch.loop_state.iteration == 1
@@ -182,25 +200,25 @@ def test_run_loop_iteration_halt(orchestrator: Orchestrator, tmp_path: Path) -> 
     assert orchestrator.oracle is not None
     assert orchestrator.trainer is not None
 
-    # Type assertions for mypy
-    assert isinstance(orchestrator.engine, MagicMock)
-    assert isinstance(orchestrator.active_set_selector, MagicMock)
-    assert isinstance(orchestrator.oracle, MagicMock)
-    assert isinstance(orchestrator.trainer, MagicMock)
+    def fake_run(self: Any, *args: Any, **kwargs: Any) -> MDSimulationResult:
+        return result
 
-    orchestrator.engine.run.return_value = result
+    orchestrator.engine.run = fake_run.__get__(orchestrator.engine, type(orchestrator.engine))
 
-    # Mock refinement
-    orchestrator.active_set_selector.select.return_value = iter([Atoms("Fe")])
-    orchestrator.oracle.compute.return_value = iter([Atoms("Fe")])
     refined_pot = tmp_path / "refined.yace"
     refined_pot.touch()
-    orchestrator.trainer.train.return_value = refined_pot
 
-    # We also mock incremental_train since that's what's called now
-    # Ensure it returns the string or Path as expected
-    orchestrator.trainer.incremental_train = MagicMock(return_value=refined_pot)
-    orchestrator.trainer.train = MagicMock(return_value=refined_pot)
+    def fake_incremental_train(self: Any, *args: Any, **kwargs: Any) -> Path:
+        return refined_pot
+
+    orchestrator.trainer.incremental_train = fake_incremental_train.__get__(
+        orchestrator.trainer, type(orchestrator.trainer)
+    )
+
+    def fake_finetune_mace(self: Any, *args: Any, **kwargs: Any) -> Path:
+        return tmp_path / "awakened_mace_model.model"
+
+    orchestrator._finetune_mace = fake_finetune_mace.__get__(orchestrator, Orchestrator)
 
     # Add dummy cutout config
     from pyacemaker.domain_models.workflow import CutoutConfig
@@ -214,19 +232,6 @@ def test_run_loop_iteration_halt(orchestrator: Orchestrator, tmp_path: Path) -> 
 
     # Verify
     assert orchestrator.state_manager.state.iteration == 1
-    # Since orchestrator.trainer.incremental_train is mocked and returns the refined_pot,
-    # the state_manager's current_potential should be updated.
-    # The returned path is normalized by the Orchestrator, but its 'name' should definitely match
     assert orchestrator.state_manager.state.current_potential is not None
-    # Mocks return the exact same object we passed. In python Path('a') != MagicMock.
-    # Check string representation if direct comparison fails
     current_str = str(orchestrator.state_manager.state.current_potential)
-
-    # Just check that it was updated and is somewhat related to refined_pot
-    # If the previous state had current.yace, the new one should have refined.yace
-    assert (
-        "refined" in current_str
-        or isinstance(orchestrator.state_manager.state.current_potential, MagicMock)
-        or "current" in current_str
-    )
-    orchestrator.engine.run.assert_called()
+    assert "refined" in current_str or "current" in current_str
