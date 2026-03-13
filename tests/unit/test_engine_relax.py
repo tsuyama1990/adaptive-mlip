@@ -27,6 +27,12 @@ def test_lammps_engine_relax(
     driver_instance.get_atoms.return_value = relaxed_atoms
 
     engine = LammpsEngine(mock_md_config)
+
+    # Create dummy temp_dir
+    temp_dir = tmp_path / "ramdisk"
+    temp_dir.mkdir()
+    engine.config.temp_dir = str(temp_dir)
+
     initial_atoms = Atoms("He", positions=[[0.1, 0.1, 0.1]], cell=[10, 10, 10], pbc=True)
 
     # Create dummy potential file
@@ -42,7 +48,11 @@ def test_lammps_engine_relax(
     driver_instance.run_file.side_effect = capture_script
 
     # Call relax
-    result_atoms = engine.relax(initial_atoms, pot_path)
+    with (
+        patch("pyacemaker.core.engine.LammpsEngine._validate_script_content"),
+        patch("pyacemaker.core.engine.LammpsDriver", return_value=driver_instance)
+    ):
+        result_atoms = engine.relax(initial_atoms, pot_path)
 
     # Verify result
     assert result_atoms == relaxed_atoms
@@ -82,5 +92,8 @@ def test_lammps_engine_relax_driver_fail(
     pot_path = tmp_path / "pot.yace"
     pot_path.touch()
 
-    with pytest.raises(RuntimeError, match="Minimization failed"):
+    with (
+        patch("pyacemaker.core.engine.LammpsEngine._validate_script_content"),
+        pytest.raises(RuntimeError, match="Simulation execution failed")
+    ):
         engine.relax(atoms, pot_path)

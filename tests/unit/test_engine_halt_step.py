@@ -33,11 +33,18 @@ def test_lammps_engine_halt_step_populated(tmp_path: Path) -> None:
         driver.get_stress.return_value = np.zeros(6)
 
         engine = LammpsEngine(config)
+
+        # Create dummy temp_dir
+        temp_dir = tmp_path / "ramdisk"
+        temp_dir.mkdir()
+        engine.config.temp_dir = str(temp_dir)
+
         atoms = Atoms("H", cell=[10, 10, 10], pbc=True)
         pot_path = tmp_path / "pot.yace"
         pot_path.touch()
 
-        result = engine.run(atoms, pot_path)
+        with patch("pyacemaker.core.engine.LammpsEngine._validate_script_content"):
+            result = engine.run(atoms, pot_path)
 
         assert result.halted is True
         assert result.halt_step == 500
@@ -69,11 +76,18 @@ def test_lammps_engine_halt_step_none_if_not_halted(tmp_path: Path) -> None:
         driver.get_stress.return_value = np.zeros(6)
 
         engine = LammpsEngine(config)
+
+        # Create dummy temp_dir
+        temp_dir = tmp_path / "ramdisk"
+        temp_dir.mkdir()
+        engine.config.temp_dir = str(temp_dir)
+
         atoms = Atoms("H", cell=[10, 10, 10], pbc=True)
         pot_path = tmp_path / "pot.yace"
         pot_path.touch()
 
-        result = engine.run(atoms, pot_path)
+        with patch("pyacemaker.core.engine.LammpsEngine._validate_script_content"):
+            result = engine.run(atoms, pot_path)
 
         assert result.halted is False
         assert result.halt_step is None

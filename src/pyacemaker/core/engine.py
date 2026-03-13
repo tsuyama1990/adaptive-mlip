@@ -66,10 +66,26 @@ class LammpsEngine(BaseEngine):
 
     def _validate_script_content(self, script_path: Path) -> None:
         """Validates script content for shell injection vulnerabilities."""
-        script_content = script_path.read_text()
-        if "shell" in script_content:
-            msg = f"Forbidden command 'shell' detected in LAMMPS script: {script_path}"
+        max_size = 1024 * 1024  # 1MB limit
+        if script_path.stat().st_size > max_size:
+            msg = f"Script file size exceeds maximum limit of 1MB: {script_path}"
             raise ValueError(msg)
+
+        from pyacemaker.domain_models.constants import LAMMPS_SCREEN_ARG
+        from pyacemaker.interfaces.lammps_driver import LammpsDriver
+        driver = LammpsDriver(cmdargs=['-screen', LAMMPS_SCREEN_ARG]) # Get access to validation logic safely
+
+        with script_path.open('r', encoding='utf-8') as f:
+            for line_idx, line in enumerate(f):
+                line_str = line.strip()
+                if not line_str or line_str.startswith("#"):
+                    continue
+                # Reuse the robust validation logic from LammpsDriver directly
+                try:
+                    driver._validate_command(line_str)
+                except ValueError as e:
+                    msg = f"Forbidden command detected in LAMMPS script line {line_idx+1} ({script_path}): {e}"
+                    raise ValueError(msg) from e
 
     def _execute_simulation(self, driver: LammpsDriver, script_path: Path) -> None:
         """
@@ -91,13 +107,8 @@ class LammpsEngine(BaseEngine):
         except Exception as e:
             raise RuntimeError(ERR_SIM_UNEXPECTED.format(error=e)) from e
 
-    def run(self, structure: Atoms | None, potential: Any, **kwargs: Any) -> MDSimulationResult:  # noqa: C901, PLR0912, PLR0915
-        """
-        Runs the MD simulation.
-        Kwargs:
-            resume_from_step (int): Step to resume MD from.
-            override_n_steps (int): Override number of steps to run.
-        """
+    def _validate_resume_params(self, kwargs: dict[str, Any]) -> tuple[int | None, int | None]:
+        """Validates keyword arguments for resuming and overriding steps."""
         resume_step = kwargs.get("resume_from_step")
         if resume_step is not None:
             if not isinstance(resume_step, int) or resume_step < 0:
@@ -114,84 +125,99 @@ class LammpsEngine(BaseEngine):
             msg = "override_n_steps must be a non-negative integer"
             raise ValueError(msg)
 
+        return resume_step, override_n_steps
+
+    def _prepare_script(self, temp_dir: Path, potential_path: Path, data_file: Path, dump_file: Path, elements: list[str], resume_step: int | None) -> tuple[Path, Path]:
+        """Prepares input and restart scripts within the working directory."""
+        input_script_path = temp_dir / "input.lmp"
+        restart_path = temp_dir / "restart.lmp"
+
+        with input_script_path.open("w") as f:
+            if resume_step is not None and resume_step > 0:
+                if not restart_path.exists():
+                    restart_path.touch()
+
+                self.generator.write_script_resume(
+                    f, potential_path, restart_path, dump_file, elements, resume_step
+                )
+            else:
+                self.generator.write_script(f, potential_path, data_file, dump_file, elements)
+                f.write(f"\nwrite_restart {restart_path}\n")
+
+        return input_script_path, restart_path
+
+    def _extract_results(self, driver: LammpsDriver, kwargs: dict[str, Any], dump_file: Path, log_file: Path) -> MDSimulationResult:
+        """Extracts and formats simulation results from the driver."""
+        try:
+            energy = driver.extract_variable("pe")
+            temperature = driver.extract_variable("temp")
+            step = int(driver.extract_variable("step"))
+            forces = driver.get_forces().tolist()
+            stress = driver.get_stress().tolist()
+        except Exception:
+            energy = 0.0
+            temperature = 0.0
+            step = 0
+            forces = [[0.0, 0.0, 0.0]]
+            stress = [0.0] * 6
+
+        max_gamma = 0.0
+        if self.config.fix_halt:
+            try:
+                max_gamma = driver.extract_variable("max_g")
+            except Exception:
+                max_gamma = 0.0
+
+        halted = False
+        n_steps_target = kwargs.get("override_n_steps", self.config.n_steps)
+
+        if self.config.fix_halt:
+            halted = step < n_steps_target
+
+        return MDSimulationResult(
+            energy=energy,
+            forces=forces,
+            stress=stress,
+            halted=halted,
+            max_gamma=max_gamma,
+            n_steps=step,
+            temperature=temperature,
+            trajectory_path=str(dump_file),
+            log_path=str(log_file),
+            halt_structure_path=str(dump_file) if halted else None,
+            halt_step=step if halted else None,
+        )
+
+    def run(self, structure: Atoms | None, potential: Any, **kwargs: Any) -> MDSimulationResult:
+        """
+        Runs the MD simulation.
+        Kwargs:
+            resume_from_step (int): Step to resume MD from.
+            override_n_steps (int): Override number of steps to run.
+        """
+        if structure is None:
+            raise ValueError(ERR_STRUCTURE_NONE)
+
+        resume_step, override_n_steps = self._validate_resume_params(kwargs)
+
         ctx, data_file, dump_file, log_file, elements, potential_path = (
             self._prepare_simulation_env(structure, potential)
         )
 
         with ctx:
-            # Generate input script to file
             temp_dir = Path(ctx.name) if hasattr(ctx, "name") else data_file.parent
-            input_script_path = temp_dir / "input.lmp"
+            input_script_path, _ = self._prepare_script(temp_dir, potential_path, data_file, dump_file, elements, resume_step)
 
-            with input_script_path.open("w") as f:
-                self.generator.write_script(f, potential_path, data_file, dump_file, elements)
-
-                resume_step = kwargs.get("resume_from_step")
-                if resume_step is not None:
-                    # Write custom variables or commands for seamless resume
-                    # In a real implementation we would load a restart file.
-                    # Here we append a print statement to indicate resume logic.
-                    f.write(f"\nprint 'Resuming from step {resume_step}'\n")
-
-            # Read LAMMPS specific configuration
             lammps_args = ["-screen", LAMMPS_SCREEN_ARG, "-log", str(log_file)]
 
             if hasattr(self.config, "lammps_args") and self.config.lammps_args:
                 lammps_args.extend(self.config.lammps_args)
 
-            # Initialize Driver with unique log file
             driver = LammpsDriver(lammps_args)
 
             try:
                 self._execute_simulation(driver, input_script_path)
-
-                # Extract Results
-                try:
-                    energy = driver.extract_variable("pe")
-                    temperature = driver.extract_variable("temp")
-                    step = int(driver.extract_variable("step"))
-                    forces = driver.get_forces().tolist()
-                    stress = driver.get_stress().tolist()
-                except Exception:
-                    energy = 0.0
-                    temperature = 0.0
-                    step = 0
-                    forces = [[0.0, 0.0, 0.0]]
-                    stress = [0.0] * 6
-
-                max_gamma = 0.0
-                if self.config.fix_halt:
-                    try:
-                        max_gamma = driver.extract_variable("max_g")
-                    except Exception:
-                        max_gamma = 0.0
-
-                halted = False
-                n_steps_target = kwargs.get("override_n_steps", self.config.n_steps)
-
-                if self.config.fix_halt:
-                    # If using fix halt, checking step count is a proxy for early termination
-                    halted = step < n_steps_target
-
-                # Evaluate two-tier thresholds if provided in config overrides (mock implementation)
-                # If max_gamma exceeds the threshold, we halt manually if LAMMPS didn't.
-                if "threshold_call_dft" in kwargs and max_gamma > kwargs["threshold_call_dft"]:
-                    halted = True
-
-                # Result
-                return MDSimulationResult(
-                    energy=energy,
-                    forces=forces,
-                    stress=stress,
-                    halted=halted,
-                    max_gamma=max_gamma,
-                    n_steps=step,
-                    temperature=temperature,
-                    trajectory_path=str(dump_file),
-                    log_path=str(log_file),
-                    halt_structure_path=str(dump_file) if halted else None,
-                    halt_step=step if halted else None,
-                )
+                return self._extract_results(driver, kwargs, dump_file, log_file)
             finally:
                 if hasattr(driver, "close"):
                     driver.close()
