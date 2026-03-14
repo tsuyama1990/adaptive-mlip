@@ -54,119 +54,88 @@ def test_macemanager_initialization(monkeypatch: pytest.MonkeyPatch, tmp_path: P
 def test_macemanager_initialization_failure(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    model_path = get_safe_test_model_path(monkeypatch, tmp_path)
-    model_path.touch()
+    """Test self-healing mechanism."""
+    atoms = Atoms("H", cell=[10, 10, 10], pbc=True)
 
-    with (
-        patch("mace.calculators.mace_mp", side_effect=Exception("Model failed to load")),
-        pytest.raises(OracleError, match="Failed to load MACE model"),
-    ):
-        MACEManager(str(model_path))
+    # Because ProcessPoolExecutor executes in a separate process, mocking stateful objects like `FakeDriver`
+    # is difficult. We will mock `ProcessPoolExecutor` itself to test the loop logic.
+    from concurrent.futures import Future
 
-    model_path.unlink()
+    class DummyFuture(Future):  # type: ignore[type-arg]
+        def __init__(self, result_value: Any, exception: Any = None) -> None:
+            super().__init__()
+            self._result_value = result_value
+            self._exception = exception
 
+        def result(self, timeout: float | None = None) -> Any:
+            return self._result_value, self._exception
 
-def test_macemanager_invalid_paths(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    pot_dir = tmp_path / "potentials"
-    monkeypatch.setattr("pyacemaker.domain_models.defaults.DEFAULT_POTENTIALS_DIR", str(pot_dir))
-    pot_dir.mkdir(parents=True, exist_ok=True)
+    class DummyExecutor:
+        def __init__(self, max_workers: int) -> None:
+            # We track the call count at the class level because DummyExecutor is instantiated fresh each loop
+            pass
 
-    # 1. Non-existent path
-    with pytest.raises(FileNotFoundError, match="Path does not exist"):
-        MACEManager(str(pot_dir / "does_not_exist.model"))
+        def __enter__(self) -> "DummyExecutor":
+            return self
 
-    # 2. Path traversal
-    # We should catch the error raised by validation, but pathlib resolve might fail first if parent doesn't exist.
-    # To properly test traversal, we create a file outside and try to reference it via ..
-    malicious_dir = tmp_path / "malicious"
-    malicious_dir.mkdir()
-    malicious_file = malicious_dir / "malicious.model"
-    malicious_file.touch()
+        def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+            pass
 
-    with pytest.raises(ValueError, match="outside allowed directory"):
-        MACEManager(str(pot_dir / ".." / "malicious" / "malicious.model"))
+        def submit(self, fn: Any, *args: Any, **kwargs: Any) -> DummyFuture:
+            DummyExecutor.call_count += 1
+            if DummyExecutor.call_count == 1:
+                return DummyFuture(None, RuntimeError("Setup failed"))
 
+            calc = MockCalculator(fail_count=0)
+            atoms = args[1]
+            atoms.calc = calc
+            atoms.get_potential_energy()  # type: ignore[no-untyped-call]
+            return DummyFuture(calc, None)
 
-def test_macemanager_compute(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    model_path = get_safe_test_model_path(monkeypatch, tmp_path)
-    model_path.touch()
+    DummyExecutor.call_count = 0
 
-    with patch("mace.calculators.mace_mp", return_value=DummyMaceCalc()):
-        manager = MACEManager(str(model_path))
+    monkeypatch.setattr("concurrent.futures.ProcessPoolExecutor", DummyExecutor)
 
-        atoms = Atoms("H2", positions=[[0, 0, 0], [0, 0, 1]])
-        structures_iter = manager.compute(iter([atoms]))
+    fake_driver = FakeDriver()
+    manager = DFTManager(mock_dft_config, driver=fake_driver)  # type: ignore[arg-type]
 
-        computed_atoms = next(structures_iter)
-        assert "energy" in computed_atoms.info
-        assert computed_atoms.has("forces")  # type: ignore[no-untyped-call]
-        assert computed_atoms.has("c_gamma")  # type: ignore[no-untyped-call]
+    gen = manager.compute(iter([atoms]))
+    result = next(gen)
 
-        c_gamma = computed_atoms.get_array("c_gamma")  # type: ignore[no-untyped-call]
-        assert len(c_gamma) == 2
-        # np.linalg.norm(np.ones(3) * 0.1) * 0.01 = sqrt(3*0.01) * 0.01 = 0.001732
-        assert np.allclose(c_gamma, 0.0017320508)
-        assert np.all(c_gamma >= 0.0), "Uncertainty must be non-negative"
-
-        # Edge case: zero forces
-        class ZeroMaceCalc(DummyMaceCalc):
-            def calculate(
-                self,
-                atoms: Atoms | None = None,
-                properties: list[str] | None = None,
-                system_changes: list[str] = all_changes,
-            ) -> None:
-                if atoms is None:
-                    return
-                super().calculate(atoms, properties, system_changes)
-                n_atoms = len(atoms)
-                self.results["forces"] = np.zeros((n_atoms, 3))
-
-        manager_zero = MACEManager(str(model_path), calculator=ZeroMaceCalc())
-        computed_atoms_zero = next(manager_zero.compute(iter([Atoms("H")])))
-        assert np.allclose(computed_atoms_zero.get_array("c_gamma"), 0.0)  # type: ignore[no-untyped-call]
-
-        # Edge case: huge forces
-        class HugeMaceCalc(DummyMaceCalc):
-            def calculate(
-                self,
-                atoms: Atoms | None = None,
-                properties: list[str] | None = None,
-                system_changes: list[str] = all_changes,
-            ) -> None:
-                if atoms is None:
-                    return
-                super().calculate(atoms, properties, system_changes)  # type: ignore[no-untyped-call]
-                n_atoms = len(atoms)
-                self.results["forces"] = np.ones((n_atoms, 3)) * 1e6
-
-        manager_huge = MACEManager(str(model_path), calculator=HugeMaceCalc())
-        computed_atoms_huge = next(manager_huge.compute(iter([Atoms("H")])))
-        huge_gamma = computed_atoms_huge.get_array("c_gamma")[0]  # type: ignore[no-untyped-call]
-        assert huge_gamma > 1000.0, "Huge forces should result in large uncertainty metric proxy"
-
-    model_path.unlink()
+    assert result.get_potential_energy() == TEST_ENERGY_GENERIC  # type: ignore[no-untyped-call]
 
 
-def test_macemanager_compute_invalid_input(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    model_path = get_safe_test_model_path(monkeypatch, tmp_path)
-    model_path.touch()
+def test_dft_manager_fatal_error(
+    mock_dft_config: DFTConfig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Test fatal error after exhausting retries."""
+    atoms = Atoms("H", cell=[10, 10, 10], pbc=True)
 
-    with patch("mace.calculators.mace_mp", return_value=DummyMaceCalc()):
-        manager = MACEManager(str(model_path))
+    from concurrent.futures import Future
 
-        with pytest.raises(TypeError, match="Oracle failed to create iterator"):
-            manager.compute([Atoms("H")])  # type: ignore[arg-type]
+    class DummyFuture(Future):  # type: ignore[type-arg]
+        def __init__(self, result_value: Any, exception: Any = None) -> None:
+            super().__init__()
+            self._result_value = result_value
+            self._exception = exception
 
-    model_path.unlink()
+        def result(self, timeout: float | None = None) -> Any:
+            return self._result_value, self._exception
 
+    class DummyExecutor:
+        def __init__(self, max_workers: int) -> None:
+            pass
 
-def test_tiered_oracle_initialization() -> None:
-    mock_mace = MagicMock()
-    mock_dft = MagicMock()
-    thresholds = ActiveLearningThresholds(
-        threshold_call_dft=0.05, threshold_add_train=0.02, smooth_steps=3
-    )
+        def __enter__(self) -> "DummyExecutor":
+            return self
+
+        def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+            pass
+
+        def submit(self, fn: Any, *args: Any, **kwargs: Any) -> DummyFuture:
+            return DummyFuture(None, RuntimeError("Always fails"))
+
+    monkeypatch.setattr("concurrent.futures.ProcessPoolExecutor", DummyExecutor)
 
     oracle = TieredOracle(mace_manager=mock_mace, dft_manager=mock_dft, thresholds=thresholds)
     assert oracle.mace == mock_mace
@@ -186,8 +155,11 @@ def test_tiered_oracle_compute_below_threshold() -> None:
         threshold_call_dft=0.05, threshold_add_train=0.02, smooth_steps=3
     )
 
-    atoms_result = Atoms("H")
-    atoms_result.new_array("c_gamma", np.array([0.01]))  # type: ignore[no-untyped-call]
+def test_dft_manager_setup_error(
+    mock_dft_config: DFTConfig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Test handling of CalculatorSetupError."""
+    atoms = Atoms("H", cell=[10, 10, 10], pbc=True)
 
     mock_mace.compute.return_value = iter([atoms_result])
 

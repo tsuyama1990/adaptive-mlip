@@ -75,7 +75,8 @@ def test_scenario_01_02_guardrails_check_temp(
     (tmp_path / "Fe.UPF").touch()
 
     # We use Pydantic model directly validation
-    config_dict = create_test_config_dict(md={"temperature": -50.0})
+    config_dict = create_test_config_dict()
+    config_dict["md"]["temperature"] = -50.0
 
     # 2. Action & 3. Expectation
     # Pydantic raises ValidationError
@@ -95,7 +96,8 @@ def test_scenario_01_02_guardrails_check_cutoff(
     monkeypatch.chdir(tmp_path)
     (tmp_path / "Fe.UPF").touch()
 
-    config_dict = create_test_config_dict(training={"cutoff_radius": -1.0})
+    config_dict = create_test_config_dict()
+    config_dict["training"]["cutoff_radius"] = -1.0
     from pydantic import ValidationError
 
     with pytest.raises(ValidationError):
