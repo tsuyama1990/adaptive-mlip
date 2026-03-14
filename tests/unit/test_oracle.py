@@ -7,7 +7,6 @@ import pytest
 from ase import Atoms
 from ase.calculators.calculator import Calculator, all_changes
 
-from pyacemaker.core.exceptions import OracleError
 from pyacemaker.core.oracle import MACEManager, TieredOracle
 from pyacemaker.domain_models.workflow import ActiveLearningThresholds
 

@@ -39,6 +39,7 @@ def mock_lammps_module(monkeypatch: pytest.MonkeyPatch) -> Any:  # noqa: C901
 
         def gather_atoms(self, name: str, type: int, count: int) -> Any:
             import ctypes
+
             import numpy as np
 
             if name in {"x", "f"}:
