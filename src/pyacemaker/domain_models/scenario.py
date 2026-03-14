@@ -42,7 +42,7 @@ AnyNodeData = Annotated[
 
 
 class DagNode(BaseModel):
-    model_config = ConfigDict(extra="forbid", strict=True)
+    model_config = ConfigDict(extra="forbid", use_enum_values=True)
     id: str = Field(..., description="Node UUID")
     type: NodeType = Field(..., description="Type of the node")
     data: AnyNodeData = Field(..., description="Node data")

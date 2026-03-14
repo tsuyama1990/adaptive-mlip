@@ -1,3 +1,5 @@
+import os
+
 from pydantic import BaseModel, ConfigDict, Field, PositiveFloat, field_validator, model_validator
 
 from pyacemaker.domain_models.defaults import (
@@ -33,14 +35,20 @@ class PacemakerConfig(BaseModel):
         default_factory=lambda: [1.0, 1.0, 1.0, 1.5],
         description="Parameters for FinnisSinclair embedding",
     )
-    ndensity: int = Field(default=DEFAULT_PACEMAKER_NDENSITY, description="Density expansion order", gt=0)
+    ndensity: int = Field(
+        default=DEFAULT_PACEMAKER_NDENSITY, description="Density expansion order", gt=0
+    )
 
     # Bond settings
-    rad_base: str = Field(default=DEFAULT_PACEMAKER_RAD_BASE, description="Radial basis function type")
+    rad_base: str = Field(
+        default=DEFAULT_PACEMAKER_RAD_BASE, description="Radial basis function type"
+    )
     rad_parameters: list[float] = Field(
         default_factory=lambda: [1.0], description="Radial basis parameters"
     )
-    max_deg: int = Field(default=DEFAULT_PACEMAKER_MAX_DEG, description="Maximum degree of expansion", gt=0)
+    max_deg: int = Field(
+        default=DEFAULT_PACEMAKER_MAX_DEG, description="Maximum degree of expansion", gt=0
+    )
     r0: float = Field(default=DEFAULT_PACEMAKER_R0, description="Radial cutoff shift", gt=0)
 
     # Loss settings
@@ -58,7 +66,9 @@ class PacemakerConfig(BaseModel):
     )
 
     # Optimizer settings
-    optimizer: str = Field(default=DEFAULT_PACEMAKER_OPTIMIZER, description="Optimization algorithm")
+    optimizer: str = Field(
+        default=DEFAULT_PACEMAKER_OPTIMIZER, description="Optimization algorithm"
+    )
 
     # Advanced Settings (Moved from hardcoded values)
     delta_spline_bins: int = Field(
@@ -78,7 +88,10 @@ class TrainingConfig(BaseModel):
     max_basis_size: int = Field(..., gt=0, description="Maximum basis set size")
 
     # Additional Parameters for Scalability & Reproducibility
-    seed: int = Field(42, description="Random seed for reproducibility")
+    seed: int = Field(
+        default_factory=lambda: int(os.getenv("PYACEMAKER_TRAINING_SEED", "42")),
+        description="Random seed for reproducibility",
+    )
     max_iterations: int = Field(
         DEFAULT_TRAINING_MAX_ITERATIONS, description="Maximum training iterations", gt=0
     )
@@ -93,7 +106,8 @@ class TrainingConfig(BaseModel):
 
     # Mocking & Output (Audit Requirement)
     output_filename: str = Field(
-        FILENAME_POTENTIAL, description="Filename for the trained potential"
+        default_factory=lambda: os.getenv("PYACEMAKER_OUTPUT_FILENAME", FILENAME_POTENTIAL),
+        description="Filename for the trained potential",
     )
 
     @field_validator("output_filename")

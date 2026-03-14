@@ -1,3 +1,5 @@
+import os
+
 from pydantic import BaseModel, ConfigDict, Field, PositiveInt, model_validator
 
 from pyacemaker.domain_models.defaults import (
@@ -45,7 +47,9 @@ class DistillationConfig(BaseModel):
 
     enable: bool = True
     mace_model_path: str = "mace-mp-0-medium"
-    uncertainty_threshold: float = Field(default=0.05, description="Threshold where MACE is confident")
+    uncertainty_threshold: float = Field(
+        default=0.05, description="Threshold where MACE is confident"
+    )
     sampling_structures_per_system: int = DEFAULT_DISTILLATION_SAMPLING_STRUCTURES
 
 
@@ -57,7 +61,8 @@ class ActiveLearningThresholds(BaseModel):
         default=0.02, description="Criterion to select atoms to add to training set"
     )
     smooth_steps: int = Field(
-        default=3, description="Consecutive steps required to exceed threshold to exclude thermal noise"
+        default=3,
+        description="Consecutive steps required to exceed threshold to exclude thermal noise",
     )
 
 
@@ -65,7 +70,9 @@ class CutoutConfig(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
 
     core_radius: float = Field(default=4.0, description="Radius for Force Weight 1.0")
-    buffer_radius: float = Field(default=3.0, description="Thickness of additional relaxation buffer layer")
+    buffer_radius: float = Field(
+        default=3.0, description="Thickness of additional relaxation buffer layer"
+    )
     enable_pre_relaxation: bool = True
     pre_relaxation_fmax: float = Field(
         default=0.05, description="Force maximum tolerance for pre-relaxation"
@@ -91,9 +98,12 @@ class LoopStrategyConfig(BaseModel):
     use_tiered_oracle: bool = True
     incremental_update: bool = True
     replay_buffer_size: int = Field(
-        default=500, description="Number of past data points to retain to prevent catastrophic forgetting"
+        default=500,
+        description="Number of past data points to retain to prevent catastrophic forgetting",
     )
-    baseline_potential_type: str = Field(default="LJ", description="Baseline physical potential (e.g., LJ)")
+    baseline_potential_type: str = Field(
+        default="LJ", description="Baseline physical potential (e.g., LJ)"
+    )
     thresholds: ActiveLearningThresholds = Field(default_factory=ActiveLearningThresholds)
 
 
@@ -108,28 +118,37 @@ class WorkflowConfig(BaseModel):
         default=0.01, gt=0, description="Force convergence criteria in eV/Angstrom"
     )
     state_file_path: str = Field(
-        default=DEFAULT_STATE_FILE, description="Path to the state checkpoint file"
+        default_factory=lambda: os.getenv("PYACEMAKER_STATE_FILE_PATH", DEFAULT_STATE_FILE),
+        description="Path to the state checkpoint file",
     )
 
     # New fields to avoid magic numbers
     batch_size: PositiveInt = Field(
-        default=DEFAULT_BATCH_SIZE, description="Number of structures to process in a batch"
+        default_factory=lambda: int(os.getenv("PYACEMAKER_BATCH_SIZE", str(DEFAULT_BATCH_SIZE))),
+        description="Number of structures to process in a batch",
     )
     n_candidates: PositiveInt = Field(
-        default=DEFAULT_N_CANDIDATES,
+        default_factory=lambda: int(
+            os.getenv("PYACEMAKER_N_CANDIDATES", str(DEFAULT_N_CANDIDATES))
+        ),
         description="Number of candidate structures to generate per iteration",
     )
     checkpoint_interval: PositiveInt = Field(
         default=DEFAULT_CHECKPOINT_INTERVAL, gt=0, description="Save state every N iterations"
     )
     data_dir: str = Field(
-        default=DEFAULT_DATA_DIR, description="Directory to store training data and artifacts"
+        default_factory=lambda: os.getenv("PYACEMAKER_DATA_DIR", DEFAULT_DATA_DIR),
+        description="Directory to store training data and artifacts",
     )
     active_learning_dir: str = Field(
-        default=DEFAULT_ACTIVE_LEARNING_DIR, description="Directory for active learning iterations"
+        default_factory=lambda: os.getenv(
+            "PYACEMAKER_ACTIVE_LEARNING_DIR", DEFAULT_ACTIVE_LEARNING_DIR
+        ),
+        description="Directory for active learning iterations",
     )
     potentials_dir: str = Field(
-        default=DEFAULT_POTENTIALS_DIR, description="Directory for storing trained potentials"
+        default_factory=lambda: os.getenv("PYACEMAKER_POTENTIALS_DIR", DEFAULT_POTENTIALS_DIR),
+        description="Directory for storing trained potentials",
     )
 
     otf: OTFConfig = Field(default_factory=OTFConfig, description="Configuration for OTF loop.")

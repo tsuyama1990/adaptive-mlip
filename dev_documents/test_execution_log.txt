@@ -11,8 +11,8 @@ tests/e2e/test_orchestrator.py .......                                   [  3%]
 tests/e2e/test_orchestrator_loop.py ...                                  [  4%]
 tests/e2e/test_orchestrator_refinement.py ..                             [  4%]
 tests/integration/test_pacemaker_integration.py ..                       [  5%]
-tests/integration/test_scenarios.py .F..                                 [  6%]
-tests/uat/test_cycle01_uat.py F.F...                                     [  9%]
+tests/integration/test_scenarios.py ....                                 [  6%]
+tests/uat/test_cycle01_uat.py ......                                     [  9%]
 tests/uat/test_cycle02_uat.py ..                                         [  9%]
 tests/uat/test_cycle03_uat.py ...                                        [ 10%]
 tests/uat/test_cycle04_uat.py ...                                        [ 11%]
@@ -66,99 +66,10 @@ tests/unit/test_validator.py .............                               [ 96%]
 tests/unit/test_validator_security.py ...........                        [100%]
 
 =================================== FAILURES ===================================
-_______________________ test_api_compile_intent_success ________________________
-
-client = <starlette.testclient.TestClient object at 0x7f97c5bf2960>
-
-    def test_api_compile_intent_success(client: TestClient) -> None:
-        payload = {
-            "accuracy_speed_slider": 5,
-            "target_material": "Pt",
-            "nodes": [
-                {
-                    "id": "node_001",
-                    "type": "INITIAL_STRUCTURE",
-                    "data": {"type": "INITIAL_STRUCTURE", "chemical_symbol": "Pt", "lattice_constant": 3.92},
-                },
-                {"id": "node_002", "type": "ACTIVE_LEARNING_LOOP", "data": {"type": "ACTIVE_LEARNING_LOOP"}},
-            ],
-            "edges": [{"source": "node_001", "target": "node_002"}],
-        }
-        response = client.post("/api/v1/intent/compile", json=payload)
->       assert response.status_code == 200
-E       assert 422 == 200
-E        +  where 422 = <Response [422 Unprocessable Entity]>.status_code
-
-tests/integration/test_scenarios.py:114: AssertionError
-_________________ test_scenario_01_a_successful_intent_payload _________________
-
-    def test_scenario_01_a_successful_intent_payload() -> None:
-        """
-        SCENARIO-01-A [Priority: High] - Successful Intent Payload Processing
-        """
-        client = TestClient(app)
-        payload = {
-            "accuracy_speed_slider": 5,
-            "target_material": "Pt",
-            "nodes": [
-                {
-                    "id": "node_001",
-                    "type": "INITIAL_STRUCTURE",
-                    "data": {"type": "INITIAL_STRUCTURE", "chemical_symbol": "Pt", "lattice_constant": 3.92},
-                },
-                {"id": "node_002", "type": "ACTIVE_LEARNING_LOOP", "data": {"type": "ACTIVE_LEARNING_LOOP"}},
-            ],
-            "edges": [{"source": "node_001", "target": "node_002"}],
-        }
-        response = client.post("/api/v1/intent/compile", json=payload)
->       assert response.status_code == 200
-E       assert 422 == 200
-E        +  where 422 = <Response [422 Unprocessable Entity]>.status_code
-
-tests/uat/test_cycle01_uat.py:31: AssertionError
-_________ test_scenario_01_c_rejection_out_of_bounds_and_invalid_types _________
-
-    def test_scenario_01_c_rejection_out_of_bounds_and_invalid_types() -> None:
-        """
-        Scenario 3: Rejection of Out-of-Bounds Intent Parameters and Invalid Types
-        """
-        client = TestClient(app)
-        # Test out of bounds
-        payload_oob = {"accuracy_speed_slider": 15, "target_material": "Pt", "nodes": [], "edges": []}
-        resp1 = client.post("/api/v1/intent/compile", json=payload_oob)
-        assert resp1.status_code == 422
-        assert "accuracy_speed_slider" in resp1.text
-
-        # Test invalid string instead of int
-        payload_type = {
-            "accuracy_speed_slider": "high",
-            "target_material": "Pt",
-            "nodes": [],
-            "edges": [],
-        }
-        resp2 = client.post("/api/v1/intent/compile", json=payload_type)
-        assert resp2.status_code == 422
-        assert "accuracy_speed_slider" in resp2.text
-
-        # Test invalid Node type
-        payload_node = {
-            "accuracy_speed_slider": 5,
-            "target_material": "Pt",
-            "nodes": [{"id": "node_001", "type": "QUANTUM_MAGIC_NODE", "data": {"type": "INITIAL_STRUCTURE", "chemical_symbol": "Pt", "lattice_constant": 3.92}}],
-            "edges": [],
-        }
-        resp3 = client.post("/api/v1/intent/compile", json=payload_node)
-        assert resp3.status_code == 422
-        # Pydantic v2 enumeration error validation usually outputs the valid choices
->       assert "INITIAL_STRUCTURE" in resp3.text
-E       assert 'INITIAL_STRUCTURE' in '{"detail":[{"loc":"nodes.0.type","msg":"Input should be an instance of NodeType","type":"is_instance_of"}]}'
-E        +  where '{"detail":[{"loc":"nodes.0.type","msg":"Input should be an instance of NodeType","type":"is_instance_of"}]}' = <Response [422 Unprocessable Entity]>.text
-
-tests/uat/test_cycle01_uat.py:88: AssertionError
 ______________________ test_scenario_phase1_distillation _______________________
 
-self = <pyacemaker.core.oracle.MACEManager object at 0x7f97c5801520>
-model_path = '/tmp/tmpu4wc_sl5/model', calculator = None
+self = <pyacemaker.core.oracle.MACEManager object at 0x7ff7e04a2bd0>
+model_path = '/tmp/tmp9vjy1bzw/model', calculator = None
 
     def __init__(self, model_path: str, calculator: Any | None = None) -> None:
         """
@@ -213,11 +124,11 @@ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
     return _legacy_load(
 _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
-f = <_io.BufferedReader name='/tmp/tmpu4wc_sl5/model'>, map_location = 'cpu'
+f = <_io.BufferedReader name='/tmp/tmp9vjy1bzw/model'>, map_location = 'cpu'
 pickle_module = <module 'pickle' from '/home/jules/.pyenv/versions/3.12.13/lib/python3.12/pickle.py'>
 pickle_load_args = {'encoding': 'utf-8'}
-legacy_load = <function _legacy_load.<locals>.legacy_load at 0x7f96980242c0>
-persistent_load = <function _legacy_load.<locals>.persistent_load at 0x7f96980244a0>
+legacy_load = <function _legacy_load.<locals>.legacy_load at 0x7ff6ae34c540>
+persistent_load = <function _legacy_load.<locals>.persistent_load at 0x7ff6ae34c720>
 f_should_read_directly = True
 
     def _legacy_load(f, map_location, pickle_module, **pickle_load_args):
@@ -485,8 +396,8 @@ The above exception was the direct cause of the following exception:
 tests/uat/test_cycle08_uat.py:45:
 _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
-self = <pyacemaker.core.oracle.MACEManager object at 0x7f97c5801520>
-model_path = '/tmp/tmpu4wc_sl5/model', calculator = None
+self = <pyacemaker.core.oracle.MACEManager object at 0x7ff7e04a2bd0>
+model_path = '/tmp/tmp9vjy1bzw/model', calculator = None
 
     def __init__(self, model_path: str, calculator: Any | None = None) -> None:
         """
@@ -533,7 +444,7 @@ model_path = '/tmp/tmpu4wc_sl5/model', calculator = None
         except Exception as e:
             msg = f"Failed to load MACE model from {self.model_path}: {e}"
 >           raise OracleError(msg) from e
-E           pyacemaker.core.exceptions.OracleError: Failed to load MACE model from /tmp/tmpu4wc_sl5/model: could not find MARK
+E           pyacemaker.core.exceptions.OracleError: Failed to load MACE model from /tmp/tmp9vjy1bzw/model: could not find MARK
 
 src/pyacemaker/core/oracle.py:284: OracleError
 ----------------------------- Captured stdout call -----------------------------
@@ -541,8 +452,8 @@ cuequivariance or cuequivariance_torch is not available. Cuequivariance accelera
 Using float32 for MACECalculator, which is faster but less accurate. Recommended for MD. Use float64 for geometry optimization.
 _________________________ test_scenario_phase3_cutout __________________________
 
-self = <pyacemaker.core.oracle.MACEManager object at 0x7f9697e354f0>
-model_path = '/tmp/tmp_w9x35pa/model', calculator = None
+self = <pyacemaker.core.oracle.MACEManager object at 0x7ff6ae357650>
+model_path = '/tmp/tmpkuz_j2vy/model', calculator = None
 
     def __init__(self, model_path: str, calculator: Any | None = None) -> None:
         """
@@ -597,11 +508,11 @@ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
     return _legacy_load(
 _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
-f = <_io.BufferedReader name='/tmp/tmp_w9x35pa/model'>, map_location = 'cpu'
+f = <_io.BufferedReader name='/tmp/tmpkuz_j2vy/model'>, map_location = 'cpu'
 pickle_module = <module 'pickle' from '/home/jules/.pyenv/versions/3.12.13/lib/python3.12/pickle.py'>
 pickle_load_args = {'encoding': 'utf-8'}
-legacy_load = <function _legacy_load.<locals>.legacy_load at 0x7f9698027b00>
-persistent_load = <function _legacy_load.<locals>.persistent_load at 0x7f9698027c40>
+legacy_load = <function _legacy_load.<locals>.legacy_load at 0x7ff6ae2700e0>
+persistent_load = <function _legacy_load.<locals>.persistent_load at 0x7ff6ae270220>
 f_should_read_directly = True
 
     def _legacy_load(f, map_location, pickle_module, **pickle_load_args):
@@ -865,8 +776,8 @@ The above exception was the direct cause of the following exception:
 tests/uat/test_cycle08_uat.py:82:
 _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
-self = <pyacemaker.core.oracle.MACEManager object at 0x7f9697e354f0>
-model_path = '/tmp/tmp_w9x35pa/model', calculator = None
+self = <pyacemaker.core.oracle.MACEManager object at 0x7ff6ae357650>
+model_path = '/tmp/tmpkuz_j2vy/model', calculator = None
 
     def __init__(self, model_path: str, calculator: Any | None = None) -> None:
         """
@@ -913,15 +824,15 @@ model_path = '/tmp/tmp_w9x35pa/model', calculator = None
         except Exception as e:
             msg = f"Failed to load MACE model from {self.model_path}: {e}"
 >           raise OracleError(msg) from e
-E           pyacemaker.core.exceptions.OracleError: Failed to load MACE model from /tmp/tmp_w9x35pa/model: could not find MARK
+E           pyacemaker.core.exceptions.OracleError: Failed to load MACE model from /tmp/tmpkuz_j2vy/model: could not find MARK
 
 src/pyacemaker/core/oracle.py:284: OracleError
 ----------------------------- Captured stdout call -----------------------------
 Using float32 for MACECalculator, which is faster but less accurate. Recommended for MD. Use float64 for geometry optimization.
 _________________________ test_scenario_phase4_resume __________________________
 
-mock_driver = <MagicMock name='LammpsDriver' id='140284770087952'>
-tmp_path = PosixPath('/tmp/pytest-of-jules/pytest-17/test_scenario_phase4_resume0')
+mock_driver = <MagicMock name='LammpsDriver' id='140697461256416'>
+tmp_path = PosixPath('/tmp/pytest-of-jules/pytest-21/test_scenario_phase4_resume0')
 
     @patch("pyacemaker.core.engine.LammpsDriver")
     def test_scenario_phase4_resume(mock_driver: MagicMock, tmp_path: Path) -> None:
@@ -945,7 +856,7 @@ src/pyacemaker/core/trainer.py:231: in finetune
                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
-filename = '/tmp/pytest-of-jules/pytest-17/test_scenario_phase4_resume0/dataset.xyz'
+filename = '/tmp/pytest-of-jules/pytest-21/test_scenario_phase4_resume0/dataset.xyz'
 read = True, guess = True
 
     def filetype(
@@ -1023,7 +934,7 @@ read = True, guess = True
 
         if len(data) == 0:
 >           raise UnknownFileTypeError('Empty file: ' + filename)
-E           ase.io.formats.UnknownFileTypeError: Empty file: /tmp/pytest-of-jules/pytest-17/test_scenario_phase4_resume0/dataset.xyz
+E           ase.io.formats.UnknownFileTypeError: Empty file: /tmp/pytest-of-jules/pytest-21/test_scenario_phase4_resume0/dataset.xyz
 
 .venv/lib/python3.12/site-packages/ase/io/formats.py:977: UnknownFileTypeError
 =============================== warnings summary ===============================
@@ -1079,12 +990,12 @@ src/pyacemaker/domain_models/defaults.py       131      0   100%
 src/pyacemaker/domain_models/dft.py             36      4    89%   79-80, 87-88
 src/pyacemaker/domain_models/eon.py             34      4    88%   66-69
 src/pyacemaker/domain_models/logging.py         31      9    71%   24-25, 31, 39, 45-47, 50-51
-src/pyacemaker/domain_models/md.py             137     25    82%   40, 62-63, 82-83, 119-120, 125-126, 128-129, 133-134, 136-137, 243-244, 250-251, 259-260, 267-268, 270-271
+src/pyacemaker/domain_models/md.py             137     25    82%   40, 64-65, 84-85, 121-122, 127-128, 130-131, 135-136, 138-139, 263-264, 270-271, 279-280, 287-288, 290-291
 src/pyacemaker/domain_models/scenario.py        75      4    95%   68-69, 76-77
 src/pyacemaker/domain_models/structure.py       74      4    95%   98-99, 117-118
-src/pyacemaker/domain_models/training.py        46      0   100%
+src/pyacemaker/domain_models/training.py        47      0   100%
 src/pyacemaker/domain_models/validation.py      17      0   100%
-src/pyacemaker/domain_models/workflow.py        60      4    93%   80-81, 83-84
+src/pyacemaker/domain_models/workflow.py        61      4    93%   87-88, 90-91
 src/pyacemaker/factory.py                       32      3    91%   82-84
 src/pyacemaker/interfaces/__init__.py            5      0   100%
 src/pyacemaker/interfaces/eon_driver.py         74     12    84%   86, 133-142, 158, 162
@@ -1092,8 +1003,8 @@ src/pyacemaker/interfaces/lammps_driver.py      80      8    90%   67-68, 78, 11
 src/pyacemaker/interfaces/process.py            14      5    64%   12, 22-29
 src/pyacemaker/interfaces/qe_driver.py          48      2    96%   113-114
 src/pyacemaker/logger.py                        22      1    95%   42
-src/pyacemaker/main.py                         131     38    71%   41-44, 50, 73, 105, 113-145, 160-161, 170-171, 204-215, 218, 224
-src/pyacemaker/orchestrator.py                 355     70    80%   105-108, 159, 171, 197, 201-202, 226, 230-231, 261-262, 267, 279-281, 300, 324, 354-359, 385-389, 399, 405-406, 412, 426, 438-440, 457, 473-474, 479-480, 493-494, 502-508, 517-523, 542, 581-584, 593, 623-628, 652-654, 672-673, 692-693, 716
+src/pyacemaker/main.py                         131     37    72%   41-44, 50, 73, 113-145, 160-161, 170-171, 204-215, 218, 224
+src/pyacemaker/orchestrator.py                 355     70    80%   105-108, 159, 171, 197, 201-202, 226, 230-231, 261-262, 267, 279-281, 300, 324, 354-359, 385-389, 399, 405-406, 412, 430, 446-448, 465, 481-482, 487-488, 501-502, 510-516, 525-531, 550, 589-592, 601, 631-636, 660-662, 680-681, 700-701, 724
 src/pyacemaker/scenarios/__init__.py             3      0   100%
 src/pyacemaker/scenarios/base_scenario.py       12      1    92%   20
 src/pyacemaker/scenarios/fept_mgo.py           148     28    81%   80, 162-165, 170-172, 181-182, 195-196, 203, 216, 221-222, 225-226, 233, 237, 245-258, 266-268
@@ -1110,14 +1021,11 @@ src/pyacemaker/utils/security.py                25     11    56%   23-24, 28-30,
 src/pyacemaker/utils/structure.py                6      2    67%   19-20
 src/pyacemaker/utils/validation.py              81     16    80%   91-93, 96, 122-123, 135-136, 151-152, 197-198, 203, 210-211, 214
 --------------------------------------------------------------------------
-TOTAL                                         3707    693    81%
+TOTAL                                         3709    692    81%
 =========================== short test summary info ============================
-FAILED tests/integration/test_scenarios.py::test_api_compile_intent_success
-FAILED tests/uat/test_cycle01_uat.py::test_scenario_01_a_successful_intent_payload
-FAILED tests/uat/test_cycle01_uat.py::test_scenario_01_c_rejection_out_of_bounds_and_invalid_types
 FAILED tests/uat/test_cycle08_uat.py::test_scenario_phase1_distillation - pya...
 FAILED tests/uat/test_cycle08_uat.py::test_scenario_phase3_cutout - pyacemake...
 FAILED tests/uat/test_cycle08_uat.py::test_scenario_phase4_resume - ase.io.fo...
-================== 6 failed, 282 passed, 8 warnings in 17.33s ==================
+================== 3 failed, 285 passed, 8 warnings in 16.13s ==================
 /app/.venv/lib/python3.12/site-packages/coverage/inorout.py:561: CoverageWarning: Module dev_src was never imported. (module-not-imported); see https://coverage.readthedocs.io/en/7.13.4/messages.html#warning-module-not-imported
   self.warn(f"Module {pkg} was never imported.", slug="module-not-imported")

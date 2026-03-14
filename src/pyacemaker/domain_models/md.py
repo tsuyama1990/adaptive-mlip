@@ -50,10 +50,12 @@ class ZBLConfig(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
 
     zbl_cut_inner: PositiveFloat = Field(
-        default=DEFAULT_MD_HYBRID_ZBL_INNER, description="Inner cutoff radius for ZBL potential (Angstrom)"
+        default=DEFAULT_MD_HYBRID_ZBL_INNER,
+        description="Inner cutoff radius for ZBL potential (Angstrom)",
     )
     zbl_cut_outer: PositiveFloat = Field(
-        default=DEFAULT_MD_HYBRID_ZBL_OUTER, description="Outer cutoff radius for ZBL potential (Angstrom)"
+        default=DEFAULT_MD_HYBRID_ZBL_OUTER,
+        description="Outer cutoff radius for ZBL potential (Angstrom)",
     )
 
     @model_validator(mode="after")
@@ -170,19 +172,34 @@ class MDConfig(BaseModel):
 
     # Configurable LAMMPS Parameters (No Hardcoding)
     velocity_seed: int = Field(
-        LAMMPS_VELOCITY_SEED, description="Random seed for velocity initialization"
+        default_factory=lambda: int(
+            os.getenv("PYACEMAKER_LAMMPS_VELOCITY_SEED", str(LAMMPS_VELOCITY_SEED))
+        ),
+        description="Random seed for velocity initialization",
     )
     minimize_steps: int = Field(
-        LAMMPS_MINIMIZE_STEPS, description="Max iterations for minimization (steps)"
+        default_factory=lambda: int(
+            os.getenv("PYACEMAKER_LAMMPS_MINIMIZE_STEPS", str(LAMMPS_MINIMIZE_STEPS))
+        ),
+        description="Max iterations for minimization (steps)",
     )
     minimize_max_iter: int = Field(
-        LAMMPS_MINIMIZE_MAX_ITER, description="Max force evaluations for minimization"
+        default_factory=lambda: int(
+            os.getenv("PYACEMAKER_LAMMPS_MINIMIZE_MAX_ITER", str(LAMMPS_MINIMIZE_MAX_ITER))
+        ),
+        description="Max force evaluations for minimization",
     )
     minimize_tol: float = Field(
-        DEFAULT_MD_MINIMIZE_TOL, description="Energy tolerance for minimization"
+        default_factory=lambda: float(
+            os.getenv("PYACEMAKER_MD_MINIMIZE_TOL", str(DEFAULT_MD_MINIMIZE_TOL))
+        ),
+        description="Energy tolerance for minimization",
     )
     minimize_ftol: float = Field(
-        DEFAULT_MD_MINIMIZE_FTOL, description="Force tolerance for minimization"
+        default_factory=lambda: float(
+            os.getenv("PYACEMAKER_MD_MINIMIZE_FTOL", str(DEFAULT_MD_MINIMIZE_FTOL))
+        ),
+        description="Force tolerance for minimization",
     )
 
     # Advanced Settings
@@ -201,10 +218,13 @@ class MDConfig(BaseModel):
 
     # Mocking Parameters (Audit Requirement)
     base_energy: float = Field(
-        DEFAULT_MD_BASE_ENERGY, description="Baseline energy for mock simulation"
+        default_factory=lambda: float(
+            os.getenv("PYACEMAKER_MD_BASE_ENERGY", str(DEFAULT_MD_BASE_ENERGY))
+        ),
+        description="Baseline energy for mock simulation",
     )
     default_forces: list[list[float]] = Field(
-        default=[[0.0, 0.0, 0.0]], description="Default forces for mock simulation"
+        default_factory=lambda: [[0.0, 0.0, 0.0]], description="Default forces for mock simulation"
     )
 
     # Spec Section 3.4 (Hybrid Potential & OTF)

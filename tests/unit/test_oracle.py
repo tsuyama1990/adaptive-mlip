@@ -14,6 +14,7 @@ from pyacemaker.domain_models.workflow import ActiveLearningThresholds
 
 TEST_ENERGY_GENERIC = -42.0
 
+
 class MockCalculator(Calculator):
     implemented_properties: list[str] = ["energy", "forces"]  # noqa: RUF012
 
@@ -30,7 +31,8 @@ class MockCalculator(Calculator):
     ) -> None:
         if self.current_fails < self.fail_count:
             self.current_fails += 1
-            raise RuntimeError("Mock failure")
+            msg = "Mock failure"
+            raise RuntimeError(msg)
 
         if atoms is None:
             return
@@ -38,6 +40,7 @@ class MockCalculator(Calculator):
         n_atoms = len(atoms)
         self.results["energy"] = TEST_ENERGY_GENERIC * n_atoms
         self.results["forces"] = np.ones((n_atoms, 3)) * 0.1
+
 
 class FakeDriver:
     def __init__(self, **kwargs: Any) -> None:
@@ -87,7 +90,6 @@ def test_macemanager_initialization_failure(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """Test self-healing mechanism."""
-    atoms = Atoms("H", cell=[10, 10, 10], pbc=True)
 
     # Because ProcessPoolExecutor executes in a separate process, mocking stateful objects like `FakeDriver`
     # is difficult. We will mock `ProcessPoolExecutor` itself to test the loop logic.
@@ -115,7 +117,8 @@ def test_macemanager_initialization_failure(
         def submit(self, fn: Any, *args: Any, **kwargs: Any) -> DummyFuture:
             self.call_count += 1
             if self.call_count == 1:
-                return DummyFuture(None, RuntimeError("Setup failed"))
+                msg = "Setup failed"
+                return DummyFuture(None, RuntimeError(msg))
 
             calc = MockCalculator(fail_count=0)
             atoms = args[1]
@@ -130,9 +133,13 @@ def test_macemanager_initialization_failure(
     model_path = get_safe_test_model_path(monkeypatch, tmp_path)
     model_path.touch()
 
-    with patch("mace.calculators.mace_mp", side_effect=Exception("Simulated Initialization Failure")):
-        with pytest.raises(OracleError):
-            MACEManager(str(model_path))
+    with (
+        patch(
+            "mace.calculators.mace_mp", side_effect=Exception("Simulated Initialization Failure")
+        ),
+        pytest.raises(OracleError),
+    ):
+        MACEManager(str(model_path))
 
     model_path.unlink()
 
@@ -175,6 +182,7 @@ def test_dft_manager_fatal_error(
     with pytest.raises(OracleError):
         next(gen)
 
+
 def test_tiered_oracle_initialization() -> None:
     mock_mace = MagicMock()
     mock_dft = MagicMock()
@@ -191,6 +199,7 @@ def test_tiered_oracle_initialization() -> None:
 
     with pytest.raises(ValueError, match="DFTManager cannot be None"):
         TieredOracle(mace_manager=mock_mace, dft_manager=None, thresholds=thresholds)
+
 
 def test_tiered_oracle_compute_below_threshold() -> None:
     mock_mace = MagicMock()

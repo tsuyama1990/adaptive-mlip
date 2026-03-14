@@ -104,9 +104,17 @@ def test_api_compile_intent_success(client: TestClient) -> None:
             {
                 "id": "node_001",
                 "type": "INITIAL_STRUCTURE",
-                "data": {"type": "INITIAL_STRUCTURE", "chemical_symbol": "Pt", "lattice_constant": 3.92},
+                "data": {
+                    "type": "INITIAL_STRUCTURE",
+                    "chemical_symbol": "Pt",
+                    "lattice_constant": 3.92,
+                },
             },
-            {"id": "node_002", "type": "ACTIVE_LEARNING_LOOP", "data": {"type": "ACTIVE_LEARNING_LOOP"}},
+            {
+                "id": "node_002",
+                "type": "ACTIVE_LEARNING_LOOP",
+                "data": {"type": "ACTIVE_LEARNING_LOOP"},
+            },
         ],
         "edges": [{"source": "node_001", "target": "node_002"}],
     }
