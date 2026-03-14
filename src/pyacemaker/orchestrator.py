@@ -419,7 +419,7 @@ class Orchestrator:
             # Label S0 with ground truth (DFT)
 
             dft_manager = self.oracle
-            if hasattr(self.oracle, "dft") and self.oracle.dft is not None:
+            if self.oracle is not None and hasattr(self.oracle, "dft") and self.oracle.dft is not None:
                 dft_manager = self.oracle.dft
 
             if dft_manager is None:
@@ -434,7 +434,7 @@ class Orchestrator:
             awakened_mace_path = self._finetune_mace(s0_path)
 
             # Update TieredOracle's MACE model to the awakened one
-            if hasattr(self.oracle, "mace") and self.oracle.mace is not None:
+            if self.oracle is not None and hasattr(self.oracle, "mace") and self.oracle.mace is not None:
                 from pyacemaker.core.oracle import MACEManager
 
                 self.oracle.mace = MACEManager(model_path=str(awakened_mace_path))

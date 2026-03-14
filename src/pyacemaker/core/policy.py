@@ -65,7 +65,9 @@ class MDMicroBurstPolicy(SafeBasePolicy):
                 burst_structure = base_structure.copy()  # type: ignore[no-untyped-call]
                 # It is safer in ase to retrieve positions, manipulate, and set them back
                 positions = burst_structure.get_positions()
-                positions += np.random.randn(*positions.shape) * POLICY_MICROBURST_NOISE_STDEV
+                # Security: use local deterministic generator
+                rng = np.random.default_rng(secrets.randbelow(2**32))
+                positions += rng.standard_normal(positions.shape) * POLICY_MICROBURST_NOISE_STDEV
                 burst_structure.set_positions(positions)
                 yield burst_structure
             return
@@ -108,7 +110,8 @@ class MDMicroBurstPolicy(SafeBasePolicy):
             # Fallback if engine run doesn't produce loaded structure
             burst_structure = base_structure.copy()  # type: ignore[no-untyped-call]
             positions = burst_structure.get_positions()
-            positions += np.random.randn(*positions.shape) * POLICY_MICROBURST_NOISE_STDEV
+            rng = np.random.default_rng(secrets.randbelow(2**32))
+            positions += rng.standard_normal(positions.shape) * POLICY_MICROBURST_NOISE_STDEV
             burst_structure.set_positions(positions)
             yield burst_structure
 
@@ -154,7 +157,8 @@ class NormalModePolicy(SafeBasePolicy):
             positions = mod_struct.get_positions()
 
             # Generate displacement. If epicenters are identified, focus the displacement there.
-            displacement = np.random.randn(*positions.shape) * POLICY_NORMALMODE_NOISE_STDEV
+            rng = np.random.default_rng(secrets.randbelow(2**32))
+            displacement = rng.standard_normal(positions.shape) * POLICY_NORMALMODE_NOISE_STDEV
 
             if epicenter_indices:
                 # Apply heavier displacement around epicenters and taper off
