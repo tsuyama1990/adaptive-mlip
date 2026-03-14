@@ -130,3 +130,93 @@ def test_uat_02_02_self_healing(
     final_config = args[1]
     assert final_config.mixing_beta < 0.7
     assert final_config.mixing_beta == 0.35
+from pyacemaker.domain_models.compiler import SemanticCompiler
+from pyacemaker.domain_models.scenario import (
+    ActiveLearningData,
+    DagNode,
+    Edge,
+    InitialStructureData,
+    IntentRequest,
+    MaceTrainingData,
+    NodeType,
+)
+
+def test_uat_02_a_successful_translation() -> None:
+    """
+    SCENARIO-02-A: Successful DAG to WorkflowConfig Translation
+    """
+    node1 = DagNode(id="n1", type=NodeType.INITIAL_STRUCTURE, data=InitialStructureData(type=NodeType.INITIAL_STRUCTURE, chemical_symbol="Al", lattice_constant=4.0))
+    node2 = DagNode(id="n2", type=NodeType.MACE_TRAINING, data=MaceTrainingData(type=NodeType.MACE_TRAINING))
+    node3 = DagNode(id="n3", type=NodeType.ACTIVE_LEARNING_LOOP, data=ActiveLearningData(type=NodeType.ACTIVE_LEARNING_LOOP))
+
+    intent = IntentRequest(
+        accuracy_speed_slider=5,
+        target_material="Al",
+        nodes=[node1, node2, node3],
+        edges=[Edge(source="n1", target="n2"), Edge(source="n2", target="n3")]
+    )
+
+    config = SemanticCompiler.compile(intent)
+    assert config.structure.elements == ["Al"]
+    assert config.training.potential_type == "mace"
+    assert config.workflow.loop_strategy.use_tiered_oracle is True
+
+
+def test_uat_02_b_intelligent_defaults() -> None:
+    """
+    SCENARIO-02-B: Intelligent Default Parameter Injection
+    """
+    node1 = DagNode(id="n1", type=NodeType.INITIAL_STRUCTURE, data=InitialStructureData(type=NodeType.INITIAL_STRUCTURE, chemical_symbol="W", lattice_constant=3.16))
+    node2 = DagNode(id="n2", type=NodeType.ACTIVE_LEARNING_LOOP, data=ActiveLearningData(type=NodeType.ACTIVE_LEARNING_LOOP))
+    node3 = DagNode(id="n3", type=NodeType.MACE_TRAINING, data=MaceTrainingData(type=NodeType.MACE_TRAINING))
+
+    intent = IntentRequest(
+        accuracy_speed_slider=1,
+        target_material="W",
+        nodes=[node1, node2, node3],
+        edges=[Edge(source="n1", target="n3"), Edge(source="n3", target="n2")]
+    )
+
+    config = SemanticCompiler.compile(intent)
+
+    assert config.md.timestep == 2.0  # W is heavy > 50.0
+    assert config.dft.encut == 42.0   # 40.0 + (1 * 2.0)
+    assert config.workflow.loop_strategy.thresholds.threshold_call_dft > 0.1 # slider=1 triggers high threshold
+
+
+def test_uat_02_c_logical_rejection() -> None:
+    """
+    SCENARIO-02-C: Logical Workflow Validation Rejection
+    """
+    from pyacemaker.core.exceptions import CompilerError
+
+    # 1. Invalid sequence (Active learning before Structure)
+    node1 = DagNode(id="n1", type=NodeType.ACTIVE_LEARNING_LOOP, data=ActiveLearningData(type=NodeType.ACTIVE_LEARNING_LOOP))
+    node2 = DagNode(id="n2", type=NodeType.INITIAL_STRUCTURE, data=InitialStructureData(type=NodeType.INITIAL_STRUCTURE, chemical_symbol="Al", lattice_constant=4.0))
+    node3 = DagNode(id="n3", type=NodeType.MACE_TRAINING, data=MaceTrainingData(type=NodeType.MACE_TRAINING))
+
+    intent1 = IntentRequest(
+        accuracy_speed_slider=5,
+        target_material="Al",
+        nodes=[node1, node2, node3],
+        edges=[Edge(source="n1", target="n3"), Edge(source="n3", target="n2")]
+    )
+
+    with pytest.raises(CompilerError, match="INITIAL_STRUCTURE node must precede"):
+        SemanticCompiler.compile(intent1)
+
+    # 2. Branching error (Parallel active learning loops)
+    node1b = DagNode(id="n1", type=NodeType.INITIAL_STRUCTURE, data=InitialStructureData(type=NodeType.INITIAL_STRUCTURE, chemical_symbol="Al", lattice_constant=4.0))
+    node2b = DagNode(id="n2", type=NodeType.ACTIVE_LEARNING_LOOP, data=ActiveLearningData(type=NodeType.ACTIVE_LEARNING_LOOP))
+    node3b = DagNode(id="n3", type=NodeType.ACTIVE_LEARNING_LOOP, data=ActiveLearningData(type=NodeType.ACTIVE_LEARNING_LOOP))
+    node4b = DagNode(id="n4", type=NodeType.MACE_TRAINING, data=MaceTrainingData(type=NodeType.MACE_TRAINING))
+
+    intent2 = IntentRequest(
+        accuracy_speed_slider=5,
+        target_material="Al",
+        nodes=[node1b, node4b, node2b, node3b],
+        edges=[Edge(source="n1", target="n4"), Edge(source="n4", target="n2"), Edge(source="n4", target="n3")]
+    )
+
+    with pytest.raises(CompilerError, match="Parallel active learning loops"):
+        SemanticCompiler.compile(intent2)

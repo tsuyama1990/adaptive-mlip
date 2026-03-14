@@ -1,3 +1,4 @@
+import signal
 from typing import cast
 
 import networkx as nx
@@ -24,7 +25,7 @@ from pyacemaker.domain_models.workflow import (
 
 class SemanticCompiler:
     @classmethod
-    def compile(cls, intent: IntentRequest) -> PyAceConfig:  # noqa: C901
+    def compile(cls, intent: IntentRequest) -> PyAceConfig:
         sorted_nodes = cls._topological_sort(intent)
         cls._validate_sequence(sorted_nodes)
 
@@ -41,49 +42,33 @@ class SemanticCompiler:
         for node in sorted_nodes:
             match node.type:
                 case NodeType.INITIAL_STRUCTURE:
-                    structure_config = cls._compile_initial_structure_node(node, slider, material)
+                    structure_config = cls._compile_initial_structure_node(node)
                 case NodeType.MACE_TRAINING:
-                    training_config = cls._compile_mace_training_node(node, slider, material)
+                    training_config = cls._compile_mace_training_node(material)
                 case NodeType.ACTIVE_LEARNING_LOOP:
                     md_config, dft_config, workflow_config = cls._compile_active_learning_node(
-                        node, slider, material
+                        slider, material
                     )
                 case _:
                     msg = f"Unsupported node type: {node.type}"
                     raise NotImplementedError(msg)
 
-        # Inject intelligent defaults for any missing components
         if structure_config is None:
-            # Although logical validation catches missing struct before loop,
-            # this ensures PyAceConfig is fully populated
-            structure_config = cls._compile_initial_structure_node(
-                DagNode(
-                    id="default",
-                    type=NodeType.INITIAL_STRUCTURE,
-                    data=InitialStructureData(
-                        type=NodeType.INITIAL_STRUCTURE,
-                        chemical_symbol=material,
-                        lattice_constant=4.0,
-                    ),
-                ),
-                slider,
-                material,
-            )
+            msg = "Missing INITIAL_STRUCTURE node in workflow"
+            raise CompilerError(msg)
 
         if training_config is None:
-            training_config = cls._compile_mace_training_node(None, slider, material)
+            msg = "Missing MACE_TRAINING node in workflow"
+            raise CompilerError(msg)
 
         if md_config is None or dft_config is None or workflow_config is None:
-            md, dft, wf = cls._compile_active_learning_node(None, slider, material)
-            if md_config is None:
-                md_config = md
-            if dft_config is None:
-                dft_config = dft
-            if workflow_config is None:
-                workflow_config = wf
+            msg = "Missing ACTIVE_LEARNING_LOOP node in workflow"
+            raise CompilerError(msg)
+
+        from pyacemaker.domain_models.defaults import DEFAULT_PROJECT_NAME
 
         return PyAceConfig(
-            project_name="intent_driven_project",
+            project_name=DEFAULT_PROJECT_NAME,
             structure=structure_config,
             dft=dft_config,
             training=training_config,
@@ -108,8 +93,15 @@ class SemanticCompiler:
             msg = "Cycle detected in DAG."
             raise CompilerError(msg)
 
-        sorted_ids = list(nx.topological_sort(graph))
-        return [nodes_dict[nid] for nid in sorted_ids]
+        try:
+            signal.alarm(30)
+            sorted_ids = list(nx.topological_sort(graph))
+            return [nodes_dict[nid] for nid in sorted_ids]
+        except TimeoutError as err:
+            msg = "DAG processing timeout"
+            raise CompilerError(msg) from err
+        finally:
+            signal.alarm(0)
 
     @classmethod
     def _validate_sequence(cls, sorted_nodes: list[DagNode]) -> None:
@@ -142,8 +134,6 @@ class SemanticCompiler:
     def _compile_initial_structure_node(
         cls,
         node: DagNode,
-        slider: int,
-        material: str,  # noqa: ARG003
     ) -> StructureConfig:
         data = cast(InitialStructureData, node.data)
 
@@ -152,9 +142,7 @@ class SemanticCompiler:
     @classmethod
     def _compile_mace_training_node(
         cls,
-        node: DagNode | None,
-        slider: int,
-        material: str,  # noqa: ARG003
+        material: str,
     ) -> TrainingConfig:
         # Intelligent defaults
         return TrainingConfig(
@@ -173,13 +161,15 @@ class SemanticCompiler:
     @classmethod
     def _compile_active_learning_node(
         cls,
-        node: DagNode | None,
         slider: int,
-        material: str,  # noqa: ARG003
+        material: str,
     ) -> tuple[MDConfig, DFTConfig, WorkflowConfig]:
         # Intelligent defaults mapping based on material and slider
 
         # 1. Determine base mass and timestep
+        if material not in chemical_symbols:
+            msg = "Invalid chemical symbol"
+            raise CompilerError(msg)
         try:
             z = chemical_symbols.index(material)
             mass = atomic_masses[z]
@@ -195,18 +185,24 @@ class SemanticCompiler:
 
         # Scale thresholds based on accuracy slider (1=Speed, 10=Accuracy)
         # Accuracy=10 -> lower thresholds (stricter)
-        conv_thr = 1e-4 * (11 - slider) / 10.0  # e.g., slider=10 -> 1e-5
+        conv_thr = 1e-5 + (1e-4 - 1e-5) * (10 - slider) / 9.0  # e.g., slider=10 -> 1e-5
         conv_thr = max(conv_thr, 1e-6)
 
         # Higher slider -> more accurate -> lower threshold to call DFT
-        call_dft_thr = 0.01 + 0.1 * ((10 - slider) / 9.0)  # slider=10 -> 0.01, slider=1 -> 0.11
+        call_dft_thr = 0.01 + 0.1 * (10 - slider) / 9.0  # slider=10 -> 0.01, slider=1 -> 0.11
+
+        from pyacemaker.domain_models.defaults import (
+            DEFAULT_MD_PRESSURE,
+            DEFAULT_MD_TEMPERATURE,
+            DEFAULT_MD_UNITS,
+        )
 
         md_config = MDConfig(
-            temperature=300.0,
-            pressure=1.0,
+            temperature=DEFAULT_MD_TEMPERATURE,
+            pressure=DEFAULT_MD_PRESSURE,
             timestep=timestep,
             n_steps=1000,
-            units="metal",
+            units=DEFAULT_MD_UNITS,
             atom_style=AtomStyle.ATOMIC,
             thermo_freq=100,
             dump_freq=100,
@@ -227,7 +223,7 @@ class SemanticCompiler:
         dft_config = DFTConfig(
             code="quantum_espresso",
             functional="pbe",
-            kpoints_density=2.0 + (10 - slider) * 0.5,  # adjust density based on slider
+            kpoints_density=2.0 + 4.0 * (10 - slider) / 9.0,  # adjust density based on slider
             encut=40.0 + (slider * 2.0),  # e.g. slider 10 -> 60 eV
             pseudopotentials={material: f"{material}.pbe-n-kjpaw_psl.1.0.0.UPF"},
             embedding_buffer=None,

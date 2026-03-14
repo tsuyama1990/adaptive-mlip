@@ -5,7 +5,7 @@ configfile: pyproject.toml
 testpaths: tests
 plugins: cov-7.0.0, asyncio-1.3.0, anyio-4.12.1
 asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
-collected 294 items
+collected 297 items
 
 tests/e2e/test_engine_integration.py ..                                  [  0%]
 tests/e2e/test_orchestrator.py EEEEEEE                                   [  3%]
@@ -15,38 +15,38 @@ tests/integration/test_api_endpoints.py FF                               [  5%]
 tests/integration/test_pacemaker_integration.py ..                       [  6%]
 tests/integration/test_scenarios.py ....                                 [  7%]
 tests/uat/test_cycle01_uat.py ....FF                                     [  9%]
-tests/uat/test_cycle02_uat.py ..                                         [ 10%]
-tests/uat/test_cycle03_uat.py ...                                        [ 11%]
-tests/uat/test_cycle04_uat.py ...                                        [ 12%]
-tests/uat/test_cycle05_uat.py .                                          [ 12%]
-tests/uat/test_cycle06_uat.py EE                                         [ 13%]
-tests/uat/test_cycle07_uat.py ..                                         [ 13%]
-tests/uat/test_cycle08_uat.py FFF                                        [ 14%]
-tests/unit/test_active_set.py .....                                      [ 16%]
+tests/uat/test_cycle02_uat.py .....                                      [ 11%]
+tests/uat/test_cycle03_uat.py ...                                        [ 12%]
+tests/uat/test_cycle04_uat.py ...                                        [ 13%]
+tests/uat/test_cycle05_uat.py .                                          [ 13%]
+tests/uat/test_cycle06_uat.py EE                                         [ 14%]
+tests/uat/test_cycle07_uat.py ..                                         [ 14%]
+tests/uat/test_cycle08_uat.py FFF                                        [ 15%]
+tests/unit/test_active_set.py .....                                      [ 17%]
 tests/unit/test_active_set_anchor.py ....                                [ 18%]
-tests/unit/test_compiler.py ....                                         [ 19%]
-tests/unit/test_delta.py ....                                            [ 20%]
-tests/unit/test_domain_models.py .................                       [ 26%]
+tests/unit/test_compiler.py ....                                         [ 20%]
+tests/unit/test_delta.py ....                                            [ 21%]
+tests/unit/test_domain_models.py .................                       [ 27%]
 tests/unit/test_domain_models_dft.py ...........                         [ 30%]
-tests/unit/test_domain_models_eon.py ....                                [ 31%]
+tests/unit/test_domain_models_eon.py ....                                [ 32%]
 tests/unit/test_domain_models_md.py .............                        [ 36%]
 tests/unit/test_domain_models_scenario.py .........                      [ 39%]
-tests/unit/test_domain_models_training.py .......                        [ 41%]
-tests/unit/test_domain_models_validation.py ....                         [ 42%]
+tests/unit/test_domain_models_training.py .......                        [ 42%]
+tests/unit/test_domain_models_validation.py ....                         [ 43%]
 tests/unit/test_elastic.py ....                                          [ 44%]
-tests/unit/test_embedding.py .......                                     [ 46%]
-tests/unit/test_engine.py .........                                      [ 49%]
+tests/unit/test_embedding.py .......                                     [ 47%]
+tests/unit/test_engine.py .........                                      [ 50%]
 tests/unit/test_engine_halt_step.py ..                                   [ 50%]
 tests/unit/test_engine_relax.py ...                                      [ 51%]
 tests/unit/test_eon_driver.py .....                                      [ 53%]
 tests/unit/test_extraction.py ....                                       [ 54%]
 tests/unit/test_factory.py ..                                            [ 55%]
 tests/unit/test_generator.py ......                                      [ 57%]
-tests/unit/test_generator_local.py ..                                    [ 57%]
+tests/unit/test_generator_local.py ..                                    [ 58%]
 tests/unit/test_io.py ........                                           [ 60%]
 tests/unit/test_io_manager.py ..                                         [ 61%]
-tests/unit/test_lammps_driver.py ...........                             [ 64%]
-tests/unit/test_lammps_driver_security.py ...                            [ 65%]
+tests/unit/test_lammps_driver.py ...........                             [ 65%]
+tests/unit/test_lammps_driver_security.py ...                            [ 66%]
 tests/unit/test_lammps_generator.py ....                                 [ 67%]
 tests/unit/test_lammps_generator_reorder.py ..                           [ 68%]
 tests/unit/test_loop.py .......                                          [ 70%]
@@ -55,7 +55,7 @@ tests/unit/test_oracle.py ........                                       [ 74%]
 tests/unit/test_oracle_streaming.py .                                    [ 74%]
 tests/unit/test_path_validation.py .....                                 [ 76%]
 tests/unit/test_perturbations.py ...                                     [ 77%]
-tests/unit/test_phonons.py ..                                            [ 77%]
+tests/unit/test_phonons.py ..                                            [ 78%]
 tests/unit/test_policies.py ....                                         [ 79%]
 tests/unit/test_policy_factory.py ...                                    [ 80%]
 tests/unit/test_process.py ....                                          [ 81%]
@@ -71,8 +71,8 @@ tests/unit/test_validator_security.py ...........                        [100%]
 ==================================== ERRORS ====================================
 ______________ ERROR at setup of test_orchestrator_initialization ______________
 
-tmp_path = PosixPath('/tmp/pytest-of-jules/pytest-0/test_orchestrator_initializati0')
-monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fed22774f80>
+tmp_path = PosixPath('/tmp/pytest-of-jules/pytest-2/test_orchestrator_initializati0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fb7227d7860>
 
     @pytest.fixture
     def mock_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> PyAceConfig:
@@ -105,14 +105,14 @@ monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fed22774f80>
             logging=LoggingConfig(level="DEBUG", log_file="test.log"),
         )
 E       pydantic_core._pydantic_core.ValidationError: 1 validation error for WorkflowConfig
-E         Value error, Path state_file_path contains directory traversal sequences or absolute paths which are not allowed: /tmp/pytest-of-jules/pytest-0/test_orchestrator_initializati0/test_state.json [type=value_error, input_value={'max_iterations': 2, 'st...itializati0/potentials'}, input_type=dict]
+E         Value error, Path state_file_path contains directory traversal sequences or absolute paths which are not allowed: /tmp/pytest-of-jules/pytest-2/test_orchestrator_initializati0/test_state.json [type=value_error, input_value={'max_iterations': 2, 'st...itializati0/potentials'}, input_type=dict]
 E           For further information visit https://errors.pydantic.dev/2.12/v/value_error
 
 /app/tests/e2e/test_orchestrator.py:115: ValidationError
 _____________ ERROR at setup of test_integration_workflow_complete _____________
 
-tmp_path = PosixPath('/tmp/pytest-of-jules/pytest-0/test_integration_workflow_comp0')
-monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fed21d90440>
+tmp_path = PosixPath('/tmp/pytest-of-jules/pytest-2/test_integration_workflow_comp0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fb721568260>
 
     @pytest.fixture
     def mock_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> PyAceConfig:
@@ -145,14 +145,14 @@ monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fed21d90440>
             logging=LoggingConfig(level="DEBUG", log_file="test.log"),
         )
 E       pydantic_core._pydantic_core.ValidationError: 1 validation error for WorkflowConfig
-E         Value error, Path state_file_path contains directory traversal sequences or absolute paths which are not allowed: /tmp/pytest-of-jules/pytest-0/test_integration_workflow_comp0/test_state.json [type=value_error, input_value={'max_iterations': 2, 'st...kflow_comp0/potentials'}, input_type=dict]
+E         Value error, Path state_file_path contains directory traversal sequences or absolute paths which are not allowed: /tmp/pytest-of-jules/pytest-2/test_integration_workflow_comp0/test_state.json [type=value_error, input_value={'max_iterations': 2, 'st...kflow_comp0/potentials'}, input_type=dict]
 E           For further information visit https://errors.pydantic.dev/2.12/v/value_error
 
 /app/tests/e2e/test_orchestrator.py:115: ValidationError
 ______________ ERROR at setup of test_orchestrator_checkpointing _______________
 
-tmp_path = PosixPath('/tmp/pytest-of-jules/pytest-0/test_orchestrator_checkpointin0')
-monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fed21d43bc0>
+tmp_path = PosixPath('/tmp/pytest-of-jules/pytest-2/test_orchestrator_checkpointin0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fb721444bf0>
 
     @pytest.fixture
     def mock_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> PyAceConfig:
@@ -185,14 +185,14 @@ monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fed21d43bc0>
             logging=LoggingConfig(level="DEBUG", log_file="test.log"),
         )
 E       pydantic_core._pydantic_core.ValidationError: 1 validation error for WorkflowConfig
-E         Value error, Path state_file_path contains directory traversal sequences or absolute paths which are not allowed: /tmp/pytest-of-jules/pytest-0/test_orchestrator_checkpointin0/test_state.json [type=value_error, input_value={'max_iterations': 2, 'st...eckpointin0/potentials'}, input_type=dict]
+E         Value error, Path state_file_path contains directory traversal sequences or absolute paths which are not allowed: /tmp/pytest-of-jules/pytest-2/test_orchestrator_checkpointin0/test_state.json [type=value_error, input_value={'max_iterations': 2, 'st...eckpointin0/potentials'}, input_type=dict]
 E           For further information visit https://errors.pydantic.dev/2.12/v/value_error
 
 /app/tests/e2e/test_orchestrator.py:115: ValidationError
 ___________ ERROR at setup of test_orchestrator_corrupted_state_file ___________
 
-tmp_path = PosixPath('/tmp/pytest-of-jules/pytest-0/test_orchestrator_corrupted_st0')
-monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fed21e2d250>
+tmp_path = PosixPath('/tmp/pytest-of-jules/pytest-2/test_orchestrator_corrupted_st0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fb721446e40>
 
     @pytest.fixture
     def mock_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> PyAceConfig:
@@ -225,14 +225,14 @@ monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fed21e2d250>
             logging=LoggingConfig(level="DEBUG", log_file="test.log"),
         )
 E       pydantic_core._pydantic_core.ValidationError: 1 validation error for WorkflowConfig
-E         Value error, Path state_file_path contains directory traversal sequences or absolute paths which are not allowed: /tmp/pytest-of-jules/pytest-0/test_orchestrator_corrupted_st0/test_state.json [type=value_error, input_value={'max_iterations': 2, 'st...rrupted_st0/potentials'}, input_type=dict]
+E         Value error, Path state_file_path contains directory traversal sequences or absolute paths which are not allowed: /tmp/pytest-of-jules/pytest-2/test_orchestrator_corrupted_st0/test_state.json [type=value_error, input_value={'max_iterations': 2, 'st...rrupted_st0/potentials'}, input_type=dict]
 E           For further information visit https://errors.pydantic.dev/2.12/v/value_error
 
 /app/tests/e2e/test_orchestrator.py:115: ValidationError
 _________ ERROR at setup of test_orchestrator_directory_creation_error _________
 
-tmp_path = PosixPath('/tmp/pytest-of-jules/pytest-0/test_orchestrator_directory_cr0')
-monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fed21e2eb70>
+tmp_path = PosixPath('/tmp/pytest-of-jules/pytest-2/test_orchestrator_directory_cr0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fb7214e0710>
 
     @pytest.fixture
     def mock_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> PyAceConfig:
@@ -265,14 +265,14 @@ monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fed21e2eb70>
             logging=LoggingConfig(level="DEBUG", log_file="test.log"),
         )
 E       pydantic_core._pydantic_core.ValidationError: 1 validation error for WorkflowConfig
-E         Value error, Path state_file_path contains directory traversal sequences or absolute paths which are not allowed: /tmp/pytest-of-jules/pytest-0/test_orchestrator_directory_cr0/test_state.json [type=value_error, input_value={'max_iterations': 2, 'st...rectory_cr0/potentials'}, input_type=dict]
+E         Value error, Path state_file_path contains directory traversal sequences or absolute paths which are not allowed: /tmp/pytest-of-jules/pytest-2/test_orchestrator_directory_cr0/test_state.json [type=value_error, input_value={'max_iterations': 2, 'st...rectory_cr0/potentials'}, input_type=dict]
 E           For further information visit https://errors.pydantic.dev/2.12/v/value_error
 
 /app/tests/e2e/test_orchestrator.py:115: ValidationError
 _________ ERROR at setup of test_orchestrator_error_handling_generator _________
 
-tmp_path = PosixPath('/tmp/pytest-of-jules/pytest-0/test_orchestrator_error_handli0')
-monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fed21e1a750>
+tmp_path = PosixPath('/tmp/pytest-of-jules/pytest-2/test_orchestrator_error_handli0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fb7214e2000>
 
     @pytest.fixture
     def mock_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> PyAceConfig:
@@ -305,14 +305,14 @@ monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fed21e1a750>
             logging=LoggingConfig(level="DEBUG", log_file="test.log"),
         )
 E       pydantic_core._pydantic_core.ValidationError: 1 validation error for WorkflowConfig
-E         Value error, Path state_file_path contains directory traversal sequences or absolute paths which are not allowed: /tmp/pytest-of-jules/pytest-0/test_orchestrator_error_handli0/test_state.json [type=value_error, input_value={'max_iterations': 2, 'st...ror_handli0/potentials'}, input_type=dict]
+E         Value error, Path state_file_path contains directory traversal sequences or absolute paths which are not allowed: /tmp/pytest-of-jules/pytest-2/test_orchestrator_error_handli0/test_state.json [type=value_error, input_value={'max_iterations': 2, 'st...ror_handli0/potentials'}, input_type=dict]
 E           For further information visit https://errors.pydantic.dev/2.12/v/value_error
 
 /app/tests/e2e/test_orchestrator.py:115: ValidationError
 _______ ERROR at setup of test_orchestrator_error_handling_oracle_stream _______
 
-tmp_path = PosixPath('/tmp/pytest-of-jules/pytest-0/test_orchestrator_error_handli1')
-monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fed21e19a90>
+tmp_path = PosixPath('/tmp/pytest-of-jules/pytest-2/test_orchestrator_error_handli1')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fb7214e3a70>
 
     @pytest.fixture
     def mock_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> PyAceConfig:
@@ -345,13 +345,13 @@ monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fed21e19a90>
             logging=LoggingConfig(level="DEBUG", log_file="test.log"),
         )
 E       pydantic_core._pydantic_core.ValidationError: 1 validation error for WorkflowConfig
-E         Value error, Path state_file_path contains directory traversal sequences or absolute paths which are not allowed: /tmp/pytest-of-jules/pytest-0/test_orchestrator_error_handli1/test_state.json [type=value_error, input_value={'max_iterations': 2, 'st...ror_handli1/potentials'}, input_type=dict]
+E         Value error, Path state_file_path contains directory traversal sequences or absolute paths which are not allowed: /tmp/pytest-of-jules/pytest-2/test_orchestrator_error_handli1/test_state.json [type=value_error, input_value={'max_iterations': 2, 'st...ror_handli1/potentials'}, input_type=dict]
 E           For further information visit https://errors.pydantic.dev/2.12/v/value_error
 
 /app/tests/e2e/test_orchestrator.py:115: ValidationError
 ______________________ ERROR at setup of test_cold_start _______________________
 
-tmp_path = PosixPath('/tmp/pytest-of-jules/pytest-0/test_cold_start0')
+tmp_path = PosixPath('/tmp/pytest-of-jules/pytest-2/test_cold_start0')
 
     @pytest.fixture
     def mock_config(tmp_path: Path) -> PyAceConfig:
@@ -402,13 +402,13 @@ tmp_path = PosixPath('/tmp/pytest-of-jules/pytest-0/test_cold_start0')
                ^^^^^^^^^^^^^^^^^^^^^^^^^^
 E       pydantic_core._pydantic_core.ValidationError: 1 validation error for PyAceConfig
 E       workflow
-E         Value error, Path state_file_path contains directory traversal sequences or absolute paths which are not allowed: /tmp/pytest-of-jules/pytest-0/test_cold_start0/state.json [type=value_error, input_value={'max_iterations': 2, 'st...cold_start0/potentials'}, input_type=dict]
+E         Value error, Path state_file_path contains directory traversal sequences or absolute paths which are not allowed: /tmp/pytest-of-jules/pytest-2/test_cold_start0/state.json [type=value_error, input_value={'max_iterations': 2, 'st...cold_start0/potentials'}, input_type=dict]
 E           For further information visit https://errors.pydantic.dev/2.12/v/value_error
 
 tests/e2e/test_orchestrator_loop.py:81: ValidationError
 ___________________ ERROR at setup of test_resume_capability ___________________
 
-tmp_path = PosixPath('/tmp/pytest-of-jules/pytest-0/test_resume_capability0')
+tmp_path = PosixPath('/tmp/pytest-of-jules/pytest-2/test_resume_capability0')
 
     @pytest.fixture
     def mock_config(tmp_path: Path) -> PyAceConfig:
@@ -459,13 +459,13 @@ tmp_path = PosixPath('/tmp/pytest-of-jules/pytest-0/test_resume_capability0')
                ^^^^^^^^^^^^^^^^^^^^^^^^^^
 E       pydantic_core._pydantic_core.ValidationError: 1 validation error for PyAceConfig
 E       workflow
-E         Value error, Path state_file_path contains directory traversal sequences or absolute paths which are not allowed: /tmp/pytest-of-jules/pytest-0/test_resume_capability0/state.json [type=value_error, input_value={'max_iterations': 2, 'st...capability0/potentials'}, input_type=dict]
+E         Value error, Path state_file_path contains directory traversal sequences or absolute paths which are not allowed: /tmp/pytest-of-jules/pytest-2/test_resume_capability0/state.json [type=value_error, input_value={'max_iterations': 2, 'st...capability0/potentials'}, input_type=dict]
 E           For further information visit https://errors.pydantic.dev/2.12/v/value_error
 
 tests/e2e/test_orchestrator_loop.py:81: ValidationError
 ________________ ERROR at setup of test_run_loop_iteration_halt ________________
 
-tmp_path = PosixPath('/tmp/pytest-of-jules/pytest-0/test_run_loop_iteration_halt0')
+tmp_path = PosixPath('/tmp/pytest-of-jules/pytest-2/test_run_loop_iteration_halt0')
 
     @pytest.fixture
     def mock_config(tmp_path: Path) -> PyAceConfig:
@@ -516,13 +516,13 @@ tmp_path = PosixPath('/tmp/pytest-of-jules/pytest-0/test_run_loop_iteration_halt
                ^^^^^^^^^^^^^^^^^^^^^^^^^^
 E       pydantic_core._pydantic_core.ValidationError: 1 validation error for PyAceConfig
 E       workflow
-E         Value error, Path state_file_path contains directory traversal sequences or absolute paths which are not allowed: /tmp/pytest-of-jules/pytest-0/test_run_loop_iteration_halt0/state.json [type=value_error, input_value={'max_iterations': 2, 'st...ation_halt0/potentials'}, input_type=dict]
+E         Value error, Path state_file_path contains directory traversal sequences or absolute paths which are not allowed: /tmp/pytest-of-jules/pytest-2/test_run_loop_iteration_halt0/state.json [type=value_error, input_value={'max_iterations': 2, 'st...ation_halt0/potentials'}, input_type=dict]
 E           For further information visit https://errors.pydantic.dev/2.12/v/value_error
 
 tests/e2e/test_orchestrator_loop.py:81: ValidationError
 ________ ERROR at setup of test_scenario_06_01_active_learning_campaign ________
 
-tmp_path = PosixPath('/tmp/pytest-of-jules/pytest-0/test_scenario_06_01_active_lea0')
+tmp_path = PosixPath('/tmp/pytest-of-jules/pytest-2/test_scenario_06_01_active_lea0')
 
     @pytest.fixture
     def uat_config(tmp_path: Path) -> PyAceConfig:
@@ -573,13 +573,13 @@ tmp_path = PosixPath('/tmp/pytest-of-jules/pytest-0/test_scenario_06_01_active_l
                ^^^^^^^^^^^^^^^^^^^^^^^^^^
 E       pydantic_core._pydantic_core.ValidationError: 1 validation error for PyAceConfig
 E       workflow
-E         Value error, Path state_file_path contains directory traversal sequences or absolute paths which are not allowed: /tmp/pytest-of-jules/pytest-0/test_scenario_06_01_active_lea0/state.json [type=value_error, input_value={'max_iterations': 2, 'st...active_lea0/potentials'}, input_type=dict]
+E         Value error, Path state_file_path contains directory traversal sequences or absolute paths which are not allowed: /tmp/pytest-of-jules/pytest-2/test_scenario_06_01_active_lea0/state.json [type=value_error, input_value={'max_iterations': 2, 'st...active_lea0/potentials'}, input_type=dict]
 E           For further information visit https://errors.pydantic.dev/2.12/v/value_error
 
 tests/uat/test_cycle06_uat.py:59: ValidationError
 ___________ ERROR at setup of test_scenario_06_02_resume_capability ____________
 
-tmp_path = PosixPath('/tmp/pytest-of-jules/pytest-0/test_scenario_06_02_resume_cap0')
+tmp_path = PosixPath('/tmp/pytest-of-jules/pytest-2/test_scenario_06_02_resume_cap0')
 
     @pytest.fixture
     def uat_config(tmp_path: Path) -> PyAceConfig:
@@ -630,14 +630,14 @@ tmp_path = PosixPath('/tmp/pytest-of-jules/pytest-0/test_scenario_06_02_resume_c
                ^^^^^^^^^^^^^^^^^^^^^^^^^^
 E       pydantic_core._pydantic_core.ValidationError: 1 validation error for PyAceConfig
 E       workflow
-E         Value error, Path state_file_path contains directory traversal sequences or absolute paths which are not allowed: /tmp/pytest-of-jules/pytest-0/test_scenario_06_02_resume_cap0/state.json [type=value_error, input_value={'max_iterations': 2, 'st...resume_cap0/potentials'}, input_type=dict]
+E         Value error, Path state_file_path contains directory traversal sequences or absolute paths which are not allowed: /tmp/pytest-of-jules/pytest-2/test_scenario_06_02_resume_cap0/state.json [type=value_error, input_value={'max_iterations': 2, 'st...resume_cap0/potentials'}, input_type=dict]
 E           For further information visit https://errors.pydantic.dev/2.12/v/value_error
 
 tests/uat/test_cycle06_uat.py:59: ValidationError
 =================================== FAILURES ===================================
 ______________________ test_orchestrator_refinement_logic ______________________
 
-tmp_path = PosixPath('/tmp/pytest-of-jules/pytest-0/test_orchestrator_refinement_l0')
+tmp_path = PosixPath('/tmp/pytest-of-jules/pytest-2/test_orchestrator_refinement_l0')
 
     def test_orchestrator_refinement_logic(tmp_path: Path) -> None:
         # Create dummy UPF
@@ -666,14 +666,14 @@ tmp_path = PosixPath('/tmp/pytest-of-jules/pytest-0/test_orchestrator_refinement
             logging=LoggingConfig(level="DEBUG"),
         )
 E       pydantic_core._pydantic_core.ValidationError: 1 validation error for WorkflowConfig
-E         Value error, Path state_file_path contains directory traversal sequences or absolute paths which are not allowed: /tmp/pytest-of-jules/pytest-0/test_orchestrator_refinement_l0/state.json [type=value_error, input_value={'max_iterations': 1, 'st...tor_refinement_l0/pots'}, input_type=dict]
+E         Value error, Path state_file_path contains directory traversal sequences or absolute paths which are not allowed: /tmp/pytest-of-jules/pytest-2/test_orchestrator_refinement_l0/state.json [type=value_error, input_value={'max_iterations': 1, 'st...tor_refinement_l0/pots'}, input_type=dict]
 E           For further information visit https://errors.pydantic.dev/2.12/v/value_error
 
 tests/e2e/test_orchestrator_refinement.py:93: ValidationError
 _______________ test_orchestrator_refinement_extraction_failure ________________
 
-tmp_path = PosixPath('/tmp/pytest-of-jules/pytest-0/test_orchestrator_refinement_e0')
-caplog = <_pytest.logging.LogCaptureFixture object at 0x7fed21c43020>
+tmp_path = PosixPath('/tmp/pytest-of-jules/pytest-2/test_orchestrator_refinement_e0')
+caplog = <_pytest.logging.LogCaptureFixture object at 0x7fb721348b90>
 
     def test_orchestrator_refinement_extraction_failure(tmp_path: Path, caplog: Any) -> None:
         # Test graceful handling of extraction failure
@@ -704,7 +704,7 @@ caplog = <_pytest.logging.LogCaptureFixture object at 0x7fed21c43020>
             logging=LoggingConfig(level="DEBUG"),
         )
 E       pydantic_core._pydantic_core.ValidationError: 1 validation error for WorkflowConfig
-E         Value error, Path state_file_path contains directory traversal sequences or absolute paths which are not allowed: /tmp/pytest-of-jules/pytest-0/test_orchestrator_refinement_e0/state.json [type=value_error, input_value={'max_iterations': 1, 'st...tor_refinement_e0/pots'}, input_type=dict]
+E         Value error, Path state_file_path contains directory traversal sequences or absolute paths which are not allowed: /tmp/pytest-of-jules/pytest-2/test_orchestrator_refinement_e0/state.json [type=value_error, input_value={'max_iterations': 1, 'st...tor_refinement_e0/pots'}, input_type=dict]
 E           For further information visit https://errors.pydantic.dev/2.12/v/value_error
 
 tests/e2e/test_orchestrator_refinement.py:197: ValidationError
@@ -900,8 +900,8 @@ E               For further information visit https://errors.pydantic.dev/2.12/v
 
 The above exception was the direct cause of the following exception:
 
-tmp_path = PosixPath('/tmp/pytest-of-jules/pytest-0/test_scenario_01_02_guardrails0')
-monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fed21cedb50>
+tmp_path = PosixPath('/tmp/pytest-of-jules/pytest-2/test_scenario_01_02_guardrails0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fb7213d4a70>
 
     def test_scenario_01_02_guardrails_check_temp(
         tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -1165,8 +1165,8 @@ E               For further information visit https://errors.pydantic.dev/2.12/v
 
 The above exception was the direct cause of the following exception:
 
-tmp_path = PosixPath('/tmp/pytest-of-jules/pytest-0/test_scenario_01_02_guardrails1')
-monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fed213038c0>
+tmp_path = PosixPath('/tmp/pytest-of-jules/pytest-2/test_scenario_01_02_guardrails1')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fb7213f6180>
 
     def test_scenario_01_02_guardrails_check_cutoff(
         tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -1309,8 +1309,8 @@ E               For further information visit https://errors.pydantic.dev/2.12/v
 /app/tests/conftest.py:391: ValueError
 ______________________ test_scenario_phase1_distillation _______________________
 
-self = <pyacemaker.core.oracle.MACEManager object at 0x7fed21301760>
-model_path = '/tmp/tmpsbj16xd9/model', calculator = None
+self = <pyacemaker.core.oracle.MACEManager object at 0x7fb7213d7e90>
+model_path = '/tmp/tmpx7cps5xj/model', calculator = None
 
     def __init__(self, model_path: str, calculator: Any | None = None) -> None:
         """
@@ -1365,11 +1365,11 @@ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
     return _legacy_load(
 _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
-f = <_io.BufferedReader name='/tmp/tmpsbj16xd9/model'>, map_location = 'cpu'
+f = <_io.BufferedReader name='/tmp/tmpx7cps5xj/model'>, map_location = 'cpu'
 pickle_module = <module 'pickle' from '/home/jules/.pyenv/versions/3.12.13/lib/python3.12/pickle.py'>
 pickle_load_args = {'encoding': 'utf-8'}
-legacy_load = <function _legacy_load.<locals>.legacy_load at 0x7febef005bc0>
-persistent_load = <function _legacy_load.<locals>.persistent_load at 0x7febef005b20>
+legacy_load = <function _legacy_load.<locals>.legacy_load at 0x7fb5ef07bba0>
+persistent_load = <function _legacy_load.<locals>.persistent_load at 0x7fb5ef07bc40>
 f_should_read_directly = True
 
     def _legacy_load(f, map_location, pickle_module, **pickle_load_args):
@@ -1637,8 +1637,8 @@ The above exception was the direct cause of the following exception:
 tests/uat/test_cycle08_uat.py:45:
 _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
-self = <pyacemaker.core.oracle.MACEManager object at 0x7fed21301760>
-model_path = '/tmp/tmpsbj16xd9/model', calculator = None
+self = <pyacemaker.core.oracle.MACEManager object at 0x7fb7213d7e90>
+model_path = '/tmp/tmpx7cps5xj/model', calculator = None
 
     def __init__(self, model_path: str, calculator: Any | None = None) -> None:
         """
@@ -1685,7 +1685,7 @@ model_path = '/tmp/tmpsbj16xd9/model', calculator = None
         except Exception as e:
             msg = f"Failed to load MACE model from {self.model_path}: {e}"
 >           raise OracleError(msg) from e
-E           pyacemaker.core.exceptions.OracleError: Failed to load MACE model from /tmp/tmpsbj16xd9/model: could not find MARK
+E           pyacemaker.core.exceptions.OracleError: Failed to load MACE model from /tmp/tmpx7cps5xj/model: could not find MARK
 
 src/pyacemaker/core/oracle.py:284: OracleError
 ----------------------------- Captured stdout call -----------------------------
@@ -1693,8 +1693,8 @@ cuequivariance or cuequivariance_torch is not available. Cuequivariance accelera
 Using float32 for MACECalculator, which is faster but less accurate. Recommended for MD. Use float64 for geometry optimization.
 _________________________ test_scenario_phase3_cutout __________________________
 
-self = <pyacemaker.core.oracle.MACEManager object at 0x7febef3fde50>
-model_path = '/tmp/tmpdkrjgoik/model', calculator = None
+self = <pyacemaker.core.oracle.MACEManager object at 0x7fb5ef099250>
+model_path = '/tmp/tmpqv2se6f4/model', calculator = None
 
     def __init__(self, model_path: str, calculator: Any | None = None) -> None:
         """
@@ -1749,11 +1749,11 @@ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
     return _legacy_load(
 _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
-f = <_io.BufferedReader name='/tmp/tmpdkrjgoik/model'>, map_location = 'cpu'
+f = <_io.BufferedReader name='/tmp/tmpqv2se6f4/model'>, map_location = 'cpu'
 pickle_module = <module 'pickle' from '/home/jules/.pyenv/versions/3.12.13/lib/python3.12/pickle.py'>
 pickle_load_args = {'encoding': 'utf-8'}
-legacy_load = <function _legacy_load.<locals>.legacy_load at 0x7febeeda89a0>
-persistent_load = <function _legacy_load.<locals>.persistent_load at 0x7febeeda8ae0>
+legacy_load = <function _legacy_load.<locals>.legacy_load at 0x7fb5ef0d6ac0>
+persistent_load = <function _legacy_load.<locals>.persistent_load at 0x7fb5ef0d6c00>
 f_should_read_directly = True
 
     def _legacy_load(f, map_location, pickle_module, **pickle_load_args):
@@ -2017,8 +2017,8 @@ The above exception was the direct cause of the following exception:
 tests/uat/test_cycle08_uat.py:82:
 _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
-self = <pyacemaker.core.oracle.MACEManager object at 0x7febef3fde50>
-model_path = '/tmp/tmpdkrjgoik/model', calculator = None
+self = <pyacemaker.core.oracle.MACEManager object at 0x7fb5ef099250>
+model_path = '/tmp/tmpqv2se6f4/model', calculator = None
 
     def __init__(self, model_path: str, calculator: Any | None = None) -> None:
         """
@@ -2065,15 +2065,15 @@ model_path = '/tmp/tmpdkrjgoik/model', calculator = None
         except Exception as e:
             msg = f"Failed to load MACE model from {self.model_path}: {e}"
 >           raise OracleError(msg) from e
-E           pyacemaker.core.exceptions.OracleError: Failed to load MACE model from /tmp/tmpdkrjgoik/model: could not find MARK
+E           pyacemaker.core.exceptions.OracleError: Failed to load MACE model from /tmp/tmpqv2se6f4/model: could not find MARK
 
 src/pyacemaker/core/oracle.py:284: OracleError
 ----------------------------- Captured stdout call -----------------------------
 Using float32 for MACECalculator, which is faster but less accurate. Recommended for MD. Use float64 for geometry optimization.
 _________________________ test_scenario_phase4_resume __________________________
 
-mock_driver = <MagicMock name='LammpsDriver' id='140651307115024'>
-tmp_path = PosixPath('/tmp/pytest-of-jules/pytest-0/test_scenario_phase4_resume0')
+mock_driver = <MagicMock name='LammpsDriver' id='140419376192528'>
+tmp_path = PosixPath('/tmp/pytest-of-jules/pytest-2/test_scenario_phase4_resume0')
 
     @patch("pyacemaker.core.engine.LammpsDriver")
     def test_scenario_phase4_resume(mock_driver: MagicMock, tmp_path: Path) -> None:
@@ -2097,7 +2097,7 @@ src/pyacemaker/core/trainer.py:231: in finetune
                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
-filename = '/tmp/pytest-of-jules/pytest-0/test_scenario_phase4_resume0/dataset.xyz'
+filename = '/tmp/pytest-of-jules/pytest-2/test_scenario_phase4_resume0/dataset.xyz'
 read = True, guess = True
 
     def filetype(
@@ -2175,7 +2175,7 @@ read = True, guess = True
 
         if len(data) == 0:
 >           raise UnknownFileTypeError('Empty file: ' + filename)
-E           ase.io.formats.UnknownFileTypeError: Empty file: /tmp/pytest-of-jules/pytest-0/test_scenario_phase4_resume0/dataset.xyz
+E           ase.io.formats.UnknownFileTypeError: Empty file: /tmp/pytest-of-jules/pytest-2/test_scenario_phase4_resume0/dataset.xyz
 
 .venv/lib/python3.12/site-packages/ase/io/formats.py:977: UnknownFileTypeError
 =============================== warnings summary ===============================
@@ -2225,10 +2225,10 @@ src/pyacemaker/core/state_manager.py            34     12    65%   28-30, 34-38,
 src/pyacemaker/core/trainer.py                 141     63    55%   31-57, 68-95, 135-136, 149-151, 163-164, 186-189, 192-193, 200-201, 204-205, 227-228, 236-237, 253-258, 263, 266-267
 src/pyacemaker/core/validator.py                44      0   100%
 src/pyacemaker/domain_models/__init__.py        11      0   100%
-src/pyacemaker/domain_models/compiler.py        99     17    83%   51-53, 59, 77-83, 108-109, 186-187, 192, 194
+src/pyacemaker/domain_models/compiler.py       108     19    82%   52-54, 57-58, 61-62, 65-66, 93-94, 100-102, 171-172, 176-177, 184
 src/pyacemaker/domain_models/config.py          24      0   100%
 src/pyacemaker/domain_models/constants.py       17      0   100%
-src/pyacemaker/domain_models/defaults.py       131      0   100%
+src/pyacemaker/domain_models/defaults.py       138      0   100%
 src/pyacemaker/domain_models/dft.py             36      4    89%   79-80, 87-88
 src/pyacemaker/domain_models/env.py             19      8    58%   8-11, 18-21
 src/pyacemaker/domain_models/eon.py             34      4    88%   66-69
@@ -2246,7 +2246,7 @@ src/pyacemaker/interfaces/lammps_driver.py      80      8    90%   67-68, 78, 11
 src/pyacemaker/interfaces/process.py            14      5    64%   12, 22-29
 src/pyacemaker/interfaces/qe_driver.py          48      2    96%   113-114
 src/pyacemaker/logger.py                        22      1    95%   42
-src/pyacemaker/main.py                         131     37    72%   41-44, 50, 73, 113-145, 160-161, 170-171, 204-215, 218, 224
+src/pyacemaker/main.py                         121     27    78%   41-44, 50, 73, 114-134, 149-150, 159-160, 193-204, 207, 213
 src/pyacemaker/orchestrator.py                 355    289    19%   84, 93-110, 132-163, 170-189, 196-221, 225-238, 242-262, 266-281, 285-290, 297-314, 323-351, 354-359, 364-365, 368-389, 392-402, 405-406, 411-455, 464-467, 471-490, 499-531, 537-555, 565-645, 652-657, 660-662, 666-681, 689-724, 730-744
 src/pyacemaker/scenarios/__init__.py             3      0   100%
 src/pyacemaker/scenarios/base_scenario.py       12      1    92%   20
@@ -2264,7 +2264,7 @@ src/pyacemaker/utils/security.py                25     11    56%   23-24, 28-30,
 src/pyacemaker/utils/structure.py                6      2    67%   19-20
 src/pyacemaker/utils/validation.py              81     16    80%   91-93, 96, 122-123, 135-136, 151-152, 197-198, 203, 210-211, 214
 --------------------------------------------------------------------------
-TOTAL                                         3838    972    75%
+TOTAL                                         3844    964    75%
 =========================== short test summary info ============================
 FAILED tests/e2e/test_orchestrator_refinement.py::test_orchestrator_refinement_logic
 FAILED tests/e2e/test_orchestrator_refinement.py::test_orchestrator_refinement_extraction_failure
@@ -2287,6 +2287,6 @@ ERROR tests/e2e/test_orchestrator_loop.py::test_resume_capability - pydantic_...
 ERROR tests/e2e/test_orchestrator_loop.py::test_run_loop_iteration_halt - pyd...
 ERROR tests/uat/test_cycle06_uat.py::test_scenario_06_01_active_learning_campaign
 ERROR tests/uat/test_cycle06_uat.py::test_scenario_06_02_resume_capability - ...
-============ 9 failed, 273 passed, 8 warnings, 12 errors in 37.46s =============
+============ 9 failed, 276 passed, 8 warnings, 12 errors in 24.29s =============
 /app/.venv/lib/python3.12/site-packages/coverage/inorout.py:561: CoverageWarning: Module dev_src was never imported. (module-not-imported); see https://coverage.readthedocs.io/en/7.13.4/messages.html#warning-module-not-imported
   self.warn(f"Module {pkg} was never imported.", slug="module-not-imported")

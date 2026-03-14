@@ -115,9 +115,12 @@ def test_compiler_intelligent_defaults() -> None:
         type=NodeType.ACTIVE_LEARNING_LOOP,
         data=ActiveLearningData(type=NodeType.ACTIVE_LEARNING_LOOP),
     )
+    node3 = DagNode(
+        id="n3", type=NodeType.MACE_TRAINING, data=MaceTrainingData(type=NodeType.MACE_TRAINING)
+    )
 
-    edges = [Edge(source="n1", target="n2")]
-    intent = create_mock_intent([node1, node2], edges, slider=8)
+    edges = [Edge(source="n1", target="n3"), Edge(source="n3", target="n2")]
+    intent = create_mock_intent([node1, node2, node3], edges, slider=8)
 
     config = SemanticCompiler.compile(intent)
 
