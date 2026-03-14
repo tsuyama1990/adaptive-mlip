@@ -4,12 +4,14 @@
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 ![Status](https://img.shields.io/badge/status-Verified-brightgreen.svg)
 
-**Next-Generation Adaptive Machine Learning Interatomic Potentials Orchestrator.**
+**Next-Generation Adaptive Machine Learning Interatomic Potentials Orchestrator & GUI Platform.**
 
 PyAceMaker entirely revolutionizes active learning for molecular dynamics. By employing a "Hierarchical Distillation" architecture featuring foundation models like MACE and highly accurate DFT computations via Quantum ESPRESSO, it solves the critical challenges of long-timescale molecular dynamics simulations.
+With the introduction of the new Intent-Driven Graphical User Interface (GUI), PyAceMaker now completely abstracts complex Python/LAMMPS configurations into an intuitive, visual 3D platform, empowering non-expert engineers and experimental researchers to perform advanced materials simulations with zero manual scripting.
 
 ## Key Features
 
+*   **Intent-Driven Visual GUI:** Construct highly complex Directed Acyclic Graph (DAG) active learning workflows and spatial tagging configurations entirely visually, completely eliminating the need for complex CUI scripting.
 *   **Zero-Shot Distillation:** Generate incredibly robust baseline interatomic potentials using combinatorial structures and MACE foundation models strictly without any initial, expensive DFT calls.
 *   **Two-Tier Uncertainty Thresholding:** Intelligently differentiates entirely between harmless transient thermal noise and true physical events via `TwoTierEvaluator`, completely avoiding unnecessary simulation pauses.
 *   **Intelligent Cutout & Auto-Passivation:** Safely, mathematically extracts the precise epicenter of uncertainty and automatically passivates highly dangerous dangling bonds (e.g., smoothly adding fractional hydrogen) ensuring safe and remarkably reliable DFT calculations.
@@ -18,73 +20,60 @@ PyAceMaker entirely revolutionizes active learning for molecular dynamics. By em
 
 ## Architecture Overview
 
-PyAceMaker employs an advanced state-machine driven orchestration model strictly using modern software design patterns. It integrates a foundational MACE AI oracle directly alongside Quantum ESPRESSO entirely to filter deep uncertainty, rigorously validating learned structural configurations strictly across several phases completely from local foundation fine-tuning entirely up to full scale, O(1) complex continuous MD resumption.
+PyAceMaker employs an advanced state-machine driven orchestration model strictly using modern software design patterns. It integrates a foundational MACE AI oracle directly alongside Quantum ESPRESSO entirely to filter deep uncertainty, rigorously validating learned structural configurations strictly across several phases completely from local foundation fine-tuning entirely up to full scale, O(1) complex continuous MD resumption. The new FastAPI gateway layer ensures a strict separation of concerns, safely translating abstract visual intents into the powerful core configurations.
 
 ```mermaid
 graph TD
-    %% Subsystems
-    subgraph Config & Schema
-        CFG[Workflow Config / Pydantic]
+    %% Frontend Components
+    subgraph Frontend [Intent-Driven GUI]
+        UI_3D[Three.js 3D Viewer]
+        UI_DAG[React Flow DAG Editor]
+        UI_INSP[Context Inspector]
+        UI_STATE[Redux/Zustand State]
     end
 
-    subgraph Core Orchestrator
-        ORCH[Main Orchestrator]
-        STATE[State Manager / SQLite]
+    %% API Gateway Layer
+    subgraph Gateway [FastAPI Backend]
+        API_REST[REST API Endpoints]
+        API_WS[WebSocket Streamer]
+        API_VAL[Pydantic Validators]
+        API_COMP[Workflow Compiler]
     end
 
-    subgraph Phase 1: Distillation
-        P1_GEN[Combinatorial Generator]
-        P1_DIR[ActiveSet Selector]
-        P1_ORACLE[MACEManager Oracle]
-        P1_TRAIN[Pacemaker Trainer]
+    %% PyAceMaker Core (Existing & Additive)
+    subgraph CoreEngine [PyAceMaker Orchestrator]
+        CORE_ORCH[Main Orchestrator]
+        CORE_CFG[Core Domain Configs]
+        CORE_IO[IoManager & State]
     end
 
-    subgraph Phase 2: Validation
-        P2_VAL[Validator Subsystem]
-        P2_PHONON[Phonon / Elastic]
-        P2_MINIMD[Miniature MD Test]
+    %% Computational Backends
+    subgraph Physics Backends
+        BACK_LAMMPS[LAMMPS MD Engine]
+        BACK_MACE[MACE Oracle]
+        BACK_DFT[Quantum ESPRESSO]
     end
 
-    subgraph Phase 3 & 4: Active Learning Loop
-        LAMMPS[LammpsEngine C++ Loop]
-        EVAL[Two-Tier Evaluator]
-        CUTOUT[Intelligent Cutout]
-        PASSIVATE[Auto Passivation]
-        DFT[DFTManager / QEDriver]
-        SURR[Surrogate Generator]
-        DELTA[Incremental Trainer]
-    end
+    %% Data Flow
+    UI_3D <--> UI_STATE
+    UI_DAG <--> UI_STATE
+    UI_INSP <--> UI_STATE
 
-    %% Flow Phase 1
-    CFG --> ORCH
-    ORCH --> P1_GEN
-    P1_GEN -- Structure Pool --> P1_DIR
-    P1_DIR -- Reduced Set --> P1_ORACLE
-    P1_ORACLE -- Confident Data --> P1_TRAIN
-    P1_TRAIN -- base.yace --> P2_VAL
+    UI_STATE -- JSON Payload --> API_REST
+    API_REST --> API_VAL
+    API_VAL --> API_COMP
+    API_COMP -- Translated WorkflowConfig --> CORE_CFG
 
-    %% Flow Phase 2
-    P2_VAL --> P2_PHONON
-    P2_VAL --> P2_MINIMD
-    P2_MINIMD -- Success --> LAMMPS
-    P2_MINIMD -- Fail --> P1_GEN
+    CORE_CFG --> CORE_ORCH
+    CORE_ORCH --> BACK_LAMMPS
+    CORE_ORCH --> BACK_MACE
+    CORE_ORCH --> BACK_DFT
 
-    %% Flow Phase 3 & 4
-    LAMMPS -- Halt Signal --> EVAL
-    EVAL -- Thermal Noise --> LAMMPS
-    EVAL -- True Event --> CUTOUT
-    CUTOUT -- Buffer Relax --> P1_ORACLE
-    CUTOUT --> PASSIVATE
-    PASSIVATE -- Clean Cluster --> DFT
-    DFT -- Ground Truth --> SURR
-    SURR -- Awakened MACE --> P1_ORACLE
-    SURR -- Large Dataset --> DELTA
-    DELTA -- Replay Buffer --> DELTA
-    DELTA -- updated.yace --> LAMMPS
+    BACK_LAMMPS -- Trajectory/Uncertainty --> CORE_IO
+    BACK_MACE -- Loss Metrics --> CORE_IO
 
-    %% Storage
-    ORCH --> STATE
-    DELTA --> STATE
+    CORE_IO -- Pub/Sub Events --> API_WS
+    API_WS -- Real-time Updates --> UI_3D
 ```
 
 ## Prerequisites
@@ -116,7 +105,7 @@ graph TD
 
 ## Usage
 
-PyAceMaker uses a strictly validated `config.yaml` to rigidly dictate exact execution parameters (e.g., LoopStrategy, Cutouts, Thresholds). You can actively explore the highly powerful full capabilities completely through our beautifully interactive tutorial.
+PyAceMaker uses a strictly validated `config.yaml` to rigidly dictate exact execution parameters (e.g., LoopStrategy, Cutouts, Thresholds). You can actively explore the highly powerful full capabilities completely through our beautifully interactive tutorial. The system can be entirely executed visually through the new GUI gateway.
 
 ### Run Interactive Tutorial
 View and safely execute the entirely immersive user test scenarios exactly within a highly interactive marimo notebook interface entirely strictly inside a highly secure Mock Mode:
@@ -130,10 +119,10 @@ uv run python tutorials/UAT_AND_TUTORIAL.py
 
 ### Production Execution
 ```bash
-# Validate your highly complex configuration completely safely in dry-run mode
-uv run pyacemaker --config config.yaml --dry-run
+# Start the visual Intent-Driven GUI gateway backend
+uv run pyacemaker gui --port 8000
 
-# Start the continuous massive active learning loop strictly with entirely hierarchical distillation fully enabled
+# Start the continuous massive active learning loop strictly with entirely hierarchical distillation fully enabled (Legacy CLI)
 uv run pyacemaker --config config.yaml
 ```
 
@@ -165,12 +154,13 @@ Development strictly follows an entirely planned 6-cycle implementation workflow
 ```text
 pyacemaker/
 ├── src/pyacemaker/
+│   ├── api/                # [NEW] FastAPI application gateway and WebSockets
 │   ├── core/               # Highly strict execution orchestration (Engine, Trainer, Oracle, Validation)
-│   ├── domain_models/      # Strongly typed Pydantic data schemas, continuous workflows, and entirely strict configuration constraints
+│   ├── domain_models/      # Strongly typed Pydantic data schemas and visual Semantic Compiler
 │   ├── interfaces/         # Robust external compute software driver adapters (LAMMPS, QE, Pacemaker)
-│   ├── scenarios/          # Extremely complex "Grand Challenge" highly specialized workflow completely customized overrides
-│   ├── utils/              # Specialized spatial tools strictly for entirely intelligent cluster extraction, chemical passivation, and geometry embeddings
-│   └── main.py             # Main CLI application entrypoint strictly for execution
+│   ├── scenarios/          # Extremely complex "Grand Challenge" highly specialized workflow overrides
+│   ├── utils/              # Spatial algorithms for semantic tagging and exact spatial math
+│   └── main.py             # Main CLI application entrypoint
 ├── tests/                  # Highly robust isolated test suites completely explicitly ensuring architectural compliance
 └── tutorials/              # Fully interactive Marimo notebooks entirely completely proving strict UAT highly explicit capabilities
 ```
