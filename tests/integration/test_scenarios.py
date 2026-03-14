@@ -4,16 +4,21 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
+from fastapi.testclient import TestClient
 
 from pyacemaker.domain_models.config import PyAceConfig
 from pyacemaker.domain_models.eon import EONConfig
 from pyacemaker.domain_models.scenario import ScenarioConfig
 from pyacemaker.interfaces.eon_driver import EONWrapper
+from pyacemaker.main import app
 from pyacemaker.scenarios.fept_mgo import FePtMgoScenario
 
 
+from typing import Generator
+
+
 @pytest.fixture
-def integration_config():
+def integration_config() -> Generator[PyAceConfig, None, None]:
     with tempfile.NamedTemporaryFile(suffix=".yace") as tmp:
         path = Path(tmp.name)
         mock_conf = MagicMock(spec=PyAceConfig)
@@ -28,7 +33,7 @@ def integration_config():
         yield mock_conf
 
 
-def test_fept_mgo_integration(integration_config):
+def test_fept_mgo_integration(integration_config: PyAceConfig) -> None:
     # Setup mocks for heavy lifting
     mock_engine = MagicMock()
     # relax returns a copy
@@ -86,3 +91,51 @@ def test_fept_mgo_integration(integration_config):
 
         finally:
             os.chdir(cwd)
+
+
+@pytest.fixture
+def client() -> TestClient:
+    return TestClient(app)
+
+
+def test_api_compile_intent_success(client: TestClient) -> None:
+    payload = {
+        "accuracy_speed_slider": 5,
+        "target_material": "Pt",
+        "nodes": [
+            {
+                "id": "node_001",
+                "type": "INITIAL_STRUCTURE",
+                "data": {"chemical_symbol": "Pt", "lattice_constant": 3.92},
+            },
+            {"id": "node_002", "type": "ACTIVE_LEARNING_LOOP", "data": {}},
+        ],
+        "edges": [{"source": "node_001", "target": "node_002"}],
+    }
+    response = client.post("/api/v1/intent/compile", json=payload)
+    assert response.status_code == 200
+    assert response.json() == {
+        "status": "success",
+        "message": "Payload validated successfully",
+        "node_count": 2,
+    }
+
+
+def test_api_compile_intent_forbidden_params(client: TestClient) -> None:
+    payload = {
+        "accuracy_speed_slider": 5,
+        "target_material": "Pt",
+        "lammps_command_string": "fix 1 all nve",
+        "nodes": [],
+        "edges": [],
+    }
+    response = client.post("/api/v1/intent/compile", json=payload)
+    assert response.status_code == 422
+    assert "lammps_command_string" in response.text
+
+
+def test_api_compile_intent_invalid_slider(client: TestClient) -> None:
+    payload = {"accuracy_speed_slider": 15, "target_material": "Pt", "nodes": [], "edges": []}
+    response = client.post("/api/v1/intent/compile", json=payload)
+    assert response.status_code == 422
+    assert "accuracy_speed_slider" in response.text

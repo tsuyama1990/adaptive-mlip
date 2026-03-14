@@ -10,6 +10,7 @@ from ase.calculators.calculator import Calculator, all_changes
 from pyacemaker.core.exceptions import OracleError
 from pyacemaker.core.oracle import MACEManager, TieredOracle
 from pyacemaker.domain_models.workflow import ActiveLearningThresholds
+from pyacemaker.domain_models.dft import DFTConfig
 
 
 class DummyMaceCalc(Calculator):
@@ -155,12 +156,7 @@ def test_tiered_oracle_compute_below_threshold() -> None:
         threshold_call_dft=0.05, threshold_add_train=0.02, smooth_steps=3
     )
 
-def test_dft_manager_setup_error(
-    mock_dft_config: DFTConfig, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Test handling of CalculatorSetupError."""
-    atoms = Atoms("H", cell=[10, 10, 10], pbc=True)
-
+    atoms_result = Atoms("H")
     mock_mace.compute.return_value = iter([atoms_result])
 
     oracle = TieredOracle(mace_manager=mock_mace, dft_manager=mock_dft, thresholds=thresholds)
