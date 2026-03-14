@@ -38,7 +38,10 @@ def test_scenario_phase1_distillation() -> None:
             f.write("dummy")
 
         import pyacemaker.domain_models.defaults
-        with patch.object(pyacemaker.domain_models.defaults, "DEFAULT_POTENTIALS_DIR", str(pot_dir.resolve())):
+
+        with patch.object(
+            pyacemaker.domain_models.defaults, "DEFAULT_POTENTIALS_DIR", str(pot_dir.resolve())
+        ):
             mace_manager = MACEManager(str(model_file))
 
         atoms1 = Atoms("Fe", cell=[2, 2, 2], pbc=True)
@@ -72,7 +75,10 @@ def test_scenario_phase3_cutout() -> None:
             f.write("dummy")
 
         import pyacemaker.domain_models.defaults
-        with patch.object(pyacemaker.domain_models.defaults, "DEFAULT_POTENTIALS_DIR", str(pot_dir.resolve())):
+
+        with patch.object(
+            pyacemaker.domain_models.defaults, "DEFAULT_POTENTIALS_DIR", str(pot_dir.resolve())
+        ):
             mace_manager = MACEManager(str(model_file))
     dft_manager = MagicMock(spec=DFTManager)
 
