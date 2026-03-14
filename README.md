@@ -154,13 +154,12 @@ Development strictly follows an entirely planned 6-cycle implementation workflow
 ```text
 pyacemaker/
 ├── src/pyacemaker/
-│   ├── api/                # [NEW] FastAPI application gateway and WebSockets
 │   ├── core/               # Highly strict execution orchestration (Engine, Trainer, Oracle, Validation)
 │   ├── domain_models/      # Strongly typed Pydantic data schemas and visual Semantic Compiler
 │   ├── interfaces/         # Robust external compute software driver adapters (LAMMPS, QE, Pacemaker)
 │   ├── scenarios/          # Extremely complex "Grand Challenge" highly specialized workflow overrides
 │   ├── utils/              # Spatial algorithms for semantic tagging and exact spatial math
-│   └── main.py             # Main CLI application entrypoint
+│   └── main.py             # Main CLI application entrypoint (including FastAPI server)
 ├── tests/                  # Highly robust isolated test suites completely explicitly ensuring architectural compliance
 └── tutorials/              # Fully interactive Marimo notebooks entirely completely proving strict UAT highly explicit capabilities
 ```

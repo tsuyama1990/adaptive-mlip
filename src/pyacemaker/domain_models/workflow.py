@@ -14,6 +14,7 @@ from pyacemaker.domain_models.defaults import (
     DEFAULT_POTENTIALS_DIR,
     DEFAULT_STATE_FILE,
 )
+from pyacemaker.domain_models.env import safe_env_int, safe_env_str
 
 
 class OTFConfig(BaseModel):
@@ -45,32 +46,37 @@ class DistillationConfig(BaseModel):
 
     enable: bool = True
     mace_model_path: str = "mace-mp-0-medium"
-    uncertainty_threshold: float = Field(0.05, description="Threshold where MACE is confident")
+    uncertainty_threshold: float = Field(
+        default=0.05, description="Threshold where MACE is confident"
+    )
     sampling_structures_per_system: int = DEFAULT_DISTILLATION_SAMPLING_STRUCTURES
 
 
 class ActiveLearningThresholds(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
 
-    threshold_call_dft: float = Field(0.05, description="Criterion to halt MD and call DFT")
+    threshold_call_dft: float = Field(default=0.05, description="Criterion to halt MD and call DFT")
     threshold_add_train: float = Field(
-        0.02, description="Criterion to select atoms to add to training set"
+        default=0.02, description="Criterion to select atoms to add to training set"
     )
     smooth_steps: int = Field(
-        3, description="Consecutive steps required to exceed threshold to exclude thermal noise"
+        default=3,
+        description="Consecutive steps required to exceed threshold to exclude thermal noise",
     )
 
 
 class CutoutConfig(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
 
-    core_radius: float = Field(4.0, description="Radius for Force Weight 1.0")
-    buffer_radius: float = Field(3.0, description="Thickness of additional relaxation buffer layer")
+    core_radius: float = Field(default=4.0, description="Radius for Force Weight 1.0")
+    buffer_radius: float = Field(
+        default=3.0, description="Thickness of additional relaxation buffer layer"
+    )
     enable_pre_relaxation: bool = True
     pre_relaxation_fmax: float = Field(
-        0.05, description="Force maximum tolerance for pre-relaxation"
+        default=0.05, description="Force maximum tolerance for pre-relaxation"
     )
-    pre_relaxation_steps: int = Field(50, description="Maximum steps for pre-relaxation")
+    pre_relaxation_steps: int = Field(default=50, description="Maximum steps for pre-relaxation")
     enable_passivation: bool = True
     passivation_element: str = "H"
 
@@ -91,9 +97,12 @@ class LoopStrategyConfig(BaseModel):
     use_tiered_oracle: bool = True
     incremental_update: bool = True
     replay_buffer_size: int = Field(
-        500, description="Number of past data points to retain to prevent catastrophic forgetting"
+        default=500,
+        description="Number of past data points to retain to prevent catastrophic forgetting",
     )
-    baseline_potential_type: str = Field("LJ", description="Baseline physical potential (e.g., LJ)")
+    baseline_potential_type: str = Field(
+        default="LJ", description="Baseline physical potential (e.g., LJ)"
+    )
     thresholds: ActiveLearningThresholds = Field(default_factory=ActiveLearningThresholds)
 
 
@@ -108,29 +117,51 @@ class WorkflowConfig(BaseModel):
         default=0.01, gt=0, description="Force convergence criteria in eV/Angstrom"
     )
     state_file_path: str = Field(
-        default=DEFAULT_STATE_FILE, description="Path to the state checkpoint file"
+        default_factory=lambda: safe_env_str("PYACEMAKER_STATE_FILE_PATH", DEFAULT_STATE_FILE),
+        description="Path to the state checkpoint file",
     )
 
     # New fields to avoid magic numbers
     batch_size: PositiveInt = Field(
-        default=DEFAULT_BATCH_SIZE, description="Number of structures to process in a batch"
+        default_factory=lambda: safe_env_int("PYACEMAKER_BATCH_SIZE", DEFAULT_BATCH_SIZE),
+        description="Number of structures to process in a batch",
+        le=10000,
     )
     n_candidates: PositiveInt = Field(
-        default=DEFAULT_N_CANDIDATES,
+        default_factory=lambda: safe_env_int("PYACEMAKER_N_CANDIDATES", DEFAULT_N_CANDIDATES),
         description="Number of candidate structures to generate per iteration",
+        le=10000,
     )
     checkpoint_interval: PositiveInt = Field(
-        default=DEFAULT_CHECKPOINT_INTERVAL, gt=0, description="Save state every N iterations"
+        default_factory=lambda: safe_env_int(
+            "PYACEMAKER_CHECKPOINT_INTERVAL", DEFAULT_CHECKPOINT_INTERVAL
+        ),
+        gt=0,
+        description="Save state every N iterations",
     )
     data_dir: str = Field(
-        default=DEFAULT_DATA_DIR, description="Directory to store training data and artifacts"
+        default_factory=lambda: safe_env_str("PYACEMAKER_DATA_DIR", DEFAULT_DATA_DIR),
+        description="Directory to store training data and artifacts",
     )
     active_learning_dir: str = Field(
-        default=DEFAULT_ACTIVE_LEARNING_DIR, description="Directory for active learning iterations"
+        default_factory=lambda: safe_env_str(
+            "PYACEMAKER_ACTIVE_LEARNING_DIR", DEFAULT_ACTIVE_LEARNING_DIR
+        ),
+        description="Directory for active learning iterations",
     )
     potentials_dir: str = Field(
-        default=DEFAULT_POTENTIALS_DIR, description="Directory for storing trained potentials"
+        default_factory=lambda: safe_env_str("PYACEMAKER_POTENTIALS_DIR", DEFAULT_POTENTIALS_DIR),
+        description="Directory for storing trained potentials",
     )
+
+    @model_validator(mode="after")
+    def validate_workflow_paths(self) -> "WorkflowConfig":
+        for path_attr in ["state_file_path", "data_dir", "active_learning_dir", "potentials_dir"]:
+            val = getattr(self, path_attr)
+            if ".." in val or val.startswith("/"):
+                msg = f"Path {path_attr} contains directory traversal sequences or absolute paths which are not allowed: {val}"
+                raise ValueError(msg)
+        return self
 
     otf: OTFConfig = Field(default_factory=OTFConfig, description="Configuration for OTF loop.")
 

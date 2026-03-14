@@ -158,7 +158,7 @@ class FePtMgoScenario(BaseScenario):
         # Validate parameters
         try:
             raw_params = self.config.scenario.parameters if self.config.scenario else {}
-            self.params = FePtMgoParameters(**raw_params)
+            self.params = FePtMgoParameters(**raw_params)  # type: ignore[arg-type]
         except ValidationError as e:
             msg = f"Invalid parameters for FePtMgoScenario: {e}"
             logger.exception(msg)

@@ -2,9 +2,107 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+from fastapi.testclient import TestClient
 
 from pyacemaker.domain_models import PyAceConfig
+from pyacemaker.main import app
 from tests.conftest import create_test_config_dict
+
+
+def test_scenario_01_a_successful_intent_payload() -> None:
+    """
+    SCENARIO-01-A [Priority: High] - Successful Intent Payload Processing
+    """
+    client = TestClient(app)
+    payload = {
+        "accuracy_speed_slider": 5,
+        "target_material": "Pt",
+        "nodes": [
+            {
+                "id": "node_001",
+                "type": "INITIAL_STRUCTURE",
+                "data": {
+                    "type": "INITIAL_STRUCTURE",
+                    "chemical_symbol": "Pt",
+                    "lattice_constant": 3.92,
+                },
+            },
+            {
+                "id": "node_002",
+                "type": "ACTIVE_LEARNING_LOOP",
+                "data": {"type": "ACTIVE_LEARNING_LOOP"},
+            },
+        ],
+        "edges": [{"source": "node_001", "target": "node_002"}],
+    }
+    response = client.post("/api/v1/intent/compile", json=payload)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["node_count"] == 2
+
+
+def test_scenario_01_b_strict_rejection_advanced_params() -> None:
+    """
+    SCENARIO-01-B [Priority: High] - Strict Rejection of Advanced Parameters
+    """
+    client = TestClient(app)
+    payload = {
+        "accuracy_speed_slider": 5,
+        "target_material": "Pt",
+        "lammps_command_string": "fix 1 all nve",
+        "learning_rate": 0.001,
+        "nodes": [],
+        "edges": [],
+    }
+    response = client.post("/api/v1/intent/compile", json=payload)
+    assert response.status_code == 422
+    assert "lammps_command_string" in response.text
+    assert "learning_rate" in response.text
+
+
+def test_scenario_01_c_rejection_out_of_bounds_and_invalid_types() -> None:
+    """
+    Scenario 3: Rejection of Out-of-Bounds Intent Parameters and Invalid Types
+    """
+    client = TestClient(app)
+    # Test out of bounds
+    payload_oob = {"accuracy_speed_slider": 15, "target_material": "Pt", "nodes": [], "edges": []}
+    resp1 = client.post("/api/v1/intent/compile", json=payload_oob)
+    assert resp1.status_code == 422
+    assert "accuracy_speed_slider" in resp1.text
+
+    # Test invalid string instead of int
+    payload_type = {
+        "accuracy_speed_slider": "high",
+        "target_material": "Pt",
+        "nodes": [],
+        "edges": [],
+    }
+    resp2 = client.post("/api/v1/intent/compile", json=payload_type)
+    assert resp2.status_code == 422
+    assert "accuracy_speed_slider" in resp2.text
+
+    # Test invalid Node type
+    payload_node = {
+        "accuracy_speed_slider": 5,
+        "target_material": "Pt",
+        "nodes": [
+            {
+                "id": "node_001",
+                "type": "QUANTUM_MAGIC_NODE",
+                "data": {
+                    "type": "INITIAL_STRUCTURE",
+                    "chemical_symbol": "Pt",
+                    "lattice_constant": 3.92,
+                },
+            }
+        ],
+        "edges": [],
+    }
+    resp3 = client.post("/api/v1/intent/compile", json=payload_node)
+    assert resp3.status_code == 422
+    assert "type" in resp3.text
 
 
 def test_scenario_01_01_hello_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

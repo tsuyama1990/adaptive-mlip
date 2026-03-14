@@ -1,3 +1,5 @@
+import os
+
 from pydantic import BaseModel, ConfigDict, Field
 
 from .dft import DFTConfig
@@ -28,3 +30,9 @@ class PyAceConfig(BaseModel):
     )
     eon: EONConfig | None = Field(None, description="EON configuration")
     scenario: ScenarioConfig | None = Field(None, description="Scenario configuration")
+    api_cors_origins: list[str] = Field(
+        default_factory=lambda: os.getenv("PYACEMAKER_CORS_ORIGINS", "http://localhost:3000").split(
+            ","
+        ),
+        description="Allowed CORS origins for the API gateway",
+    )
