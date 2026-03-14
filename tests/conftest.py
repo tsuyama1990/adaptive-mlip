@@ -85,10 +85,13 @@ def mock_dft_config(dummy_pseudopotentials_dir: Path, monkeypatch: Any) -> DFTCo
         functional="PBE",
         kpoints_density=0.04,
         encut=500.0,
+        embedding_buffer=None,
         mixing_beta=0.7,
         smearing_type="mv",
         smearing_width=0.1,
         diagonalization="david",
+        mixing_beta_factor=0.5,
+        smearing_width_factor=2.0,
         pseudopotentials={"H": "H.UPF", "O": "O.UPF", "Fe": "Fe.UPF"},
     )
 

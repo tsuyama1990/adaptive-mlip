@@ -11,6 +11,12 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import Response
+from starlette.types import ASGIApp
 
 from pyacemaker.domain_models.config import PyAceConfig
 from pyacemaker.domain_models.defaults import (
@@ -25,11 +31,15 @@ from pyacemaker.scenarios.base_scenario import BaseScenario
 from pyacemaker.scenarios.fept_mgo import FePtMgoScenario
 from pyacemaker.utils.io import load_config
 
+SCENARIO_REGISTRY: dict[str, type[BaseScenario]] = {
+    "fept_mgo": FePtMgoScenario,
+}
+
 
 def get_scenario_runner(name: str, config: PyAceConfig) -> BaseScenario:
     """Factory method to get the appropriate scenario runner."""
-    if name == "fept_mgo":
-        return FePtMgoScenario(config)
+    if name in SCENARIO_REGISTRY:
+        return SCENARIO_REGISTRY[name](config)
     msg = f"Unknown scenario: {name}"
     raise ValueError(msg)
 
@@ -43,14 +53,32 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
 app = FastAPI(title="PyAceMaker Intent-Driven API", lifespan=lifespan)
 
-# Restrict CORS specifically as required
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# Rate Limiter
+limiter = Limiter(key_func=get_remote_address, default_limits=["100/minute"])
+
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # type: ignore[arg-type]
+
+
+# Payload Size Limiting Middleware
+class LimitUploadSize(BaseHTTPMiddleware):
+    def __init__(self, app: ASGIApp, max_upload_size: int) -> None:
+        super().__init__(app)
+        self.max_upload_size = max_upload_size
+
+    async def dispatch(self, request: Request, call_next: Any) -> Response:
+        if request.method == "POST":
+            content_length = request.headers.get("content-length")
+            if content_length is not None and int(content_length) > self.max_upload_size:
+                return JSONResponse(
+                    status_code=413,
+                    content={"detail": "Payload too large. Maximum size is 5MB."},
+                )
+        res: Response = await call_next(request)
+        return res
+
+
+app.add_middleware(LimitUploadSize, max_upload_size=5_000_000)
 
 
 @app.exception_handler(RequestValidationError)
@@ -72,12 +100,83 @@ async def validation_exception_handler(
 
 
 @app.post("/api/v1/intent/compile")
-async def compile_intent(payload: IntentRequest) -> dict[str, Any]:
+@limiter.limit("60/minute")
+async def compile_intent(request: Request, payload: IntentRequest) -> dict[str, Any]:
     return {
         "status": "success",
         "message": "Payload validated successfully",
         "node_count": len(payload.nodes),
     }
+
+
+def _run_gui_server(args: argparse.Namespace) -> None:
+    import os
+
+    cors_origins = ["http://localhost:3000"]
+    if hasattr(args, "config") and args.config:
+        try:
+            conf = PyAceConfig(**load_config(Path(args.config)))
+            cors_origins = conf.api_cors_origins
+        except Exception as e:
+            logging.warning(f"Failed to load CORS from config, defaulting. Error: {e}")
+    elif "PYACEMAKER_CORS_ORIGINS" in os.environ:
+        cors_origins = os.environ["PYACEMAKER_CORS_ORIGINS"].split(",")
+
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=cors_origins,
+        allow_credentials=True,
+        allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        allow_headers=["*"],
+    )
+
+    try:
+        uvicorn.run(
+            app,
+            host=args.host,
+            port=args.port,
+            workers=args.workers,
+            timeout_keep_alive=65,
+            log_level="info",
+        )
+    except KeyboardInterrupt:
+        pass
+    finally:
+        sys.exit(0)
+
+
+def _run_legacy_simulation(args: argparse.Namespace) -> None:
+    config_path = Path(args.config)
+
+    try:
+        config_dict = load_config(config_path)
+        config = PyAceConfig(**config_dict)
+
+        logger = setup_logger(config.logging, config.project_name)
+        logger.info(LOG_CONFIG_LOADED)
+
+        if args.dry_run:
+            if args.scenario:
+                get_scenario_runner(args.scenario, config)
+                logger.info("Scenario '%s' selected for dry-run.", args.scenario)
+            else:
+                Orchestrator(config)
+
+            logger.info(LOG_PROJECT_INIT.format(project_name=config.project_name))
+            logger.info(LOG_DRY_RUN_COMPLETE)
+            sys.exit(0)
+
+        if args.scenario:
+            runner = get_scenario_runner(args.scenario, config)
+            runner.run()
+        else:
+            orchestrator = Orchestrator(config)
+            orchestrator.run()
+
+    except Exception:
+        logging.basicConfig(level=logging.ERROR)
+        logging.exception("Fatal error during execution")
+        sys.exit(1)
 
 
 def main() -> None:
@@ -103,8 +202,6 @@ def main() -> None:
     # Legacy fallback logic for `pyacemaker --config config.yaml` directly
     if args.command is None:
         if "--config" in sys.argv:
-            # We try parsing again assuming default 'run' structure if no subparser was provided
-            # but arguments were passed directly.
             legacy_parser = argparse.ArgumentParser(
                 description="Adaptive MLIP construction orchestrator"
             )
@@ -118,44 +215,9 @@ def main() -> None:
             sys.exit(1)
 
     if args.command == "gui":
-        uvicorn.run("pyacemaker.main:app", host=args.host, port=args.port, workers=args.workers)
-        sys.exit(0)
-
-    config_path = Path(args.config)
-
-    try:
-        config_dict = load_config(config_path)
-        # Validate config using Pydantic model
-        config = PyAceConfig(**config_dict)
-
-        # Initialize Logger
-        logger = setup_logger(config.logging, config.project_name)
-        logger.info(LOG_CONFIG_LOADED)
-
-        if args.dry_run:
-            if args.scenario:
-                get_scenario_runner(args.scenario, config)  # Validate scenario name
-                logger.info("Scenario '%s' selected for dry-run.", args.scenario)
-            else:
-                Orchestrator(config)  # Verify orchestrator init
-
-            logger.info(LOG_PROJECT_INIT.format(project_name=config.project_name))
-            logger.info(LOG_DRY_RUN_COMPLETE)
-            sys.exit(0)
-
-        if args.scenario:
-            runner = get_scenario_runner(args.scenario, config)
-            runner.run()
-        else:
-            # Run workflow
-            orchestrator = Orchestrator(config)
-            orchestrator.run()
-
-    except Exception:
-        # Fallback logging if logger isn't set up or fails
-        logging.basicConfig(level=logging.ERROR)
-        logging.exception("Fatal error during execution")
-        sys.exit(1)
+        _run_gui_server(args)
+    else:
+        _run_legacy_simulation(args)
 
 
 if __name__ == "__main__":

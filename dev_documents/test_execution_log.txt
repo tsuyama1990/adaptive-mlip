@@ -4,12 +4,1047 @@ rootdir: /app
 configfile: pyproject.toml
 plugins: cov-7.0.0, asyncio-1.3.0, anyio-4.12.1
 asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
-collected 19 items
+collected 288 items
 
-tests/unit/test_domain_models_scenario.py .........                      [ 47%]
-tests/integration/test_scenarios.py ....                                 [ 68%]
-tests/uat/test_cycle01_uat.py ......                                     [100%]
+tests/e2e/test_engine_integration.py ..                                  [  0%]
+tests/e2e/test_orchestrator.py .......                                   [  3%]
+tests/e2e/test_orchestrator_loop.py ...                                  [  4%]
+tests/e2e/test_orchestrator_refinement.py ..                             [  4%]
+tests/integration/test_pacemaker_integration.py ..                       [  5%]
+tests/integration/test_scenarios.py .F..                                 [  6%]
+tests/uat/test_cycle01_uat.py F.F...                                     [  9%]
+tests/uat/test_cycle02_uat.py ..                                         [  9%]
+tests/uat/test_cycle03_uat.py ...                                        [ 10%]
+tests/uat/test_cycle04_uat.py ...                                        [ 11%]
+tests/uat/test_cycle05_uat.py .                                          [ 12%]
+tests/uat/test_cycle06_uat.py ..                                         [ 12%]
+tests/uat/test_cycle07_uat.py ..                                         [ 13%]
+tests/uat/test_cycle08_uat.py FFF                                        [ 14%]
+tests/unit/test_active_set.py .....                                      [ 16%]
+tests/unit/test_active_set_anchor.py ....                                [ 17%]
+tests/unit/test_delta.py ....                                            [ 19%]
+tests/unit/test_domain_models.py .................                       [ 25%]
+tests/unit/test_domain_models_dft.py ...........                         [ 28%]
+tests/unit/test_domain_models_eon.py ....                                [ 30%]
+tests/unit/test_domain_models_md.py .............                        [ 34%]
+tests/unit/test_domain_models_scenario.py .........                      [ 37%]
+tests/unit/test_domain_models_training.py .......                        [ 40%]
+tests/unit/test_domain_models_validation.py ....                         [ 41%]
+tests/unit/test_elastic.py ....                                          [ 43%]
+tests/unit/test_embedding.py .......                                     [ 45%]
+tests/unit/test_engine.py .........                                      [ 48%]
+tests/unit/test_engine_halt_step.py ..                                   [ 49%]
+tests/unit/test_engine_relax.py ...                                      [ 50%]
+tests/unit/test_eon_driver.py .....                                      [ 52%]
+tests/unit/test_extraction.py ....                                       [ 53%]
+tests/unit/test_factory.py ..                                            [ 54%]
+tests/unit/test_generator.py ......                                      [ 56%]
+tests/unit/test_generator_local.py ..                                    [ 56%]
+tests/unit/test_io.py ........                                           [ 59%]
+tests/unit/test_io_manager.py ..                                         [ 60%]
+tests/unit/test_lammps_driver.py ...........                             [ 64%]
+tests/unit/test_lammps_driver_security.py ...                            [ 65%]
+tests/unit/test_lammps_generator.py ....                                 [ 66%]
+tests/unit/test_lammps_generator_reorder.py ..                           [ 67%]
+tests/unit/test_loop.py .......                                          [ 69%]
+tests/unit/test_main.py ...                                              [ 70%]
+tests/unit/test_oracle.py ........                                       [ 73%]
+tests/unit/test_oracle_streaming.py .                                    [ 73%]
+tests/unit/test_path_validation.py .....                                 [ 75%]
+tests/unit/test_perturbations.py ...                                     [ 76%]
+tests/unit/test_phonons.py ..                                            [ 77%]
+tests/unit/test_policies.py ....                                         [ 78%]
+tests/unit/test_policy_factory.py ...                                    [ 79%]
+tests/unit/test_process.py ....                                          [ 81%]
+tests/unit/test_qe_driver.py .......                                     [ 83%]
+tests/unit/test_report.py ..                                             [ 84%]
+tests/unit/test_scenarios_fept_mgo.py ......                             [ 86%]
+tests/unit/test_streaming_io.py ...                                      [ 87%]
+tests/unit/test_trainer_pacemaker.py .......                             [ 89%]
+tests/unit/test_validation.py .....                                      [ 91%]
+tests/unit/test_validator.py .............                               [ 96%]
+tests/unit/test_validator_security.py ...........                        [100%]
 
+=================================== FAILURES ===================================
+_______________________ test_api_compile_intent_success ________________________
+
+client = <starlette.testclient.TestClient object at 0x7f97c5bf2960>
+
+    def test_api_compile_intent_success(client: TestClient) -> None:
+        payload = {
+            "accuracy_speed_slider": 5,
+            "target_material": "Pt",
+            "nodes": [
+                {
+                    "id": "node_001",
+                    "type": "INITIAL_STRUCTURE",
+                    "data": {"type": "INITIAL_STRUCTURE", "chemical_symbol": "Pt", "lattice_constant": 3.92},
+                },
+                {"id": "node_002", "type": "ACTIVE_LEARNING_LOOP", "data": {"type": "ACTIVE_LEARNING_LOOP"}},
+            ],
+            "edges": [{"source": "node_001", "target": "node_002"}],
+        }
+        response = client.post("/api/v1/intent/compile", json=payload)
+>       assert response.status_code == 200
+E       assert 422 == 200
+E        +  where 422 = <Response [422 Unprocessable Entity]>.status_code
+
+tests/integration/test_scenarios.py:114: AssertionError
+_________________ test_scenario_01_a_successful_intent_payload _________________
+
+    def test_scenario_01_a_successful_intent_payload() -> None:
+        """
+        SCENARIO-01-A [Priority: High] - Successful Intent Payload Processing
+        """
+        client = TestClient(app)
+        payload = {
+            "accuracy_speed_slider": 5,
+            "target_material": "Pt",
+            "nodes": [
+                {
+                    "id": "node_001",
+                    "type": "INITIAL_STRUCTURE",
+                    "data": {"type": "INITIAL_STRUCTURE", "chemical_symbol": "Pt", "lattice_constant": 3.92},
+                },
+                {"id": "node_002", "type": "ACTIVE_LEARNING_LOOP", "data": {"type": "ACTIVE_LEARNING_LOOP"}},
+            ],
+            "edges": [{"source": "node_001", "target": "node_002"}],
+        }
+        response = client.post("/api/v1/intent/compile", json=payload)
+>       assert response.status_code == 200
+E       assert 422 == 200
+E        +  where 422 = <Response [422 Unprocessable Entity]>.status_code
+
+tests/uat/test_cycle01_uat.py:31: AssertionError
+_________ test_scenario_01_c_rejection_out_of_bounds_and_invalid_types _________
+
+    def test_scenario_01_c_rejection_out_of_bounds_and_invalid_types() -> None:
+        """
+        Scenario 3: Rejection of Out-of-Bounds Intent Parameters and Invalid Types
+        """
+        client = TestClient(app)
+        # Test out of bounds
+        payload_oob = {"accuracy_speed_slider": 15, "target_material": "Pt", "nodes": [], "edges": []}
+        resp1 = client.post("/api/v1/intent/compile", json=payload_oob)
+        assert resp1.status_code == 422
+        assert "accuracy_speed_slider" in resp1.text
+
+        # Test invalid string instead of int
+        payload_type = {
+            "accuracy_speed_slider": "high",
+            "target_material": "Pt",
+            "nodes": [],
+            "edges": [],
+        }
+        resp2 = client.post("/api/v1/intent/compile", json=payload_type)
+        assert resp2.status_code == 422
+        assert "accuracy_speed_slider" in resp2.text
+
+        # Test invalid Node type
+        payload_node = {
+            "accuracy_speed_slider": 5,
+            "target_material": "Pt",
+            "nodes": [{"id": "node_001", "type": "QUANTUM_MAGIC_NODE", "data": {"type": "INITIAL_STRUCTURE", "chemical_symbol": "Pt", "lattice_constant": 3.92}}],
+            "edges": [],
+        }
+        resp3 = client.post("/api/v1/intent/compile", json=payload_node)
+        assert resp3.status_code == 422
+        # Pydantic v2 enumeration error validation usually outputs the valid choices
+>       assert "INITIAL_STRUCTURE" in resp3.text
+E       assert 'INITIAL_STRUCTURE' in '{"detail":[{"loc":"nodes.0.type","msg":"Input should be an instance of NodeType","type":"is_instance_of"}]}'
+E        +  where '{"detail":[{"loc":"nodes.0.type","msg":"Input should be an instance of NodeType","type":"is_instance_of"}]}' = <Response [422 Unprocessable Entity]>.text
+
+tests/uat/test_cycle01_uat.py:88: AssertionError
+______________________ test_scenario_phase1_distillation _______________________
+
+self = <pyacemaker.core.oracle.MACEManager object at 0x7f97c5801520>
+model_path = '/tmp/tmpu4wc_sl5/model', calculator = None
+
+    def __init__(self, model_path: str, calculator: Any | None = None) -> None:
+        """
+        Initializes the MACEManager.
+
+        Args:
+            model_path: Path to the MACE model file.
+            calculator: Optional pre-initialized calculator instance for dependency injection.
+        """
+        from pyacemaker.domain_models.defaults import DEFAULT_POTENTIALS_DIR
+        from pyacemaker.utils.security import validate_path_containment
+
+        # Securely validate containment REGARDLESS of calculator injection
+        canonical_path = validate_path_containment(model_path, DEFAULT_POTENTIALS_DIR)
+        self.model_path = str(canonical_path)
+
+        if calculator is not None:
+            self.calc = calculator
+            self.is_initialized = True
+            return
+
+        # Initialize MACE properly
+        import torch
+        from mace.calculators import mace_mp
+
+        # Ensure graceful fallback and explicit capability checking for GPU
+        device = "cpu"
+        if torch.cuda.is_available():
+            try:
+                # Basic check to ensure CUDA can actually be initialized correctly
+                torch.cuda.init()  # type: ignore[no-untyped-call]
+                device = "cuda"
+            except Exception as e:
+                logger.warning(
+                    f"CUDA is available but failed to initialize: {e}. Falling back to CPU."
+                )
+
+        # Load the model directly without fallback.
+        # This complies with the principle of explicit configuration.
+        try:
+>           self.calc = mace_mp(
+                model=self.model_path, dispersion=False, default_dtype="float32", device=device
+            )
+
+src/pyacemaker/core/oracle.py:279:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+.venv/lib/python3.12/site-packages/mace/calculators/foundations_models.py:168: in mace_mp
+    mace_calc = MACECalculator(
+.venv/lib/python3.12/site-packages/mace/calculators/mace.py:199: in __init__
+    torch.load(f=model_path, map_location=device)
+.venv/lib/python3.12/site-packages/torch/serialization.py:1573: in load
+    return _legacy_load(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+f = <_io.BufferedReader name='/tmp/tmpu4wc_sl5/model'>, map_location = 'cpu'
+pickle_module = <module 'pickle' from '/home/jules/.pyenv/versions/3.12.13/lib/python3.12/pickle.py'>
+pickle_load_args = {'encoding': 'utf-8'}
+legacy_load = <function _legacy_load.<locals>.legacy_load at 0x7f96980242c0>
+persistent_load = <function _legacy_load.<locals>.persistent_load at 0x7f96980244a0>
+f_should_read_directly = True
+
+    def _legacy_load(f, map_location, pickle_module, **pickle_load_args):
+        deserialized_objects: dict[int, Any] = {}
+
+        restore_location = _get_restore_location(map_location)
+
+        class UnpicklerWrapper(pickle_module.Unpickler):  # type: ignore[name-defined]
+            def find_class(self, mod_name, name):
+                if type(name) is str and "Storage" in name:
+                    try:
+                        return StorageType(name)
+                    except KeyError:
+                        pass
+                return super().find_class(mod_name, name)
+
+        def _check_container_source(container_type, source_file, original_source):
+            try:
+                current_source = "".join(get_source_lines_and_file(container_type)[0])
+            except Exception:  # saving the source is optional, so we can ignore any errors
+                warnings.warn(
+                    "Couldn't retrieve source code for container of "
+                    "type " + container_type.__name__ + ". It won't be checked "
+                    "for correctness upon loading.",
+                    stacklevel=2,
+                )
+                return
+            if original_source != current_source:
+                if container_type.dump_patches:
+                    file_name = container_type.__name__ + ".patch"
+                    diff = difflib.unified_diff(
+                        current_source.split("\n"),
+                        original_source.split("\n"),
+                        source_file,
+                        source_file,
+                        lineterm="",
+                    )
+                    lines = "\n".join(diff)
+                    try:
+                        with open(file_name, "a+") as f:
+                            file_size = f.seek(0, 2)
+                            f.seek(0)
+                            if file_size == 0:
+                                f.write(lines)
+                            elif file_size != len(lines) or f.read() != lines:
+                                raise OSError
+                        msg = (
+                            "Saved a reverse patch to " + file_name + ". "
+                            "Run `patch -p0 < " + file_name + "` to revert your "
+                            "changes."
+                        )
+                    except OSError:
+                        msg = (
+                            "Tried to save a patch, but couldn't create a "
+                            "writable file " + file_name + ". Make sure it "
+                            "doesn't exist and your working directory is "
+                            "writable."
+                        )
+                else:
+                    msg = (
+                        "you can retrieve the original source code by "
+                        "accessing the object's source attribute or set "
+                        "`torch.nn.Module.dump_patches = True` and use the "
+                        "patch tool to revert the changes."
+                    )
+                msg = f"source code of class '{torch.typename(container_type)}' has changed. {msg}"
+                warnings.warn(msg, SourceChangeWarning, stacklevel=2)
+
+        def legacy_load(f):
+            deserialized_objects: dict[int, Any] = {}
+
+            def persistent_load(saved_id):
+                if isinstance(saved_id, tuple):
+                    # Ignore containers that don't have any sources saved
+                    if all(saved_id[1:]):
+                        _check_container_source(*saved_id)
+                    return saved_id[0]
+                return deserialized_objects[int(saved_id)]
+
+            with (
+                closing(
+                    tarfile.open(fileobj=f, mode="r:", format=tarfile.PAX_FORMAT)
+                ) as tar,
+                mkdtemp() as tmpdir,
+            ):
+                if pickle_module is _weights_only_unpickler:
+                    raise RuntimeError(
+                        "Cannot use ``weights_only=True`` with files saved in the "
+                        "legacy .tar format. " + UNSAFE_MESSAGE
+                    )
+                tar.extract("storages", path=tmpdir)
+                with open(os.path.join(tmpdir, "storages"), "rb", 0) as f:
+                    num_storages = pickle_module.load(f, **pickle_load_args)
+                    for _ in range(num_storages):
+                        args = pickle_module.load(f, **pickle_load_args)
+                        key, location, storage_type = args
+                        dtype = storage_type._dtype
+                        obj = cast(Storage, torch.UntypedStorage)._new_with_file(
+                            f, torch._utils._element_size(dtype)
+                        )
+                        obj = restore_location(obj, location)
+                        # TODO: Once we decide to break serialization FC, we can
+                        # stop wrapping with TypedStorage
+                        deserialized_objects[key] = torch.storage.TypedStorage(
+                            wrap_storage=obj, dtype=dtype, _internal=True
+                        )
+
+                    storage_views = pickle_module.load(f, **pickle_load_args)
+                    for target_cdata, root_cdata, offset, numel in storage_views:
+                        root = deserialized_objects[root_cdata]
+                        element_size = torch._utils._element_size(root.dtype)
+                        offset_bytes = offset * element_size
+                        # TODO: Once we decide to break serialization FC, we can
+                        # stop wrapping with TypedStorage
+                        deserialized_objects[target_cdata] = torch.storage.TypedStorage(
+                            wrap_storage=root._untyped_storage[
+                                offset_bytes : offset_bytes + numel * element_size
+                            ],
+                            dtype=root.dtype,
+                            _internal=True,
+                        )
+
+                tar.extract("tensors", path=tmpdir)
+                with open(os.path.join(tmpdir, "tensors"), "rb", 0) as f:
+                    num_tensors = pickle_module.load(f, **pickle_load_args)
+                    for _ in range(num_tensors):
+                        args = pickle_module.load(f, **pickle_load_args)
+                        key, storage_id, _original_tensor_type = args
+                        storage = deserialized_objects[storage_id]
+                        (ndim,) = struct.unpack("<i", f.read(4))
+                        # skip next 4 bytes; legacy encoding treated ndim as 8 bytes
+                        f.read(4)
+                        numel = struct.unpack(f"<{ndim}q", f.read(8 * ndim))
+                        stride = struct.unpack(f"<{ndim}q", f.read(8 * ndim))
+                        (storage_offset,) = struct.unpack("<q", f.read(8))
+                        tensor = torch.empty((0,), dtype=storage.dtype).set_(
+                            storage._untyped_storage, storage_offset, numel, stride
+                        )
+                        deserialized_objects[key] = tensor
+
+                pickle_file = tar.extractfile("pickle")
+                unpickler = UnpicklerWrapper(pickle_file, **pickle_load_args)
+                unpickler.persistent_load = persistent_load
+                result = unpickler.load()
+                return result
+
+        deserialized_objects = {}
+
+        def persistent_load(saved_id):
+            assert isinstance(saved_id, tuple)
+            typename = _maybe_decode_ascii(saved_id[0])
+            data = saved_id[1:]
+
+            if typename == "module":
+                # Ignore containers that don't have any sources saved
+                if all(data[1:]):
+                    _check_container_source(*data)
+                return data[0]
+            elif typename == "storage":
+                storage_type, root_key, location, numel, view_metadata = data
+                location = _maybe_decode_ascii(location)
+                dtype = storage_type.dtype
+
+                nbytes = numel * torch._utils._element_size(dtype)
+
+                if root_key not in deserialized_objects:
+                    if torch._guards.active_fake_mode() is not None:
+                        obj = cast(Storage, torch.UntypedStorage(nbytes, device="meta"))
+                    elif _serialization_tls.skip_data:
+                        obj = cast(Storage, torch.UntypedStorage(nbytes))
+                        obj = restore_location(obj, location)
+                    else:
+                        obj = cast(Storage, torch.UntypedStorage(nbytes))
+                        obj._torch_load_uninitialized = True
+                        obj = restore_location(obj, location)
+                    # TODO: Once we decide to break serialization FC, we can
+                    # stop wrapping with TypedStorage
+                    typed_storage = torch.storage.TypedStorage(
+                        wrap_storage=obj, dtype=dtype, _internal=True
+                    )
+                    deserialized_objects[root_key] = typed_storage
+                else:
+                    typed_storage = deserialized_objects[root_key]
+                    if typed_storage._data_ptr() == 0:
+                        typed_storage = torch.storage.TypedStorage(
+                            device=typed_storage._untyped_storage.device,
+                            dtype=dtype,
+                            _internal=True,
+                        )
+
+                if view_metadata is not None:
+                    view_key, offset, view_size = view_metadata
+                    offset_bytes = offset * torch._utils._element_size(dtype)
+                    view_size_bytes = view_size * torch._utils._element_size(dtype)
+                    if view_key not in deserialized_objects:
+                        # TODO: Once we decide to break serialization FC, we can
+                        # stop wrapping with TypedStorage
+                        deserialized_objects[view_key] = torch.storage.TypedStorage(
+                            wrap_storage=typed_storage._untyped_storage[
+                                offset_bytes : offset_bytes + view_size_bytes
+                            ],
+                            dtype=dtype,
+                            _internal=True,
+                        )
+                    res = deserialized_objects[view_key]
+
+                else:
+                    res = typed_storage
+                return res
+            else:
+                raise RuntimeError(f"Unknown saved id type: {saved_id[0]}")
+
+        _check_seekable(f)
+        f_should_read_directly = _should_read_directly(f)
+
+        if f_should_read_directly and f.tell() == 0:
+            # legacy_load requires that f has fileno()
+            # only if offset is zero we can attempt the legacy tar file loader
+            try:
+                return legacy_load(f)
+            except tarfile.TarError:
+                if _is_zipfile(f):
+                    # .zip is used for torch.jit.save and will throw an un-pickling error here
+                    raise RuntimeError(
+                        f"{f.name} is a zip archive (did you mean to use torch.jit.load()?)"
+                    ) from None
+                # if not a tarfile, reset file offset and proceed
+                f.seek(0)
+
+>       magic_number = pickle_module.load(f, **pickle_load_args)
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       _pickle.UnpicklingError: could not find MARK
+
+.venv/lib/python3.12/site-packages/torch/serialization.py:1822: UnpicklingError
+
+The above exception was the direct cause of the following exception:
+
+    def test_scenario_phase1_distillation() -> None:
+        """
+        Scenario 1: Verification of Zero-Shot Distillation and Baseline Construction
+        """
+        config = WorkflowConfig(
+            max_iterations=1, distillation=DistillationConfig(enable=True, uncertainty_threshold=0.05)
+        )
+
+        assert config.distillation.enable is True
+
+        # 1. MACE evaluates structures
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            pot_dir = Path(temp_dir)
+            model_file = pot_dir / "model"
+            with model_file.open("w") as f:
+                f.write("dummy")
+
+            import pyacemaker.domain_models.defaults
+
+            with patch.object(
+                pyacemaker.domain_models.defaults, "DEFAULT_POTENTIALS_DIR", str(pot_dir.resolve())
+            ):
+>               mace_manager = MACEManager(str(model_file))
+                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/uat/test_cycle08_uat.py:45:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <pyacemaker.core.oracle.MACEManager object at 0x7f97c5801520>
+model_path = '/tmp/tmpu4wc_sl5/model', calculator = None
+
+    def __init__(self, model_path: str, calculator: Any | None = None) -> None:
+        """
+        Initializes the MACEManager.
+
+        Args:
+            model_path: Path to the MACE model file.
+            calculator: Optional pre-initialized calculator instance for dependency injection.
+        """
+        from pyacemaker.domain_models.defaults import DEFAULT_POTENTIALS_DIR
+        from pyacemaker.utils.security import validate_path_containment
+
+        # Securely validate containment REGARDLESS of calculator injection
+        canonical_path = validate_path_containment(model_path, DEFAULT_POTENTIALS_DIR)
+        self.model_path = str(canonical_path)
+
+        if calculator is not None:
+            self.calc = calculator
+            self.is_initialized = True
+            return
+
+        # Initialize MACE properly
+        import torch
+        from mace.calculators import mace_mp
+
+        # Ensure graceful fallback and explicit capability checking for GPU
+        device = "cpu"
+        if torch.cuda.is_available():
+            try:
+                # Basic check to ensure CUDA can actually be initialized correctly
+                torch.cuda.init()  # type: ignore[no-untyped-call]
+                device = "cuda"
+            except Exception as e:
+                logger.warning(
+                    f"CUDA is available but failed to initialize: {e}. Falling back to CPU."
+                )
+
+        # Load the model directly without fallback.
+        # This complies with the principle of explicit configuration.
+        try:
+            self.calc = mace_mp(
+                model=self.model_path, dispersion=False, default_dtype="float32", device=device
+            )
+        except Exception as e:
+            msg = f"Failed to load MACE model from {self.model_path}: {e}"
+>           raise OracleError(msg) from e
+E           pyacemaker.core.exceptions.OracleError: Failed to load MACE model from /tmp/tmpu4wc_sl5/model: could not find MARK
+
+src/pyacemaker/core/oracle.py:284: OracleError
+----------------------------- Captured stdout call -----------------------------
+cuequivariance or cuequivariance_torch is not available. Cuequivariance acceleration will be disabled.
+Using float32 for MACECalculator, which is faster but less accurate. Recommended for MD. Use float64 for geometry optimization.
+_________________________ test_scenario_phase3_cutout __________________________
+
+self = <pyacemaker.core.oracle.MACEManager object at 0x7f9697e354f0>
+model_path = '/tmp/tmp_w9x35pa/model', calculator = None
+
+    def __init__(self, model_path: str, calculator: Any | None = None) -> None:
+        """
+        Initializes the MACEManager.
+
+        Args:
+            model_path: Path to the MACE model file.
+            calculator: Optional pre-initialized calculator instance for dependency injection.
+        """
+        from pyacemaker.domain_models.defaults import DEFAULT_POTENTIALS_DIR
+        from pyacemaker.utils.security import validate_path_containment
+
+        # Securely validate containment REGARDLESS of calculator injection
+        canonical_path = validate_path_containment(model_path, DEFAULT_POTENTIALS_DIR)
+        self.model_path = str(canonical_path)
+
+        if calculator is not None:
+            self.calc = calculator
+            self.is_initialized = True
+            return
+
+        # Initialize MACE properly
+        import torch
+        from mace.calculators import mace_mp
+
+        # Ensure graceful fallback and explicit capability checking for GPU
+        device = "cpu"
+        if torch.cuda.is_available():
+            try:
+                # Basic check to ensure CUDA can actually be initialized correctly
+                torch.cuda.init()  # type: ignore[no-untyped-call]
+                device = "cuda"
+            except Exception as e:
+                logger.warning(
+                    f"CUDA is available but failed to initialize: {e}. Falling back to CPU."
+                )
+
+        # Load the model directly without fallback.
+        # This complies with the principle of explicit configuration.
+        try:
+>           self.calc = mace_mp(
+                model=self.model_path, dispersion=False, default_dtype="float32", device=device
+            )
+
+src/pyacemaker/core/oracle.py:279:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+.venv/lib/python3.12/site-packages/mace/calculators/foundations_models.py:168: in mace_mp
+    mace_calc = MACECalculator(
+.venv/lib/python3.12/site-packages/mace/calculators/mace.py:199: in __init__
+    torch.load(f=model_path, map_location=device)
+.venv/lib/python3.12/site-packages/torch/serialization.py:1573: in load
+    return _legacy_load(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+f = <_io.BufferedReader name='/tmp/tmp_w9x35pa/model'>, map_location = 'cpu'
+pickle_module = <module 'pickle' from '/home/jules/.pyenv/versions/3.12.13/lib/python3.12/pickle.py'>
+pickle_load_args = {'encoding': 'utf-8'}
+legacy_load = <function _legacy_load.<locals>.legacy_load at 0x7f9698027b00>
+persistent_load = <function _legacy_load.<locals>.persistent_load at 0x7f9698027c40>
+f_should_read_directly = True
+
+    def _legacy_load(f, map_location, pickle_module, **pickle_load_args):
+        deserialized_objects: dict[int, Any] = {}
+
+        restore_location = _get_restore_location(map_location)
+
+        class UnpicklerWrapper(pickle_module.Unpickler):  # type: ignore[name-defined]
+            def find_class(self, mod_name, name):
+                if type(name) is str and "Storage" in name:
+                    try:
+                        return StorageType(name)
+                    except KeyError:
+                        pass
+                return super().find_class(mod_name, name)
+
+        def _check_container_source(container_type, source_file, original_source):
+            try:
+                current_source = "".join(get_source_lines_and_file(container_type)[0])
+            except Exception:  # saving the source is optional, so we can ignore any errors
+                warnings.warn(
+                    "Couldn't retrieve source code for container of "
+                    "type " + container_type.__name__ + ". It won't be checked "
+                    "for correctness upon loading.",
+                    stacklevel=2,
+                )
+                return
+            if original_source != current_source:
+                if container_type.dump_patches:
+                    file_name = container_type.__name__ + ".patch"
+                    diff = difflib.unified_diff(
+                        current_source.split("\n"),
+                        original_source.split("\n"),
+                        source_file,
+                        source_file,
+                        lineterm="",
+                    )
+                    lines = "\n".join(diff)
+                    try:
+                        with open(file_name, "a+") as f:
+                            file_size = f.seek(0, 2)
+                            f.seek(0)
+                            if file_size == 0:
+                                f.write(lines)
+                            elif file_size != len(lines) or f.read() != lines:
+                                raise OSError
+                        msg = (
+                            "Saved a reverse patch to " + file_name + ". "
+                            "Run `patch -p0 < " + file_name + "` to revert your "
+                            "changes."
+                        )
+                    except OSError:
+                        msg = (
+                            "Tried to save a patch, but couldn't create a "
+                            "writable file " + file_name + ". Make sure it "
+                            "doesn't exist and your working directory is "
+                            "writable."
+                        )
+                else:
+                    msg = (
+                        "you can retrieve the original source code by "
+                        "accessing the object's source attribute or set "
+                        "`torch.nn.Module.dump_patches = True` and use the "
+                        "patch tool to revert the changes."
+                    )
+                msg = f"source code of class '{torch.typename(container_type)}' has changed. {msg}"
+                warnings.warn(msg, SourceChangeWarning, stacklevel=2)
+
+        def legacy_load(f):
+            deserialized_objects: dict[int, Any] = {}
+
+            def persistent_load(saved_id):
+                if isinstance(saved_id, tuple):
+                    # Ignore containers that don't have any sources saved
+                    if all(saved_id[1:]):
+                        _check_container_source(*saved_id)
+                    return saved_id[0]
+                return deserialized_objects[int(saved_id)]
+
+            with (
+                closing(
+                    tarfile.open(fileobj=f, mode="r:", format=tarfile.PAX_FORMAT)
+                ) as tar,
+                mkdtemp() as tmpdir,
+            ):
+                if pickle_module is _weights_only_unpickler:
+                    raise RuntimeError(
+                        "Cannot use ``weights_only=True`` with files saved in the "
+                        "legacy .tar format. " + UNSAFE_MESSAGE
+                    )
+                tar.extract("storages", path=tmpdir)
+                with open(os.path.join(tmpdir, "storages"), "rb", 0) as f:
+                    num_storages = pickle_module.load(f, **pickle_load_args)
+                    for _ in range(num_storages):
+                        args = pickle_module.load(f, **pickle_load_args)
+                        key, location, storage_type = args
+                        dtype = storage_type._dtype
+                        obj = cast(Storage, torch.UntypedStorage)._new_with_file(
+                            f, torch._utils._element_size(dtype)
+                        )
+                        obj = restore_location(obj, location)
+                        # TODO: Once we decide to break serialization FC, we can
+                        # stop wrapping with TypedStorage
+                        deserialized_objects[key] = torch.storage.TypedStorage(
+                            wrap_storage=obj, dtype=dtype, _internal=True
+                        )
+
+                    storage_views = pickle_module.load(f, **pickle_load_args)
+                    for target_cdata, root_cdata, offset, numel in storage_views:
+                        root = deserialized_objects[root_cdata]
+                        element_size = torch._utils._element_size(root.dtype)
+                        offset_bytes = offset * element_size
+                        # TODO: Once we decide to break serialization FC, we can
+                        # stop wrapping with TypedStorage
+                        deserialized_objects[target_cdata] = torch.storage.TypedStorage(
+                            wrap_storage=root._untyped_storage[
+                                offset_bytes : offset_bytes + numel * element_size
+                            ],
+                            dtype=root.dtype,
+                            _internal=True,
+                        )
+
+                tar.extract("tensors", path=tmpdir)
+                with open(os.path.join(tmpdir, "tensors"), "rb", 0) as f:
+                    num_tensors = pickle_module.load(f, **pickle_load_args)
+                    for _ in range(num_tensors):
+                        args = pickle_module.load(f, **pickle_load_args)
+                        key, storage_id, _original_tensor_type = args
+                        storage = deserialized_objects[storage_id]
+                        (ndim,) = struct.unpack("<i", f.read(4))
+                        # skip next 4 bytes; legacy encoding treated ndim as 8 bytes
+                        f.read(4)
+                        numel = struct.unpack(f"<{ndim}q", f.read(8 * ndim))
+                        stride = struct.unpack(f"<{ndim}q", f.read(8 * ndim))
+                        (storage_offset,) = struct.unpack("<q", f.read(8))
+                        tensor = torch.empty((0,), dtype=storage.dtype).set_(
+                            storage._untyped_storage, storage_offset, numel, stride
+                        )
+                        deserialized_objects[key] = tensor
+
+                pickle_file = tar.extractfile("pickle")
+                unpickler = UnpicklerWrapper(pickle_file, **pickle_load_args)
+                unpickler.persistent_load = persistent_load
+                result = unpickler.load()
+                return result
+
+        deserialized_objects = {}
+
+        def persistent_load(saved_id):
+            assert isinstance(saved_id, tuple)
+            typename = _maybe_decode_ascii(saved_id[0])
+            data = saved_id[1:]
+
+            if typename == "module":
+                # Ignore containers that don't have any sources saved
+                if all(data[1:]):
+                    _check_container_source(*data)
+                return data[0]
+            elif typename == "storage":
+                storage_type, root_key, location, numel, view_metadata = data
+                location = _maybe_decode_ascii(location)
+                dtype = storage_type.dtype
+
+                nbytes = numel * torch._utils._element_size(dtype)
+
+                if root_key not in deserialized_objects:
+                    if torch._guards.active_fake_mode() is not None:
+                        obj = cast(Storage, torch.UntypedStorage(nbytes, device="meta"))
+                    elif _serialization_tls.skip_data:
+                        obj = cast(Storage, torch.UntypedStorage(nbytes))
+                        obj = restore_location(obj, location)
+                    else:
+                        obj = cast(Storage, torch.UntypedStorage(nbytes))
+                        obj._torch_load_uninitialized = True
+                        obj = restore_location(obj, location)
+                    # TODO: Once we decide to break serialization FC, we can
+                    # stop wrapping with TypedStorage
+                    typed_storage = torch.storage.TypedStorage(
+                        wrap_storage=obj, dtype=dtype, _internal=True
+                    )
+                    deserialized_objects[root_key] = typed_storage
+                else:
+                    typed_storage = deserialized_objects[root_key]
+                    if typed_storage._data_ptr() == 0:
+                        typed_storage = torch.storage.TypedStorage(
+                            device=typed_storage._untyped_storage.device,
+                            dtype=dtype,
+                            _internal=True,
+                        )
+
+                if view_metadata is not None:
+                    view_key, offset, view_size = view_metadata
+                    offset_bytes = offset * torch._utils._element_size(dtype)
+                    view_size_bytes = view_size * torch._utils._element_size(dtype)
+                    if view_key not in deserialized_objects:
+                        # TODO: Once we decide to break serialization FC, we can
+                        # stop wrapping with TypedStorage
+                        deserialized_objects[view_key] = torch.storage.TypedStorage(
+                            wrap_storage=typed_storage._untyped_storage[
+                                offset_bytes : offset_bytes + view_size_bytes
+                            ],
+                            dtype=dtype,
+                            _internal=True,
+                        )
+                    res = deserialized_objects[view_key]
+
+                else:
+                    res = typed_storage
+                return res
+            else:
+                raise RuntimeError(f"Unknown saved id type: {saved_id[0]}")
+
+        _check_seekable(f)
+        f_should_read_directly = _should_read_directly(f)
+
+        if f_should_read_directly and f.tell() == 0:
+            # legacy_load requires that f has fileno()
+            # only if offset is zero we can attempt the legacy tar file loader
+            try:
+                return legacy_load(f)
+            except tarfile.TarError:
+                if _is_zipfile(f):
+                    # .zip is used for torch.jit.save and will throw an un-pickling error here
+                    raise RuntimeError(
+                        f"{f.name} is a zip archive (did you mean to use torch.jit.load()?)"
+                    ) from None
+                # if not a tarfile, reset file offset and proceed
+                f.seek(0)
+
+>       magic_number = pickle_module.load(f, **pickle_load_args)
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       _pickle.UnpicklingError: could not find MARK
+
+.venv/lib/python3.12/site-packages/torch/serialization.py:1822: UnpicklingError
+
+The above exception was the direct cause of the following exception:
+
+    def test_scenario_phase3_cutout() -> None:
+        """
+        Scenario 3: Exclusion of Thermal Noise and Intelligent Cluster Extraction
+        """
+        thresholds = ActiveLearningThresholds(threshold_call_dft=0.05, threshold_add_train=0.02)
+        config = CutoutConfig(core_radius=3.0, buffer_radius=2.0)
+
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            pot_dir = Path(temp_dir)
+            model_file = pot_dir / "model"
+            with model_file.open("w") as f:
+                f.write("dummy")
+
+            import pyacemaker.domain_models.defaults
+
+            with patch.object(
+                pyacemaker.domain_models.defaults, "DEFAULT_POTENTIALS_DIR", str(pot_dir.resolve())
+            ):
+>               mace_manager = MACEManager(str(model_file))
+                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/uat/test_cycle08_uat.py:82:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <pyacemaker.core.oracle.MACEManager object at 0x7f9697e354f0>
+model_path = '/tmp/tmp_w9x35pa/model', calculator = None
+
+    def __init__(self, model_path: str, calculator: Any | None = None) -> None:
+        """
+        Initializes the MACEManager.
+
+        Args:
+            model_path: Path to the MACE model file.
+            calculator: Optional pre-initialized calculator instance for dependency injection.
+        """
+        from pyacemaker.domain_models.defaults import DEFAULT_POTENTIALS_DIR
+        from pyacemaker.utils.security import validate_path_containment
+
+        # Securely validate containment REGARDLESS of calculator injection
+        canonical_path = validate_path_containment(model_path, DEFAULT_POTENTIALS_DIR)
+        self.model_path = str(canonical_path)
+
+        if calculator is not None:
+            self.calc = calculator
+            self.is_initialized = True
+            return
+
+        # Initialize MACE properly
+        import torch
+        from mace.calculators import mace_mp
+
+        # Ensure graceful fallback and explicit capability checking for GPU
+        device = "cpu"
+        if torch.cuda.is_available():
+            try:
+                # Basic check to ensure CUDA can actually be initialized correctly
+                torch.cuda.init()  # type: ignore[no-untyped-call]
+                device = "cuda"
+            except Exception as e:
+                logger.warning(
+                    f"CUDA is available but failed to initialize: {e}. Falling back to CPU."
+                )
+
+        # Load the model directly without fallback.
+        # This complies with the principle of explicit configuration.
+        try:
+            self.calc = mace_mp(
+                model=self.model_path, dispersion=False, default_dtype="float32", device=device
+            )
+        except Exception as e:
+            msg = f"Failed to load MACE model from {self.model_path}: {e}"
+>           raise OracleError(msg) from e
+E           pyacemaker.core.exceptions.OracleError: Failed to load MACE model from /tmp/tmp_w9x35pa/model: could not find MARK
+
+src/pyacemaker/core/oracle.py:284: OracleError
+----------------------------- Captured stdout call -----------------------------
+Using float32 for MACECalculator, which is faster but less accurate. Recommended for MD. Use float64 for geometry optimization.
+_________________________ test_scenario_phase4_resume __________________________
+
+mock_driver = <MagicMock name='LammpsDriver' id='140284770087952'>
+tmp_path = PosixPath('/tmp/pytest-of-jules/pytest-17/test_scenario_phase4_resume0')
+
+    @patch("pyacemaker.core.engine.LammpsDriver")
+    def test_scenario_phase4_resume(mock_driver: MagicMock, tmp_path: Path) -> None:
+        """
+        Scenario 4: Hierarchical Fine-Tuning and Seamless Resume
+        """
+        # 1. Finetune MACE
+        finetune_mgr = FinetuneManager()
+        dataset_path = tmp_path / "dataset.xyz"
+        dataset_path.touch()
+>       awakened_model = finetune_mgr.finetune(dataset_path)
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/uat/test_cycle08_uat.py:126:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+src/pyacemaker/core/trainer.py:231: in finetune
+    _ = next(iread(dataset_path, index=":"))
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/ase/io/formats.py:825: in iread
+    format = format or filetype(filename, read=isinstance(filename, str))
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+filename = '/tmp/pytest-of-jules/pytest-17/test_scenario_phase4_resume0/dataset.xyz'
+read = True, guess = True
+
+    def filetype(
+            filename: NameOrFile,
+            read: bool = True,
+            guess: bool = True,
+    ) -> str:
+        """Try to guess the type of the file.
+
+        First, special signatures in the filename will be checked for.  If that
+        does not identify the file type, then the first 2000 bytes of the file
+        will be read and analysed.  Turn off this second part by using
+        read=False.
+
+        Can be used from the command-line also::
+
+            $ ase info filename ...
+        """
+
+        orig_filename = filename
+        if hasattr(filename, 'name'):
+            filename = filename.name
+
+        ext = None
+        if isinstance(filename, str):
+            if os.path.isdir(filename):
+                if os.path.basename(os.path.normpath(filename)) == 'states':
+                    return 'eon'
+                return 'bundletrajectory'
+
+            if filename.startswith('postgres'):
+                return 'postgresql'
+
+            if filename.startswith('mysql') or filename.startswith('mariadb'):
+                return 'mysql'
+
+            if filename.endswith('aselmdb'):
+                return 'db'
+
+            # strip any compression extensions that can be read
+            root, _compression = get_compression(filename)
+            basename = os.path.basename(root)
+
+            if '.' in basename:
+                ext = os.path.splitext(basename)[1].strip('.').lower()
+
+            for fmt in ioformats.values():
+                if fmt.match_name(basename):
+                    return fmt.name
+
+            if not read:
+                if ext is None:
+                    raise UnknownFileTypeError('Could not guess file type')
+                ioformat = extension2format.get(ext)
+                if ioformat:
+                    return ioformat.name
+
+                # askhl: This is strange, we don't know if ext is a format:
+                return ext
+
+            if orig_filename == filename:
+                fd = open_with_compression(filename, 'rb')
+            else:
+                fd = orig_filename  # type: ignore[assignment]
+        else:
+            fd = filename
+            if fd is sys.stdin:
+                return 'json'
+
+        data = fd.read(PEEK_BYTES)
+        if fd is not filename:
+            fd.close()
+        else:
+            fd.seek(0)
+
+        if len(data) == 0:
+>           raise UnknownFileTypeError('Empty file: ' + filename)
+E           ase.io.formats.UnknownFileTypeError: Empty file: /tmp/pytest-of-jules/pytest-17/test_scenario_phase4_resume0/dataset.xyz
+
+.venv/lib/python3.12/site-packages/ase/io/formats.py:977: UnknownFileTypeError
+=============================== warnings summary ===============================
+tests/uat/test_cycle08_uat.py::test_scenario_phase1_distillation
+  /app/.venv/lib/python3.12/site-packages/e3nn/o3/_wigner.py:10: UserWarning: Environment variable TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD detected, since the`weights_only` argument was not explicitly passed to `torch.load`, forcing weights_only=False.
+    _Jd, _W3j_flat, _W3j_indices = torch.load(os.path.join(os.path.dirname(__file__), 'constants.pt'))
+
+tests/uat/test_cycle08_uat.py::test_scenario_phase1_distillation
+tests/uat/test_cycle08_uat.py::test_scenario_phase1_distillation
+tests/uat/test_cycle08_uat.py::test_scenario_phase1_distillation
+tests/uat/test_cycle08_uat.py::test_scenario_phase1_distillation
+tests/uat/test_cycle08_uat.py::test_scenario_phase1_distillation
+  /app/.venv/lib/python3.12/site-packages/torch/jit/_script.py:1480: DeprecationWarning: `torch.jit.script` is deprecated. Please switch to `torch.compile` or `torch.export`.
+    warnings.warn(
+
+tests/uat/test_cycle08_uat.py::test_scenario_phase1_distillation
+tests/uat/test_cycle08_uat.py::test_scenario_phase3_cutout
+  /app/.venv/lib/python3.12/site-packages/mace/calculators/mace.py:199: UserWarning: Environment variable TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD detected, since the`weights_only` argument was not explicitly passed to `torch.load`, forcing weights_only=False.
+    torch.load(f=model_path, map_location=device)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
 ================================ tests coverage ================================
 _______________ coverage: platform linux, python 3.12.13-final-0 _______________
 
@@ -17,62 +1052,72 @@ Name                                         Stmts   Miss  Cover   Missing
 --------------------------------------------------------------------------
 src/pyacemaker/__init__.py                       4      0   100%
 src/pyacemaker/core/__init__.py                  7      0   100%
-src/pyacemaker/core/active_set.py               71     57    20%   45-88, 95-111, 117-132, 136-141, 148-151
+src/pyacemaker/core/active_set.py               71     10    86%   46-47, 60-61, 71, 77-78, 86-88
 src/pyacemaker/core/base.py                     30      0   100%
-src/pyacemaker/core/config_generator.py         36     23    36%   16, 29-43, 47-58, 62-63, 86-87, 100-101, 109-110
-src/pyacemaker/core/directory_manager.py        20     11    45%   21-44
-src/pyacemaker/core/engine.py                  169    142    16%   28-29, 35-54, 73-75, 84-94, 98-100, 104-106, 112-126, 130-149, 163-219, 225-255, 277-311, 318-323, 329-353
-src/pyacemaker/core/error_handler.py            13     13     0%   1-36
+src/pyacemaker/core/config_generator.py         36      3    92%   56-58
+src/pyacemaker/core/directory_manager.py        20      0   100%
+src/pyacemaker/core/engine.py                  169     38    78%   43-45, 85, 99-100, 135-136, 143-144, 167-192, 235-238, 244-247, 278, 302, 318-323, 345
+src/pyacemaker/core/error_handler.py            13      4    69%   26, 28, 32, 36
 src/pyacemaker/core/evaluator_script.py         31     31     0%   7-56
 src/pyacemaker/core/exceptions.py                9      0   100%
-src/pyacemaker/core/generator.py                53     39    26%   21-22, 36-39, 58-119, 137-154
-src/pyacemaker/core/io_manager.py               74     59    20%   24, 43-83, 89-141
-src/pyacemaker/core/lammps_generator.py        192    170    11%   19-21, 25-31, 38-51, 58-95, 99-102, 106-108, 113-123, 129-148, 155-181, 188-197, 202-224, 229, 242-275, 290-354, 366-379
-src/pyacemaker/core/loop.py                     70     45    36%   30-41, 45-87, 95-102
-src/pyacemaker/core/m3gnet_wrapper.py           20     15    25%   23-35, 38-54
-src/pyacemaker/core/oracle.py                  173    136    21%   30-52, 73-77, 88-92, 96-104, 119-124, 130, 133, 136, 139, 143-144, 160-231, 248-286, 289-292, 295-329, 344-354, 357-360, 363-385
-src/pyacemaker/core/policy.py                  110     83    25%   30-31, 47-48, 63-113, 131-170, 179, 189-207, 222-227, 242-245, 260-264
-src/pyacemaker/core/policy_factory.py           31     23    26%   37-65, 78-89
-src/pyacemaker/core/report.py                   12      4    67%   76-77, 81, 85
-src/pyacemaker/core/state_manager.py            34     12    65%   28-30, 34-38, 42, 46, 50, 54
-src/pyacemaker/core/trainer.py                 141    122    13%   22-23, 31-57, 68-95, 118-195, 199-210, 222-269
-src/pyacemaker/core/validator.py                44     27    39%   29-31, 49-65, 80-83, 90-91, 99-131
+src/pyacemaker/core/generator.py                53     11    79%   36-39, 59, 62, 97, 107, 113, 115, 138
+src/pyacemaker/core/io_manager.py               74     30    59%   58-71, 78-81, 106-107, 110-115, 124-125, 129, 133-141
+src/pyacemaker/core/lammps_generator.py        192     38    80%   26-27, 39-40, 46-47, 59-60, 64-65, 82-84, 90-92, 132-148, 164-171, 189, 268, 302, 309, 319, 345
+src/pyacemaker/core/loop.py                     70      6    91%   56, 63, 79-82, 85
+src/pyacemaker/core/m3gnet_wrapper.py           20      7    65%   26-27, 33-35, 42, 52-54
+src/pyacemaker/core/oracle.py                  173     32    82%   89, 120, 182-183, 209-214, 256-258, 267-272, 289-292, 295-329
+src/pyacemaker/core/policy.py                  110     28    75%   30-31, 81-106, 134-136, 148, 161-164, 190, 197
+src/pyacemaker/core/policy_factory.py           31      7    77%   47, 53-54, 58-59, 86-87
+src/pyacemaker/core/report.py                   12      1    92%   85
+src/pyacemaker/core/state_manager.py            34      2    94%   37-38
+src/pyacemaker/core/trainer.py                 141     63    55%   31-57, 68-95, 135-136, 149-151, 163-164, 186-189, 192-193, 200-201, 204-205, 227-228, 236-237, 253-258, 263, 266-267
+src/pyacemaker/core/validator.py                44      0   100%
 src/pyacemaker/domain_models/__init__.py        11      0   100%
-src/pyacemaker/domain_models/config.py          22      0   100%
+src/pyacemaker/domain_models/config.py          23      0   100%
 src/pyacemaker/domain_models/constants.py       17      0   100%
 src/pyacemaker/domain_models/defaults.py       131      0   100%
-src/pyacemaker/domain_models/dft.py             36      8    78%   75-76, 79-80, 83-84, 87-88
-src/pyacemaker/domain_models/eon.py             34      6    82%   57-58, 66-69
+src/pyacemaker/domain_models/dft.py             36      4    89%   79-80, 87-88
+src/pyacemaker/domain_models/eon.py             34      4    88%   66-69
 src/pyacemaker/domain_models/logging.py         31      9    71%   24-25, 31, 39, 45-47, 50-51
-src/pyacemaker/domain_models/md.py             137     34    75%   40, 62-63, 77-84, 118-139, 243-244, 250-251, 259-260, 267-268, 270-271
-src/pyacemaker/domain_models/scenario.py        71      2    97%   48-49
-src/pyacemaker/domain_models/structure.py       74      9    88%   98-99, 103-104, 109-110, 117-118, 131
-src/pyacemaker/domain_models/training.py        46      4    91%   104-105, 119-120
+src/pyacemaker/domain_models/md.py             137     25    82%   40, 62-63, 82-83, 119-120, 125-126, 128-129, 133-134, 136-137, 243-244, 250-251, 259-260, 267-268, 270-271
+src/pyacemaker/domain_models/scenario.py        75      4    95%   68-69, 76-77
+src/pyacemaker/domain_models/structure.py       74      4    95%   98-99, 117-118
+src/pyacemaker/domain_models/training.py        46      0   100%
 src/pyacemaker/domain_models/validation.py      17      0   100%
 src/pyacemaker/domain_models/workflow.py        60      4    93%   80-81, 83-84
-src/pyacemaker/factory.py                       32     17    47%   47-86
+src/pyacemaker/factory.py                       32      3    91%   82-84
 src/pyacemaker/interfaces/__init__.py            5      0   100%
-src/pyacemaker/interfaces/eon_driver.py         74     24    68%   37-40, 86, 102, 109, 126-142, 158, 162
-src/pyacemaker/interfaces/lammps_driver.py      80     66    18%   27-33, 45-55, 65-84, 96-97, 109-133, 142-148, 155-165
+src/pyacemaker/interfaces/eon_driver.py         74     12    84%   86, 133-142, 158, 162
+src/pyacemaker/interfaces/lammps_driver.py      80      8    90%   67-68, 78, 111, 144, 163-165
 src/pyacemaker/interfaces/process.py            14      5    64%   12, 22-29
-src/pyacemaker/interfaces/qe_driver.py          48     35    27%   37-82, 106-143
+src/pyacemaker/interfaces/qe_driver.py          48      2    96%   113-114
 src/pyacemaker/logger.py                        22      1    95%   42
-src/pyacemaker/main.py                          91     27    70%   31-34, 40, 105-118, 121-122, 137-138, 146-152, 156-158, 162
-src/pyacemaker/orchestrator.py                 355    289    19%   84, 93-110, 132-163, 170-189, 196-221, 225-238, 242-262, 266-281, 285-290, 297-314, 323-351, 354-359, 364-365, 368-389, 392-402, 405-406, 411-447, 456-459, 463-482, 491-523, 529-547, 557-637, 644-649, 652-654, 658-673, 681-716, 722-736
+src/pyacemaker/main.py                         131     38    71%   41-44, 50, 73, 105, 113-145, 160-161, 170-171, 204-215, 218, 224
+src/pyacemaker/orchestrator.py                 355     70    80%   105-108, 159, 171, 197, 201-202, 226, 230-231, 261-262, 267, 279-281, 300, 324, 354-359, 385-389, 399, 405-406, 412, 426, 438-440, 457, 473-474, 479-480, 493-494, 502-508, 517-523, 542, 581-584, 593, 623-628, 652-654, 672-673, 692-693, 716
 src/pyacemaker/scenarios/__init__.py             3      0   100%
 src/pyacemaker/scenarios/base_scenario.py       12      1    92%   20
-src/pyacemaker/scenarios/fept_mgo.py           148     34    77%   80, 99-111, 134-135, 162-165, 170-172, 181-182, 195-196, 203, 216, 221-222, 225-226, 233, 237, 245-258, 266-268
-src/pyacemaker/utils/delta.py                   20     15    25%   18-21, 36-62
-src/pyacemaker/utils/elastic.py                 80     64    20%   28-30, 34-35, 46-137, 141-146, 150-154
-src/pyacemaker/utils/embedding.py               36     31    14%   32-87
-src/pyacemaker/utils/extraction.py             262    222    15%   21-50, 55-69, 73-78, 85-115, 119-124, 128-131, 140-163, 168-170, 178-202, 208-228, 232, 240-241, 252-265, 277-283, 290-298, 306-308, 316-319, 327-330, 334, 338-344, 348-350, 354-357, 361-364, 368-374, 378-381, 387-395, 405-409, 415-429, 435-443, 447-454, 464-475, 485-490
-src/pyacemaker/utils/io.py                      73     54    26%   28-29, 50-66, 77-78, 83-87, 103-163
-src/pyacemaker/utils/path.py                    38     17    55%   26-27, 30-31, 35-36, 40-41, 50-61, 79-80
-src/pyacemaker/utils/phonons.py                 51     36    29%   27-30, 33, 47-51, 63-114
-src/pyacemaker/utils/process.py                 32     28    12%   32-83
-src/pyacemaker/utils/structure.py                6      4    33%   18-22
+src/pyacemaker/scenarios/fept_mgo.py           148     28    81%   80, 162-165, 170-172, 181-182, 195-196, 203, 216, 221-222, 225-226, 233, 237, 245-258, 266-268
+src/pyacemaker/utils/delta.py                   20      3    85%   21, 37-38
+src/pyacemaker/utils/elastic.py                 80     52    35%   34-35, 46-137, 146, 154
+src/pyacemaker/utils/embedding.py               36      6    83%   41-42, 49-50, 61-62
+src/pyacemaker/utils/extraction.py             262     57    78%   21-50, 58-59, 64, 66, 69, 74-75, 77-78, 99-100, 123-124, 186-187, 211-212, 291-292, 339, 349, 373-374, 378-381, 406, 419-420, 422-423, 425-426, 428-429, 439-440
+src/pyacemaker/utils/io.py                      73      0   100%
+src/pyacemaker/utils/path.py                    38      4    89%   57-61
+src/pyacemaker/utils/perturbations.py           43      1    98%   77
+src/pyacemaker/utils/phonons.py                 51      2    96%   51, 69
+src/pyacemaker/utils/process.py                 32      6    81%   76-83
+src/pyacemaker/utils/security.py                25     11    56%   23-24, 28-30, 35-36, 44-45, 49-50
+src/pyacemaker/utils/structure.py                6      2    67%   19-20
+src/pyacemaker/utils/validation.py              81     16    80%   91-93, 96, 122-123, 135-136, 151-152, 197-198, 203, 210-211, 214
 --------------------------------------------------------------------------
-TOTAL                                         3513   2058    41%
-============================== 19 passed in 2.20s ==============================
+TOTAL                                         3707    693    81%
+=========================== short test summary info ============================
+FAILED tests/integration/test_scenarios.py::test_api_compile_intent_success
+FAILED tests/uat/test_cycle01_uat.py::test_scenario_01_a_successful_intent_payload
+FAILED tests/uat/test_cycle01_uat.py::test_scenario_01_c_rejection_out_of_bounds_and_invalid_types
+FAILED tests/uat/test_cycle08_uat.py::test_scenario_phase1_distillation - pya...
+FAILED tests/uat/test_cycle08_uat.py::test_scenario_phase3_cutout - pyacemake...
+FAILED tests/uat/test_cycle08_uat.py::test_scenario_phase4_resume - ase.io.fo...
+================== 6 failed, 282 passed, 8 warnings in 17.33s ==================
 /app/.venv/lib/python3.12/site-packages/coverage/inorout.py:561: CoverageWarning: Module dev_src was never imported. (module-not-imported); see https://coverage.readthedocs.io/en/7.13.4/messages.html#warning-module-not-imported
   self.warn(f"Module {pkg} was never imported.", slug="module-not-imported")

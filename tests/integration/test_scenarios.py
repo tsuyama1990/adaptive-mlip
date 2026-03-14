@@ -1,5 +1,6 @@
 import os
 import tempfile
+from collections.abc import Generator
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -12,9 +13,6 @@ from pyacemaker.domain_models.scenario import ScenarioConfig
 from pyacemaker.interfaces.eon_driver import EONWrapper
 from pyacemaker.main import app
 from pyacemaker.scenarios.fept_mgo import FePtMgoScenario
-
-
-from typing import Generator
 
 
 @pytest.fixture
@@ -106,9 +104,9 @@ def test_api_compile_intent_success(client: TestClient) -> None:
             {
                 "id": "node_001",
                 "type": "INITIAL_STRUCTURE",
-                "data": {"chemical_symbol": "Pt", "lattice_constant": 3.92},
+                "data": {"type": "INITIAL_STRUCTURE", "chemical_symbol": "Pt", "lattice_constant": 3.92},
             },
-            {"id": "node_002", "type": "ACTIVE_LEARNING_LOOP", "data": {}},
+            {"id": "node_002", "type": "ACTIVE_LEARNING_LOOP", "data": {"type": "ACTIVE_LEARNING_LOOP"}},
         ],
         "edges": [{"source": "node_001", "target": "node_002"}],
     }

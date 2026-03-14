@@ -50,10 +50,10 @@ class ZBLConfig(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
 
     zbl_cut_inner: PositiveFloat = Field(
-        DEFAULT_MD_HYBRID_ZBL_INNER, description="Inner cutoff radius for ZBL potential (Angstrom)"
+        default=DEFAULT_MD_HYBRID_ZBL_INNER, description="Inner cutoff radius for ZBL potential (Angstrom)"
     )
     zbl_cut_outer: PositiveFloat = Field(
-        DEFAULT_MD_HYBRID_ZBL_OUTER, description="Outer cutoff radius for ZBL potential (Angstrom)"
+        default=DEFAULT_MD_HYBRID_ZBL_OUTER, description="Outer cutoff radius for ZBL potential (Angstrom)"
     )
 
     @model_validator(mode="after")

@@ -21,9 +21,9 @@ def test_scenario_01_a_successful_intent_payload() -> None:
             {
                 "id": "node_001",
                 "type": "INITIAL_STRUCTURE",
-                "data": {"chemical_symbol": "Pt", "lattice_constant": 3.92},
+                "data": {"type": "INITIAL_STRUCTURE", "chemical_symbol": "Pt", "lattice_constant": 3.92},
             },
-            {"id": "node_002", "type": "ACTIVE_LEARNING_LOOP", "data": {}},
+            {"id": "node_002", "type": "ACTIVE_LEARNING_LOOP", "data": {"type": "ACTIVE_LEARNING_LOOP"}},
         ],
         "edges": [{"source": "node_001", "target": "node_002"}],
     }
@@ -79,7 +79,7 @@ def test_scenario_01_c_rejection_out_of_bounds_and_invalid_types() -> None:
     payload_node = {
         "accuracy_speed_slider": 5,
         "target_material": "Pt",
-        "nodes": [{"id": "node_001", "type": "QUANTUM_MAGIC_NODE", "data": {}}],
+        "nodes": [{"id": "node_001", "type": "QUANTUM_MAGIC_NODE", "data": {"type": "INITIAL_STRUCTURE", "chemical_symbol": "Pt", "lattice_constant": 3.92}}],
         "edges": [],
     }
     resp3 = client.post("/api/v1/intent/compile", json=payload_node)

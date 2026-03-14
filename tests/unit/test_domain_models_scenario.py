@@ -46,9 +46,9 @@ def test_intent_request_valid_dag() -> None:
             DagNode(
                 id="n1",
                 type=NodeType.INITIAL_STRUCTURE,
-                data={"chemical_symbol": "Pt", "lattice_constant": 3.9},
+                data={"type": "INITIAL_STRUCTURE", "chemical_symbol": "Pt", "lattice_constant": 3.9},
             ),
-            DagNode(id="n2", type=NodeType.ACTIVE_LEARNING_LOOP, data={}),
+            DagNode(id="n2", type=NodeType.ACTIVE_LEARNING_LOOP, data={"type": "ACTIVE_LEARNING_LOOP"}),
         ],
         edges=[Edge(source="n1", target="n2")],
     )
@@ -80,9 +80,9 @@ def test_intent_request_cycle_detection() -> None:
             accuracy_speed_slider=5,
             target_material="Pt",
             nodes=[
-                DagNode(id="n1", type=NodeType.INITIAL_STRUCTURE, data={}),
-                DagNode(id="n2", type=NodeType.ACTIVE_LEARNING_LOOP, data={}),
-                DagNode(id="n3", type=NodeType.MACE_TRAINING, data={}),
+                DagNode(id="n1", type=NodeType.INITIAL_STRUCTURE, data={"type": "INITIAL_STRUCTURE", "chemical_symbol": "Pt", "lattice_constant": 3.9}),
+                DagNode(id="n2", type=NodeType.ACTIVE_LEARNING_LOOP, data={"type": "ACTIVE_LEARNING_LOOP"}),
+                DagNode(id="n3", type=NodeType.MACE_TRAINING, data={"type": "MACE_TRAINING"}),
             ],
             edges=[
                 Edge(source="n1", target="n2"),
@@ -98,7 +98,7 @@ def test_intent_request_invalid_edge_nodes() -> None:
             accuracy_speed_slider=5,
             target_material="Pt",
             nodes=[
-                DagNode(id="n1", type=NodeType.INITIAL_STRUCTURE, data={}),
+                DagNode(id="n1", type=NodeType.INITIAL_STRUCTURE, data={"type": "INITIAL_STRUCTURE", "chemical_symbol": "Pt", "lattice_constant": 3.9}),
             ],
             edges=[
                 Edge(source="n1", target="n2"),  # n2 doesn't exist

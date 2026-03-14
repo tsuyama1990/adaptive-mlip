@@ -28,3 +28,7 @@ class PyAceConfig(BaseModel):
     )
     eon: EONConfig | None = Field(None, description="EON configuration")
     scenario: ScenarioConfig | None = Field(None, description="Scenario configuration")
+    api_cors_origins: list[str] = Field(
+        default_factory=lambda: ["http://localhost:3000"],
+        description="Allowed CORS origins for the API gateway",
+    )

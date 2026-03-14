@@ -45,32 +45,32 @@ class DistillationConfig(BaseModel):
 
     enable: bool = True
     mace_model_path: str = "mace-mp-0-medium"
-    uncertainty_threshold: float = Field(0.05, description="Threshold where MACE is confident")
+    uncertainty_threshold: float = Field(default=0.05, description="Threshold where MACE is confident")
     sampling_structures_per_system: int = DEFAULT_DISTILLATION_SAMPLING_STRUCTURES
 
 
 class ActiveLearningThresholds(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
 
-    threshold_call_dft: float = Field(0.05, description="Criterion to halt MD and call DFT")
+    threshold_call_dft: float = Field(default=0.05, description="Criterion to halt MD and call DFT")
     threshold_add_train: float = Field(
-        0.02, description="Criterion to select atoms to add to training set"
+        default=0.02, description="Criterion to select atoms to add to training set"
     )
     smooth_steps: int = Field(
-        3, description="Consecutive steps required to exceed threshold to exclude thermal noise"
+        default=3, description="Consecutive steps required to exceed threshold to exclude thermal noise"
     )
 
 
 class CutoutConfig(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
 
-    core_radius: float = Field(4.0, description="Radius for Force Weight 1.0")
-    buffer_radius: float = Field(3.0, description="Thickness of additional relaxation buffer layer")
+    core_radius: float = Field(default=4.0, description="Radius for Force Weight 1.0")
+    buffer_radius: float = Field(default=3.0, description="Thickness of additional relaxation buffer layer")
     enable_pre_relaxation: bool = True
     pre_relaxation_fmax: float = Field(
-        0.05, description="Force maximum tolerance for pre-relaxation"
+        default=0.05, description="Force maximum tolerance for pre-relaxation"
     )
-    pre_relaxation_steps: int = Field(50, description="Maximum steps for pre-relaxation")
+    pre_relaxation_steps: int = Field(default=50, description="Maximum steps for pre-relaxation")
     enable_passivation: bool = True
     passivation_element: str = "H"
 
@@ -91,9 +91,9 @@ class LoopStrategyConfig(BaseModel):
     use_tiered_oracle: bool = True
     incremental_update: bool = True
     replay_buffer_size: int = Field(
-        500, description="Number of past data points to retain to prevent catastrophic forgetting"
+        default=500, description="Number of past data points to retain to prevent catastrophic forgetting"
     )
-    baseline_potential_type: str = Field("LJ", description="Baseline physical potential (e.g., LJ)")
+    baseline_potential_type: str = Field(default="LJ", description="Baseline physical potential (e.g., LJ)")
     thresholds: ActiveLearningThresholds = Field(default_factory=ActiveLearningThresholds)
 
 

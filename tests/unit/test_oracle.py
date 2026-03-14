@@ -8,9 +8,40 @@ from ase import Atoms
 from ase.calculators.calculator import Calculator, all_changes
 
 from pyacemaker.core.exceptions import OracleError
-from pyacemaker.core.oracle import MACEManager, TieredOracle
-from pyacemaker.domain_models.workflow import ActiveLearningThresholds
+from pyacemaker.core.oracle import DFTManager, MACEManager, TieredOracle
 from pyacemaker.domain_models.dft import DFTConfig
+from pyacemaker.domain_models.workflow import ActiveLearningThresholds
+
+TEST_ENERGY_GENERIC = -42.0
+
+class MockCalculator(Calculator):
+    implemented_properties: list[str] = ["energy", "forces"]  # noqa: RUF012
+
+    def __init__(self, fail_count: int = 0, **kwargs: Any) -> None:
+        super().__init__(**kwargs)  # type: ignore[no-untyped-call]
+        self.fail_count = fail_count
+        self.current_fails = 0
+
+    def calculate(
+        self,
+        atoms: Atoms | None = None,
+        properties: list[str] | None = None,
+        system_changes: list[str] = all_changes,
+    ) -> None:
+        if self.current_fails < self.fail_count:
+            self.current_fails += 1
+            raise RuntimeError("Mock failure")
+
+        if atoms is None:
+            return
+        super().calculate(atoms, properties, system_changes)  # type: ignore[no-untyped-call]
+        n_atoms = len(atoms)
+        self.results["energy"] = TEST_ENERGY_GENERIC * n_atoms
+        self.results["forces"] = np.ones((n_atoms, 3)) * 0.1
+
+class FakeDriver:
+    def __init__(self, **kwargs: Any) -> None:
+        pass
 
 
 class DummyMaceCalc(Calculator):
@@ -73,8 +104,7 @@ def test_macemanager_initialization_failure(
 
     class DummyExecutor:
         def __init__(self, max_workers: int) -> None:
-            # We track the call count at the class level because DummyExecutor is instantiated fresh each loop
-            pass
+            self.call_count = 0
 
         def __enter__(self) -> "DummyExecutor":
             return self
@@ -83,27 +113,28 @@ def test_macemanager_initialization_failure(
             pass
 
         def submit(self, fn: Any, *args: Any, **kwargs: Any) -> DummyFuture:
-            DummyExecutor.call_count += 1
-            if DummyExecutor.call_count == 1:
+            self.call_count += 1
+            if self.call_count == 1:
                 return DummyFuture(None, RuntimeError("Setup failed"))
 
             calc = MockCalculator(fail_count=0)
             atoms = args[1]
             atoms.calc = calc
-            atoms.get_potential_energy()  # type: ignore[no-untyped-call]
+            atoms.get_potential_energy()
             return DummyFuture(calc, None)
 
-    DummyExecutor.call_count = 0
+    executor = DummyExecutor(max_workers=1)
+    executor.call_count = 0
+    monkeypatch.setattr("concurrent.futures.ProcessPoolExecutor", lambda max_workers: executor)
 
-    monkeypatch.setattr("concurrent.futures.ProcessPoolExecutor", DummyExecutor)
+    model_path = get_safe_test_model_path(monkeypatch, tmp_path)
+    model_path.touch()
 
-    fake_driver = FakeDriver()
-    manager = DFTManager(mock_dft_config, driver=fake_driver)  # type: ignore[arg-type]
+    with patch("mace.calculators.mace_mp", side_effect=Exception("Simulated Initialization Failure")):
+        with pytest.raises(OracleError):
+            MACEManager(str(model_path))
 
-    gen = manager.compute(iter([atoms]))
-    result = next(gen)
-
-    assert result.get_potential_energy() == TEST_ENERGY_GENERIC  # type: ignore[no-untyped-call]
+    model_path.unlink()
 
 
 def test_dft_manager_fatal_error(
@@ -138,16 +169,28 @@ def test_dft_manager_fatal_error(
 
     monkeypatch.setattr("concurrent.futures.ProcessPoolExecutor", DummyExecutor)
 
+    manager = DFTManager(mock_dft_config, driver=FakeDriver())
+
+    gen = manager.compute(iter([atoms]))
+    with pytest.raises(OracleError):
+        next(gen)
+
+def test_tiered_oracle_initialization() -> None:
+    mock_mace = MagicMock()
+    mock_dft = MagicMock()
+    thresholds = ActiveLearningThresholds(
+        threshold_call_dft=0.05, threshold_add_train=0.02, smooth_steps=3
+    )
+
     oracle = TieredOracle(mace_manager=mock_mace, dft_manager=mock_dft, thresholds=thresholds)
     assert oracle.mace == mock_mace
     assert oracle.dft == mock_dft
 
     with pytest.raises(ValueError, match="MACEManager must be provided"):
-        TieredOracle(mace_manager=None, dft_manager=mock_dft, thresholds=thresholds)  # type: ignore[arg-type]
+        TieredOracle(mace_manager=None, dft_manager=mock_dft, thresholds=thresholds)
 
     with pytest.raises(ValueError, match="DFTManager cannot be None"):
-        TieredOracle(mace_manager=mock_mace, dft_manager=None, thresholds=thresholds)  # type: ignore[arg-type]
-
+        TieredOracle(mace_manager=mock_mace, dft_manager=None, thresholds=thresholds)
 
 def test_tiered_oracle_compute_below_threshold() -> None:
     mock_mace = MagicMock()
@@ -157,6 +200,7 @@ def test_tiered_oracle_compute_below_threshold() -> None:
     )
 
     atoms_result = Atoms("H")
+    atoms_result.new_array("c_gamma", np.array([0.01]))
     mock_mace.compute.return_value = iter([atoms_result])
 
     oracle = TieredOracle(mace_manager=mock_mace, dft_manager=mock_dft, thresholds=thresholds)
@@ -213,8 +257,8 @@ def test_tiered_oracle_compute_above_threshold() -> None:
     result = next(result_iter)
 
     assert result == atoms_dft_result
-    assert result.has("c_gamma")  # type: ignore[no-untyped-call]
-    assert np.array_equal(result.get_array("c_gamma"), np.array([0.1]))  # type: ignore[no-untyped-call]
+    assert result.has("c_gamma")
+    assert np.array_equal(result.get_array("c_gamma"), np.array([0.1]))
 
     mock_mace.compute.assert_called_once()
     mock_dft.compute.assert_called_once()
@@ -229,4 +273,4 @@ def test_tiered_oracle_compute_invalid_input() -> None:
 
     oracle = TieredOracle(mace_manager=mock_mace, dft_manager=mock_dft, thresholds=thresholds)
     with pytest.raises(TypeError, match="Oracle failed to create iterator"):
-        oracle.compute([Atoms("H")])  # type: ignore[arg-type]
+        oracle.compute([Atoms("H")])
