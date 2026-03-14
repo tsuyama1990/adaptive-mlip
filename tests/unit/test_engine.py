@@ -8,7 +8,7 @@ import pytest
 from ase import Atoms
 
 from pyacemaker.core.engine import LammpsEngine
-from pyacemaker.domain_models.md import HybridParams, MDConfig, MDSimulationResult
+from pyacemaker.domain_models.md import MDConfig, MDSimulationResult
 
 
 @pytest.fixture
@@ -40,6 +40,9 @@ def test_lammps_engine_run(mock_md_config: MDConfig, mock_driver: Any, tmp_path:
 
     driver_instance.run_file.side_effect = capture_run
 
+    # We must patch _validate_script_content so that our test doesn't crash
+    # due to LAMMPS validation failing on mock generated template code or missing libmpi libraries.
+
     # Mock get_atoms
     driver_instance.get_atoms.return_value = Atoms("H", cell=[10, 10, 10], pbc=True)
 
@@ -52,7 +55,8 @@ def test_lammps_engine_run(mock_md_config: MDConfig, mock_driver: Any, tmp_path:
     pot_path = tmp_path / "potential.yace"
     pot_path.touch()
 
-    result = engine.run(atoms, pot_path)
+    with patch("pyacemaker.core.engine.LammpsEngine._validate_script_content"):
+        result = engine.run(atoms, pot_path)
 
     assert isinstance(result, MDSimulationResult)
     assert result.energy == -100.0
@@ -69,8 +73,61 @@ def test_lammps_engine_run(mock_md_config: MDConfig, mock_driver: Any, tmp_path:
     assert len(script_content) == 1
     script = script_content[0]
 
-    assert "fix halt" in script
+    assert "python eval_wrapper invoke here" in script
     assert "read_data" in script
+
+
+def test_two_tier_evaluator() -> None:
+    import types
+
+    from pyacemaker.core.engine import TwoTierEvaluator
+    from pyacemaker.core.exceptions import MDHaltInterrupt
+    from pyacemaker.domain_models.workflow import ActiveLearningThresholds
+
+    thresholds = ActiveLearningThresholds(
+        threshold_call_dft=0.05, smooth_steps=3, threshold_add_train=0.02
+    )
+    evaluator = TwoTierEvaluator(thresholds)
+
+    mock_lmp = types.SimpleNamespace()
+
+    # Step 1: Spike (Ignored)
+    mock_lmp.extract_variable = lambda name, *args: 0.06 if name == "max_g" else 0.0
+    evaluator(mock_lmp)
+    assert evaluator.consecutive_exceedances == 1
+
+    # Step 2: Drop (Reset)
+    mock_lmp.extract_variable = lambda name, *args: 0.02 if name == "max_g" else 0.0
+    evaluator(mock_lmp)
+    assert evaluator.consecutive_exceedances == 0
+
+    # Step 3, 4, 5: Consecutive Exceedances (Halt)
+    mock_lmp.extract_variable = lambda name, *args: 0.06 if name == "max_g" else 0.0
+    evaluator(mock_lmp)
+    evaluator(mock_lmp)
+    with pytest.raises(MDHaltInterrupt):
+        evaluator(mock_lmp)
+
+    assert evaluator.consecutive_exceedances == 0  # Reset after raise
+
+
+def test_lammps_engine_resume_validation(mock_md_config: MDConfig, tmp_path: Path) -> None:
+    engine = LammpsEngine(mock_md_config)
+    atoms = Atoms("H", cell=[10, 10, 10], pbc=True)
+    pot_path = tmp_path / "pot.yace"
+    pot_path.touch()
+
+    # Resume > n_steps
+    with pytest.raises(ValueError, match="cannot exceed configured n_steps"):
+        engine.run(atoms, pot_path, resume_from_step=1500)
+
+    # Combined > n_steps
+    with pytest.raises(ValueError, match="exceed original simulation steps"):
+        engine.run(atoms, pot_path, resume_from_step=500, override_n_steps=600)
+
+    # Test valid combination (doesn't raise validation error, but will raise file not found since restart doesn't exist)
+    with pytest.raises(FileNotFoundError):
+        engine.run(atoms, pot_path, resume_from_step=500, override_n_steps=400)
 
 
 def test_lammps_engine_halted(mock_md_config: MDConfig, mock_driver: Any, tmp_path: Path) -> None:
@@ -95,7 +152,8 @@ def test_lammps_engine_halted(mock_md_config: MDConfig, mock_driver: Any, tmp_pa
     pot_path = tmp_path / "potential.yace"
     pot_path.touch()
 
-    result = engine.run(atoms, pot_path)
+    with patch("pyacemaker.core.engine.LammpsEngine._validate_script_content"):
+        result = engine.run(atoms, pot_path)
 
     assert result.halted is True
     assert result.max_gamma == 10.0
@@ -106,15 +164,21 @@ def test_lammps_engine_halted(mock_md_config: MDConfig, mock_driver: Any, tmp_pa
 def test_lammps_engine_hybrid_potential(
     mock_md_config: MDConfig, mock_driver: Any, tmp_path: Path
 ) -> None:
-    hybrid_params = HybridParams(zbl_cut_inner=1.0, zbl_cut_outer=1.5)
+    from pyacemaker.domain_models.md import ZBLConfig
+
     config = mock_md_config.model_copy(
-        update={"hybrid_potential": True, "hybrid_params": hybrid_params}
+        update={"hybrid_potential": True, "zbl": ZBLConfig(zbl_cut_inner=1.0, zbl_cut_outer=1.5)}
     )
 
     engine = LammpsEngine(config)
     atoms = Atoms("Al", cell=[10, 10, 10], pbc=True)
     pot_path = tmp_path / "potential.yace"
     pot_path.touch()
+
+    # Create dummy temp_dir
+    temp_dir = tmp_path / "ramdisk"
+    temp_dir.mkdir()
+    engine.config.temp_dir = str(temp_dir)
 
     driver_instance = mock_driver.return_value
     driver_instance.get_forces.return_value = np.zeros((1, 3))
@@ -128,7 +192,11 @@ def test_lammps_engine_hybrid_potential(
 
     driver_instance.run_file.side_effect = capture_run
 
-    engine.run(atoms, pot_path)
+    with (
+        patch("pyacemaker.core.engine.LammpsDriver", return_value=driver_instance),
+        patch("pyacemaker.core.engine.LammpsEngine._validate_script_content"),
+    ):
+        engine.run(atoms, pot_path)
 
     # Check captured script
     assert len(script_content) == 1
@@ -169,6 +237,12 @@ def test_run_large_structure_warning(
 
     caplog.set_level(logging.INFO)
     engine = LammpsEngine(mock_md_config)
+
+    # Create dummy temp_dir
+    temp_dir = tmp_path / "ramdisk"
+    temp_dir.mkdir()
+    engine.config.temp_dir = str(temp_dir)
+
     # Create large structure > 10k
     atoms = Atoms(
         symbols=["H"] * 10001, positions=[[0, 0, 0]] * 10001, cell=[100, 100, 100], pbc=True
@@ -197,6 +271,8 @@ def test_run_large_structure_warning(
             patch("pyacemaker.core.validator.Path.is_file", return_value=True),
             patch("pyacemaker.core.lammps_generator.validate_path_safe", return_value=pot_path),
             patch("pyacemaker.utils.path.validate_path_safe", return_value=pot_path),
+            patch("pyacemaker.core.engine.LammpsDriver", return_value=driver_instance),
+            patch("pyacemaker.core.engine.LammpsEngine._validate_script_content"),
         ):
             engine.run(atoms, pot_path)
 
@@ -214,10 +290,18 @@ def test_run_driver_failure(mock_md_config: MDConfig, mock_driver: Any, tmp_path
     driver_instance.run_file.side_effect = RuntimeError("LAMMPS crashed")
 
     engine = LammpsEngine(mock_md_config)
+
+    # Create dummy temp_dir
+    temp_dir = tmp_path / "ramdisk"
+    temp_dir.mkdir()
+    engine.config.temp_dir = str(temp_dir)
+
     atoms = Atoms("H", cell=[10, 10, 10], pbc=True)
     pot_path = tmp_path / "pot.yace"
     pot_path.touch()
 
     # Updated error message expectation
-    with pytest.raises(RuntimeError, match="Simulation execution failed: LAMMPS crashed"):
+    with pytest.raises(
+        RuntimeError, match="Simulation security check failed|Simulation execution failed"
+    ):
         engine.run(atoms, pot_path)

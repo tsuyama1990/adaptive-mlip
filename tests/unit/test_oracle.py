@@ -1,79 +1,58 @@
-from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
+from unittest.mock import MagicMock, patch
 
+import numpy as np
 import pytest
 from ase import Atoms
+from ase.calculators.calculator import Calculator, all_changes
 
 from pyacemaker.core.exceptions import OracleError
-from pyacemaker.core.oracle import DFTManager
-from pyacemaker.domain_models import DFTConfig
-from tests.conftest import MockCalculator, create_dummy_pseudopotentials
-from tests.constants import TEST_ENERGY_GENERIC
+from pyacemaker.core.oracle import MACEManager, TieredOracle
+from pyacemaker.domain_models.workflow import ActiveLearningThresholds
 
 
-@pytest.fixture
-def mock_dft_config(dummy_pseudopotentials_dir: Path, monkeypatch: pytest.MonkeyPatch) -> DFTConfig:
-    monkeypatch.chdir(dummy_pseudopotentials_dir)
-    create_dummy_pseudopotentials(dummy_pseudopotentials_dir, ["H"])
+class DummyMaceCalc(Calculator):
+    implemented_properties: list[str] = ["energy", "forces"]  # noqa: RUF012
 
-    return DFTConfig(
-        code="pw.x",
-        functional="PBE",
-        kpoints_density=0.04,
-        encut=500.0,
-        mixing_beta=0.7,
-        smearing_type="mv",
-        smearing_width=0.1,
-        diagonalization="david",
-        pseudopotentials={"H": "H.UPF"},
-    )
+    def __init__(self, **kwargs: Any) -> None:
+        super().__init__(**kwargs)  # type: ignore[no-untyped-call]
+        self.models = [1, 2]  # Dummy to trigger node variance extraction block
 
-
-class FakeDriver:
-    """Fake driver to be picklable for ProcessPoolExecutor"""
-
-    def __init__(self, calcs: list[MockCalculator] | MockCalculator | None = None) -> None:
-        self.calcs = (
-            calcs
-            if isinstance(calcs, list)
-            else [calcs]
-            if calcs
-            else [MockCalculator(fail_count=0)]
-        )
-        self.call_count = 0
-        self.call_args_list: list[tuple[Any, Any]] = []
-
-    def get_calculator(self, atoms: Atoms, config: Any, directory: str) -> Any:
-        self.call_args_list.append(((atoms, config), {"directory": directory}))
-        calc = self.calcs[self.call_count] if self.call_count < len(self.calcs) else self.calcs[-1]
-        self.call_count += 1
-        return calc
+    def calculate(
+        self,
+        atoms: Atoms | None = None,
+        properties: list[str] | None = None,
+        system_changes: list[str] = all_changes,
+    ) -> None:
+        if atoms is None:
+            return
+        super().calculate(atoms, properties, system_changes)  # type: ignore[no-untyped-call]
+        n_atoms = len(atoms)
+        self.results["energy"] = -10.0 * n_atoms
+        self.results["forces"] = np.ones((n_atoms, 3)) * 0.1
 
 
-def test_dft_manager_compute_success(mock_dft_config: DFTConfig) -> None:
-    """Test successful computation using dependency injection."""
-    atoms = Atoms("H", cell=[10, 10, 10], pbc=True)
-
-    # Create Fake Driver
-    fake_driver = FakeDriver()
-
-    # Inject fake driver
-    manager = DFTManager(mock_dft_config, driver=fake_driver)  # type: ignore[arg-type]
-
-    # Verify generator behavior with next() instead of list()
-    generator = manager.compute(iter([atoms]))
-    result = next(generator)
-
-    assert result.get_potential_energy() == TEST_ENERGY_GENERIC  # type: ignore[no-untyped-call]
-
-    # ProcessPoolExecutor copies state, so we can't easily assert on fake_driver call_count
-    # Verify generator returned the correctly calculated atoms object instead.
-    assert result.get_potential_energy() == TEST_ENERGY_GENERIC
+def get_safe_test_model_path(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
+    pot_dir = tmp_path / "potentials"
+    monkeypatch.setattr("pyacemaker.domain_models.defaults.DEFAULT_POTENTIALS_DIR", str(pot_dir))
+    pot_dir.mkdir(parents=True, exist_ok=True)
+    return pot_dir / "model.model"
 
 
-def test_dft_manager_self_healing(
-    mock_dft_config: DFTConfig, monkeypatch: pytest.MonkeyPatch
+def test_macemanager_initialization(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    model_path = get_safe_test_model_path(monkeypatch, tmp_path)
+    model_path.touch()
+
+    with patch("mace.calculators.mace_mp", return_value=DummyMaceCalc()):
+        manager = MACEManager(str(model_path))
+        assert manager.is_initialized
+
+    model_path.unlink()
+
+
+def test_macemanager_initialization_failure(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """Test self-healing mechanism."""
     atoms = Atoms("H", cell=[10, 10, 10], pbc=True)
@@ -158,22 +137,23 @@ def test_dft_manager_fatal_error(
 
     monkeypatch.setattr("concurrent.futures.ProcessPoolExecutor", DummyExecutor)
 
-    fake_driver = FakeDriver(calcs=MockCalculator(fail_count=100))
+    oracle = TieredOracle(mace_manager=mock_mace, dft_manager=mock_dft, thresholds=thresholds)
+    assert oracle.mace == mock_mace
+    assert oracle.dft == mock_dft
 
-    manager = DFTManager(mock_dft_config, driver=fake_driver)  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match="MACEManager must be provided"):
+        TieredOracle(mace_manager=None, dft_manager=mock_dft, thresholds=thresholds)  # type: ignore[arg-type]
 
-    # Now raises OracleError
-    # Use next() to trigger execution
-    gen = manager.compute(iter([atoms]))
-    with pytest.raises(OracleError, match="Oracle calculation failed"):
-        next(gen)
+    with pytest.raises(ValueError, match="DFTManager cannot be None"):
+        TieredOracle(mace_manager=mock_mace, dft_manager=None, thresholds=thresholds)  # type: ignore[arg-type]
 
-    # In tests, if ProcessPoolExecutor is used, state updates inside _run_calculator
-    # (like mock call counts on self.driver) are not reflected back in the main process
-    # because they happen in a separate process space. This is a limitation of testing
-    # ProcessPoolExecutor.
-    # We will just assert that the code raises the correct exception.
 
+def test_tiered_oracle_compute_below_threshold() -> None:
+    mock_mace = MagicMock()
+    mock_dft = MagicMock()
+    thresholds = ActiveLearningThresholds(
+        threshold_call_dft=0.05, threshold_add_train=0.02, smooth_steps=3
+    )
 
 def test_dft_manager_setup_error(
     mock_dft_config: DFTConfig, monkeypatch: pytest.MonkeyPatch
@@ -181,131 +161,76 @@ def test_dft_manager_setup_error(
     """Test handling of CalculatorSetupError."""
     atoms = Atoms("H", cell=[10, 10, 10], pbc=True)
 
-    from concurrent.futures import Future
+    mock_mace.compute.return_value = iter([atoms_result])
 
-    class DummyFuture(Future):  # type: ignore[type-arg]
-        def __init__(self, result_value: Any, exception: Any = None) -> None:
-            super().__init__()
-            self._result_value = result_value
-            self._exception = exception
+    oracle = TieredOracle(mace_manager=mock_mace, dft_manager=mock_dft, thresholds=thresholds)
 
-        def result(self, timeout: float | None = None) -> Any:
-            return self._result_value, self._exception
+    atoms_input = Atoms("H")
+    result_iter = oracle.compute(iter([atoms_input]))
+    result = next(result_iter)
 
-    class DummyExecutor:
-        def __init__(self, max_workers: int) -> None:
-            pass
-
-        def __enter__(self) -> "DummyExecutor":
-            return self
-
-        def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
-            pass
-
-        def submit(self, fn: Any, *args: Any, **kwargs: Any) -> DummyFuture:
-            return DummyFuture(None, RuntimeError("CalculatorSetupError"))
-
-    monkeypatch.setattr("concurrent.futures.ProcessPoolExecutor", DummyExecutor)
-
-    fake_driver = FakeDriver(calcs=MockCalculator(setup_error=True))
-
-    manager = DFTManager(mock_dft_config, driver=fake_driver)  # type: ignore[arg-type]
-
-    gen = manager.compute(iter([atoms]))
-    with pytest.raises(OracleError, match="Oracle calculation failed"):
-        next(gen)
-
-    # Should retry even on setup error if it's considered transient or parameter based?
-    # Spec says "JobFailedException" (RuntimeError). Implementation catches (RuntimeError, CalculatorSetupError).
-    # So it should retry.
+    assert result == atoms_result
+    mock_mace.compute.assert_called_once()
+    mock_dft.compute.assert_not_called()
 
 
-def test_dft_manager_strategies(mock_dft_config: DFTConfig) -> None:
-    """Test that strategies are correctly defined."""
-    manager = DFTManager(mock_dft_config)
-    strategies = manager._get_strategies()
+def test_tiered_oracle_compute_boundary_threshold() -> None:
+    mock_mace = MagicMock()
+    mock_dft = MagicMock()
+    # Exact boundary edge case
+    thresholds = ActiveLearningThresholds(
+        threshold_call_dft=0.05, threshold_add_train=0.02, smooth_steps=3
+    )
 
-    assert len(strategies) > 0
-    assert strategies[0] is None  # First attempt is vanilla
+    atoms_mace_result = Atoms("H")
+    atoms_mace_result.new_array("c_gamma", np.array([0.05]))  # type: ignore[no-untyped-call]
 
-    # Strategy 1: Reduce Beta
-    strat_beta = strategies[1]
-    assert strat_beta is not None
-    config_copy = mock_dft_config.model_copy()
-    original_beta = config_copy.mixing_beta
-    strat_beta(config_copy)
-    assert config_copy.mixing_beta == original_beta * 0.5
+    mock_mace.compute.return_value = iter([atoms_mace_result])
+    oracle = TieredOracle(mace_manager=mock_mace, dft_manager=mock_dft, thresholds=thresholds)
 
-    # Strategy 2: Increase Smearing
-    strat_smearing = strategies[2]
-    assert strat_smearing is not None
-    config_copy = mock_dft_config.model_copy()
-    original_smearing = config_copy.smearing_width
-    strat_smearing(config_copy)
-    assert config_copy.smearing_width == original_smearing * 2.0
+    result = next(oracle.compute(iter([Atoms("H")])))
 
-    # Strategy 3: CG Diagonalization
-    strat_cg = strategies[3]
-    assert strat_cg is not None
-    config_copy = mock_dft_config.model_copy()
-    strat_cg(config_copy)
-    assert config_copy.diagonalization == "cg"
+    # Should NOT fall back to DFT because it is <= threshold (not strictly >)
+    assert result == atoms_mace_result
+    mock_dft.compute.assert_not_called()
 
 
-def test_dft_manager_invalid_input(mock_dft_config: DFTConfig) -> None:
-    """Test compute raises TypeError for non-iterator input."""
-    manager = DFTManager(mock_dft_config)
-    atoms_list = [Atoms("H")]
+def test_tiered_oracle_compute_above_threshold() -> None:
+    mock_mace = MagicMock()
+    mock_dft = MagicMock()
+    thresholds = ActiveLearningThresholds(
+        threshold_call_dft=0.05, threshold_add_train=0.02, smooth_steps=3
+    )
 
-    # Check that it raises TypeError immediately upon calling compute (before next)
+    atoms_mace_result = Atoms("H")
+    atoms_mace_result.new_array("c_gamma", np.array([0.1]))  # type: ignore[no-untyped-call]
+
+    atoms_dft_result = Atoms("H")
+
+    mock_mace.compute.return_value = iter([atoms_mace_result])
+    mock_dft.compute.return_value = iter([atoms_dft_result])
+
+    oracle = TieredOracle(mace_manager=mock_mace, dft_manager=mock_dft, thresholds=thresholds)
+
+    atoms_input = Atoms("H")
+    result_iter = oracle.compute(iter([atoms_input]))
+    result = next(result_iter)
+
+    assert result == atoms_dft_result
+    assert result.has("c_gamma")  # type: ignore[no-untyped-call]
+    assert np.array_equal(result.get_array("c_gamma"), np.array([0.1]))  # type: ignore[no-untyped-call]
+
+    mock_mace.compute.assert_called_once()
+    mock_dft.compute.assert_called_once()
+
+
+def test_tiered_oracle_compute_invalid_input() -> None:
+    mock_mace = MagicMock()
+    mock_dft = MagicMock()
+    thresholds = ActiveLearningThresholds(
+        threshold_call_dft=0.05, threshold_add_train=0.02, smooth_steps=3
+    )
+
+    oracle = TieredOracle(mace_manager=mock_mace, dft_manager=mock_dft, thresholds=thresholds)
     with pytest.raises(TypeError, match="Oracle failed to create iterator"):
-        manager.compute(atoms_list)  # type: ignore[arg-type]
-
-    # Explicitly check None
-    with pytest.raises(TypeError, match="Oracle failed to create iterator"):
-        manager.compute(None)  # type: ignore[arg-type]
-
-
-def test_dft_manager_empty_iterator(mock_dft_config: DFTConfig) -> None:
-    """Test compute handles empty iterator correctly safely."""
-    manager = DFTManager(mock_dft_config)
-    empty_iter: Iterator[Atoms] = iter([])
-
-    # Explicit loop without list() materialization for safety
-    # Use deque(..., maxlen=0) to consume iterator efficiently
-    from collections import deque
-
-    deque(manager.compute(empty_iter), maxlen=0)
-
-
-def test_dft_manager_embedding(mock_dft_config: DFTConfig, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Test that embedding is applied when configured."""
-    from pyacemaker.core.oracle import DFTManager
-
-    # Configure embedding buffer
-    mock_dft_config.embedding_buffer = 5.0
-
-    # Mock embed_cluster
-    # It must be picklable too, or not used here.
-    # We will just patch `embed_cluster` with a simple function
-    embedded_atoms = Atoms("H", cell=[20, 20, 20], pbc=True)
-
-    def fake_embed(*args: Any, **kwargs: Any) -> Atoms:
-        return embedded_atoms
-
-    monkeypatch.setattr("pyacemaker.core.oracle.embed_cluster", fake_embed)
-
-    # Mock Driver
-    fake_driver = FakeDriver(calcs=MockCalculator(fail_count=0))
-
-    manager = DFTManager(mock_dft_config, driver=fake_driver)  # type: ignore[arg-type]
-
-    atoms = Atoms("H", positions=[[0, 0, 0]])
-    # Must be iterator
-    gen = manager.compute(iter([atoms]))
-    result = next(gen)
-
-    # Check if result is the embedded one
-    # DFTManager.compute yields the result of _compute_single(embedded_atoms)
-    # _compute_single returns the atom object passed to it (which is embedded_atoms)
-    assert result == embedded_atoms
+        oracle.compute([Atoms("H")])  # type: ignore[arg-type]

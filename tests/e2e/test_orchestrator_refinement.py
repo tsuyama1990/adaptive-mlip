@@ -137,10 +137,17 @@ def test_orchestrator_refinement_logic(tmp_path: Path) -> None:
     orch.oracle = FakeOracle()
     refined_pot = tmp_path / "refined.yace"
     orch.trainer = FakeTrainer(refined_pot)
-    # mock incremental_train with a mock that returns the path instead of failing
-    from unittest.mock import MagicMock
 
-    orch.trainer.incremental_train = MagicMock(return_value=refined_pot)
+    # Instead of mock patching, override the methods with fake alternatives
+    def fake_incremental_train(self: Any, *args: Any, **kwargs: Any) -> Path:
+        return refined_pot
+
+    orch.trainer.incremental_train = fake_incremental_train.__get__(orch.trainer, FakeTrainer)
+
+    def fake_finetune_mace(self: Any, *args: Any, **kwargs: Any) -> Path:
+        return tmp_path / "awakened_mace_model.model"
+
+    orch._finetune_mace = fake_finetune_mace.__get__(orch, Orchestrator)
 
     # 5. Create Simulation Result
     result = MDSimulationResult(

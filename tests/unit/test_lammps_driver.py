@@ -54,7 +54,7 @@ def test_lammps_driver_run_forbidden_chars(mock_lammps: Any) -> None:
     driver = LammpsDriver()
     # Pipe is forbidden
     script = "print 'Hello' | grep World"
-    with pytest.raises(ValueError, match="forbidden characters"):
+    with pytest.raises(ValueError, match="explicitly blocked shell metacharacters"):
         driver.run(script)
 
 

@@ -19,7 +19,7 @@ from pyacemaker.domain_models.defaults import (
 class OTFConfig(BaseModel):
     """Configuration for On-The-Fly (OTF) Active Learning loop."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", strict=True)
 
     uncertainty_threshold: float = Field(
         default=DEFAULT_OTF_UNCERTAINTY_THRESHOLD,
@@ -41,7 +41,7 @@ class OTFConfig(BaseModel):
 
 
 class DistillationConfig(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", strict=True)
 
     enable: bool = True
     mace_model_path: str = "mace-mp-0-medium"
@@ -50,7 +50,7 @@ class DistillationConfig(BaseModel):
 
 
 class ActiveLearningThresholds(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", strict=True)
 
     threshold_call_dft: float = Field(0.05, description="Criterion to halt MD and call DFT")
     threshold_add_train: float = Field(
@@ -62,11 +62,15 @@ class ActiveLearningThresholds(BaseModel):
 
 
 class CutoutConfig(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", strict=True)
 
     core_radius: float = Field(4.0, description="Radius for Force Weight 1.0")
     buffer_radius: float = Field(3.0, description="Thickness of additional relaxation buffer layer")
     enable_pre_relaxation: bool = True
+    pre_relaxation_fmax: float = Field(
+        0.05, description="Force maximum tolerance for pre-relaxation"
+    )
+    pre_relaxation_steps: int = Field(50, description="Maximum steps for pre-relaxation")
     enable_passivation: bool = True
     passivation_element: str = "H"
 
@@ -82,7 +86,7 @@ class CutoutConfig(BaseModel):
 
 
 class LoopStrategyConfig(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", strict=True)
 
     use_tiered_oracle: bool = True
     incremental_update: bool = True
@@ -94,7 +98,7 @@ class LoopStrategyConfig(BaseModel):
 
 
 class WorkflowConfig(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", strict=True)
 
     max_iterations: PositiveInt = Field(..., description="Maximum number of active learning cycles")
     convergence_energy: float = Field(

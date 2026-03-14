@@ -2,7 +2,7 @@ from .config import PyAceConfig
 from .dft import DFTConfig
 from .eon import EONConfig
 from .logging import LoggingConfig
-from .md import HybridParams, MDConfig, MDSimulationResult
+from .md import MDConfig, MDSimulationResult, ZBLConfig
 from .scenario import ScenarioConfig
 from .structure import StructureConfig
 from .training import TrainingConfig
@@ -12,7 +12,6 @@ from .workflow import WorkflowConfig
 __all__ = [
     "DFTConfig",
     "EONConfig",
-    "HybridParams",
     "LoggingConfig",
     "MDConfig",
     "MDSimulationResult",
@@ -22,4 +21,5 @@ __all__ = [
     "TrainingConfig",
     "ValidationConfig",
     "WorkflowConfig",
+    "ZBLConfig",
 ]

@@ -1,17 +1,19 @@
+from typing import Any
 from unittest.mock import patch
 
 import pytest
 
 from pyacemaker.interfaces.lammps_driver import LammpsDriver
+from pyacemaker.utils.validation import validate_lammps_command
 
 
 @pytest.fixture
-def driver():
+def driver() -> Any:
     with patch("pyacemaker.interfaces.lammps_driver.lammps"):
         return LammpsDriver()
 
 
-def test_validate_command_safe(driver):
+def test_validate_command_safe(driver: Any) -> None:
     """Test safe commands pass validation."""
     safe_cmds = [
         "units metal",
@@ -23,10 +25,10 @@ def test_validate_command_safe(driver):
         "run 1000",
     ]
     for cmd in safe_cmds:
-        driver._validate_command(cmd)
+        validate_lammps_command(cmd)
 
 
-def test_validate_command_unsafe_chars(driver):
+def test_validate_command_unsafe_chars(driver: Any) -> None:
     """Test commands with unsafe characters fail."""
     unsafe_cmds = [
         "shell ls -la",  # shell token is blocked, but chars might be allowed by regex if not stricter
@@ -37,14 +39,15 @@ def test_validate_command_unsafe_chars(driver):
     ]
     for cmd in unsafe_cmds:
         with pytest.raises(
-            ValueError, match="contains forbidden characters|forbidden command|unrecognized command"
+            ValueError,
+            match="contains explicitly blocked shell metacharacters|contains forbidden characters|forbidden command|unrecognized command",
         ):
-            driver._validate_command(cmd)
+            validate_lammps_command(cmd)
 
 
-def test_validate_command_shell_token(driver):
+def test_validate_command_shell_token(driver: Any) -> None:
     """Test explicit shell token rejection."""
     # shell command is valid LAMMPS command but dangerous
     cmd = "shell cd /tmp"
     with pytest.raises(ValueError, match="unrecognized command"):
-        driver._validate_command(cmd)
+        validate_lammps_command(cmd)

@@ -46,8 +46,8 @@ class AtomStyle(StrEnum):
     FULL = "full"
 
 
-class HybridParams(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+class ZBLConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
 
     zbl_cut_inner: PositiveFloat = Field(
         DEFAULT_MD_HYBRID_ZBL_INNER, description="Inner cutoff radius for ZBL potential (Angstrom)"
@@ -57,7 +57,7 @@ class HybridParams(BaseModel):
     )
 
     @model_validator(mode="after")
-    def validate_zbl_cutoffs(self) -> "HybridParams":
+    def validate_zbl_cutoffs(self) -> "ZBLConfig":
         if self.zbl_cut_inner >= self.zbl_cut_outer:
             msg = "zbl_cut_inner must be strictly less than zbl_cut_outer"
             raise ValueError(msg)
@@ -65,7 +65,7 @@ class HybridParams(BaseModel):
 
 
 class MDRampingConfig(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", strict=True)
 
     temp_start: float | None = Field(None, ge=0.0, description="Starting temperature (K)")
     temp_end: float | None = Field(None, ge=0.0, description="Ending temperature (K)")
@@ -85,7 +85,7 @@ class MDRampingConfig(BaseModel):
 
 
 class MCConfig(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", strict=True)
 
     swap_freq: int = Field(..., gt=0, description="Frequency of MC swaps (steps)")
     swap_prob: float = Field(..., gt=0.0, le=1.0, description="Probability of swapping atoms")
@@ -93,7 +93,7 @@ class MCConfig(BaseModel):
 
 
 class MDSimulationResult(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", strict=True)
 
     energy: float = Field(..., description="Final potential energy of the system")
     forces: list[list[float]] = Field(..., description="Forces on atoms in the final frame")
@@ -144,7 +144,7 @@ class MDConfig(BaseModel):
     Configuration for Molecular Dynamics simulations.
     """
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", strict=True)
 
     # Basic Physics
     temperature: float = Field(..., ge=0.0, description="Simulation temperature in Kelvin")
@@ -165,6 +165,7 @@ class MDConfig(BaseModel):
     neighbor_skin: PositiveFloat = Field(
         DEFAULT_MD_NEIGHBOR_SKIN, description="Neighbor list skin distance (Angstrom)"
     )
+    units: str = Field("metal", description="LAMMPS unit style")
     atom_style: AtomStyle = Field(AtomStyle(DEFAULT_MD_ATOM_STYLE), description="LAMMPS atom style")
 
     # Configurable LAMMPS Parameters (No Hardcoding)
@@ -208,8 +209,8 @@ class MDConfig(BaseModel):
 
     # Spec Section 3.4 (Hybrid Potential & OTF)
     hybrid_potential: bool = Field(False, description="Use hybrid potential (ACE + LJ/ZBL)")
-    hybrid_params: HybridParams = Field(
-        default_factory=HybridParams, description="Parameters for hybrid potential baseline"
+    zbl: ZBLConfig = Field(
+        default_factory=ZBLConfig, description="ZBL Potential specific parameters"
     )
 
     # Spec Section 3.4 (OTF)
@@ -227,11 +228,20 @@ class MDConfig(BaseModel):
     ramping: MDRampingConfig | None = Field(None, description="Configuration for T/P ramping")
     mc: MCConfig | None = Field(None, description="Configuration for Monte Carlo atom swapping")
 
+    # Cycle 05: Seamless Resume Soft Start (Thermalization)
+    soft_start_steps: int = Field(
+        0, ge=0, description="Steps for strong Langevin thermalization upon resume"
+    )
+    soft_start_langevin_damp: float = Field(
+        0.1, gt=0.0, description="Damping parameter (ps) for soft start Langevin thermostat"
+    )
+
     @model_validator(mode="after")
     def validate_simulation_physics(self) -> "MDConfig":
         total_time = self.n_steps * self.timestep
         if total_time > MAX_MD_DURATION:
-            pass
+            msg = f"Total time {total_time} ps exceeds maximum {MAX_MD_DURATION} ps"
+            raise ValueError(msg)
         return self
 
     @model_validator(mode="after")
