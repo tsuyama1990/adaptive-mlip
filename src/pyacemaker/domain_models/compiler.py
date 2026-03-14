@@ -140,16 +140,22 @@ class SemanticCompiler:
 
     @classmethod
     def _compile_initial_structure_node(
-        cls, node: DagNode, slider: int, material: str
-    ) -> StructureConfig:  # noqa: ARG003
+        cls,
+        node: DagNode,
+        slider: int,
+        material: str,  # noqa: ARG003
+    ) -> StructureConfig:
         data = cast(InitialStructureData, node.data)
 
         return StructureConfig(elements=[data.chemical_symbol], supercell_size=[3, 3, 3])
 
     @classmethod
     def _compile_mace_training_node(
-        cls, node: DagNode | None, slider: int, material: str
-    ) -> TrainingConfig:  # noqa: ARG003
+        cls,
+        node: DagNode | None,
+        slider: int,
+        material: str,  # noqa: ARG003
+    ) -> TrainingConfig:
         # Intelligent defaults
         return TrainingConfig(
             potential_type="mace",
@@ -166,8 +172,11 @@ class SemanticCompiler:
 
     @classmethod
     def _compile_active_learning_node(
-        cls, node: DagNode | None, slider: int, material: str
-    ) -> tuple[MDConfig, DFTConfig, WorkflowConfig]:  # noqa: ARG003
+        cls,
+        node: DagNode | None,
+        slider: int,
+        material: str,  # noqa: ARG003
+    ) -> tuple[MDConfig, DFTConfig, WorkflowConfig]:
         # Intelligent defaults mapping based on material and slider
 
         # 1. Determine base mass and timestep
