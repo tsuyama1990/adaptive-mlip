@@ -11,6 +11,7 @@ from pyacemaker.core.exceptions import OracleError
 from pyacemaker.core.oracle import DFTManager, MACEManager, TieredOracle
 from pyacemaker.domain_models.dft import DFTConfig
 from pyacemaker.domain_models.workflow import ActiveLearningThresholds
+from pyacemaker.interfaces.qe_driver import QEDriver
 
 TEST_ENERGY_GENERIC = -42.0
 
@@ -42,7 +43,7 @@ class MockCalculator(Calculator):
         self.results["forces"] = np.ones((n_atoms, 3)) * 0.1
 
 
-class FakeDriver:
+class FakeDriver(QEDriver):  # type: ignore[misc]
     def __init__(self, **kwargs: Any) -> None:
         pass
 
@@ -209,7 +210,7 @@ def test_tiered_oracle_compute_below_threshold() -> None:
     )
 
     atoms_result = Atoms("H")
-    atoms_result.new_array("c_gamma", np.array([0.01]))
+    atoms_result.new_array("c_gamma", np.array([0.01]))  # type: ignore[no-untyped-call]
     mock_mace.compute.return_value = iter([atoms_result])
 
     oracle = TieredOracle(mace_manager=mock_mace, dft_manager=mock_dft, thresholds=thresholds)

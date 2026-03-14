@@ -1,5 +1,3 @@
-import os
-
 from pydantic import BaseModel, ConfigDict, Field, PositiveFloat, field_validator, model_validator
 
 from pyacemaker.domain_models.defaults import (
@@ -20,6 +18,7 @@ from pyacemaker.domain_models.defaults import (
     DEFAULT_TRAINING_MAX_ITERATIONS,
     FILENAME_POTENTIAL,
 )
+from pyacemaker.domain_models.env import safe_env_int, safe_env_str
 
 
 class PacemakerConfig(BaseModel):
@@ -89,7 +88,7 @@ class TrainingConfig(BaseModel):
 
     # Additional Parameters for Scalability & Reproducibility
     seed: int = Field(
-        default_factory=lambda: int(os.getenv("PYACEMAKER_TRAINING_SEED", "42")),
+        default_factory=lambda: safe_env_int("PYACEMAKER_TRAINING_SEED", 42),
         description="Random seed for reproducibility",
     )
     max_iterations: int = Field(
@@ -106,7 +105,7 @@ class TrainingConfig(BaseModel):
 
     # Mocking & Output (Audit Requirement)
     output_filename: str = Field(
-        default_factory=lambda: os.getenv("PYACEMAKER_OUTPUT_FILENAME", FILENAME_POTENTIAL),
+        default_factory=lambda: safe_env_str("PYACEMAKER_OUTPUT_FILENAME", FILENAME_POTENTIAL),
         description="Filename for the trained potential",
     )
 

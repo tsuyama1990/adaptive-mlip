@@ -30,6 +30,7 @@ from pyacemaker.domain_models.defaults import (
     DEFAULT_OTF_UNCERTAINTY_THRESHOLD,
     MAX_MD_STEPS,
 )
+from pyacemaker.domain_models.env import safe_env_float, safe_env_int
 
 
 def _get_default_temp_dir() -> str | None:
@@ -172,32 +173,32 @@ class MDConfig(BaseModel):
 
     # Configurable LAMMPS Parameters (No Hardcoding)
     velocity_seed: int = Field(
-        default_factory=lambda: int(
-            os.getenv("PYACEMAKER_LAMMPS_VELOCITY_SEED", str(LAMMPS_VELOCITY_SEED))
+        default_factory=lambda: safe_env_int(
+            "PYACEMAKER_LAMMPS_VELOCITY_SEED", LAMMPS_VELOCITY_SEED
         ),
         description="Random seed for velocity initialization",
     )
     minimize_steps: int = Field(
-        default_factory=lambda: int(
-            os.getenv("PYACEMAKER_LAMMPS_MINIMIZE_STEPS", str(LAMMPS_MINIMIZE_STEPS))
+        default_factory=lambda: safe_env_int(
+            "PYACEMAKER_LAMMPS_MINIMIZE_STEPS", LAMMPS_MINIMIZE_STEPS
         ),
         description="Max iterations for minimization (steps)",
     )
     minimize_max_iter: int = Field(
-        default_factory=lambda: int(
-            os.getenv("PYACEMAKER_LAMMPS_MINIMIZE_MAX_ITER", str(LAMMPS_MINIMIZE_MAX_ITER))
+        default_factory=lambda: safe_env_int(
+            "PYACEMAKER_LAMMPS_MINIMIZE_MAX_ITER", LAMMPS_MINIMIZE_MAX_ITER
         ),
         description="Max force evaluations for minimization",
     )
     minimize_tol: float = Field(
-        default_factory=lambda: float(
-            os.getenv("PYACEMAKER_MD_MINIMIZE_TOL", str(DEFAULT_MD_MINIMIZE_TOL))
+        default_factory=lambda: safe_env_float(
+            "PYACEMAKER_MD_MINIMIZE_TOL", DEFAULT_MD_MINIMIZE_TOL
         ),
         description="Energy tolerance for minimization",
     )
     minimize_ftol: float = Field(
-        default_factory=lambda: float(
-            os.getenv("PYACEMAKER_MD_MINIMIZE_FTOL", str(DEFAULT_MD_MINIMIZE_FTOL))
+        default_factory=lambda: safe_env_float(
+            "PYACEMAKER_MD_MINIMIZE_FTOL", DEFAULT_MD_MINIMIZE_FTOL
         ),
         description="Force tolerance for minimization",
     )
@@ -218,9 +219,7 @@ class MDConfig(BaseModel):
 
     # Mocking Parameters (Audit Requirement)
     base_energy: float = Field(
-        default_factory=lambda: float(
-            os.getenv("PYACEMAKER_MD_BASE_ENERGY", str(DEFAULT_MD_BASE_ENERGY))
-        ),
+        default_factory=lambda: safe_env_float("PYACEMAKER_MD_BASE_ENERGY", DEFAULT_MD_BASE_ENERGY),
         description="Baseline energy for mock simulation",
     )
     default_forces: list[list[float]] = Field(

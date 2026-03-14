@@ -1,5 +1,3 @@
-import os
-
 from pydantic import BaseModel, ConfigDict, Field, PositiveInt, model_validator
 
 from pyacemaker.domain_models.defaults import (
@@ -16,6 +14,7 @@ from pyacemaker.domain_models.defaults import (
     DEFAULT_POTENTIALS_DIR,
     DEFAULT_STATE_FILE,
 )
+from pyacemaker.domain_models.env import safe_env_int, safe_env_str
 
 
 class OTFConfig(BaseModel):
@@ -118,38 +117,51 @@ class WorkflowConfig(BaseModel):
         default=0.01, gt=0, description="Force convergence criteria in eV/Angstrom"
     )
     state_file_path: str = Field(
-        default_factory=lambda: os.getenv("PYACEMAKER_STATE_FILE_PATH", DEFAULT_STATE_FILE),
+        default_factory=lambda: safe_env_str("PYACEMAKER_STATE_FILE_PATH", DEFAULT_STATE_FILE),
         description="Path to the state checkpoint file",
     )
 
     # New fields to avoid magic numbers
     batch_size: PositiveInt = Field(
-        default_factory=lambda: int(os.getenv("PYACEMAKER_BATCH_SIZE", str(DEFAULT_BATCH_SIZE))),
+        default_factory=lambda: safe_env_int("PYACEMAKER_BATCH_SIZE", DEFAULT_BATCH_SIZE),
         description="Number of structures to process in a batch",
+        le=10000,
     )
     n_candidates: PositiveInt = Field(
-        default_factory=lambda: int(
-            os.getenv("PYACEMAKER_N_CANDIDATES", str(DEFAULT_N_CANDIDATES))
-        ),
+        default_factory=lambda: safe_env_int("PYACEMAKER_N_CANDIDATES", DEFAULT_N_CANDIDATES),
         description="Number of candidate structures to generate per iteration",
+        le=10000,
     )
     checkpoint_interval: PositiveInt = Field(
-        default=DEFAULT_CHECKPOINT_INTERVAL, gt=0, description="Save state every N iterations"
+        default_factory=lambda: safe_env_int(
+            "PYACEMAKER_CHECKPOINT_INTERVAL", DEFAULT_CHECKPOINT_INTERVAL
+        ),
+        gt=0,
+        description="Save state every N iterations",
     )
     data_dir: str = Field(
-        default_factory=lambda: os.getenv("PYACEMAKER_DATA_DIR", DEFAULT_DATA_DIR),
+        default_factory=lambda: safe_env_str("PYACEMAKER_DATA_DIR", DEFAULT_DATA_DIR),
         description="Directory to store training data and artifacts",
     )
     active_learning_dir: str = Field(
-        default_factory=lambda: os.getenv(
+        default_factory=lambda: safe_env_str(
             "PYACEMAKER_ACTIVE_LEARNING_DIR", DEFAULT_ACTIVE_LEARNING_DIR
         ),
         description="Directory for active learning iterations",
     )
     potentials_dir: str = Field(
-        default_factory=lambda: os.getenv("PYACEMAKER_POTENTIALS_DIR", DEFAULT_POTENTIALS_DIR),
+        default_factory=lambda: safe_env_str("PYACEMAKER_POTENTIALS_DIR", DEFAULT_POTENTIALS_DIR),
         description="Directory for storing trained potentials",
     )
+
+    @model_validator(mode="after")
+    def validate_workflow_paths(self) -> "WorkflowConfig":
+        for path_attr in ["state_file_path", "data_dir", "active_learning_dir", "potentials_dir"]:
+            val = getattr(self, path_attr)
+            if ".." in val or val.startswith("/"):
+                msg = f"Path {path_attr} contains directory traversal sequences or absolute paths which are not allowed: {val}"
+                raise ValueError(msg)
+        return self
 
     otf: OTFConfig = Field(default_factory=OTFConfig, description="Configuration for OTF loop.")
 
