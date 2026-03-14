@@ -30,8 +30,6 @@ def uat_dft_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> DFTConfig
     )
 
 
-
-
 class DummyFuture:
     def __init__(self, result_value: Any, exception: Any = None) -> None:
         self._result_value = result_value
@@ -57,6 +55,7 @@ class DummyExecutor:
             return DummyFuture(res, exc)
         except Exception as e:
             return DummyFuture(None, e)
+
 
 def test_uat_02_01_single_point_calculation(
     uat_dft_config: DFTConfig, monkeypatch: pytest.MonkeyPatch
