@@ -124,3 +124,20 @@ def test_apply_spatial_tags_empty_selection(test_structure) -> None:
     tags = apply_spatial_tags(test_structure, [reg1])
     assert np.sum(tags == 0) == 1000
     assert np.sum(tags == 1) == 0
+
+
+def test_apply_spatial_tags_active_learning(test_structure) -> None:
+    reg1 = SpatialRegion(
+        x_min=-1.0,
+        x_max=11.0,
+        y_min=-1.0,
+        y_max=11.0,
+        z_min=-0.1,
+        z_max=4.5,
+        action=SpatialAction.ACTION_ACTIVE_LEARNING_ONLY,
+    )
+
+    tags = apply_spatial_tags(test_structure, [reg1])
+
+    assert tags.shape == (1000,)
+    assert np.sum(tags == 1) == 500

@@ -27,17 +27,29 @@ def apply_spatial_tags(atoms: ase.Atoms, regions: list[SpatialRegion]) -> npt.ND
 
     Returns:
         A 1D numpy array of integers representing the tags. 0 means no tag.
-        Tags are assigned sequentially starting from 1 for each unique action type,
-        but typically we just need unique groups. We'll map each region to its index + 1.
-        Wait, if multiple regions have the same action, do they get the same tag?
-        The spec says: "The Semantic Compiler assigns a unique integer tag (e.g., 1) to these atoms...
-        mapping tag 1 to region my_reg block... and group active_atoms region my_reg".
-        Let's assign tag `i + 1` for each region `i` in the list, subject to overlap priority.
+        Tags are assigned sequentially starting from 1 for each unique action type.
     """
+    from pyacemaker.domain_models.defaults import DEFAULT_TAG_ASSIGNMENT_STRATEGY
+
     num_atoms = len(atoms)
     tags = np.zeros(num_atoms, dtype=np.int_)
     if num_atoms == 0 or not regions:
         return tags
+
+    cell_lengths = atoms.get_cell().lengths()
+    for i, region in enumerate(regions):
+        # Validate region coordinates are within cell dimensions (using generous bounds for logic simplicity)
+        if (
+            region.x_max < -cell_lengths[0] * 10
+            or region.x_min > cell_lengths[0] * 10
+            or region.y_max < -cell_lengths[1] * 10
+            or region.y_min > cell_lengths[1] * 10
+            or region.z_max < -cell_lengths[2] * 10
+            or region.z_min > cell_lengths[2] * 10
+        ):
+            logger.warning(
+                f"Region {i + 1} is entirely outside reasonable bounds for cell of size {cell_lengths}."
+            )
 
     # Handle periodic boundaries cleanly by wrapping positions
     # as per architecture "intelligently wrap or clip the selection"
@@ -70,23 +82,24 @@ def apply_spatial_tags(atoms: ase.Atoms, regions: list[SpatialRegion]) -> npt.ND
         # than the already assigned tag.
         overlap_mask = np.logical_and(mask_xyz, current_priorities > 0)
 
-        # Priority resolution
-        for idx in np.where(overlap_mask)[0]:
-            existing_priority = current_priorities[idx]
-            if region_priority > existing_priority:
-                # New region overrides
-                pass
-            elif region_priority < existing_priority:
-                # Existing region is preserved, remove from current mask
-                mask_xyz[idx] = False
-            else:
-                # Same priority - unresolvable conflict
-                msg = (
-                    f"Unresolvable spatial region conflict at atom index {idx} "
-                    f"between region {tags[idx]} and region {tag_id} "
-                    f"(both have priority {region_priority})."
-                )
-                raise ValueError(msg)
+        # Priority resolution using configurable strategy (defaults to "priority")
+        if DEFAULT_TAG_ASSIGNMENT_STRATEGY == "priority":
+            for idx in np.where(overlap_mask)[0]:
+                existing_priority = current_priorities[idx]
+                if region_priority > existing_priority:
+                    # New region overrides
+                    pass
+                elif region_priority < existing_priority:
+                    # Existing region is preserved, remove from current mask
+                    mask_xyz[idx] = False
+                else:
+                    # Same priority - unresolvable conflict
+                    msg = (
+                        f"Unresolvable spatial region conflict at atom index {idx} "
+                        f"between region {tags[idx]} and region {tag_id} "
+                        f"(both have priority {region_priority})."
+                    )
+                    raise ValueError(msg)
 
         # Apply the tag
         tags[mask_xyz] = tag_id

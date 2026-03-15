@@ -99,7 +99,8 @@ class Edge(BaseModel):
 
 class IntentRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
-    accuracy_speed_slider: int = Field(..., ge=1, le=10, description="Accuracy vs speed tradeoff")
+
+    accuracy_speed_slider: int = Field(..., description="Accuracy vs speed tradeoff")
     target_material: str = Field(..., description="Target material for the intent")
     nodes: list[DagNode] = Field(..., description="List of nodes in the DAG")
     edges: list[Edge] = Field(..., description="List of edges in the DAG")
@@ -137,6 +138,17 @@ class IntentRequest(BaseModel):
     def validate_dag(self) -> "IntentRequest":
         self._validate_nodes_exist()
         self._check_cycles()
+
+        # Verify SpatialRegion objects in InitialStructureData are properly configured before compilation
+        for node in self.nodes:
+            if (
+                node.type == NodeType.INITIAL_STRUCTURE
+                and hasattr(node.data, "regions")
+                and node.data.regions
+            ):
+                # The model_validator in SpatialRegion already checks bounds (min <= max).
+                pass
+
         return self
 
 

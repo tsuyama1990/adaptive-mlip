@@ -35,7 +35,11 @@ from pyacemaker.domain_models.env import safe_env_float, safe_env_int
 
 def _get_default_temp_dir() -> str | None:
     """Returns RAM disk path if available and writable, else None."""
+    from pyacemaker.domain_models.constants import DANGEROUS_PATH_CHARS
+
     shm_path = Path(DEFAULT_RAM_DISK_PATH)
+    if any(char in str(shm_path) for char in DANGEROUS_PATH_CHARS):
+        return None
     if shm_path.exists() and shm_path.is_dir() and os.access(shm_path, os.W_OK):
         return str(shm_path)
     return None
@@ -154,7 +158,7 @@ class MDConfig(BaseModel):
     pressure: float = Field(
         ..., ge=0.0, le=MAX_MD_PRESSURE, description="Simulation pressure in Bar"
     )
-    timestep: PositiveFloat = Field(..., gt=0.0, le=10.0, description="Timestep in ps")
+    timestep: PositiveFloat = Field(..., gt=0.0, description="Timestep in ps")
     n_steps: int = Field(..., gt=0, le=MAX_MD_STEPS, description="Number of MD steps")
 
     # Output Control
@@ -262,6 +266,12 @@ class MDConfig(BaseModel):
 
     @model_validator(mode="after")
     def validate_simulation_physics(self) -> "MDConfig":
+        from pyacemaker.domain_models.defaults import DEFAULT_MAX_TIMESTEP
+
+        if self.timestep > DEFAULT_MAX_TIMESTEP:
+            msg = f"Timestep {self.timestep} ps exceeds maximum {DEFAULT_MAX_TIMESTEP} ps"
+            raise ValueError(msg)
+
         total_time = self.n_steps * self.timestep
         if total_time > MAX_MD_DURATION:
             msg = f"Total time {total_time} ps exceeds maximum {MAX_MD_DURATION} ps"
@@ -273,6 +283,19 @@ class MDConfig(BaseModel):
         if self.fix_halt and self.check_interval <= 0:
             msg = "check_interval must be positive when fix_halt is enabled."
             raise ValueError(msg)
+        return self
+
+    @model_validator(mode="after")
+    def validate_custom_initialization_commands(self) -> "MDConfig":
+        if self.custom_initialization_commands:
+            import re
+            from pyacemaker.domain_models.constants import LAMMPS_SAFE_CMD_PATTERN
+
+            pattern = re.compile(LAMMPS_SAFE_CMD_PATTERN)
+            for cmd in self.custom_initialization_commands:
+                if not pattern.match(cmd):
+                    msg = f"Invalid spatial command generated: {cmd}"
+                    raise ValueError(msg)
         return self
 
     @model_validator(mode="after")

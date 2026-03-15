@@ -146,11 +146,26 @@ def test_uat_02_a_successful_translation() -> None:
     """
     SCENARIO-02-A: Successful DAG to WorkflowConfig Translation
     """
+    from pyacemaker.domain_models.scenario import SpatialAction, SpatialRegion
+
     node1 = DagNode(
         id="n1",
         type=NodeType.INITIAL_STRUCTURE,
         data=InitialStructureData(
-            type=NodeType.INITIAL_STRUCTURE, chemical_symbol="Al", lattice_constant=4.0
+            type=NodeType.INITIAL_STRUCTURE,
+            chemical_symbol="Al",
+            lattice_constant=4.0,
+            regions=[
+                SpatialRegion(
+                    x_min=-10.0,
+                    x_max=10.0,
+                    y_min=-10.0,
+                    y_max=10.0,
+                    z_min=-10.0,
+                    z_max=10.0,
+                    action=SpatialAction.ACTION_FREEZE,
+                )
+            ],
         ),
     )
     node2 = DagNode(
@@ -174,16 +189,35 @@ def test_uat_02_a_successful_translation() -> None:
     assert config.training.potential_type == "mace"
     assert config.workflow.loop_strategy.use_tiered_oracle is True
 
+    cmds = config.md.custom_initialization_commands
+    assert cmds is not None
+    assert any("fix freeze_fix_1" in c for c in cmds)
+
 
 def test_uat_02_b_intelligent_defaults() -> None:
     """
     SCENARIO-02-B: Intelligent Default Parameter Injection
     """
+    from pyacemaker.domain_models.scenario import SpatialAction, SpatialRegion
+
     node1 = DagNode(
         id="n1",
         type=NodeType.INITIAL_STRUCTURE,
         data=InitialStructureData(
-            type=NodeType.INITIAL_STRUCTURE, chemical_symbol="W", lattice_constant=3.16
+            type=NodeType.INITIAL_STRUCTURE,
+            chemical_symbol="W",
+            lattice_constant=3.16,
+            regions=[
+                SpatialRegion(
+                    x_min=-10.0,
+                    x_max=10.0,
+                    y_min=-10.0,
+                    y_max=10.0,
+                    z_min=0.0,
+                    z_max=5.0,
+                    action=SpatialAction.ACTION_LANGEVIN_THERMOSTAT,
+                )
+            ],
         ),
     )
     node2 = DagNode(
@@ -209,6 +243,10 @@ def test_uat_02_b_intelligent_defaults() -> None:
     assert (
         config.workflow.loop_strategy.thresholds.threshold_call_dft > 0.1
     )  # slider=1 triggers high threshold
+
+    cmds = config.md.custom_initialization_commands
+    assert cmds is not None
+    assert any("fix langevin_fix_1" in c for c in cmds)
 
 
 def test_uat_02_c_logical_rejection() -> None:

@@ -69,8 +69,8 @@ def test_scenario_01_c_rejection_out_of_bounds_and_invalid_types() -> None:
     # Test out of bounds
     payload_oob = {"accuracy_speed_slider": 15, "target_material": "Pt", "nodes": [], "edges": []}
     resp1 = client.post("/api/v1/intent/compile", json=payload_oob)
-    assert resp1.status_code == 422
-    assert "accuracy_speed_slider" in resp1.text
+    assert resp1.status_code == 400
+    assert "Slider must be an integer between" in resp1.text
 
     # Test invalid string instead of int
     payload_type = {

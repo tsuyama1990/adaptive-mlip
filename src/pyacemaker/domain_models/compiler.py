@@ -139,14 +139,17 @@ class SemanticCompiler:
         cls,
         node: DagNode,
     ) -> tuple[StructureConfig, list[str] | None]:
+        from pyacemaker.domain_models.defaults import DEFAULT_SUPERCELL_SIZE
+
         data = cast(InitialStructureData, node.data)
 
         spatial_commands: list[str] | None = None
         if data.regions:
             try:
-                atoms = ase.build.bulk(
-                    data.chemical_symbol, a=data.lattice_constant, cubic=True
-                ) * (3, 3, 3)
+                atoms = (
+                    ase.build.bulk(data.chemical_symbol, a=data.lattice_constant, cubic=True)
+                    * DEFAULT_SUPERCELL_SIZE
+                )
             except Exception as e:
                 msg = f"Failed to build initial structure for spatial tagging: {e}"
                 raise CompilerError(msg) from e
@@ -201,8 +204,10 @@ class SemanticCompiler:
                     # This might just define a group for later use
                     pass
 
+        from pyacemaker.domain_models.defaults import DEFAULT_SUPERCELL_SIZE
+
         return StructureConfig(
-            elements=[data.chemical_symbol], supercell_size=[3, 3, 3]
+            elements=[data.chemical_symbol], supercell_size=DEFAULT_SUPERCELL_SIZE
         ), spatial_commands
 
     @classmethod
@@ -239,39 +244,71 @@ class SemanticCompiler:
         spatial_commands: list[str] | None = None,
     ) -> tuple[MDConfig, DFTConfig, WorkflowConfig]:
         # Intelligent defaults mapping based on material and slider
+        from pyacemaker.domain_models.defaults import (
+            DEFAULT_TIMESTEP_BASE,
+            DEFAULT_TIMESTEP_HEAVY,
+            DEFAULT_TIMESTEP_LIGHT,
+            DEFAULT_MASS_THRESHOLD_HEAVY,
+            DEFAULT_MASS_THRESHOLD_LIGHT,
+            DEFAULT_SLIDER_MIN,
+            DEFAULT_SLIDER_MAX,
+            DEFAULT_MAX_ITERATIONS,
+            DEFAULT_FIX_HALT,
+            DEFAULT_SOFT_START_STEPS,
+            DEFAULT_SOFT_START_LANGEVIN_DAMP,
+            DEFAULT_MD_PRESSURE,
+            DEFAULT_MD_TEMPERATURE,
+            DEFAULT_MD_UNITS,
+        )
 
         # 1. Determine base mass and timestep
         if material not in chemical_symbols:
             msg = "Invalid chemical symbol"
             raise CompilerError(msg)
 
-        if not isinstance(slider, int) or not (1 <= slider <= 10):
-            msg = "Slider must be an integer between 1 and 10"
+        if not isinstance(slider, int) or not (DEFAULT_SLIDER_MIN <= slider <= DEFAULT_SLIDER_MAX):
+            msg = f"Slider must be an integer between {DEFAULT_SLIDER_MIN} and {DEFAULT_SLIDER_MAX}"
             raise CompilerError(msg)
 
         z = chemical_symbols.index(material)
         mass = atomic_masses[z]
 
         # Lighter elements -> smaller timestep.
-        timestep = 1.0
-        if mass > 50.0:
-            timestep = 2.0
-        if mass < 10.0:
-            timestep = 0.5
-
-        # Scale thresholds based on accuracy slider (1=Speed, 10=Accuracy)
-        # Accuracy=10 -> lower thresholds (stricter)
-        conv_thr = 1e-5 + (1e-4 - 1e-5) * (10 - slider) / 9.0  # e.g., slider=10 -> 1e-5
-        conv_thr = max(conv_thr, 1e-6)
-
-        # Higher slider -> more accurate -> lower threshold to call DFT
-        call_dft_thr = 0.01 + 0.1 * (10 - slider) / 9.0  # slider=10 -> 0.01, slider=1 -> 0.11
+        timestep = DEFAULT_TIMESTEP_BASE
+        if mass > DEFAULT_MASS_THRESHOLD_HEAVY:
+            timestep = DEFAULT_TIMESTEP_HEAVY
+        if mass < DEFAULT_MASS_THRESHOLD_LIGHT:
+            timestep = DEFAULT_TIMESTEP_LIGHT
 
         from pyacemaker.domain_models.defaults import (
             DEFAULT_MD_PRESSURE,
             DEFAULT_MD_TEMPERATURE,
             DEFAULT_MD_UNITS,
+            DEFAULT_SLIDER_MAX,
+            DEFAULT_SLIDER_MIN,
+            DEFAULT_FIX_HALT,
+            DEFAULT_SOFT_START_STEPS,
+            DEFAULT_SOFT_START_LANGEVIN_DAMP,
         )
+
+        # Scale thresholds based on accuracy slider
+        # slider MAX -> stricter
+        slider_range = max(1, DEFAULT_SLIDER_MAX - DEFAULT_SLIDER_MIN)
+        conv_thr = 1e-5 + (1e-4 - 1e-5) * (DEFAULT_SLIDER_MAX - slider) / float(slider_range)
+        conv_thr = max(conv_thr, 1e-6)
+
+        # Higher slider -> more accurate -> lower threshold to call DFT
+        call_dft_thr = 0.01 + 0.1 * (DEFAULT_SLIDER_MAX - slider) / float(slider_range)
+
+        if spatial_commands is not None:
+            import re
+            from pyacemaker.domain_models.constants import LAMMPS_SAFE_CMD_PATTERN
+
+            pattern = re.compile(LAMMPS_SAFE_CMD_PATTERN)
+            for cmd in spatial_commands:
+                if not pattern.match(cmd):
+                    msg = f"Invalid spatial command generated: {cmd}"
+                    raise CompilerError(msg)
 
         md_config = MDConfig(
             temperature=DEFAULT_MD_TEMPERATURE,
@@ -287,13 +324,13 @@ class SemanticCompiler:
             tdamp_factor=100.0,
             pdamp_factor=1000.0,
             hybrid_potential=False,
-            fix_halt=True,
+            fix_halt=DEFAULT_FIX_HALT,
             uncertainty_threshold=call_dft_thr,
             check_interval=10,
             ramping=None,
             mc=None,
-            soft_start_steps=0,
-            soft_start_langevin_damp=0.1,
+            soft_start_steps=DEFAULT_SOFT_START_STEPS,
+            soft_start_langevin_damp=DEFAULT_SOFT_START_LANGEVIN_DAMP,
             custom_initialization_commands=spatial_commands,
         )
 
@@ -314,11 +351,24 @@ class SemanticCompiler:
             msg = f"No verified pseudopotential mapping exists for material: {material}"
             raise CompilerError(msg)
 
+        from pyacemaker.domain_models.defaults import (
+            DEFAULT_KPOINTS_DENSITY_BASE,
+            DEFAULT_KPOINTS_DENSITY_FACTOR,
+            DEFAULT_ENCUT_BASE,
+            DEFAULT_ENCUT_FACTOR,
+            DEFAULT_MAX_ITERATIONS,
+            DEFAULT_SLIDER_MAX,
+            DEFAULT_SLIDER_MIN,
+        )
+
+        slider_range = max(1, DEFAULT_SLIDER_MAX - DEFAULT_SLIDER_MIN)
+
         dft_config = DFTConfig(
             code=DEFAULT_DFT_CODE,
             functional=DEFAULT_DFT_FUNCTIONAL,
-            kpoints_density=2.0 + 4.0 * (10 - slider) / 9.0,  # adjust density based on slider
-            encut=40.0 + (slider * 2.0),  # e.g. slider 10 -> 60 eV
+            kpoints_density=DEFAULT_KPOINTS_DENSITY_BASE
+            + DEFAULT_KPOINTS_DENSITY_FACTOR * (DEFAULT_SLIDER_MAX - slider) / float(slider_range),
+            encut=DEFAULT_ENCUT_BASE + (slider * DEFAULT_ENCUT_FACTOR),
             pseudopotentials={material: safe_pseudo},
             embedding_buffer=None,
             mixing_beta=DEFAULT_DFT_MIXING_BETA,
@@ -330,7 +380,7 @@ class SemanticCompiler:
         )
 
         workflow_config = WorkflowConfig(
-            max_iterations=10,
+            max_iterations=DEFAULT_MAX_ITERATIONS,
             loop_strategy=LoopStrategyConfig(
                 thresholds=ActiveLearningThresholds(
                     threshold_call_dft=call_dft_thr, threshold_add_train=call_dft_thr / 2.0
