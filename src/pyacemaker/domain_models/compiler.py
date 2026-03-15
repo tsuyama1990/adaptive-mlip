@@ -1,8 +1,8 @@
-import signal
+import concurrent.futures
 from typing import cast
 
+import ase.build
 import networkx as nx
-import concurrent.futures
 from ase.data import atomic_masses, chemical_symbols
 
 from pyacemaker.core.exceptions import CompilerError
@@ -14,6 +14,7 @@ from pyacemaker.domain_models.scenario import (
     InitialStructureData,
     IntentRequest,
     NodeType,
+    SpatialAction,
 )
 from pyacemaker.domain_models.structure import StructureConfig
 from pyacemaker.domain_models.training import PacemakerConfig, TrainingConfig
@@ -22,6 +23,7 @@ from pyacemaker.domain_models.workflow import (
     LoopStrategyConfig,
     WorkflowConfig,
 )
+from pyacemaker.utils.spatial import apply_spatial_tags
 
 
 class SemanticCompiler:
@@ -40,15 +42,17 @@ class SemanticCompiler:
         slider = intent.accuracy_speed_slider
         material = intent.target_material
 
+        spatial_commands: list[str] | None = None
+
         for node in sorted_nodes:
             match node.type:
                 case NodeType.INITIAL_STRUCTURE:
-                    structure_config = cls._compile_initial_structure_node(node)
+                    structure_config, spatial_commands = cls._compile_initial_structure_node(node)
                 case NodeType.MACE_TRAINING:
                     training_config = cls._compile_mace_training_node(material)
                 case NodeType.ACTIVE_LEARNING_LOOP:
                     md_config, dft_config, workflow_config = cls._compile_active_learning_node(
-                        slider, material
+                        slider, material, spatial_commands
                     )
                 case _:
                     msg = f"Unsupported node type: {node.type}"
@@ -66,9 +70,9 @@ class SemanticCompiler:
             msg = "Missing ACTIVE_LEARNING_LOOP node in workflow"
             raise CompilerError(msg)
 
-        from pyacemaker.domain_models.defaults import DEFAULT_PROJECT_NAME
-
         from pydantic import ValidationError
+
+        from pyacemaker.domain_models.defaults import DEFAULT_PROJECT_NAME
 
         try:
             return PyAceConfig(
@@ -78,9 +82,11 @@ class SemanticCompiler:
                 training=training_config,
                 md=md_config,
                 workflow=workflow_config,
+                eon=None,
+                scenario=None,
             )
         except ValidationError as e:
-            msg = f"Final compilation validation failed: {str(e)}"
+            msg = f"Final compilation validation failed: {e!s}"
             raise CompilerError(msg) from e
 
     @classmethod
@@ -138,10 +144,66 @@ class SemanticCompiler:
     def _compile_initial_structure_node(
         cls,
         node: DagNode,
-    ) -> StructureConfig:
+    ) -> tuple[StructureConfig, list[str] | None]:
         data = cast(InitialStructureData, node.data)
 
-        return StructureConfig(elements=[data.chemical_symbol], supercell_size=[3, 3, 3])
+        spatial_commands: list[str] | None = None
+        if data.regions:
+            try:
+                atoms = ase.build.bulk(
+                    data.chemical_symbol, a=data.lattice_constant, cubic=True
+                ) * (3, 3, 3)
+            except Exception as e:
+                msg = f"Failed to build initial structure for spatial tagging: {e}"
+                raise CompilerError(msg) from e
+
+            tags = apply_spatial_tags(atoms, data.regions)
+            spatial_commands = []
+
+            # Group by tag ID to avoid duplicate group definitions and handle 'all' optimization
+            # Note: tags array contains values corresponding to region indices + 1, where 0 is untagged.
+            import numpy as np
+
+            unique_tags = np.unique(tags)
+
+            for region_idx, region in enumerate(data.regions):
+                tag_id = region_idx + 1
+                if tag_id not in unique_tags:
+                    continue  # Region was empty or fully overridden
+
+                # Check if this region encompasses all atoms in the structure
+                num_tagged = np.sum(tags == tag_id)
+                is_all = num_tagged == len(atoms)
+
+                group_name = f"region_{tag_id}_group"
+
+                if is_all:
+                    # Optimize to use 'all' group
+                    group_name = "all"
+                else:
+                    # Explicit region and group definition
+                    region_name = f"spatial_region_{tag_id}"
+                    spatial_commands.append(
+                        f"region {region_name} block {region.x_min} {region.x_max} {region.y_min} {region.y_max} {region.z_min} {region.z_max} units box"
+                    )
+                    spatial_commands.append(f"group {group_name} region {region_name}")
+
+                # Apply fix based on action
+                if region.action == SpatialAction.ACTION_FREEZE:
+                    spatial_commands.append(
+                        f"fix freeze_fix_{tag_id} {group_name} setforce 0.0 0.0 0.0"
+                    )
+                elif region.action == SpatialAction.ACTION_LANGEVIN_THERMOSTAT:
+                    spatial_commands.append(
+                        f"fix langevin_fix_{tag_id} {group_name} langevin 300.0 300.0 100.0 12345"
+                    )
+                elif region.action == SpatialAction.ACTION_ACTIVE_LEARNING_ONLY:
+                    # This might just define a group for later use
+                    pass
+
+        return StructureConfig(
+            elements=[data.chemical_symbol], supercell_size=[3, 3, 3]
+        ), spatial_commands
 
     @classmethod
     def _compile_mace_training_node(
@@ -167,11 +229,13 @@ class SemanticCompiler:
         cls,
         slider: int,
         material: str,
+        spatial_commands: list[str] | None = None,
     ) -> tuple[MDConfig, DFTConfig, WorkflowConfig]:
         # Intelligent defaults mapping based on material and slider
 
         # 1. Determine base mass and timestep
         import re
+
         if not re.match(r"^[A-Z][a-z]?$", material) or material not in chemical_symbols:
             msg = "Invalid chemical symbol"
             raise CompilerError(msg)
@@ -225,12 +289,13 @@ class SemanticCompiler:
             mc=None,
             soft_start_steps=0,
             soft_start_langevin_damp=0.1,
+            custom_initialization_commands=spatial_commands,
         )
 
         from pyacemaker.domain_models.defaults import (
             DEFAULT_DFT_CODE,
             DEFAULT_DFT_FUNCTIONAL,
-            DEFAULT_PSEUDOPOTENTIAL_MAPPING
+            DEFAULT_PSEUDOPOTENTIAL_MAPPING,
         )
 
         safe_pseudo = DEFAULT_PSEUDOPOTENTIAL_MAPPING.get(material)

@@ -1,9 +1,51 @@
 from enum import StrEnum
-from typing import Annotated, Literal
+from typing import Annotated, Literal, Any
 
 import networkx as nx
 from ase.data import chemical_symbols
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+
+class SpatialAction(StrEnum):
+    ACTION_FREEZE = "ACTION_FREEZE"
+    ACTION_LANGEVIN_THERMOSTAT = "ACTION_LANGEVIN_THERMOSTAT"
+    ACTION_ACTIVE_LEARNING_ONLY = "ACTION_ACTIVE_LEARNING_ONLY"
+
+
+class SpatialRegion(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    x_min: float = Field(..., description="Minimum x coordinate")
+    x_max: float = Field(..., description="Maximum x coordinate")
+    y_min: float = Field(..., description="Minimum y coordinate")
+    y_max: float = Field(..., description="Maximum y coordinate")
+    z_min: float = Field(..., description="Minimum z coordinate")
+    z_max: float = Field(..., description="Maximum z coordinate")
+    action: SpatialAction = Field(..., description="Action to apply to the region")
+
+    @field_validator("action", mode="before")
+    @classmethod
+    def parse_action(cls, v: Any) -> SpatialAction:
+        if isinstance(v, str):
+            try:
+                return SpatialAction(v)
+            except ValueError:
+                pass
+        if isinstance(v, SpatialAction):
+            return v
+        return v  # type: ignore[no-any-return]
+
+    @model_validator(mode="after")
+    def validate_bounds(self) -> "SpatialRegion":
+        if self.x_min > self.x_max:
+            msg = f"x_min ({self.x_min}) must be less than or equal to x_max ({self.x_max})"
+            raise ValueError(msg)
+        if self.y_min > self.y_max:
+            msg = f"y_min ({self.y_min}) must be less than or equal to y_max ({self.y_max})"
+            raise ValueError(msg)
+        if self.z_min > self.z_max:
+            msg = f"z_min ({self.z_min}) must be less than or equal to z_max ({self.z_max})"
+            raise ValueError(msg)
+        return self
 
 
 class NodeType(StrEnum):
@@ -18,6 +60,7 @@ class InitialStructureData(BaseModel):
     type: Literal[NodeType.INITIAL_STRUCTURE] = Field(NodeType.INITIAL_STRUCTURE)
     chemical_symbol: str = Field(..., description="The chemical symbol")
     lattice_constant: float = Field(..., description="The lattice constant")
+    regions: list[SpatialRegion] | None = Field(None, description="Spatial regions to tag")
 
 
 class MaceTrainingData(BaseModel):
