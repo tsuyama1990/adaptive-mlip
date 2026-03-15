@@ -7,12 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field, PositiveFloat, PositiveInt, m
 
 from pyacemaker.domain_models.constants import (
     DEFAULT_MC_SEED,
-    DEFAULT_MD_MINIMIZE_FTOL,
-    DEFAULT_MD_MINIMIZE_TOL,
     DEFAULT_RAM_DISK_PATH,
-    LAMMPS_MINIMIZE_MAX_ITER,
-    LAMMPS_MINIMIZE_STEPS,
-    LAMMPS_VELOCITY_SEED,
     MAX_MD_DURATION,
     MAX_MD_PRESSURE,
 )
@@ -27,6 +22,11 @@ from pyacemaker.domain_models.defaults import (
     DEFAULT_MD_PDAMP_FACTOR,
     DEFAULT_MD_TDAMP_FACTOR,
     DEFAULT_MD_THERMO_FREQ,
+    DEFAULT_MD_MINIMIZE_FTOL,
+    DEFAULT_MD_MINIMIZE_TOL,
+    DEFAULT_LAMMPS_MINIMIZE_MAX_ITER,
+    DEFAULT_LAMMPS_MINIMIZE_STEPS,
+    DEFAULT_LAMMPS_VELOCITY_SEED,
     DEFAULT_OTF_UNCERTAINTY_THRESHOLD,
     MAX_MD_STEPS,
 )
@@ -35,7 +35,11 @@ from pyacemaker.domain_models.env import safe_env_float, safe_env_int
 
 def _get_default_temp_dir() -> str | None:
     """Returns RAM disk path if available and writable, else None."""
+    from pyacemaker.domain_models.constants import DANGEROUS_PATH_CHARS
+
     shm_path = Path(DEFAULT_RAM_DISK_PATH)
+    if any(char in str(shm_path) for char in DANGEROUS_PATH_CHARS):
+        return None
     if shm_path.exists() and shm_path.is_dir() and os.access(shm_path, os.W_OK):
         return str(shm_path)
     return None
@@ -154,7 +158,7 @@ class MDConfig(BaseModel):
     pressure: float = Field(
         ..., ge=0.0, le=MAX_MD_PRESSURE, description="Simulation pressure in Bar"
     )
-    timestep: PositiveFloat = Field(..., gt=0.0, le=10.0, description="Timestep in ps")
+    timestep: PositiveFloat = Field(..., gt=0.0, description="Timestep in ps")
     n_steps: int = Field(..., gt=0, le=MAX_MD_STEPS, description="Number of MD steps")
 
     # Output Control
@@ -174,19 +178,19 @@ class MDConfig(BaseModel):
     # Configurable LAMMPS Parameters (No Hardcoding)
     velocity_seed: int = Field(
         default_factory=lambda: safe_env_int(
-            "PYACEMAKER_LAMMPS_VELOCITY_SEED", LAMMPS_VELOCITY_SEED
+            "PYACEMAKER_LAMMPS_VELOCITY_SEED", DEFAULT_LAMMPS_VELOCITY_SEED
         ),
         description="Random seed for velocity initialization",
     )
     minimize_steps: int = Field(
         default_factory=lambda: safe_env_int(
-            "PYACEMAKER_LAMMPS_MINIMIZE_STEPS", LAMMPS_MINIMIZE_STEPS
+            "PYACEMAKER_LAMMPS_MINIMIZE_STEPS", DEFAULT_LAMMPS_MINIMIZE_STEPS
         ),
         description="Max iterations for minimization (steps)",
     )
     minimize_max_iter: int = Field(
         default_factory=lambda: safe_env_int(
-            "PYACEMAKER_LAMMPS_MINIMIZE_MAX_ITER", LAMMPS_MINIMIZE_MAX_ITER
+            "PYACEMAKER_LAMMPS_MINIMIZE_MAX_ITER", DEFAULT_LAMMPS_MINIMIZE_MAX_ITER
         ),
         description="Max force evaluations for minimization",
     )
@@ -255,8 +259,19 @@ class MDConfig(BaseModel):
         0.1, gt=0.0, description="Damping parameter (ps) for soft start Langevin thermostat"
     )
 
+    # Cycle 03: Spatial Tagging
+    custom_initialization_commands: list[str] | None = Field(
+        default=None, description="Custom LAMMPS commands generated for initialization"
+    )
+
     @model_validator(mode="after")
     def validate_simulation_physics(self) -> "MDConfig":
+        from pyacemaker.domain_models.defaults import DEFAULT_MAX_TIMESTEP
+
+        if self.timestep > DEFAULT_MAX_TIMESTEP:
+            msg = f"Timestep {self.timestep} ps exceeds maximum {DEFAULT_MAX_TIMESTEP} ps"
+            raise ValueError(msg)
+
         total_time = self.n_steps * self.timestep
         if total_time > MAX_MD_DURATION:
             msg = f"Total time {total_time} ps exceeds maximum {MAX_MD_DURATION} ps"
@@ -268,6 +283,19 @@ class MDConfig(BaseModel):
         if self.fix_halt and self.check_interval <= 0:
             msg = "check_interval must be positive when fix_halt is enabled."
             raise ValueError(msg)
+        return self
+
+    @model_validator(mode="after")
+    def validate_custom_initialization_commands(self) -> "MDConfig":
+        if self.custom_initialization_commands:
+            import re
+            from pyacemaker.domain_models.constants import LAMMPS_SAFE_CMD_PATTERN
+
+            pattern = re.compile(LAMMPS_SAFE_CMD_PATTERN)
+            for cmd in self.custom_initialization_commands:
+                if not pattern.match(cmd):
+                    msg = f"Invalid spatial command generated: {cmd}"
+                    raise ValueError(msg)
         return self
 
     @model_validator(mode="after")
