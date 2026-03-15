@@ -127,6 +127,7 @@ class TrainingConfig(BaseModel):
             from pathlib import Path
 
             from pyacemaker.utils.path import validate_path_safe
+
             validate_path_safe(Path(v))
         return v
 

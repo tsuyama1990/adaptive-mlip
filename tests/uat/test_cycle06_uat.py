@@ -61,7 +61,7 @@ def uat_config(tmp_path: Path) -> PyAceConfig:
         ),
         logging=LoggingConfig.model_construct(),
         eon=None,
-        scenario=None
+        scenario=None,
     )
 
 
@@ -120,7 +120,7 @@ def test_scenario_06_01_active_learning_campaign(uat_config: PyAceConfig, tmp_pa
             trajectory_path=None,
             log_path=None,
             halt_step=50,
-            stress=[0.0] * 6
+            stress=[0.0] * 6,
         )
 
         # Iteration 2: Converged (not halted)
@@ -135,7 +135,7 @@ def test_scenario_06_01_active_learning_campaign(uat_config: PyAceConfig, tmp_pa
             trajectory_path=None,
             log_path=None,
             halt_step=None,
-            stress=[0.0] * 6
+            stress=[0.0] * 6,
         )
 
         mock_engine.run.side_effect = [res1, res2]
@@ -220,7 +220,7 @@ def test_scenario_06_02_resume_capability(uat_config: PyAceConfig, tmp_path: Pat
             trajectory_path=None,
             log_path=None,
             halt_step=None,
-            stress=[0.0] * 6
+            stress=[0.0] * 6,
         )
         mock_engine.run.return_value = res2
 
