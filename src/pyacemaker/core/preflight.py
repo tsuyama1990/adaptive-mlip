@@ -46,7 +46,7 @@ class StructuralValidator(BaseValidator):
             )
             return
 
-        positions = atoms.get_positions()
+        positions = atoms.get_positions()  # type: ignore[no-untyped-call]
         if len(positions) < 2:
             return  # No collisions possible with < 2 atoms
 
@@ -77,8 +77,8 @@ class StructuralValidator(BaseValidator):
                 )
 
         # Cell volume check (simple heuristic: density check)
-        volume = atoms.get_volume()
-        if volume > 0 and len(atoms) / volume > 0.5:
+        volume = atoms.get_volume()  # type: ignore[no-untyped-call]
+        if volume > 0.0 and len(atoms) / volume > 0.5:
              report.warnings.append(
                  DiagnosticMessage(
                     node_id="INITIAL_STRUCTURE",
@@ -94,14 +94,13 @@ class DependencyValidator(BaseValidator):
     Validates external dependencies (executables, models, pseudopotentials).
     """
 
-    def validate(self, config: PyAceConfig, report: DiagnosticReport) -> None:
-        # Check required executables based on config
+    def _validate_executables(self, config: PyAceConfig, report: DiagnosticReport) -> None:
         required_executables = []
         if config.dft.code.lower() in ("qe", "quantum_espresso"):
             required_executables.append("pw.x")
 
         if config.training.potential_type.lower() == "mace":
-            required_executables.append("mace_run_train") # Assuming pace_train or mace_run_train
+            required_executables.append("mace_run_train")
 
         for exe in required_executables:
             if shutil.which(exe) is None:
@@ -114,108 +113,77 @@ class DependencyValidator(BaseValidator):
                     )
                 )
 
-        # Check explicit paths
-        # Pseudopotentials
+    def _validate_pseudopotentials(self, config: PyAceConfig, report: DiagnosticReport) -> None:
+        from pyacemaker.utils.path import validate_path_safe
+
         if config.dft.pseudopotentials:
             for element, filename in config.dft.pseudopotentials.items():
-                if not Path(filename).exists():
+                try:
+                    safe_filename = validate_path_safe(Path(str(filename)))
+                    if not safe_filename.exists():
+                         report.errors.append(
+                            DiagnosticMessage(
+                                node_id="DFT_CONFIG",
+                                severity=Severity.ERROR,
+                                description=f"Pseudopotential file not found for element {element}: {safe_filename}",
+                                suggestion="Ensure the UPF file exists in the correct directory.",
+                            )
+                        )
+                except Exception as e:
                      report.errors.append(
                         DiagnosticMessage(
                             node_id="DFT_CONFIG",
                             severity=Severity.ERROR,
-                            description=f"Pseudopotential file not found for element {element}: {filename}",
-                            suggestion="Ensure the UPF file exists in the correct directory.",
+                            description=f"Invalid pseudopotential path for element {element}: {e}",
+                            suggestion="Provide a secure path within the project directory.",
                         )
                     )
 
-        # MACE model (advanced setting check)
-        # Note: in config, advanced_settings might be mixed, we look for model paths if specified
-        # If testing requires explicit path
-        # Let's inspect config for any explicit path.
-        # Typically MACE model is in TieredOracle or similar. For PyAceConfig, it might be in advanced settings or training.
-        # However, looking at the SPEC: "user specifies an explicit path to a pre-trained MACE foundation model ... Check os.path.exists()"
-        # The specific path may be passed.
-        # We will parse `config` for any `.model` file.
-        # The prompt says: "The user sets a visual node referencing a specific .model ... file"
+    def _validate_models(self, config: PyAceConfig, report: DiagnosticReport) -> None:
+        from pyacemaker.utils.path import validate_path_safe
 
-        # Let's look for model paths in training config or scenario config advanced settings
-        if getattr(config.training, "foundation_model_path", None):
-            p = Path(config.training.foundation_model_path)
-            if not p.exists():
+        foundation_model_path = getattr(config.training, "foundation_model_path", None)
+        if foundation_model_path:
+            try:
+                p = validate_path_safe(Path(str(foundation_model_path)))
+                if not p.exists():
+                    report.errors.append(
+                        DiagnosticMessage(
+                            node_id="MACE_TRAINING",
+                            severity=Severity.ERROR,
+                            description=f"Required MACE model file not found at path: {p}",
+                            suggestion="Verify the path to the pre-trained MACE model.",
+                        )
+                    )
+            except Exception as e:
                 report.errors.append(
                     DiagnosticMessage(
                         node_id="MACE_TRAINING",
                         severity=Severity.ERROR,
-                        description=f"Required MACE model file not found at path: {p}",
-                        suggestion="Verify the path to the pre-trained MACE model.",
+                        description=f"Invalid MACE model path: {e}",
+                        suggestion="Provide a valid, secure path within the project directory.",
                     )
                 )
+
+    def validate(self, config: PyAceConfig, report: DiagnosticReport) -> None:
+        self._validate_executables(config, report)
+        self._validate_pseudopotentials(config, report)
+        self._validate_models(config, report)
 
 
 class LammpsSyntaxValidator(BaseValidator):
     """
     Validates LAMMPS script syntax by spinning up a lightweight isolated Python subprocess.
     """
-
-    def validate(self, config: PyAceConfig, report: DiagnosticReport) -> None:
-        from pyacemaker.factory import ModuleFactory
-        from pyacemaker.core.lammps_generator import LammpsScriptGenerator
-
-        try:
-            generator, _, _, _, _, _ = ModuleFactory.create_modules(config)
-            atoms = next(generator.generate(1))
-        except Exception:
-            return  # Will be caught by StructuralValidator
-
-        elements = list(set(atoms.get_chemical_symbols()))
-        lammps_gen = LammpsScriptGenerator(config.md)
-
-        with tempfile.TemporaryDirectory() as td:
-            td_path = Path(td)
-
-            # Generate a data file to load
-            data_file = td_path / "structure.data"
-            from ase.io import write
-            write(data_file, atoms, format="lammps-data", atom_style=config.md.atom_style.value)
-
-            potential_path = td_path / "potential.yace"
-            potential_path.touch() # Dummy file for testing syntax
-            dump_file = td_path / "dump.xyz"
-
-            import io
-            buffer = io.StringIO()
-            lammps_gen.write_script(buffer, potential_path, data_file, dump_file, elements)
-
-            script_content = buffer.getvalue()
-
-            # Override run N to run 0 for syntax check
-            # We want to replace the `run N` with `run 0`.
-            lines = script_content.splitlines()
-            modified_lines = []
-            for line in lines:
-                # If there's an intentional bad command injected by test, we keep it to let lammps crash
-                if line.startswith("run "):
-                    modified_lines.append("run 0")
-                elif line.startswith("fix py_halt"):
-                    # For preflight, skip Python fixes to avoid environment complications in subprocess
-                    # if the user hasn't correctly set PYTHONPATH for the subprocess.
-                    pass
-                elif line.startswith("python eval_wrapper"):
-                    pass
-                else:
-                    modified_lines.append(line)
-
-            modified_script = "\n".join(modified_lines)
-
-            # Write python runner script
-            runner_py = td_path / "runner.py"
-            runner_code = f"""
+    def _execute_dry_run(self, lammps_script_file: Path, runner_py: Path, report: DiagnosticReport) -> None:
+        runner_code = f"""
 from lammps import lammps
 import sys
 
 lmp = lammps(cmdargs=["-screen", "none"])
-script = {modified_script!r}
 try:
+    with open({str(lammps_script_file)!r}, 'r') as f:
+        script = f.read()
     for line in script.splitlines():
         if line.strip():
             lmp.command(line.strip())
@@ -223,39 +191,89 @@ except Exception as e:
     sys.stderr.write(str(e))
     sys.exit(1)
 """
-            runner_py.write_text(runner_code)
+        runner_py.write_text(runner_code)
 
-            env = os.environ.copy()
-            if 'PYTHONPATH' not in env:
-                env['PYTHONPATH'] = 'src'
+        safe_keys = ["PATH", "HOME", "USER", "LANG", "LC_ALL"]
+        safe_env = {k: v for k, v in os.environ.items() if k in safe_keys}
 
-            proc = subprocess.run(  # noqa: S603
-                [sys.executable, str(runner_py)],
-                capture_output=True,
-                text=True,
-                env=env,
-                check=False,
+        proc = subprocess.run(  # noqa: S603
+            [sys.executable, str(runner_py)],
+            capture_output=True,
+            text=True,
+            env=safe_env,
+            check=False,
+            shell=False,
+        )
+
+        if proc.returncode != 0:
+            err_out = proc.stderr.strip()
+            err_lines = [line for line in err_out.splitlines() if "ERROR" in line]
+            if err_lines:
+                clean_err = err_lines[0].split("(")[0].strip()
+                desc = clean_err.replace("ERROR: ", "")
+            else:
+                desc = "Unknown LAMMPS error"
+
+            report.errors.append(
+                DiagnosticMessage(
+                    node_id="ACTIVE_LEARNING_LOOP",
+                    severity=Severity.ERROR,
+                    description=desc,
+                    suggestion="Check the LAMMPS configuration parameters for syntax issues.",
+                )
             )
 
-            if proc.returncode != 0:
-                err_out = proc.stderr.strip()
-                # Try to extract standard LAMMPS ERROR line
-                err_lines = [line for line in err_out.splitlines() if "ERROR" in line]
-                if err_lines:
-                    # Clean up file/line reference
-                    clean_err = err_lines[0].split("(")[0].strip()
-                    desc = clean_err.replace("ERROR: ", "")
-                else:
-                    desc = "Unknown LAMMPS error"
+    def validate(self, config: PyAceConfig, report: DiagnosticReport) -> None:
+        from pyacemaker.core.lammps_generator import LammpsScriptGenerator
+        from pyacemaker.factory import ModuleFactory
 
-                report.errors.append(
-                    DiagnosticMessage(
-                        node_id="ACTIVE_LEARNING_LOOP",
-                        severity=Severity.ERROR,
-                        description=desc,
-                        suggestion="Check the LAMMPS configuration parameters for syntax issues.",
-                    )
-                )
+        try:
+            generator, _, _, _, _, _ = ModuleFactory.create_modules(config)
+            atoms = next(generator.generate(1))
+        except Exception:
+            return
+
+        elements = list(set(atoms.get_chemical_symbols()))  # type: ignore[no-untyped-call]
+        lammps_gen = LammpsScriptGenerator(config.md)
+
+        import stat
+        td = tempfile.mkdtemp()
+        td_path = Path(td)
+        td_path.chmod(stat.S_IRUSR | stat.S_IWUSR | stat.S_IXUSR) # explicit 0o700
+        try:
+            data_file = td_path / "structure.data"
+            from ase.io import write
+            # Handle atomic_style fallback for the test using the string directly
+            style = getattr(config.md.atom_style, "value", config.md.atom_style) if config.md.atom_style else "atomic"
+            write(data_file, atoms, format="lammps-data", atom_style=style)
+
+            potential_path = td_path / "potential.yace"
+            potential_path.touch()
+            dump_file = td_path / "dump.xyz"
+
+            import io
+            buffer = io.StringIO()
+            lammps_gen.write_script(buffer, potential_path, data_file, dump_file, elements)
+
+            script_content = buffer.getvalue()
+            lines = script_content.splitlines()
+            modified_lines = []
+            for line in lines:
+                if line.startswith("run "):
+                    modified_lines.append("run 0")
+                elif line.startswith(("fix py_halt", "python eval_wrapper")):
+                    pass
+                else:
+                    modified_lines.append(line)
+
+            modified_script = "\n".join(modified_lines)
+            lammps_script_file = td_path / "script.in"
+            lammps_script_file.write_text(modified_script)
+
+            runner_py = td_path / "runner.py"
+            self._execute_dry_run(lammps_script_file, runner_py, report)
+        finally:
+            shutil.rmtree(td_path, ignore_errors=True)
 
 
 class PreflightManager:

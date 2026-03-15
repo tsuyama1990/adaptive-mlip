@@ -13,12 +13,15 @@ from .workflow import WorkflowConfig
 
 __all__ = [
     "DFTConfig",
+    "DiagnosticMessage",
+    "DiagnosticReport",
     "EONConfig",
     "LoggingConfig",
     "MDConfig",
     "MDSimulationResult",
     "PyAceConfig",
     "ScenarioConfig",
+    "Severity",
     "SimulationState",
     "StateChangePayload",
     "StructureConfig",
@@ -28,7 +31,4 @@ __all__ = [
     "ValidationConfig",
     "WorkflowConfig",
     "ZBLConfig",
-    "DiagnosticMessage",
-    "DiagnosticReport",
-    "Severity",
 ]

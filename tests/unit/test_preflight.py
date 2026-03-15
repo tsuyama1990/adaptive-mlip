@@ -12,7 +12,13 @@ from pyacemaker.core.preflight import (
     StructuralValidator,
 )
 from pyacemaker.domain_models.config import PyAceConfig
+from pyacemaker.domain_models.dft import DFTConfig
+from pyacemaker.domain_models.logging import LoggingConfig
+from pyacemaker.domain_models.md import MDConfig
 from pyacemaker.domain_models.preflight import DiagnosticReport, Severity
+from pyacemaker.domain_models.structure import StructureConfig
+from pyacemaker.domain_models.training import PacemakerConfig, TrainingConfig
+from pyacemaker.domain_models.workflow import WorkflowConfig
 
 
 @pytest.fixture
@@ -24,47 +30,56 @@ def clean_report() -> DiagnosticReport:
 def mock_config() -> PyAceConfig:
     return PyAceConfig(
         project_name="TestProject",
-        structure={
-            "elements": ["Al"],
-            "supercell_size": [1, 1, 1],
-            "policy_name": "cold_start"
-        },
-        dft={
-            "code": "qe",
-            "functional": "pbe",
-            "kpoints_density": 2.0,
-            "encut": 40.0,
-            "pseudopotentials": {"Al": "fake.UPF"},
-            "mixing_beta": 0.7,
-            "smearing_type": "gaussian",
-            "smearing_width": 0.1,
-            "diagonalization": "david"
-        },
-        training={
-            "potential_type": "mace",
-            "cutoff_radius": 5.0,
-            "max_basis_size": 200,
-            "delta_learning": False,
-            "active_set_optimization": False,
-            "foundation_model_path": "fake.model",
-            "pacemaker": {}
-        },
-        md={
-            "temperature": 300.0,
-            "pressure": 0.0,
-            "timestep": 0.001,
-            "n_steps": 1000,
-            "uncertainty_threshold": 0.1,
-            "check_interval": 10
-        },
-        workflow={
-            "max_iterations": 2,
-            "state_file_path": "state.json",
-            "data_dir": "data",
-            "active_learning_dir": "al",
-            "potentials_dir": "pot"
-        },
-        logging={}
+        structure=StructureConfig(
+            elements=["Al"],
+            supercell_size=[1, 1, 1],
+            policy_name="cold_start"
+        ),
+        dft=DFTConfig.model_construct(
+            code="qe",
+            functional="pbe",
+            kpoints_density=2.0,
+            encut=40.0,
+            pseudopotentials={"Al": "fake.UPF"},
+            mixing_beta=0.7,
+            smearing_type="gaussian",
+            smearing_width=0.1,
+            diagonalization="david",
+            embedding_buffer=1.0,
+            mixing_beta_factor=1.0,
+            smearing_width_factor=1.0
+        ),
+        training=TrainingConfig(
+            potential_type="mace",
+            cutoff_radius=5.0,
+            max_basis_size=200,
+            delta_learning=False,
+            active_set_optimization=False,
+            foundation_model_path="fake.model",
+            pacemaker=PacemakerConfig(),
+            max_iterations=10,
+            batch_size=1,
+            elements=["Al"],
+            active_set_size=None
+        ),
+        md=MDConfig(
+            temperature=300.0,
+            pressure=0.0,
+            timestep=0.001,
+            n_steps=1000,
+            uncertainty_threshold=0.1,
+            check_interval=10
+        ),
+        workflow=WorkflowConfig.model_construct(
+            max_iterations=2,
+            state_file_path="state.json",
+            data_dir="data",
+            active_learning_dir="al",
+            potentials_dir="pot"
+        ),
+        logging=LoggingConfig(),
+        eon=None,
+        scenario=None
     )
 
 

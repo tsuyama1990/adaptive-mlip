@@ -1,4 +1,4 @@
 ImportError while loading conftest '/app/tests/conftest.py'.
-tests/conftest.py:1: in <module>
-    from pyacemaker.domain_models.config import DEFAULT_BATCH_SIZE, DEFAULT_N_CANDIDATES
+tests/conftest.py:13: in <module>
+    from pyacemaker.domain_models import (
 E   ModuleNotFoundError: No module named 'pyacemaker'

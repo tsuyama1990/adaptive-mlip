@@ -1,4 +1,3 @@
-from pyacemaker.domain_models.config import DEFAULT_BATCH_SIZE, DEFAULT_N_CANDIDATES
 import sys
 import tempfile
 from collections.abc import Generator
@@ -17,7 +16,7 @@ from pyacemaker.domain_models import (
     StructureConfig,
     TrainingConfig,
 )
-from pyacemaker.domain_models.config import PyAceConfig
+from pyacemaker.domain_models.config import DEFAULT_BATCH_SIZE, DEFAULT_N_CANDIDATES, PyAceConfig
 from pyacemaker.domain_models.defaults import (
     DEFAULT_ACTIVE_LEARNING_DIR,
     DEFAULT_CHECKPOINT_INTERVAL,
