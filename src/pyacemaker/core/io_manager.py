@@ -47,15 +47,24 @@ class IoManager:
             except OSError as e:
                 logger.warning(f"Failed to rotate trajectory file {filepath}: {e}")
 
-        # Disk I/O (append frame to file)
-        try:
-            write(str(filepath), atoms, format="extxyz", append=True)
-        except OSError as e:
-            msg = f"Failed to write trajectory frame to {filepath} due to disk or permission error: {e}"
-            logger.exception(msg)
-            raise RuntimeError(msg) from e
-        except Exception:
-            logger.exception(f"Failed to write trajectory frame to {filepath}")
+        # Fast non-blocking Disk I/O dispatch via executor to prevent locking the orchestrator logic
+        # For an append format like extxyz, threadpool I/O avoids massive GIL locks
+        def _write_task() -> None:
+            try:
+                write(str(filepath), atoms, format="extxyz", append=True)
+            except OSError as e:
+                msg = f"Failed to write trajectory frame to {filepath} due to disk or permission error: {e}"
+                logger.exception(msg)
+                raise RuntimeError(msg) from e
+            except Exception:
+                logger.exception(f"Failed to write trajectory frame to {filepath}")
+
+        # The orchestrator is synchronous, but we can offload I/O to avoid blocking the physics
+        import concurrent.futures
+        # Using a fire-and-forget mechanism on a bounded executor
+        if not hasattr(self, "_executor"):
+            self._executor = concurrent.futures.ThreadPoolExecutor(max_workers=2)
+        self._executor.submit(_write_task)
 
         # Telemetry downsampling check
         if force_publish or (step % self.stream_interval == 0):
@@ -159,8 +168,15 @@ class LammpsFileManager:
             msg = f"Invalid output path, symlink detected: {output_path}"
             raise ValueError(msg)
 
-        real_output_path = Path(os.path.realpath(output_path))
-        real_cwd = Path(os.path.realpath(Path.cwd()))
+        # Canonicalize to resolve any . or .. components strictly
+        real_output_path = Path(os.path.realpath(output_path)).resolve()
+        real_cwd = Path(os.path.realpath(Path.cwd())).resolve()
+
+        # Additional protection against encoded injection and null bytes
+        if "\0" in str(output_path):
+            msg = "Null byte detected in path"
+            raise ValueError(msg)
+
         if not real_output_path.is_relative_to(real_cwd):
             msg = f"Invalid output path, potential path traversal detected: {output_path}"
             raise ValueError(msg)

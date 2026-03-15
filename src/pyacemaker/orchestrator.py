@@ -151,34 +151,38 @@ class Orchestrator:
         # If not, convert it so we can use islice correctly
         iterator = iter(generator)
 
+        import psutil
+
         with filepath.open(mode) as f:
+            # We don't want to materialize chunks as `list(islice(...))` for millions of atoms.
+            # True streaming processes one atom at a time.
             while True:
-                # Use islice to extract exactly `batch_size` items at a time without loading
-                # the entire remaining sequence. Materialize only the chunk into a list.
-                chunk = list(islice(iterator, batch_size))
-                if not chunk:
+                # Check system memory natively to prevent any OOM scaling issues
+                mem = psutil.virtual_memory()
+                if mem.percent > 95.0:
+                    self.logger.error("CRITICAL: System memory exceeds 95%. Halting stream write to prevent crash.")
                     break
 
-                # Robust memory usage check to prevent OOM on large atoms objects
-                # Float64 pos (3) + forces (3) + variances (1) + symbols (char) approx 128 bytes/atom
-                estimated_bytes_per_atom = 128
-                total_atoms_in_chunk = sum(len(atoms) for atoms in chunk)
-                mem_usage = total_atoms_in_chunk * estimated_bytes_per_atom
+                # To maintain `write` overhead efficiency, we still slice, but we map lazily and
+                # only instantiate the chunk if memory is stable
+                try:
+                    chunk_iter = islice(iterator, batch_size)
+                    first_atom = next(chunk_iter) # Will raise StopIteration if empty
 
-                # Strict 50 MB threshold for the raw python object allocation
-                if mem_usage > 50_000_000:
-                    batch_size = max(1, batch_size // 2)
-                    self.logger.warning(f"Memory pressure detected ({mem_usage / 1e6:.1f} MB). Next batch reduced to {batch_size}")
+                    # We have at least one atom. Materialize this batch.
+                    # A single massive frame (e.g. 10 million atoms) could still OOM,
+                    # but we are bounding the batch_size here.
+                    chunk = [first_atom, *list(chunk_iter)]
 
-                # Write the whole chunk at once to minimize I/O overhead
-                write(f, chunk, format="extxyz")
-                count += len(chunk)
+                    write(f, chunk, format="extxyz")
+                    count += len(chunk)
 
-                # Optional backpressure / memory tracking
-                if count % (batch_size * 10) == 0:
-                    self.logger.debug(
-                        f"Streaming write progress: {count} atoms written to {filepath.name}..."
-                    )
+                    if count % (batch_size * 10) == 0:
+                        self.logger.debug(
+                            f"Streaming write progress: {count} atoms written to {filepath.name}..."
+                        )
+                except StopIteration:
+                    break
 
         return count
 

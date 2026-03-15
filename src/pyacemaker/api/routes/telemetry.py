@@ -28,32 +28,27 @@ class ConnectionManager:
             if not self.active_connections[workflow_id]:
                 del self.active_connections[workflow_id]
 
+    async def _safe_send(self, connection: WebSocket, message: str, workflow_id: str) -> None:
+        try:
+            # Apply explicit backpressure/timeout to prevent hanging on slow clients
+            await asyncio.wait_for(connection.send_text(message), timeout=2.0)
+        except Exception:
+            # Drop the disconnected or unresponsive client
+            self.disconnect(connection, workflow_id)
+
     async def broadcast(self, message: str, workflow_id: str) -> None:
         if workflow_id in self.active_connections:
-            # Create a list of send tasks to run concurrently
-            send_tasks = []
-            connections_to_remove = set()
-            for connection in self.active_connections[workflow_id]:
-                try:
-                    # Apply explicit backpressure/timeout to prevent hanging on slow clients
-                    task = asyncio.wait_for(connection.send_text(message), timeout=2.0)
-                    send_tasks.append(task)
-                except Exception:
-                    # Client may have disconnected ungracefully between checks
-                    connections_to_remove.add(connection)
+            # Capture the current connections in a tuple to avoid mutation errors during iteration
+            current_connections = tuple(self.active_connections[workflow_id])
 
-            # Remove silently failed connections
-            for conn in connections_to_remove:
-                self.disconnect(conn, workflow_id)
+            # Execute all sends concurrently without blocking the main broadcast loop
+            send_tasks = [
+                self._safe_send(conn, message, workflow_id)
+                for conn in current_connections
+            ]
 
-            # Await all valid send tasks
             if send_tasks:
-                results = await asyncio.gather(*send_tasks, return_exceptions=True)
-                for i, result in enumerate(results):
-                    if isinstance(result, Exception):
-                        # The corresponding connection from the task list
-                        failed_conn = list(self.active_connections[workflow_id])[i]
-                        self.disconnect(failed_conn, workflow_id)
+                await asyncio.gather(*send_tasks, return_exceptions=True)
 
 manager = ConnectionManager()
 
