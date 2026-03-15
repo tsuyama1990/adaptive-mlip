@@ -85,7 +85,7 @@ class TelemetryBroker:
         # Perform actual JSON serialization size checking with error handling
         # Using model_dump_json but wrapped to catch MemoryError for oversized payloads.
         # This is more rigorous than estimation and ensures strict security limits.
-        MAX_PAYLOAD_SIZE_BYTES = 5_000_000
+        from pyacemaker.domain_models.constants import MAX_PAYLOAD_SIZE_BYTES
 
         try:
             serialized_payload = payload.model_dump_json()

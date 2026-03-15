@@ -15,6 +15,29 @@ from pyacemaker.utils.structure import get_species_order
 
 logger = logging.getLogger(__name__)
 
+def _validate_output_path(output_path: Path) -> Path:
+    import os
+    # Need to convert output_path to string in case it's a Path object containing null bytes
+    # before the object resolves them out, but pathlib strictly forbids them during init.
+    # Check string first.
+    if "\0" in str(output_path):
+        msg = "Null byte detected in path"
+        raise ValueError(msg)
+
+    if output_path.is_symlink():
+        msg = f"Invalid output path, symlink detected: {output_path}"
+        raise ValueError(msg)
+
+    # Canonicalize to resolve any . or .. components strictly
+    real_output_path = Path(os.path.realpath(output_path)).resolve()
+    real_cwd = Path(os.path.realpath(Path.cwd())).resolve()
+
+    if not real_output_path.is_relative_to(real_cwd):
+        msg = f"Invalid output path, potential path traversal detected: {output_path}"
+        raise ValueError(msg)
+    return real_output_path
+
+
 class IoManager:
     """
     Manages disk I/O and telemetry streaming for MD trajectories.
@@ -35,29 +58,33 @@ class IoManager:
         High-uncertainty events can use force_publish=True to bypass downsampling.
         Implements basic file rotation if trajectory exceeds 500MB.
         """
+        # Validate filepath using established anti-traversal logic before any I/O check
+        real_filepath = _validate_output_path(filepath)
+
         # File Rotation Logic
-        MAX_FILE_SIZE_BYTES = 500_000_000  # 500MB
-        if filepath.exists() and filepath.stat().st_size > MAX_FILE_SIZE_BYTES:
+        from pyacemaker.domain_models.constants import MAX_FILE_SIZE_BYTES
+
+        if real_filepath.exists() and real_filepath.stat().st_size > MAX_FILE_SIZE_BYTES:
             import datetime
             timestamp = datetime.datetime.now(datetime.UTC).strftime("%Y%m%d%H%M%S")
-            rotated_path = filepath.with_name(f"{filepath.stem}_{timestamp}{filepath.suffix}")
+            rotated_path = real_filepath.with_name(f"{real_filepath.stem}_{timestamp}{real_filepath.suffix}")
             try:
-                filepath.rename(rotated_path)
-                logger.info(f"Rotated trajectory file: {filepath} -> {rotated_path}")
+                real_filepath.rename(rotated_path)
+                logger.info(f"Rotated trajectory file: {real_filepath} -> {rotated_path}")
             except OSError as e:
-                logger.warning(f"Failed to rotate trajectory file {filepath}: {e}")
+                logger.warning(f"Failed to rotate trajectory file {real_filepath}: {e}")
 
         # Fast non-blocking Disk I/O dispatch via executor to prevent locking the orchestrator logic
         # For an append format like extxyz, threadpool I/O avoids massive GIL locks
         def _write_task() -> None:
             try:
-                write(str(filepath), atoms, format="extxyz", append=True)
+                write(str(real_filepath), atoms, format="extxyz", append=True)
             except OSError as e:
-                msg = f"Failed to write trajectory frame to {filepath} due to disk or permission error: {e}"
+                msg = f"Failed to write trajectory frame to {real_filepath} due to disk or permission error: {e}"
                 logger.exception(msg)
                 raise RuntimeError(msg) from e
             except Exception:
-                logger.exception(f"Failed to write trajectory frame to {filepath}")
+                logger.exception(f"Failed to write trajectory frame to {real_filepath}")
 
         # The orchestrator is synchronous, but we can offload I/O to avoid blocking the physics
         import concurrent.futures
@@ -164,6 +191,13 @@ class LammpsFileManager:
 
     def _validate_output_path(self, output_path: Path) -> Path:
         import os
+        # Need to convert output_path to string in case it's a Path object containing null bytes
+        # before the object resolves them out, but pathlib strictly forbids them during init.
+        # Check string first.
+        if "\0" in str(output_path):
+            msg = "Null byte detected in path"
+            raise ValueError(msg)
+
         if output_path.is_symlink():
             msg = f"Invalid output path, symlink detected: {output_path}"
             raise ValueError(msg)
@@ -171,11 +205,6 @@ class LammpsFileManager:
         # Canonicalize to resolve any . or .. components strictly
         real_output_path = Path(os.path.realpath(output_path)).resolve()
         real_cwd = Path(os.path.realpath(Path.cwd())).resolve()
-
-        # Additional protection against encoded injection and null bytes
-        if "\0" in str(output_path):
-            msg = "Null byte detected in path"
-            raise ValueError(msg)
 
         if not real_output_path.is_relative_to(real_cwd):
             msg = f"Invalid output path, potential path traversal detected: {output_path}"
@@ -226,7 +255,7 @@ class LammpsFileManager:
                 msg = f"Temporary file {temp_path} is missing or empty before finalizing."
                 raise ValueError(msg)  # noqa: TRY301
 
-            # Atomic rename validation
+            # Atomic rename validation guarantees no zero-byte files are committed
             if not temp_path.exists() or temp_path.stat().st_size == 0:
                 _raise_error()
 
