@@ -67,9 +67,10 @@ class TelemetryBroker:
         return cls._instance
 
     def __init__(self) -> None:
+        from pyacemaker.domain_models.constants import TELEMETRY_QUEUE_MAXSIZE
         if getattr(self, "_initialized", False):
             return
-        self.queue: asyncio.Queue[TelemetryFrame | StateChangePayload | SystemTopology] = asyncio.Queue(maxsize=100)
+        self.queue: asyncio.Queue[TelemetryFrame | StateChangePayload | SystemTopology] = asyncio.Queue(maxsize=TELEMETRY_QUEUE_MAXSIZE)
         self.loop: asyncio.AbstractEventLoop | None = None
         self._initialized = True
 
@@ -80,19 +81,24 @@ class TelemetryBroker:
     def _validate_payload_size(self, payload: TelemetryFrame | StateChangePayload | SystemTopology) -> str:
         # Pre-serialization strict length checks to avoid MemoryError during json dumping
         # A Float64 generally serializes to ~24 bytes max, but we assume 32 for strict bounds
-        from pyacemaker.domain_models.constants import MAX_PAYLOAD_SIZE_BYTES
+        from pyacemaker.domain_models.constants import (
+            BYTES_PER_ATOMIC_NUMBER,
+            BYTES_PER_FLOAT64,
+            MAX_PAYLOAD_SIZE_BYTES,
+            PAYLOAD_BASE_OVERHEAD_BYTES,
+        )
 
-        estimated_bytes = 100 # Base JSON structural overhead
+        estimated_bytes = PAYLOAD_BASE_OVERHEAD_BYTES # Base JSON structural overhead
         if isinstance(payload, TelemetryFrame):
-            estimated_bytes += len(payload.positions) * 32
+            estimated_bytes += len(payload.positions) * BYTES_PER_FLOAT64
             if payload.forces:
-                estimated_bytes += len(payload.forces) * 32
+                estimated_bytes += len(payload.forces) * BYTES_PER_FLOAT64
             if payload.variances:
-                estimated_bytes += len(payload.variances) * 32
+                estimated_bytes += len(payload.variances) * BYTES_PER_FLOAT64
         elif isinstance(payload, SystemTopology):
-            estimated_bytes += len(payload.atomic_numbers) * 8
+            estimated_bytes += len(payload.atomic_numbers) * BYTES_PER_ATOMIC_NUMBER
             if payload.cell_dimensions:
-                estimated_bytes += len(payload.cell_dimensions) * 32
+                estimated_bytes += len(payload.cell_dimensions) * BYTES_PER_FLOAT64
 
         if estimated_bytes > MAX_PAYLOAD_SIZE_BYTES:
             msg = f"Payload too large (estimated {estimated_bytes} bytes). Limit is {MAX_PAYLOAD_SIZE_BYTES} bytes."

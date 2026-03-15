@@ -151,6 +151,7 @@ class Orchestrator:
         # If not, convert it so we can use islice correctly
         iterator = iter(generator)
 
+
         with filepath.open(mode) as f:
             # We don't want to materialize chunks directly for millions of atoms.
             # To maintain `write` overhead efficiency, we slice lazily and

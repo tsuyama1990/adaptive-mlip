@@ -39,7 +39,7 @@ src/pyacemaker/core/validator.py                44     27    39%   29-31, 49-65,
 src/pyacemaker/domain_models/__init__.py        12      0   100%
 src/pyacemaker/domain_models/compiler.py       159    159     0%   1-384
 src/pyacemaker/domain_models/config.py          24      0   100%
-src/pyacemaker/domain_models/constants.py       19      0   100%
+src/pyacemaker/domain_models/constants.py       25      0   100%
 src/pyacemaker/domain_models/defaults.py       163      0   100%
 src/pyacemaker/domain_models/dft.py             36     17    53%   67-90
 src/pyacemaker/domain_models/env.py             19     12    37%   8-11, 15-21, 25
@@ -58,9 +58,9 @@ src/pyacemaker/interfaces/eon_driver.py         74     55    26%   24-25, 32-40,
 src/pyacemaker/interfaces/lammps_driver.py      80     66    18%   27-33, 45-55, 65-84, 96-97, 109-133, 142-148, 155-165
 src/pyacemaker/interfaces/process.py            14      5    64%   12, 22-29
 src/pyacemaker/interfaces/qe_driver.py          48     35    27%   37-82, 106-143
-src/pyacemaker/logger.py                        81     29    64%   25-54, 89, 91, 93-95, 98-99, 104-106, 109-110, 122
+src/pyacemaker/logger.py                        82     29    65%   25-54, 95, 97, 99-101, 104-105, 110-112, 115-116, 128
 src/pyacemaker/main.py                         131    131     0%   1-222
-src/pyacemaker/orchestrator.py                 384    331    14%   59-81, 85-88, 93, 102-119, 141-186, 193-212, 219-244, 248-262, 266-286, 290-305, 309-314, 321-352, 361-390, 393-399, 404-405, 408-429, 432-442, 445-446, 451-496, 505-508, 512-531, 540-573, 579-597, 607-687, 694-699, 702-704, 708-723, 731-766, 772-788
+src/pyacemaker/orchestrator.py                 384    331    14%   59-81, 85-88, 93, 102-119, 141-187, 194-213, 220-245, 249-263, 267-287, 291-306, 310-315, 322-353, 362-391, 394-400, 405-406, 409-430, 433-443, 446-447, 452-497, 506-509, 513-532, 541-574, 580-598, 608-688, 695-700, 703-705, 709-724, 732-767, 773-789
 src/pyacemaker/scenarios/__init__.py             3      3     0%   1-4
 src/pyacemaker/scenarios/base_scenario.py       12     12     0%   1-23
 src/pyacemaker/scenarios/fept_mgo.py           148    148     0%   1-272
@@ -74,8 +74,8 @@ src/pyacemaker/utils/phonons.py                 51     36    29%   27-30, 33, 47
 src/pyacemaker/utils/process.py                 32     28    12%   32-83
 src/pyacemaker/utils/structure.py                6      4    33%   18-22
 --------------------------------------------------------------------------
-TOTAL                                         4029   2660    34%
-============================== 5 passed in 0.93s ===============================
+TOTAL                                         4036   2660    34%
+============================== 5 passed in 0.89s ===============================
 /app/.venv/lib/python3.12/site-packages/coverage/inorout.py:561: CoverageWarning: Module dev_src was never imported. (module-not-imported); see https://coverage.readthedocs.io/en/7.13.4/messages.html#warning-module-not-imported
   self.warn(f"Module {pkg} was never imported.", slug="module-not-imported")
 
