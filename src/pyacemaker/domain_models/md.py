@@ -5,24 +5,23 @@ from pathlib import Path
 import numpy as np
 from pydantic import BaseModel, ConfigDict, Field, PositiveFloat, PositiveInt, model_validator
 
+from pyacemaker.domain_models.config import DEFAULT_MD_BASE_ENERGY
 from pyacemaker.domain_models.constants import (
     DEFAULT_MC_SEED,
-    DEFAULT_MD_MINIMIZE_FTOL,
-    DEFAULT_MD_MINIMIZE_TOL,
     DEFAULT_RAM_DISK_PATH,
-    LAMMPS_MINIMIZE_MAX_ITER,
-    LAMMPS_MINIMIZE_STEPS,
-    LAMMPS_VELOCITY_SEED,
     MAX_MD_DURATION,
     MAX_MD_PRESSURE,
 )
 from pyacemaker.domain_models.defaults import (
-    DEFAULT_MD_ATOM_STYLE,
-    DEFAULT_MD_BASE_ENERGY,
+    DEFAULT_LAMMPS_MINIMIZE_MAX_ITER,
+    DEFAULT_LAMMPS_MINIMIZE_STEPS,
+    DEFAULT_LAMMPS_VELOCITY_SEED,
     DEFAULT_MD_CHECK_INTERVAL,
     DEFAULT_MD_DUMP_FREQ,
     DEFAULT_MD_HYBRID_ZBL_INNER,
     DEFAULT_MD_HYBRID_ZBL_OUTER,
+    DEFAULT_MD_MINIMIZE_FTOL,
+    DEFAULT_MD_MINIMIZE_TOL,
     DEFAULT_MD_NEIGHBOR_SKIN,
     DEFAULT_MD_PDAMP_FACTOR,
     DEFAULT_MD_TDAMP_FACTOR,
@@ -30,11 +29,16 @@ from pyacemaker.domain_models.defaults import (
     DEFAULT_OTF_UNCERTAINTY_THRESHOLD,
     MAX_MD_STEPS,
 )
+from pyacemaker.domain_models.env import safe_env_float, safe_env_int
 
 
 def _get_default_temp_dir() -> str | None:
     """Returns RAM disk path if available and writable, else None."""
+    from pyacemaker.domain_models.constants import DANGEROUS_PATH_CHARS
+
     shm_path = Path(DEFAULT_RAM_DISK_PATH)
+    if any(char in str(shm_path) for char in DANGEROUS_PATH_CHARS):
+        return None
     if shm_path.exists() and shm_path.is_dir() and os.access(shm_path, os.W_OK):
         return str(shm_path)
     return None
@@ -50,10 +54,12 @@ class ZBLConfig(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
 
     zbl_cut_inner: PositiveFloat = Field(
-        DEFAULT_MD_HYBRID_ZBL_INNER, description="Inner cutoff radius for ZBL potential (Angstrom)"
+        default=DEFAULT_MD_HYBRID_ZBL_INNER,
+        description="Inner cutoff radius for ZBL potential (Angstrom)",
     )
     zbl_cut_outer: PositiveFloat = Field(
-        DEFAULT_MD_HYBRID_ZBL_OUTER, description="Outer cutoff radius for ZBL potential (Angstrom)"
+        default=DEFAULT_MD_HYBRID_ZBL_OUTER,
+        description="Outer cutoff radius for ZBL potential (Angstrom)",
     )
 
     @model_validator(mode="after")
@@ -151,7 +157,7 @@ class MDConfig(BaseModel):
     pressure: float = Field(
         ..., ge=0.0, le=MAX_MD_PRESSURE, description="Simulation pressure in Bar"
     )
-    timestep: PositiveFloat = Field(..., gt=0.0, le=10.0, description="Timestep in ps")
+    timestep: PositiveFloat = Field(..., gt=0.0, description="Timestep in ps")
     n_steps: int = Field(..., gt=0, le=MAX_MD_STEPS, description="Number of MD steps")
 
     # Output Control
@@ -166,23 +172,38 @@ class MDConfig(BaseModel):
         DEFAULT_MD_NEIGHBOR_SKIN, description="Neighbor list skin distance (Angstrom)"
     )
     units: str = Field("metal", description="LAMMPS unit style")
-    atom_style: AtomStyle = Field(AtomStyle(DEFAULT_MD_ATOM_STYLE), description="LAMMPS atom style")
+    atom_style: AtomStyle = Field(AtomStyle.ATOMIC, description="LAMMPS atom style")
 
     # Configurable LAMMPS Parameters (No Hardcoding)
     velocity_seed: int = Field(
-        LAMMPS_VELOCITY_SEED, description="Random seed for velocity initialization"
+        default_factory=lambda: safe_env_int(
+            "PYACEMAKER_LAMMPS_VELOCITY_SEED", DEFAULT_LAMMPS_VELOCITY_SEED
+        ),
+        description="Random seed for velocity initialization",
     )
     minimize_steps: int = Field(
-        LAMMPS_MINIMIZE_STEPS, description="Max iterations for minimization (steps)"
+        default_factory=lambda: safe_env_int(
+            "PYACEMAKER_LAMMPS_MINIMIZE_STEPS", DEFAULT_LAMMPS_MINIMIZE_STEPS
+        ),
+        description="Max iterations for minimization (steps)",
     )
     minimize_max_iter: int = Field(
-        LAMMPS_MINIMIZE_MAX_ITER, description="Max force evaluations for minimization"
+        default_factory=lambda: safe_env_int(
+            "PYACEMAKER_LAMMPS_MINIMIZE_MAX_ITER", DEFAULT_LAMMPS_MINIMIZE_MAX_ITER
+        ),
+        description="Max force evaluations for minimization",
     )
     minimize_tol: float = Field(
-        DEFAULT_MD_MINIMIZE_TOL, description="Energy tolerance for minimization"
+        default_factory=lambda: safe_env_float(
+            "PYACEMAKER_MD_MINIMIZE_TOL", DEFAULT_MD_MINIMIZE_TOL
+        ),
+        description="Energy tolerance for minimization",
     )
     minimize_ftol: float = Field(
-        DEFAULT_MD_MINIMIZE_FTOL, description="Force tolerance for minimization"
+        default_factory=lambda: safe_env_float(
+            "PYACEMAKER_MD_MINIMIZE_FTOL", DEFAULT_MD_MINIMIZE_FTOL
+        ),
+        description="Force tolerance for minimization",
     )
 
     # Advanced Settings
@@ -201,10 +222,11 @@ class MDConfig(BaseModel):
 
     # Mocking Parameters (Audit Requirement)
     base_energy: float = Field(
-        DEFAULT_MD_BASE_ENERGY, description="Baseline energy for mock simulation"
+        default_factory=lambda: safe_env_float("PYACEMAKER_MD_BASE_ENERGY", DEFAULT_MD_BASE_ENERGY),
+        description="Baseline energy for mock simulation",
     )
     default_forces: list[list[float]] = Field(
-        default=[[0.0, 0.0, 0.0]], description="Default forces for mock simulation"
+        default_factory=lambda: [[0.0, 0.0, 0.0]], description="Default forces for mock simulation"
     )
 
     # Spec Section 3.4 (Hybrid Potential & OTF)
@@ -236,8 +258,19 @@ class MDConfig(BaseModel):
         0.1, gt=0.0, description="Damping parameter (ps) for soft start Langevin thermostat"
     )
 
+    # Cycle 03: Spatial Tagging
+    custom_initialization_commands: list[str] | None = Field(
+        default=None, description="Custom LAMMPS commands generated for initialization"
+    )
+
     @model_validator(mode="after")
     def validate_simulation_physics(self) -> "MDConfig":
+        from pyacemaker.domain_models.defaults import DEFAULT_MAX_TIMESTEP
+
+        if self.timestep > DEFAULT_MAX_TIMESTEP:
+            msg = f"Timestep {self.timestep} ps exceeds maximum {DEFAULT_MAX_TIMESTEP} ps"
+            raise ValueError(msg)
+
         total_time = self.n_steps * self.timestep
         if total_time > MAX_MD_DURATION:
             msg = f"Total time {total_time} ps exceeds maximum {MAX_MD_DURATION} ps"
@@ -249,6 +282,20 @@ class MDConfig(BaseModel):
         if self.fix_halt and self.check_interval <= 0:
             msg = "check_interval must be positive when fix_halt is enabled."
             raise ValueError(msg)
+        return self
+
+    @model_validator(mode="after")
+    def validate_custom_initialization_commands(self) -> "MDConfig":
+        if self.custom_initialization_commands:
+            import re
+
+            from pyacemaker.domain_models.constants import LAMMPS_SAFE_CMD_PATTERN
+
+            pattern = re.compile(LAMMPS_SAFE_CMD_PATTERN)
+            for cmd in self.custom_initialization_commands:
+                if not pattern.match(cmd):
+                    msg = f"Invalid spatial command generated: {cmd}"
+                    raise ValueError(msg)
         return self
 
     @model_validator(mode="after")

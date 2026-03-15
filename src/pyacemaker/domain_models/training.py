@@ -1,6 +1,6 @@
 from pydantic import BaseModel, ConfigDict, Field, PositiveFloat, field_validator, model_validator
 
-from pyacemaker.domain_models.defaults import (
+from pyacemaker.domain_models.constants import (
     DEFAULT_DELTA_SPLINE_BINS,
     DEFAULT_DISPLAY_STEP,
     DEFAULT_EVALUATOR,
@@ -18,6 +18,7 @@ from pyacemaker.domain_models.defaults import (
     DEFAULT_TRAINING_MAX_ITERATIONS,
     FILENAME_POTENTIAL,
 )
+from pyacemaker.domain_models.env import safe_env_int, safe_env_str
 
 
 class PacemakerConfig(BaseModel):
@@ -27,46 +28,55 @@ class PacemakerConfig(BaseModel):
 
     # Embedding settings
     embedding_type: str = Field(
-        DEFAULT_PACEMAKER_EMBEDDING_TYPE, description="Type of embedding function"
+        default=DEFAULT_PACEMAKER_EMBEDDING_TYPE, description="Type of embedding function"
     )
     fs_parameters: list[float] = Field(
         default_factory=lambda: [1.0, 1.0, 1.0, 1.5],
         description="Parameters for FinnisSinclair embedding",
     )
-    ndensity: int = Field(DEFAULT_PACEMAKER_NDENSITY, description="Density expansion order", gt=0)
+    ndensity: int = Field(
+        default=DEFAULT_PACEMAKER_NDENSITY, description="Density expansion order", gt=0
+    )
 
     # Bond settings
-    rad_base: str = Field(DEFAULT_PACEMAKER_RAD_BASE, description="Radial basis function type")
+    rad_base: str = Field(
+        default=DEFAULT_PACEMAKER_RAD_BASE, description="Radial basis function type"
+    )
     rad_parameters: list[float] = Field(
         default_factory=lambda: [1.0], description="Radial basis parameters"
     )
-    max_deg: int = Field(DEFAULT_PACEMAKER_MAX_DEG, description="Maximum degree of expansion", gt=0)
-    r0: float = Field(DEFAULT_PACEMAKER_R0, description="Radial cutoff shift", gt=0)
+    max_deg: int = Field(
+        default=DEFAULT_PACEMAKER_MAX_DEG, description="Maximum degree of expansion", gt=0
+    )
+    r0: float = Field(default=DEFAULT_PACEMAKER_R0, description="Radial cutoff shift", gt=0)
 
     # Loss settings
     loss_kappa: float = Field(
-        DEFAULT_PACEMAKER_LOSS_KAPPA, description="Kappa parameter for loss function", ge=0
+        default=DEFAULT_PACEMAKER_LOSS_KAPPA, description="Kappa parameter for loss function", ge=0
     )
     loss_l1_coeffs: float = Field(
-        DEFAULT_PACEMAKER_LOSS_L1, description="L1 regularization coefficient", ge=0
+        default=DEFAULT_PACEMAKER_LOSS_L1, description="L1 regularization coefficient", ge=0
     )
     loss_l2_coeffs: float = Field(
-        DEFAULT_PACEMAKER_LOSS_L2, description="L2 regularization coefficient", ge=0
+        default=DEFAULT_PACEMAKER_LOSS_L2, description="L2 regularization coefficient", ge=0
     )
     repulsion_sigma: float = Field(
-        DEFAULT_PACEMAKER_REPULSION_SIGMA, description="Repulsion sigma", gt=0
+        default=DEFAULT_PACEMAKER_REPULSION_SIGMA, description="Repulsion sigma", gt=0
     )
 
     # Optimizer settings
-    optimizer: str = Field(DEFAULT_PACEMAKER_OPTIMIZER, description="Optimization algorithm")
+    learning_rate: float = Field(default=0.01, description="Learning rate for optimizer", gt=0)
+    optimizer: str = Field(
+        default=DEFAULT_PACEMAKER_OPTIMIZER, description="Optimization algorithm"
+    )
 
     # Advanced Settings (Moved from hardcoded values)
     delta_spline_bins: int = Field(
-        DEFAULT_DELTA_SPLINE_BINS, description="Number of bins for delta spline", gt=0
+        default=DEFAULT_DELTA_SPLINE_BINS, description="Number of bins for delta spline", gt=0
     )
-    evaluator: str = Field(DEFAULT_EVALUATOR, description="Backend evaluator for potential")
+    evaluator: str = Field(default=DEFAULT_EVALUATOR, description="Backend evaluator for potential")
     display_step: int = Field(
-        DEFAULT_DISPLAY_STEP, description="Frequency of logging during training", gt=0
+        default=DEFAULT_DISPLAY_STEP, description="Frequency of logging during training", gt=0
     )
 
 
@@ -78,7 +88,10 @@ class TrainingConfig(BaseModel):
     max_basis_size: int = Field(..., gt=0, description="Maximum basis set size")
 
     # Additional Parameters for Scalability & Reproducibility
-    seed: int = Field(42, description="Random seed for reproducibility")
+    seed: int = Field(
+        default_factory=lambda: safe_env_int("PYACEMAKER_TRAINING_SEED", 42),
+        description="Random seed for reproducibility",
+    )
     max_iterations: int = Field(
         DEFAULT_TRAINING_MAX_ITERATIONS, description="Maximum training iterations", gt=0
     )
@@ -88,12 +101,13 @@ class TrainingConfig(BaseModel):
     )
 
     pacemaker: PacemakerConfig = Field(
-        default_factory=PacemakerConfig, description="Detailed Pacemaker configuration"
+        default_factory=PacemakerConfig, description="Configuration for Pacemaker backend"
     )
 
     # Mocking & Output (Audit Requirement)
     output_filename: str = Field(
-        FILENAME_POTENTIAL, description="Filename for the trained potential"
+        default_factory=lambda: safe_env_str("PYACEMAKER_OUTPUT_FILENAME", FILENAME_POTENTIAL),
+        description="Filename for the trained potential",
     )
 
     @field_validator("output_filename")
@@ -105,11 +119,26 @@ class TrainingConfig(BaseModel):
             raise ValueError(msg)
         return v
 
+    @field_validator("foundation_model_path")
+    @classmethod
+    def validate_foundation_model_path(cls, v: str | None) -> str | None:
+        """Ensures foundation_model_path is secure against traversal."""
+        if v is not None:
+            from pathlib import Path
+
+            from pyacemaker.utils.path import validate_path_safe
+
+            validate_path_safe(Path(v))
+        return v
+
     # Spec Section 3.3
     delta_learning: bool = Field(False, description="Use LJ baseline for delta learning")
     active_set_optimization: bool = Field(False, description="Use MaxVol selection for active set")
     active_set_size: int | None = Field(
         None, description="Target number of structures for active set", gt=0
+    )
+    foundation_model_path: str | None = Field(
+        None, description="Path to a pre-trained foundation model (e.g., MACE) to finetune from"
     )
 
     @model_validator(mode="after")

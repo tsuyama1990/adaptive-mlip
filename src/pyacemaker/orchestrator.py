@@ -1,25 +1,30 @@
 import shutil
 from collections.abc import Iterable
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 from ase import Atoms
 from ase.io import iread, read, write
 
-from pyacemaker.core.active_set import ActiveSetSelector
-from pyacemaker.core.base import BaseEngine, BaseGenerator, BaseOracle, BaseTrainer
+from pyacemaker.core.base import (
+    BaseEngine,
+    BaseGenerator,
+    BaseOracle,
+    BaseTrainer,
+)
 from pyacemaker.core.directory_manager import DirectoryManager
 from pyacemaker.core.exceptions import OrchestratorError
+from pyacemaker.core.io_manager import IoManager
 from pyacemaker.core.state_manager import StateManager
 from pyacemaker.core.trainer import FinetuneManager
 from pyacemaker.core.validator import Validator
 from pyacemaker.domain_models import PyAceConfig
+from pyacemaker.domain_models.config import FILENAME_POTENTIAL
 from pyacemaker.domain_models.defaults import (
     DEFAULT_PRODUCTION_DIR,
     DEFAULT_RESUME_N_STEPS,
     FILENAME_CANDIDATES,
-    FILENAME_POTENTIAL,
     FILENAME_TRAINING,
     LOG_COMPUTED_PROPERTIES,
     LOG_GENERATED_CANDIDATES,
@@ -36,8 +41,9 @@ from pyacemaker.domain_models.defaults import (
     TEMPLATE_POTENTIAL_FILE,
 )
 from pyacemaker.domain_models.md import MDSimulationResult
+from pyacemaker.domain_models.telemetry import SimulationState, StateChangePayload
 from pyacemaker.factory import ModuleFactory
-from pyacemaker.logger import setup_logger
+from pyacemaker.logger import setup_logger, telemetry_broker
 from pyacemaker.utils.extraction import extract_intelligent_cluster
 
 
@@ -71,12 +77,24 @@ class Orchestrator:
         self.oracle: BaseOracle | None = None
         self.trainer: BaseTrainer | None = None
         self.engine: BaseEngine | None = None
-        self.active_set_selector: ActiveSetSelector | None = None
+        self.active_set_selector: Any = None
         self.validator: Validator | None = None
 
         # Initialize State
         self.state_manager.load()
         self.logger.info(LOG_PROJECT_INIT.format(project_name=config.project_name))
+
+    def _publish_state(self, new_state: SimulationState) -> None:
+        """Publishes the orchestrator's state to the telemetry broker."""
+        try:
+            telemetry_broker.publish(
+                cast(
+                    "dict[str, Any]",
+                    StateChangePayload(workflow_id="default_workflow", new_state=new_state),
+                )
+            )
+        except Exception:
+            self.logger.warning("Failed to publish state change telemetry")
 
     @property
     def loop_state(self) -> Any:
@@ -143,22 +161,38 @@ class Orchestrator:
         iterator = iter(generator)
 
         with filepath.open(mode) as f:
+            # We don't want to materialize chunks directly for millions of atoms.
+            # To maintain `write` overhead efficiency, we slice lazily and
+            # dynamically limit batch_size solely based on array heuristics.
             while True:
-                # Use islice to extract exactly `batch_size` items at a time without loading
-                # the entire remaining sequence. Materialize only the chunk into a list.
-                chunk = list(islice(iterator, batch_size))
-                if not chunk:
+                try:
+                    chunk_iter = islice(iterator, batch_size)
+                    first_atom = next(chunk_iter)  # Will raise StopIteration if empty
+
+                    # We have at least one atom. Materialize this batch.
+                    chunk = [first_atom, *list(chunk_iter)]
+
+                    # Heuristic check to prevent OOM without blocking system calls
+                    estimated_bytes_per_atom = 128
+                    total_atoms_in_chunk = sum(len(atoms) for atoms in chunk)
+                    mem_usage = total_atoms_in_chunk * estimated_bytes_per_atom
+
+                    # Strict 50 MB threshold for the raw python object allocation
+                    if mem_usage > 50_000_000:
+                        batch_size = max(1, batch_size // 2)
+                        self.logger.warning(
+                            f"Memory pressure detected ({mem_usage / 1e6:.1f} MB). Next batch reduced to {batch_size}"
+                        )
+
+                    write(f, chunk, format="extxyz")
+                    count += len(chunk)
+
+                    if count % (batch_size * 10) == 0:
+                        self.logger.debug(
+                            f"Streaming write progress: {count} atoms written to {filepath.name}..."
+                        )
+                except StopIteration:
                     break
-
-                # Write the whole chunk at once to minimize I/O overhead
-                write(f, chunk, format="extxyz")
-                count += len(chunk)
-
-                # Optional backpressure / memory tracking
-                if count % (batch_size * 10) == 0:
-                    self.logger.debug(
-                        f"Streaming write progress: {count} atoms written to {filepath.name}..."
-                    )
 
         return count
 
@@ -230,6 +264,7 @@ class Orchestrator:
             self.logger.warning("No training data found, skipping training.")
             return None
 
+        self._publish_state(SimulationState.TRAINING_MACE)
         result = self.trainer.train(
             training_data_path=training_file, initial_potential=initial_potential
         )
@@ -295,9 +330,23 @@ class Orchestrator:
         Utilizes intelligent extraction with core/buffer weighting, pre-relaxation, and auto-passivation.
         """
         try:
+            self._publish_state(SimulationState.EXTRACTING_CUTOUT)
             halt_structure = read(halt_structure_path)
             if isinstance(halt_structure, list):
                 halt_structure = halt_structure[-1]
+
+            # Publish the exact frame that halted specifically via IoManager logic to bypass downsampling
+            try:
+                io_manager = IoManager()
+                io_manager.write_trajectory(
+                    atoms=halt_structure,
+                    filepath=Path(halt_structure_path).with_suffix(".extxyz"),
+                    step=-1,  # arbitrary non-zero step just for telemetry publish
+                    state=SimulationState.EXTRACTING_CUTOUT,
+                    force_publish=True,
+                )
+            except Exception:
+                self.logger.warning("Failed to force publish high-uncertainty frame")
 
             # Find center atom (max gamma)
             center_idx = self._get_max_gamma_atom_index(halt_structure)
@@ -342,6 +391,7 @@ class Orchestrator:
         )
 
         # Label
+        self._publish_state(SimulationState.RUNNING_DFT)
         labelled_gen = self.oracle.compute(selected_gen)
 
         # Append to training data
@@ -351,6 +401,7 @@ class Orchestrator:
         return self._stream_write(labelled_gen, training_file, batch_size=batch_size, append=True)
 
     def _finetune_mace(self, dataset_path: Path) -> Path:
+        self._publish_state(SimulationState.TRAINING_MACE)
         finetune_manager = FinetuneManager()
         awakened_mace_path = finetune_manager.finetune(dataset_path)
         self.logger.info(
@@ -417,9 +468,14 @@ class Orchestrator:
 
         try:
             # Label S0 with ground truth (DFT)
+            self._publish_state(SimulationState.RUNNING_DFT)
 
             dft_manager = self.oracle
-            if hasattr(self.oracle, "dft") and self.oracle.dft is not None:
+            if (
+                self.oracle is not None
+                and hasattr(self.oracle, "dft")
+                and self.oracle.dft is not None
+            ):
                 dft_manager = self.oracle.dft
 
             if dft_manager is None:
@@ -434,7 +490,11 @@ class Orchestrator:
             awakened_mace_path = self._finetune_mace(s0_path)
 
             # Update TieredOracle's MACE model to the awakened one
-            if hasattr(self.oracle, "mace") and self.oracle.mace is not None:
+            if (
+                self.oracle is not None
+                and hasattr(self.oracle, "mace")
+                and getattr(self.oracle, "mace", None) is not None
+            ):
                 from pyacemaker.core.oracle import MACEManager
 
                 self.oracle.mace = MACEManager(model_path=str(awakened_mace_path))
@@ -494,6 +554,7 @@ class Orchestrator:
             return None
 
         if self.engine:
+            self._publish_state(SimulationState.RUNNING_MD)
             # Prepare arguments for fix python/invoke integration
             run_kwargs: dict[str, Any] = {"use_fix_invoke": True}
 
@@ -728,9 +789,11 @@ class Orchestrator:
             while self.state_manager.iteration < self.config.workflow.max_iterations:
                 self._run_loop_iteration()
 
+            self._publish_state(SimulationState.COMPLETED)
             self._finalize()
             self.logger.info(LOG_WORKFLOW_COMPLETED)
 
         except Exception as e:
+            self._publish_state(SimulationState.FAILED)
             self.logger.critical(LOG_WORKFLOW_CRASHED.format(error=e))
             raise

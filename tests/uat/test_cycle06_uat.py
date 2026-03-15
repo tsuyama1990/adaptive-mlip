@@ -7,56 +7,62 @@ from ase.io import write
 
 from pyacemaker.core.loop import LoopState, LoopStatus
 from pyacemaker.domain_models import PyAceConfig
-from pyacemaker.domain_models.md import MDSimulationResult
+from pyacemaker.domain_models.dft import DFTConfig
+from pyacemaker.domain_models.logging import LoggingConfig
+from pyacemaker.domain_models.md import MDConfig, MDSimulationResult
+from pyacemaker.domain_models.structure import StructureConfig
+from pyacemaker.domain_models.training import TrainingConfig
+from pyacemaker.domain_models.workflow import WorkflowConfig
 from pyacemaker.orchestrator import Orchestrator
 
 
 @pytest.fixture
 def uat_config(tmp_path: Path) -> PyAceConfig:
     (tmp_path / "Fe.UPF").touch()
-    config_dict = {
-        "project_name": "UAT_Project",
-        "structure": {
-            "elements": ["Fe"],
-            "supercell_size": [1, 1, 1],
-            "policy_name": "cold_start",
-        },
-        "dft": {
-            "code": "qe",
-            "functional": "PBE",
-            "kpoints_density": 0.04,
-            "encut": 500.0,
-            "pseudopotentials": {"Fe": "Fe.UPF"},
-            "mixing_beta": 0.7,
-            "smearing_type": "mv",
-            "smearing_width": 0.1,
-            "diagonalization": "david",
-        },
-        "training": {
-            "potential_type": "ace",
-            "cutoff_radius": 5.0,
-            "max_basis_size": 500,
-            "delta_learning": True,
-            "active_set_optimization": False,
-        },
-        "md": {
-            "temperature": 300.0,
-            "pressure": 0.0,
-            "timestep": 0.001,
-            "n_steps": 1000,
-            "uncertainty_threshold": 5.0,
-            "check_interval": 10,
-        },
-        "workflow": {
-            "max_iterations": 2,
-            "state_file_path": str(tmp_path / "state.json"),
-            "data_dir": str(tmp_path / "data"),
-            "active_learning_dir": str(tmp_path / "active_learning"),
-            "potentials_dir": str(tmp_path / "potentials"),
-        },
-        "logging": {},
-    }
-    return PyAceConfig(**config_dict)
+    return PyAceConfig(
+        project_name="UAT_Project",
+        structure=StructureConfig.model_construct(
+            elements=["Fe"],
+            supercell_size=[1, 1, 1],
+            policy_name="cold_start",
+        ),
+        dft=DFTConfig.model_construct(
+            code="qe",
+            functional="PBE",
+            kpoints_density=0.04,
+            encut=500.0,
+            pseudopotentials={"Fe": "Fe.UPF"},
+            mixing_beta=0.7,
+            smearing_type="mv",
+            smearing_width=0.1,
+            diagonalization="david",
+        ),
+        training=TrainingConfig.model_construct(
+            potential_type="ace",
+            cutoff_radius=5.0,
+            max_basis_size=500,
+            delta_learning=True,
+            active_set_optimization=False,
+        ),
+        md=MDConfig.model_construct(
+            temperature=300.0,
+            pressure=0.0,
+            timestep=0.001,
+            n_steps=1000,
+            uncertainty_threshold=5.0,
+            check_interval=10,
+        ),
+        workflow=WorkflowConfig.model_construct(
+            max_iterations=2,
+            state_file_path=str(tmp_path / "state.json"),
+            data_dir=str(tmp_path / "data"),
+            active_learning_dir=str(tmp_path / "active_learning"),
+            potentials_dir=str(tmp_path / "potentials"),
+        ),
+        logging=LoggingConfig.model_construct(),
+        eon=None,
+        scenario=None,
+    )
 
 
 def test_scenario_06_01_active_learning_campaign(uat_config: PyAceConfig, tmp_path: Path) -> None:
@@ -103,7 +109,7 @@ def test_scenario_06_01_active_learning_campaign(uat_config: PyAceConfig, tmp_pa
         halt_path = tmp_path / "halt1.xyz"
         write(halt_path, Atoms("Fe"))
 
-        res1 = MDSimulationResult(
+        res1 = MDSimulationResult.model_construct(
             energy=-10.0,
             temperature=300,
             forces=[[0.0, 0.0, 0.0]],
@@ -111,10 +117,14 @@ def test_scenario_06_01_active_learning_campaign(uat_config: PyAceConfig, tmp_pa
             max_gamma=10.0,
             halted=True,
             halt_structure_path=str(halt_path),
+            trajectory_path=None,
+            log_path=None,
+            halt_step=50,
+            stress=[0.0] * 6,
         )
 
         # Iteration 2: Converged (not halted)
-        res2 = MDSimulationResult(
+        res2 = MDSimulationResult.model_construct(
             energy=-10.0,
             temperature=300,
             forces=[[0.0, 0.0, 0.0]],
@@ -122,6 +132,10 @@ def test_scenario_06_01_active_learning_campaign(uat_config: PyAceConfig, tmp_pa
             max_gamma=2.0,
             halted=False,
             halt_structure_path=None,
+            trajectory_path=None,
+            log_path=None,
+            halt_step=None,
+            stress=[0.0] * 6,
         )
 
         mock_engine.run.side_effect = [res1, res2]
@@ -195,7 +209,7 @@ def test_scenario_06_02_resume_capability(uat_config: PyAceConfig, tmp_path: Pat
         )
 
         # Iteration 2: Run MD
-        res2 = MDSimulationResult(
+        res2 = MDSimulationResult.model_construct(
             energy=-10.0,
             temperature=300,
             forces=[[0.0, 0.0, 0.0]],
@@ -203,6 +217,10 @@ def test_scenario_06_02_resume_capability(uat_config: PyAceConfig, tmp_path: Pat
             max_gamma=2.0,
             halted=False,
             halt_structure_path=None,
+            trajectory_path=None,
+            log_path=None,
+            halt_step=None,
+            stress=[0.0] * 6,
         )
         mock_engine.run.return_value = res2
 

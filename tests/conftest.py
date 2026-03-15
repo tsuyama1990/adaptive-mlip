@@ -16,12 +16,10 @@ from pyacemaker.domain_models import (
     StructureConfig,
     TrainingConfig,
 )
-from pyacemaker.domain_models.config import PyAceConfig
+from pyacemaker.domain_models.config import DEFAULT_BATCH_SIZE, DEFAULT_N_CANDIDATES, PyAceConfig
 from pyacemaker.domain_models.defaults import (
     DEFAULT_ACTIVE_LEARNING_DIR,
-    DEFAULT_BATCH_SIZE,
     DEFAULT_CHECKPOINT_INTERVAL,
-    DEFAULT_N_CANDIDATES,
     DEFAULT_OTF_LOCAL_N_CANDIDATES,
     DEFAULT_OTF_LOCAL_N_SELECT,
     DEFAULT_OTF_MAX_RETRIES,
@@ -85,10 +83,13 @@ def mock_dft_config(dummy_pseudopotentials_dir: Path, monkeypatch: Any) -> DFTCo
         functional="PBE",
         kpoints_density=0.04,
         encut=500.0,
+        embedding_buffer=None,
         mixing_beta=0.7,
         smearing_type="mv",
         smearing_width=0.1,
         diagonalization="david",
+        mixing_beta_factor=0.5,
+        smearing_width_factor=2.0,
         pseudopotentials={"H": "H.UPF", "O": "O.UPF", "Fe": "Fe.UPF"},
     )
 
@@ -104,7 +105,7 @@ def mock_structure_config() -> StructureConfig:
 
 @pytest.fixture
 def mock_training_config() -> TrainingConfig:
-    return TrainingConfig(
+    return TrainingConfig.model_construct(
         potential_type="ace",
         cutoff_radius=5.0,
         max_basis_size=500,
@@ -117,13 +118,13 @@ def mock_training_config() -> TrainingConfig:
 def mock_md_config() -> MDConfig:
     from pyacemaker.domain_models.md import ZBLConfig
 
-    return MDConfig(
+    return MDConfig.model_construct(
         temperature=300.0,
         pressure=1.0,
         timestep=0.001,
         n_steps=1000,
         hybrid_potential=True,
-        zbl=ZBLConfig(zbl_cut_inner=2.0, zbl_cut_outer=2.5),
+        zbl=ZBLConfig.model_construct(zbl_cut_inner=2.0, zbl_cut_outer=2.5),
     )
 
 
@@ -318,6 +319,9 @@ def create_test_config_dict(**overrides: Any) -> ConfigDictType:
             "smearing_type": "mv",
             "smearing_width": 0.1,
             "diagonalization": "david",
+            "embedding_buffer": None,
+            "mixing_beta_factor": 0.5,
+            "smearing_width_factor": 2.0,
         },
         "training": {
             "potential_type": "ace",
@@ -325,6 +329,10 @@ def create_test_config_dict(**overrides: Any) -> ConfigDictType:
             "max_basis_size": 500,
             "delta_learning": True,
             "active_set_optimization": False,
+            "max_iterations": 100,
+            "batch_size": 32,
+            "elements": ["Fe"],
+            "active_set_size": None,
         },
         "md": {
             "temperature": 300.0,
@@ -334,6 +342,19 @@ def create_test_config_dict(**overrides: Any) -> ConfigDictType:
             "zbl": {"zbl_cut_inner": 1.0, "zbl_cut_outer": 1.5},
             "uncertainty_threshold": DEFAULT_OTF_UNCERTAINTY_THRESHOLD,
             "check_interval": DEFAULT_CHECKPOINT_INTERVAL,
+            "thermo_freq": 100,
+            "dump_freq": 100,
+            "minimize": True,
+            "neighbor_skin": 2.0,
+            "units": "metal",
+            "atom_style": "atomic",
+            "tdamp_factor": 100.0,
+            "pdamp_factor": 1000.0,
+            "fix_halt": True,
+            "ramping": False,
+            "mc": False,
+            "soft_start_steps": 0,
+            "soft_start_langevin_damp": 0.1,
         },
         "validation": {},
         "workflow": {

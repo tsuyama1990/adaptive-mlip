@@ -6,6 +6,10 @@ class ConfigError(PyAceError):
     """Configuration related errors."""
 
 
+class CompilerError(PyAceError):
+    """Semantic compilation errors."""
+
+
 class OracleError(PyAceError):
     """Oracle (DFT) related errors."""
 

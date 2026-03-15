@@ -1,0 +1,87 @@
+{
+  "project_session_id": "sessions/12286648370081756187",
+  "feature_branch": "dev/int-20260314-1656",
+  "integration_branch": "dev/int-20260314-1656",
+  "qa_session_id": "sessions/8844581490009579934",
+  "cycles": [
+    {
+      "id": "01",
+      "status": "completed",
+      "branch_name": null,
+      "jules_session_id": "sessions/8499454575850134086",
+      "current_iteration": 1,
+      "pr_url": null,
+      "last_error": null,
+      "session_restart_count": 0,
+      "max_session_restarts": 2,
+      "created_at": "2026-03-14T18:03:18.081775Z",
+      "updated_at": "2026-03-14T21:41:49.236097Z"
+    },
+    {
+      "id": "02",
+      "status": "completed",
+      "branch_name": null,
+      "jules_session_id": "sessions/1267725770353488856",
+      "current_iteration": 1,
+      "pr_url": null,
+      "last_error": null,
+      "session_restart_count": 0,
+      "max_session_restarts": 2,
+      "created_at": "2026-03-14T18:03:18.081786Z",
+      "updated_at": "2026-03-15T00:07:32.089978Z"
+    },
+    {
+      "id": "03",
+      "status": "completed",
+      "branch_name": null,
+      "jules_session_id": "sessions/3583799193244890785",
+      "current_iteration": 1,
+      "pr_url": null,
+      "last_error": "Session timed out. Last error: Timed out after 7227.844267103996s",
+      "session_restart_count": 0,
+      "max_session_restarts": 2,
+      "created_at": "2026-03-14T18:03:18.081790Z",
+      "updated_at": "2026-03-15T09:26:05.401675Z"
+    },
+    {
+      "id": "04",
+      "status": "completed",
+      "branch_name": null,
+      "jules_session_id": "sessions/4961938655824146943",
+      "current_iteration": 1,
+      "pr_url": null,
+      "last_error": "Jules Session Failed: Unknown error",
+      "session_restart_count": 0,
+      "max_session_restarts": 2,
+      "created_at": "2026-03-14T18:03:18.081793Z",
+      "updated_at": "2026-03-15T12:44:31.406841Z"
+    },
+    {
+      "id": "05",
+      "status": "completed",
+      "branch_name": null,
+      "jules_session_id": "sessions/8852120182188538948",
+      "current_iteration": 1,
+      "pr_url": null,
+      "last_error": null,
+      "session_restart_count": 0,
+      "max_session_restarts": 2,
+      "created_at": "2026-03-14T18:03:18.081796Z",
+      "updated_at": "2026-03-15T13:51:31.076211Z"
+    },
+    {
+      "id": "06",
+      "status": "completed",
+      "branch_name": null,
+      "jules_session_id": "sessions/4931543237577309993",
+      "current_iteration": 1,
+      "pr_url": null,
+      "last_error": null,
+      "session_restart_count": 0,
+      "max_session_restarts": 2,
+      "created_at": "2026-03-14T18:03:18.081799Z",
+      "updated_at": "2026-03-15T17:56:30.746695Z"
+    }
+  ],
+  "last_updated": "2026-03-15T18:18:34.559615Z"
+}

@@ -1,9 +1,12 @@
+from typing import Any
 from pathlib import Path
 from unittest.mock import MagicMock
 
-from pyacemaker.interfaces.process import ProcessRunner
+from pyacemaker.utils.process import ProcessRunner
 
 
+from pyacemaker.utils.process import ProcessRunner
+from pyacemaker.utils.process import ProcessRunner
 class MockProcessRunner(ProcessRunner):
     """Mock runner for testing."""
 
@@ -11,9 +14,9 @@ class MockProcessRunner(ProcessRunner):
         self.returncode = returncode
         self.stdout = stdout
         self.stderr = stderr
-        self.commands = []
+        self.commands: list[list[str]] = []
 
-    def run(self, cmd: list[str], cwd: Path, **kwargs):
+    def run(self, cmd: list[str], cwd: Path, **kwargs) -> Any:
         self.commands.append((cmd, cwd))
         mock_res = MagicMock()
         mock_res.returncode = self.returncode
