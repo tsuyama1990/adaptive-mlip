@@ -1,8 +1,6 @@
-import signal
 from typing import cast
 
 import networkx as nx
-import concurrent.futures
 from ase.data import atomic_masses, chemical_symbols
 
 from pyacemaker.core.exceptions import CompilerError
@@ -66,9 +64,9 @@ class SemanticCompiler:
             msg = "Missing ACTIVE_LEARNING_LOOP node in workflow"
             raise CompilerError(msg)
 
-        from pyacemaker.domain_models.defaults import DEFAULT_PROJECT_NAME
-
         from pydantic import ValidationError
+
+        from pyacemaker.domain_models.defaults import DEFAULT_PROJECT_NAME
 
         try:
             return PyAceConfig(
@@ -78,9 +76,11 @@ class SemanticCompiler:
                 training=training_config,
                 md=md_config,
                 workflow=workflow_config,
+                eon=None,
+                scenario=None,
             )
         except ValidationError as e:
-            msg = f"Final compilation validation failed: {str(e)}"
+            msg = f"Final compilation validation failed: {e!s}"
             raise CompilerError(msg) from e
 
     @classmethod
@@ -98,14 +98,8 @@ class SemanticCompiler:
             msg = "Cycle detected in DAG."
             raise CompilerError(msg)
 
-        try:
-            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-                future = executor.submit(lambda g: list(nx.topological_sort(g)), graph)
-                sorted_ids = future.result(timeout=10.0)
-            return [nodes_dict[nid] for nid in sorted_ids]
-        except concurrent.futures.TimeoutError as err:
-            msg = "DAG processing timeout"
-            raise CompilerError(msg) from err
+        sorted_ids = list(nx.topological_sort(graph))
+        return [nodes_dict[nid] for nid in sorted_ids]
 
     @classmethod
     def _validate_sequence(cls, sorted_nodes: list[DagNode]) -> None:
@@ -172,6 +166,7 @@ class SemanticCompiler:
 
         # 1. Determine base mass and timestep
         import re
+
         if not re.match(r"^[A-Z][a-z]?$", material) or material not in chemical_symbols:
             msg = "Invalid chemical symbol"
             raise CompilerError(msg)
@@ -230,7 +225,7 @@ class SemanticCompiler:
         from pyacemaker.domain_models.defaults import (
             DEFAULT_DFT_CODE,
             DEFAULT_DFT_FUNCTIONAL,
-            DEFAULT_PSEUDOPOTENTIAL_MAPPING
+            DEFAULT_PSEUDOPOTENTIAL_MAPPING,
         )
 
         safe_pseudo = DEFAULT_PSEUDOPOTENTIAL_MAPPING.get(material)

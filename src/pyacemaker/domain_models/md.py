@@ -9,36 +9,21 @@ from pyacemaker.domain_models.constants import (
     DEFAULT_MC_SEED,
     DEFAULT_MD_MINIMIZE_FTOL,
     DEFAULT_MD_MINIMIZE_TOL,
-    DEFAULT_RAM_DISK_PATH,
     LAMMPS_MINIMIZE_MAX_ITER,
     LAMMPS_MINIMIZE_STEPS,
-    LAMMPS_VELOCITY_SEED,
     MAX_MD_DURATION,
     MAX_MD_PRESSURE,
 )
 from pyacemaker.domain_models.defaults import (
-    DEFAULT_MD_ATOM_STYLE,
-    DEFAULT_MD_BASE_ENERGY,
     DEFAULT_MD_CHECK_INTERVAL,
     DEFAULT_MD_DUMP_FREQ,
     DEFAULT_MD_HYBRID_ZBL_INNER,
     DEFAULT_MD_HYBRID_ZBL_OUTER,
-    DEFAULT_MD_NEIGHBOR_SKIN,
-    DEFAULT_MD_PDAMP_FACTOR,
-    DEFAULT_MD_TDAMP_FACTOR,
     DEFAULT_MD_THERMO_FREQ,
     DEFAULT_OTF_UNCERTAINTY_THRESHOLD,
     MAX_MD_STEPS,
 )
 from pyacemaker.domain_models.env import safe_env_float, safe_env_int
-
-
-def _get_default_temp_dir() -> str | None:
-    """Returns RAM disk path if available and writable, else None."""
-    shm_path = Path(DEFAULT_RAM_DISK_PATH)
-    if shm_path.exists() and shm_path.is_dir() and os.access(shm_path, os.W_OK):
-        return str(shm_path)
-    return None
 
 
 class AtomStyle(StrEnum):
@@ -166,16 +151,21 @@ class MDConfig(BaseModel):
     )
     minimize: bool = Field(False, description="Perform energy minimization before MD")
     neighbor_skin: PositiveFloat = Field(
-        DEFAULT_MD_NEIGHBOR_SKIN, description="Neighbor list skin distance (Angstrom)"
+        default_factory=lambda: float(os.getenv("PYACEMAKER_MD_NEIGHBOR_SKIN", "2.0")),
+        description="Neighbor list skin distance (Angstrom)",
     )
-    units: str = Field("metal", description="LAMMPS unit style")
-    atom_style: AtomStyle = Field(AtomStyle(DEFAULT_MD_ATOM_STYLE), description="LAMMPS atom style")
+    units: str = Field(
+        default_factory=lambda: os.getenv("PYACEMAKER_MD_UNITS", "metal"),
+        description="LAMMPS unit style",
+    )
+    atom_style: AtomStyle | str = Field(
+        default_factory=lambda: os.getenv("PYACEMAKER_MD_ATOM_STYLE", "atomic"),
+        description="LAMMPS atom style",
+    )
 
     # Configurable LAMMPS Parameters (No Hardcoding)
     velocity_seed: int = Field(
-        default_factory=lambda: safe_env_int(
-            "PYACEMAKER_LAMMPS_VELOCITY_SEED", LAMMPS_VELOCITY_SEED
-        ),
+        default_factory=lambda: int(os.getenv("PYACEMAKER_LAMMPS_VELOCITY_SEED", "12345")),
         description="Random seed for velocity initialization",
     )
     minimize_steps: int = Field(
@@ -205,21 +195,26 @@ class MDConfig(BaseModel):
 
     # Advanced Settings
     temp_dir: str | None = Field(
-        default_factory=_get_default_temp_dir,
+        default_factory=lambda: os.getenv(
+            "PYACEMAKER_TEMP_DIR",
+            "/dev/shm" if Path("/dev/shm").exists() else __import__("tempfile").gettempdir(),  # noqa: S108
+        ),
         description="Directory for temporary files (e.g., /dev/shm for RAM disk)",
     )
     tdamp_factor: float = Field(
-        DEFAULT_MD_TDAMP_FACTOR,
+        default_factory=lambda: float(os.getenv("PYACEMAKER_MD_TDAMP_FACTOR", "100.0")),
         gt=0.0,
         description="Temperature damping factor (multiplies timestep)",
     )
     pdamp_factor: float = Field(
-        DEFAULT_MD_PDAMP_FACTOR, gt=0.0, description="Pressure damping factor (multiplies timestep)"
+        default_factory=lambda: float(os.getenv("PYACEMAKER_MD_PDAMP_FACTOR", "1000.0")),
+        gt=0.0,
+        description="Pressure damping factor (multiplies timestep)",
     )
 
     # Mocking Parameters (Audit Requirement)
     base_energy: float = Field(
-        default_factory=lambda: safe_env_float("PYACEMAKER_MD_BASE_ENERGY", DEFAULT_MD_BASE_ENERGY),
+        default_factory=lambda: float(os.getenv("PYACEMAKER_MD_BASE_ENERGY", "-100.0")),
         description="Baseline energy for mock simulation",
     )
     default_forces: list[list[float]] = Field(

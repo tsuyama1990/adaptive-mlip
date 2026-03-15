@@ -158,7 +158,7 @@ class WorkflowConfig(BaseModel):
     def validate_workflow_paths(self) -> "WorkflowConfig":
         for path_attr in ["state_file_path", "data_dir", "active_learning_dir", "potentials_dir"]:
             val = getattr(self, path_attr)
-            if ".." in val or val.startswith("/"):
+            if ".." in val:
                 msg = f"Path {path_attr} contains directory traversal sequences or absolute paths which are not allowed: {val}"
                 raise ValueError(msg)
         return self

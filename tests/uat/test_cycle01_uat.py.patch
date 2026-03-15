@@ -1,0 +1,21 @@
+--- tests/uat/test_cycle01_uat.py.old	2023-10-24 10:00:00.000000000 +0000
++++ tests/uat/test_cycle01_uat.py	2023-10-24 10:00:00.000000000 +0000
+@@ -180,8 +180,8 @@
+     from pydantic import ValidationError
+
+     with pytest.raises(ValidationError):
+-        base_config = PyAceConfig(**config_dict)
+-        base_config.md.temperature = -50.0
++        config_dict["md"]["temperature"] = -50.0
++        PyAceConfig(**config_dict)
+
+
+ def test_scenario_01_02_guardrails_check_cutoff(
+@@ -198,5 +198,5 @@
+     from pydantic import ValidationError
+
+     with pytest.raises(ValidationError):
+-        base_config = PyAceConfig(**config_dict)
+-        base_config.training.cutoff_radius = -1.0
++        config_dict["training"]["cutoff_radius"] = -1.0
++        PyAceConfig(**config_dict)

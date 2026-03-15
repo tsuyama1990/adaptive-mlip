@@ -353,8 +353,6 @@ def create_test_config_dict(**overrides: Any) -> ConfigDictType:
             "tdamp_factor": 100.0,
             "pdamp_factor": 1000.0,
             "fix_halt": True,
-            "ramping": False,
-            "mc": False,
             "soft_start_steps": 0,
             "soft_start_langevin_damp": 0.1,
         },
