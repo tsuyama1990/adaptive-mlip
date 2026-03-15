@@ -197,13 +197,14 @@ class LammpsSyntaxValidator(BaseValidator):
     Validates LAMMPS script syntax by spinning up a lightweight isolated Python subprocess.
     """
     def _execute_dry_run(self, lammps_script_file: Path, runner_py: Path, report: DiagnosticReport) -> None:
-        runner_code = f"""
+        runner_code = """
 from lammps import lammps
 import sys
 
 lmp = lammps(cmdargs=["-screen", "none"])
 try:
-    with open({str(lammps_script_file)!r}, 'r') as f:
+    script_path = sys.argv[1]
+    with open(script_path, 'r') as f:
         script = f.read()
     for line in script.splitlines():
         if line.strip():
@@ -218,8 +219,24 @@ except Exception as e:
         if "PYTHONPATH" in safe_env:
             del safe_env["PYTHONPATH"]
 
+        try:
+            from pyacemaker.utils.path import validate_path_safe
+            safe_runner_py = validate_path_safe(runner_py)
+            safe_script_file = validate_path_safe(lammps_script_file)
+        except ImportError as e:
+            report.errors.append(DiagnosticMessage(
+                node_id="SYSTEM", severity=Severity.ERROR,
+                description=f"Missing internal utility dependency: {e}",
+                suggestion="Ensure pyacemaker installation is complete."
+            ))
+            return
+
         proc = subprocess.run(  # noqa: S603
-            [sys.executable, str(runner_py.resolve())],
+            [
+                sys.executable,
+                str(safe_runner_py.resolve()),
+                str(safe_script_file.resolve())
+            ],
             capture_output=True,
             text=True,
             env=safe_env,
@@ -346,12 +363,15 @@ except Exception as e:
 class PreflightManager:
     """Orchestrates preflight diagnostic validations."""
 
-    def __init__(self) -> None:
-        self.validators: list[BaseValidator] = [
-            StructuralValidator(),
-            DependencyValidator(),
-            LammpsSyntaxValidator(),
-        ]
+    def __init__(self, validators: list[BaseValidator] | None = None) -> None:
+        if validators is None:
+            self.validators = [
+                StructuralValidator(),
+                DependencyValidator(),
+                LammpsSyntaxValidator(),
+            ]
+        else:
+            self.validators = validators
 
     def run(self, config: PyAceConfig) -> DiagnosticReport:
         report = DiagnosticReport()
