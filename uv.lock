@@ -1868,6 +1868,7 @@ dependencies = [
     { name = "pydantic" },
     { name = "pyyaml" },
     { name = "ruff" },
+    { name = "scipy" },
     { name = "slowapi" },
     { name = "uvicorn" },
 ]
@@ -1899,6 +1900,7 @@ requires-dist = [
     { name = "pydantic", specifier = ">=2.0" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "ruff", specifier = ">=0.15.2" },
+    { name = "scipy", specifier = ">=1.17.1" },
     { name = "slowapi", specifier = ">=0.1.9" },
     { name = "uvicorn", specifier = ">=0.41.0" },
 ]

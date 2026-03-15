@@ -125,6 +125,9 @@ class TrainingConfig(BaseModel):
     active_set_size: int | None = Field(
         None, description="Target number of structures for active set", gt=0
     )
+    foundation_model_path: str | None = Field(
+        None, description="Path to a pre-trained foundation model (e.g., MACE) to finetune from"
+    )
 
     @model_validator(mode="after")
     def validate_active_set_size(self) -> "TrainingConfig":
