@@ -1,6 +1,6 @@
 from pydantic import BaseModel, ConfigDict, Field, PositiveFloat, field_validator, model_validator
 
-from pyacemaker.domain_models.config import (
+from pyacemaker.domain_models.constants import (
     DEFAULT_DELTA_SPLINE_BINS,
     DEFAULT_DISPLAY_STEP,
     DEFAULT_EVALUATOR,
@@ -119,11 +119,25 @@ class TrainingConfig(BaseModel):
             raise ValueError(msg)
         return v
 
+    @field_validator("foundation_model_path")
+    @classmethod
+    def validate_foundation_model_path(cls, v: str | None) -> str | None:
+        """Ensures foundation_model_path is secure against traversal."""
+        if v is not None:
+            from pathlib import Path
+
+            from pyacemaker.utils.path import validate_path_safe
+            validate_path_safe(Path(v))
+        return v
+
     # Spec Section 3.3
     delta_learning: bool = Field(False, description="Use LJ baseline for delta learning")
     active_set_optimization: bool = Field(False, description="Use MaxVol selection for active set")
     active_set_size: int | None = Field(
         None, description="Target number of structures for active set", gt=0
+    )
+    foundation_model_path: str | None = Field(
+        None, description="Path to a pre-trained foundation model (e.g., MACE) to finetune from"
     )
 
     @model_validator(mode="after")

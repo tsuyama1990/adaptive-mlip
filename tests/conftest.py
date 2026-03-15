@@ -1,4 +1,3 @@
-from pyacemaker.domain_models.config import DEFAULT_BATCH_SIZE, DEFAULT_N_CANDIDATES
 import sys
 import tempfile
 from collections.abc import Generator
@@ -17,7 +16,7 @@ from pyacemaker.domain_models import (
     StructureConfig,
     TrainingConfig,
 )
-from pyacemaker.domain_models.config import PyAceConfig
+from pyacemaker.domain_models.config import DEFAULT_BATCH_SIZE, DEFAULT_N_CANDIDATES, PyAceConfig
 from pyacemaker.domain_models.defaults import (
     DEFAULT_ACTIVE_LEARNING_DIR,
     DEFAULT_CHECKPOINT_INTERVAL,
@@ -106,7 +105,7 @@ def mock_structure_config() -> StructureConfig:
 
 @pytest.fixture
 def mock_training_config() -> TrainingConfig:
-    return TrainingConfig(
+    return TrainingConfig.model_construct(
         potential_type="ace",
         cutoff_radius=5.0,
         max_basis_size=500,
@@ -119,13 +118,13 @@ def mock_training_config() -> TrainingConfig:
 def mock_md_config() -> MDConfig:
     from pyacemaker.domain_models.md import ZBLConfig
 
-    return MDConfig(
+    return MDConfig.model_construct(
         temperature=300.0,
         pressure=1.0,
         timestep=0.001,
         n_steps=1000,
         hybrid_potential=True,
-        zbl=ZBLConfig(zbl_cut_inner=2.0, zbl_cut_outer=2.5),
+        zbl=ZBLConfig.model_construct(zbl_cut_inner=2.0, zbl_cut_outer=2.5),
     )
 
 

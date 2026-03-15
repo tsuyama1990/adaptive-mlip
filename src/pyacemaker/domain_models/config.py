@@ -109,15 +109,16 @@ DEFAULT_TRAINING_MAX_ITERATIONS: Final[int] = int(
 FILENAME_POTENTIAL: Final[str] = os.getenv("PYACEMAKER_FILENAME_POTENTIAL", "potential.yace")
 
 
-from .dft import DFTConfig
-from .eon import EONConfig
-from .logging import LoggingConfig
-from .md import MDConfig
-from .scenario import ScenarioConfig
-from .structure import StructureConfig
-from .training import TrainingConfig
-from .validation import ValidationConfig
-from .workflow import WorkflowConfig
+from .dft import DFTConfig  # noqa: E402
+from .eon import EONConfig  # noqa: E402
+from .logging import LoggingConfig  # noqa: E402
+from .md import MDConfig  # noqa: E402
+from .scenario import ScenarioConfig  # noqa: E402
+from .structure import StructureConfig  # noqa: E402
+from .training import TrainingConfig  # noqa: E402
+from .validation import ValidationConfig  # noqa: E402
+from .workflow import WorkflowConfig  # noqa: E402
+
 
 class PyAceConfig(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
