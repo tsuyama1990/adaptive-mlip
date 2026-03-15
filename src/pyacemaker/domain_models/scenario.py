@@ -13,11 +13,17 @@ class NodeType(StrEnum):
     EON_TRANSITION_SEARCH = "EON_TRANSITION_SEARCH"
 
 
+from pyacemaker.domain_models.gui_schema import SpatialRegion
+
+
 class InitialStructureData(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     type: Literal[NodeType.INITIAL_STRUCTURE] = Field(NodeType.INITIAL_STRUCTURE)
     chemical_symbol: str = Field(..., description="The chemical symbol")
     lattice_constant: float = Field(..., description="The lattice constant")
+    regions: list[SpatialRegion] | None = Field(
+        default=None, description="Spatial regions mapped to this structure"
+    )
 
 
 class MaceTrainingData(BaseModel):
