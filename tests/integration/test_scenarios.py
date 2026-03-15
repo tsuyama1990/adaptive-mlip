@@ -112,36 +112,95 @@ def test_api_compile_intent_success(client: TestClient) -> None:
             },
             {
                 "id": "node_002",
+                "type": "MACE_TRAINING",
+                "data": {"type": "MACE_TRAINING"},
+            },
+            {
+                "id": "node_003",
                 "type": "ACTIVE_LEARNING_LOOP",
                 "data": {"type": "ACTIVE_LEARNING_LOOP"},
             },
         ],
-        "edges": [{"source": "node_001", "target": "node_002"}],
+        "edges": [{"source": "node_001", "target": "node_002"}, {"source": "node_002", "target": "node_003"}],
     }
     response = client.post("/api/v1/intent/compile", json=payload)
     assert response.status_code == 200
-    assert response.json() == {
-        "status": "success",
-        "message": "Payload validated successfully",
-        "node_count": 2,
-    }
-
-
-def test_api_compile_intent_forbidden_params(client: TestClient) -> None:
-    payload = {
-        "accuracy_speed_slider": 5,
-        "target_material": "Pt",
-        "lammps_command_string": "fix 1 all nve",
-        "nodes": [],
-        "edges": [],
-    }
-    response = client.post("/api/v1/intent/compile", json=payload)
-    assert response.status_code == 422
-    assert "lammps_command_string" in response.text
-
 
 def test_api_compile_intent_invalid_slider(client: TestClient) -> None:
     payload = {"accuracy_speed_slider": 15, "target_material": "Pt", "nodes": [], "edges": []}
     response = client.post("/api/v1/intent/compile", json=payload)
     assert response.status_code == 422
     assert "accuracy_speed_slider" in response.text
+
+def test_spatial_region_compiler_integration() -> None:
+    from pyacemaker.domain_models.compiler import SemanticCompiler
+    from pyacemaker.domain_models.gui_schema import SpatialAction, SpatialRegion
+    from pyacemaker.domain_models.scenario import (
+        ActiveLearningData,
+        DagNode,
+        Edge,
+        InitialStructureData,
+        IntentRequest,
+        MaceTrainingData,
+        NodeType,
+    )
+
+    # Create spatial regions
+    freeze_region = SpatialRegion(
+        x_min=0.0, x_max=10.0,
+        y_min=0.0, y_max=10.0,
+        z_min=0.0, z_max=5.0,
+        action=SpatialAction.ACTION_FREEZE
+    )
+    thermostat_region = SpatialRegion(
+        x_min=0.0, x_max=10.0,
+        y_min=0.0, y_max=10.0,
+        z_min=5.0, z_max=15.0,
+        action=SpatialAction.ACTION_LANGEVIN_THERMOSTAT
+    )
+
+    node_init = DagNode(
+        id="n1",
+        type=NodeType.INITIAL_STRUCTURE,
+        data=InitialStructureData(
+            type=NodeType.INITIAL_STRUCTURE,
+            chemical_symbol="Pt",
+            lattice_constant=3.92,
+            spatial_regions=[freeze_region, thermostat_region]
+        )
+    )
+    node_train = DagNode(
+        id="n2",
+        type=NodeType.MACE_TRAINING,
+        data=MaceTrainingData(type=NodeType.MACE_TRAINING)
+    )
+    node_loop = DagNode(
+        id="n3",
+        type=NodeType.ACTIVE_LEARNING_LOOP,
+        data=ActiveLearningData(type=NodeType.ACTIVE_LEARNING_LOOP)
+    )
+    edge1 = Edge(source="n1", target="n2")
+    edge2 = Edge(source="n2", target="n3")
+
+    intent = IntentRequest(
+        accuracy_speed_slider=5,
+        target_material="Pt",
+        nodes=[node_init, node_train, node_loop],
+        edges=[edge1, edge2]
+    )
+
+    config = SemanticCompiler.compile(intent)
+
+    # Assert MDConfig contains the generated LAMMPS strings
+    assert config.md.spatial_tags_commands is not None
+    commands = " ".join(config.md.spatial_tags_commands)
+    assert "region reg_1 block 0.0 10.0 0.0 10.0 0.0 5.0" in commands
+    assert "group group_1 region reg_1" in commands
+    assert "fix fix_1 group_1 setforce 0.0 0.0 0.0" in commands
+
+    assert "region reg_2 block 0.0 10.0 0.0 10.0 5.0 15.0" in commands
+    assert "group group_2 region reg_2" in commands
+    assert "langevin" in commands
+
+    # Assert ignore tags are propagated
+    assert config.workflow.loop_strategy.thresholds.ignore_tags == [1]

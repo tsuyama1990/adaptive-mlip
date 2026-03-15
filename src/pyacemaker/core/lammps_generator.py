@@ -255,6 +255,11 @@ class LammpsScriptGenerator:
         # Output setup MUST come before run
         self._gen_output_setup(buffer, dump_file)
 
+        # Apply spatial tags commands generated from intent GUI
+        if self.config.spatial_tags_commands:
+            for cmd in self.config.spatial_tags_commands:
+                buffer.write(f"{cmd}\n")
+
         # Inject Python TwoTierEvaluator
         if self.config.fix_halt:
             buffer.write("python eval_wrapper invoke here\n")
@@ -296,6 +301,11 @@ class LammpsScriptGenerator:
         self._gen_settings(buffer)
         self._gen_watchdog(buffer, potential_path)
         self._gen_output_setup(buffer, dump_file)
+
+        # Apply spatial tags commands generated from intent GUI
+        if self.config.spatial_tags_commands:
+            for cmd in self.config.spatial_tags_commands:
+                buffer.write(f"{cmd}\n")
 
         # Inject Python TwoTierEvaluator
         if self.config.fix_halt:

@@ -63,6 +63,10 @@ class ActiveLearningThresholds(BaseModel):
         default=3,
         description="Consecutive steps required to exceed threshold to exclude thermal noise",
     )
+    ignore_tags: list[int] | None = Field(
+        default=None,
+        description="List of integer tags (e.g. frozen regions) to ignore during variance/uncertainty evaluations."
+    )
 
 
 class CutoutConfig(BaseModel):

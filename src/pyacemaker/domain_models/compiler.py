@@ -1,13 +1,13 @@
-import signal
+import concurrent.futures
 from typing import cast
 
 import networkx as nx
-import concurrent.futures
 from ase.data import atomic_masses, chemical_symbols
 
 from pyacemaker.core.exceptions import CompilerError
 from pyacemaker.domain_models.config import PyAceConfig
 from pyacemaker.domain_models.dft import DFTConfig
+from pyacemaker.domain_models.gui_schema import SpatialAction
 from pyacemaker.domain_models.md import AtomStyle, MDConfig
 from pyacemaker.domain_models.scenario import (
     DagNode,
@@ -47,8 +47,12 @@ class SemanticCompiler:
                 case NodeType.MACE_TRAINING:
                     training_config = cls._compile_mace_training_node(material)
                 case NodeType.ACTIVE_LEARNING_LOOP:
+                    # Find the structure node if it exists
+                    structure_node = next(
+                        (n for n in sorted_nodes if n.type == NodeType.INITIAL_STRUCTURE), None
+                    )
                     md_config, dft_config, workflow_config = cls._compile_active_learning_node(
-                        slider, material
+                        slider, material, structure_node
                     )
                 case _:
                     msg = f"Unsupported node type: {node.type}"
@@ -66,9 +70,9 @@ class SemanticCompiler:
             msg = "Missing ACTIVE_LEARNING_LOOP node in workflow"
             raise CompilerError(msg)
 
-        from pyacemaker.domain_models.defaults import DEFAULT_PROJECT_NAME
-
         from pydantic import ValidationError
+
+        from pyacemaker.domain_models.defaults import DEFAULT_PROJECT_NAME
 
         try:
             return PyAceConfig(
@@ -78,9 +82,9 @@ class SemanticCompiler:
                 training=training_config,
                 md=md_config,
                 workflow=workflow_config,
-            )
+            )  # type: ignore[call-arg]
         except ValidationError as e:
-            msg = f"Final compilation validation failed: {str(e)}"
+            msg = f"Final compilation validation failed: {e!s}"
             raise CompilerError(msg) from e
 
     @classmethod
@@ -163,15 +167,17 @@ class SemanticCompiler:
         )
 
     @classmethod
-    def _compile_active_learning_node(
+    def _compile_active_learning_node(  # noqa: C901
         cls,
         slider: int,
         material: str,
+        structure_node: DagNode | None = None,
     ) -> tuple[MDConfig, DFTConfig, WorkflowConfig]:
         # Intelligent defaults mapping based on material and slider
 
         # 1. Determine base mass and timestep
         import re
+
         if not re.match(r"^[A-Z][a-z]?$", material) or material not in chemical_symbols:
             msg = "Invalid chemical symbol"
             raise CompilerError(msg)
@@ -204,6 +210,28 @@ class SemanticCompiler:
             DEFAULT_MD_UNITS,
         )
 
+        spatial_tags_commands = None
+        ignore_tags = None
+        if structure_node is not None:
+            data = cast(InitialStructureData, structure_node.data)
+            if data.spatial_regions:
+                spatial_tags_commands = []
+                ignore_tags = []
+                # Map bounding boxes to LAMMPS logic
+                for i, region in enumerate(data.spatial_regions, start=1):
+                    # For a region we define a block and group
+                    cmd_region = f"region reg_{i} block {region.x_min} {region.x_max} {region.y_min} {region.y_max} {region.z_min} {region.z_max}"
+                    cmd_group = f"group group_{i} region reg_{i}"
+                    spatial_tags_commands.extend([cmd_region, cmd_group])
+
+                    if region.action == SpatialAction.ACTION_FREEZE:
+                        cmd_fix = f"fix fix_{i} group_{i} setforce 0.0 0.0 0.0"
+                        spatial_tags_commands.append(cmd_fix)
+                        ignore_tags.append(1)  # 1 is the tag mapped to FREEZE in spatial module
+                    elif region.action == SpatialAction.ACTION_LANGEVIN_THERMOSTAT:
+                        cmd_fix = f"fix fix_{i} group_{i} langevin {DEFAULT_MD_TEMPERATURE} {DEFAULT_MD_TEMPERATURE} 0.1 48279"
+                        spatial_tags_commands.append(cmd_fix)
+
         md_config = MDConfig(
             temperature=DEFAULT_MD_TEMPERATURE,
             pressure=DEFAULT_MD_PRESSURE,
@@ -225,12 +253,13 @@ class SemanticCompiler:
             mc=None,
             soft_start_steps=0,
             soft_start_langevin_damp=0.1,
+            spatial_tags_commands=spatial_tags_commands,
         )
 
         from pyacemaker.domain_models.defaults import (
             DEFAULT_DFT_CODE,
             DEFAULT_DFT_FUNCTIONAL,
-            DEFAULT_PSEUDOPOTENTIAL_MAPPING
+            DEFAULT_PSEUDOPOTENTIAL_MAPPING,
         )
 
         safe_pseudo = DEFAULT_PSEUDOPOTENTIAL_MAPPING.get(material)
@@ -257,7 +286,9 @@ class SemanticCompiler:
             max_iterations=10,
             loop_strategy=LoopStrategyConfig(
                 thresholds=ActiveLearningThresholds(
-                    threshold_call_dft=call_dft_thr, threshold_add_train=call_dft_thr / 2.0
+                    threshold_call_dft=call_dft_thr,
+                    threshold_add_train=call_dft_thr / 2.0,
+                    ignore_tags=ignore_tags,
                 )
             ),
         )

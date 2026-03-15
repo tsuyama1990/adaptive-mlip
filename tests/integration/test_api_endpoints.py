@@ -37,7 +37,6 @@ def test_compile_intent_success() -> None:
 
     # When testing locally, we're returning the raw PyAceConfig object
     # So the response JSON is the dict representation
-    print(response.json())
     import pytest
     assert response.status_code == 200
     response_data = response.json()
@@ -87,7 +86,6 @@ def test_compile_intent_branching_rejection() -> None:
     }
 
     response = client.post("/api/v1/intent/compile", json=payload)
-    print(response.json())
     if response.status_code == 200:
         # Handled mock response
         pass

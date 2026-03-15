@@ -5,6 +5,8 @@ import networkx as nx
 from ase.data import chemical_symbols
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from pyacemaker.domain_models.gui_schema import SpatialRegion
+
 
 class NodeType(StrEnum):
     INITIAL_STRUCTURE = "INITIAL_STRUCTURE"
@@ -14,10 +16,11 @@ class NodeType(StrEnum):
 
 
 class InitialStructureData(BaseModel):
-    model_config = ConfigDict(extra="forbid", strict=True)
+    model_config = ConfigDict(extra="forbid", strict=True, use_enum_values=True)
     type: Literal[NodeType.INITIAL_STRUCTURE] = Field(NodeType.INITIAL_STRUCTURE)
     chemical_symbol: str = Field(..., description="The chemical symbol")
     lattice_constant: float = Field(..., description="The lattice constant")
+    spatial_regions: list[SpatialRegion] | None = Field(default=None, description="Optional list of spatial regions to apply constraints.")
 
 
 class MaceTrainingData(BaseModel):
@@ -55,7 +58,7 @@ class Edge(BaseModel):
 
 
 class IntentRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid", strict=True)
+    model_config = ConfigDict(extra="forbid", strict=True, use_enum_values=True)
     accuracy_speed_slider: int = Field(..., ge=1, le=10, description="Accuracy vs speed tradeoff")
     target_material: str = Field(..., description="Target material for the intent")
     nodes: list[DagNode] = Field(..., description="List of nodes in the DAG")

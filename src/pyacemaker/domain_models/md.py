@@ -255,6 +255,10 @@ class MDConfig(BaseModel):
         0.1, gt=0.0, description="Damping parameter (ps) for soft start Langevin thermostat"
     )
 
+    spatial_tags_commands: list[str] | None = Field(
+        default=None, description="Custom LAMMPS commands for region, group, and fixes generated from visual regions."
+    )
+
     @model_validator(mode="after")
     def validate_simulation_physics(self) -> "MDConfig":
         total_time = self.n_steps * self.timestep
