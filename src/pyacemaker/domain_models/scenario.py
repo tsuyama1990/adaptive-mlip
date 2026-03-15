@@ -1,5 +1,5 @@
 from enum import StrEnum
-from typing import Annotated, Literal, Any
+from typing import Annotated, Any, Literal
 
 import networkx as nx
 from ase.data import chemical_symbols

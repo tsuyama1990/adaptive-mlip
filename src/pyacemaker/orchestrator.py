@@ -11,6 +11,7 @@ from pyacemaker.core.active_set import ActiveSetSelector
 from pyacemaker.core.base import BaseEngine, BaseGenerator, BaseOracle, BaseTrainer
 from pyacemaker.core.directory_manager import DirectoryManager
 from pyacemaker.core.exceptions import OrchestratorError
+from pyacemaker.core.io_manager import IoManager
 from pyacemaker.core.state_manager import StateManager
 from pyacemaker.core.trainer import FinetuneManager
 from pyacemaker.core.validator import Validator
@@ -36,8 +37,9 @@ from pyacemaker.domain_models.defaults import (
     TEMPLATE_POTENTIAL_FILE,
 )
 from pyacemaker.domain_models.md import MDSimulationResult
+from pyacemaker.domain_models.telemetry import SimulationState, StateChangePayload
 from pyacemaker.factory import ModuleFactory
-from pyacemaker.logger import setup_logger
+from pyacemaker.logger import setup_logger, telemetry_broker
 from pyacemaker.utils.extraction import extract_intelligent_cluster
 
 
@@ -77,6 +79,13 @@ class Orchestrator:
         # Initialize State
         self.state_manager.load()
         self.logger.info(LOG_PROJECT_INIT.format(project_name=config.project_name))
+
+    def _publish_state(self, new_state: SimulationState) -> None:
+        """Publishes the orchestrator's state to the telemetry broker."""
+        try:
+            telemetry_broker.publish(StateChangePayload(new_state=new_state))
+        except Exception:
+            self.logger.warning("Failed to publish state change telemetry")
 
     @property
     def loop_state(self) -> Any:
@@ -230,6 +239,7 @@ class Orchestrator:
             self.logger.warning("No training data found, skipping training.")
             return None
 
+        self._publish_state(SimulationState.TRAINING_MACE)
         result = self.trainer.train(
             training_data_path=training_file, initial_potential=initial_potential
         )
@@ -295,9 +305,23 @@ class Orchestrator:
         Utilizes intelligent extraction with core/buffer weighting, pre-relaxation, and auto-passivation.
         """
         try:
+            self._publish_state(SimulationState.EXTRACTING_CUTOUT)
             halt_structure = read(halt_structure_path)
             if isinstance(halt_structure, list):
                 halt_structure = halt_structure[-1]
+
+            # Publish the exact frame that halted specifically via IoManager logic to bypass downsampling
+            try:
+                io_manager = IoManager()
+                io_manager.write_trajectory(
+                    atoms=halt_structure,
+                    filepath=Path(halt_structure_path).with_suffix(".extxyz"),
+                    step=-1, # arbitrary non-zero step just for telemetry publish
+                    state=SimulationState.EXTRACTING_CUTOUT,
+                    force_publish=True
+                )
+            except Exception:
+                self.logger.warning("Failed to force publish high-uncertainty frame")
 
             # Find center atom (max gamma)
             center_idx = self._get_max_gamma_atom_index(halt_structure)
@@ -342,6 +366,7 @@ class Orchestrator:
         )
 
         # Label
+        self._publish_state(SimulationState.RUNNING_DFT)
         labelled_gen = self.oracle.compute(selected_gen)
 
         # Append to training data
@@ -351,6 +376,7 @@ class Orchestrator:
         return self._stream_write(labelled_gen, training_file, batch_size=batch_size, append=True)
 
     def _finetune_mace(self, dataset_path: Path) -> Path:
+        self._publish_state(SimulationState.TRAINING_MACE)
         finetune_manager = FinetuneManager()
         awakened_mace_path = finetune_manager.finetune(dataset_path)
         self.logger.info(
@@ -417,6 +443,7 @@ class Orchestrator:
 
         try:
             # Label S0 with ground truth (DFT)
+            self._publish_state(SimulationState.RUNNING_DFT)
 
             dft_manager = self.oracle
             if (
@@ -502,6 +529,7 @@ class Orchestrator:
             return None
 
         if self.engine:
+            self._publish_state(SimulationState.RUNNING_MD)
             # Prepare arguments for fix python/invoke integration
             run_kwargs: dict[str, Any] = {"use_fix_invoke": True}
 
@@ -736,9 +764,11 @@ class Orchestrator:
             while self.state_manager.iteration < self.config.workflow.max_iterations:
                 self._run_loop_iteration()
 
+            self._publish_state(SimulationState.COMPLETED)
             self._finalize()
             self.logger.info(LOG_WORKFLOW_COMPLETED)
 
         except Exception as e:
+            self._publish_state(SimulationState.FAILED)
             self.logger.critical(LOG_WORKFLOW_CRASHED.format(error=e))
             raise

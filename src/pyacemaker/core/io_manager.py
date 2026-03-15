@@ -8,11 +8,64 @@ from ase import Atoms
 from ase.io import write
 
 from pyacemaker.domain_models.md import MDConfig
+from pyacemaker.domain_models.telemetry import SimulationState, TelemetryFrame
+from pyacemaker.logger import telemetry_broker
 from pyacemaker.utils.io import write_lammps_streaming
 from pyacemaker.utils.structure import get_species_order
 
 logger = logging.getLogger(__name__)
 
+class IoManager:
+    """
+    Manages disk I/O and telemetry streaming for MD trajectories.
+    """
+    def __init__(self, stream_interval: int = 10) -> None:
+        self.stream_interval = stream_interval
+
+    def write_trajectory(
+        self,
+        atoms: Atoms,
+        filepath: Path,
+        step: int,
+        state: SimulationState,
+        force_publish: bool = False
+    ) -> None:
+        """
+        Writes frame to disk and pushes it to telemetry queue based on interval.
+        High-uncertainty events can use force_publish=True to bypass downsampling.
+        """
+        # Disk I/O (append frame to file)
+        try:
+            write(str(filepath), atoms, format="extxyz", append=True)
+        except Exception:
+            logger.exception(f"Failed to write trajectory frame to {filepath}")
+
+        # Telemetry downsampling check
+        if force_publish or (step % self.stream_interval == 0):
+            self._publish_frame(atoms, step, state)
+
+    def _publish_frame(self, atoms: Atoms, step: int, state: SimulationState) -> None:
+        try:
+            positions = atoms.get_positions().flatten().tolist()
+
+            forces = None
+            if "forces" in atoms.arrays:
+                forces = atoms.get_forces().flatten().tolist()
+
+            variances = None
+            if "c_gamma" in atoms.arrays:
+                variances = atoms.get_array("c_gamma").flatten().tolist()
+
+            frame = TelemetryFrame(
+                step_number=step,
+                current_state=state,
+                positions=positions,
+                forces=forces,
+                variances=variances
+            )
+            telemetry_broker.publish(frame)
+        except Exception:
+            logger.exception("Failed to publish telemetry frame")
 
 class LammpsFileManager:
     """

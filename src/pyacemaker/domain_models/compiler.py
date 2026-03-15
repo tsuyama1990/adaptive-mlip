@@ -1,4 +1,3 @@
-import concurrent.futures
 from typing import cast
 
 import ase.build
@@ -192,9 +191,9 @@ class SemanticCompiler:
                     )
                 elif region.action == SpatialAction.ACTION_LANGEVIN_THERMOSTAT:
                     from pyacemaker.domain_models.defaults import (
-                        DEFAULT_LANGEVIN_TEMP,
                         DEFAULT_LANGEVIN_DAMPING,
                         DEFAULT_LANGEVIN_SEED,
+                        DEFAULT_LANGEVIN_TEMP,
                     )
 
                     spatial_commands.append(
@@ -216,10 +215,10 @@ class SemanticCompiler:
         material: str,
     ) -> TrainingConfig:
         from pyacemaker.domain_models.defaults import (
+            DEFAULT_MACE_BATCH_SIZE,
             DEFAULT_TRAINING_CUTOFF_RADIUS,
             DEFAULT_TRAINING_MAX_BASIS_SIZE,
             DEFAULT_TRAINING_MAX_ITERATIONS,
-            DEFAULT_MACE_BATCH_SIZE,
         )
 
         # Intelligent defaults
@@ -245,20 +244,20 @@ class SemanticCompiler:
     ) -> tuple[MDConfig, DFTConfig, WorkflowConfig]:
         # Intelligent defaults mapping based on material and slider
         from pyacemaker.domain_models.defaults import (
-            DEFAULT_TIMESTEP_BASE,
-            DEFAULT_TIMESTEP_HEAVY,
-            DEFAULT_TIMESTEP_LIGHT,
+            DEFAULT_FIX_HALT,
             DEFAULT_MASS_THRESHOLD_HEAVY,
             DEFAULT_MASS_THRESHOLD_LIGHT,
-            DEFAULT_SLIDER_MIN,
-            DEFAULT_SLIDER_MAX,
             DEFAULT_MAX_ITERATIONS,
-            DEFAULT_FIX_HALT,
-            DEFAULT_SOFT_START_STEPS,
-            DEFAULT_SOFT_START_LANGEVIN_DAMP,
             DEFAULT_MD_PRESSURE,
             DEFAULT_MD_TEMPERATURE,
             DEFAULT_MD_UNITS,
+            DEFAULT_SLIDER_MAX,
+            DEFAULT_SLIDER_MIN,
+            DEFAULT_SOFT_START_LANGEVIN_DAMP,
+            DEFAULT_SOFT_START_STEPS,
+            DEFAULT_TIMESTEP_BASE,
+            DEFAULT_TIMESTEP_HEAVY,
+            DEFAULT_TIMESTEP_LIGHT,
         )
 
         # 1. Determine base mass and timestep
@@ -281,14 +280,8 @@ class SemanticCompiler:
             timestep = DEFAULT_TIMESTEP_LIGHT
 
         from pyacemaker.domain_models.defaults import (
-            DEFAULT_MD_PRESSURE,
-            DEFAULT_MD_TEMPERATURE,
-            DEFAULT_MD_UNITS,
             DEFAULT_SLIDER_MAX,
             DEFAULT_SLIDER_MIN,
-            DEFAULT_FIX_HALT,
-            DEFAULT_SOFT_START_STEPS,
-            DEFAULT_SOFT_START_LANGEVIN_DAMP,
         )
 
         # Scale thresholds based on accuracy slider
@@ -302,6 +295,7 @@ class SemanticCompiler:
 
         if spatial_commands is not None:
             import re
+
             from pyacemaker.domain_models.constants import LAMMPS_SAFE_CMD_PATTERN
 
             pattern = re.compile(LAMMPS_SAFE_CMD_PATTERN)
@@ -336,14 +330,14 @@ class SemanticCompiler:
 
         from pyacemaker.domain_models.defaults import (
             DEFAULT_DFT_CODE,
+            DEFAULT_DFT_DIAGONALIZATION,
             DEFAULT_DFT_FUNCTIONAL,
-            DEFAULT_PSEUDOPOTENTIAL_MAPPING,
             DEFAULT_DFT_MIXING_BETA,
+            DEFAULT_DFT_MIXING_BETA_FACTOR,
             DEFAULT_DFT_SMEARING_TYPE,
             DEFAULT_DFT_SMEARING_WIDTH,
-            DEFAULT_DFT_DIAGONALIZATION,
-            DEFAULT_DFT_MIXING_BETA_FACTOR,
             DEFAULT_DFT_SMEARING_WIDTH_FACTOR,
+            DEFAULT_PSEUDOPOTENTIAL_MAPPING,
         )
 
         safe_pseudo = DEFAULT_PSEUDOPOTENTIAL_MAPPING.get(material)
@@ -352,11 +346,10 @@ class SemanticCompiler:
             raise CompilerError(msg)
 
         from pyacemaker.domain_models.defaults import (
-            DEFAULT_KPOINTS_DENSITY_BASE,
-            DEFAULT_KPOINTS_DENSITY_FACTOR,
             DEFAULT_ENCUT_BASE,
             DEFAULT_ENCUT_FACTOR,
-            DEFAULT_MAX_ITERATIONS,
+            DEFAULT_KPOINTS_DENSITY_BASE,
+            DEFAULT_KPOINTS_DENSITY_FACTOR,
             DEFAULT_SLIDER_MAX,
             DEFAULT_SLIDER_MIN,
         )

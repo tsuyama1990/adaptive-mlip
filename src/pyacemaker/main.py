@@ -1,4 +1,6 @@
 import argparse
+import asyncio
+import contextlib
 import logging
 import sys
 from collections.abc import AsyncGenerator
@@ -18,6 +20,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
 from starlette.types import ASGIApp
 
+from pyacemaker.api.routes import telemetry
 from pyacemaker.domain_models.config import PyAceConfig
 from pyacemaker.domain_models.defaults import (
     LOG_CONFIG_LOADED,
@@ -25,7 +28,7 @@ from pyacemaker.domain_models.defaults import (
     LOG_PROJECT_INIT,
 )
 from pyacemaker.domain_models.scenario import IntentRequest
-from pyacemaker.logger import setup_logger
+from pyacemaker.logger import setup_logger, telemetry_broker
 from pyacemaker.orchestrator import Orchestrator
 from pyacemaker.scenarios.base_scenario import BaseScenario
 from pyacemaker.scenarios.fept_mgo import FePtMgoScenario
@@ -47,8 +50,14 @@ def get_scenario_runner(name: str, config: PyAceConfig) -> BaseScenario:
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Setup before app start
+    loop = asyncio.get_running_loop()
+    telemetry_broker.initialize_loop(loop)
+    broadcast_task = asyncio.create_task(telemetry.broadcast_loop())
     yield
     # Cleanup after app shutdown
+    broadcast_task.cancel()
+    with contextlib.suppress(asyncio.CancelledError):
+        await broadcast_task
 
 
 app = FastAPI(title="PyAceMaker Intent-Driven API", lifespan=lifespan)
@@ -79,7 +88,7 @@ class LimitUploadSize(BaseHTTPMiddleware):
 
 
 app.add_middleware(LimitUploadSize, max_upload_size=5_000_000)
-
+app.include_router(telemetry.router)
 
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(

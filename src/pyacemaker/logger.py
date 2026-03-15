@@ -1,9 +1,13 @@
+import asyncio
+import contextlib
 import logging
 import sys
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
+from typing import Optional
 
 from pyacemaker.domain_models.logging import LoggingConfig
+from pyacemaker.domain_models.telemetry import StateChangePayload, TelemetryFrame
 
 
 def setup_logger(config: LoggingConfig, project_name: str) -> logging.Logger:
@@ -48,3 +52,51 @@ def setup_logger(config: LoggingConfig, project_name: str) -> logging.Logger:
         logger.addHandler(file_handler)
 
     return logger
+
+class TelemetryBroker:
+    """
+    Singleton class managing the Pub/Sub architecture for the WebSockets.
+    Safely bridges synchronous producer threads (LAMMPS) to the async event loop.
+    """
+    _instance: Optional["TelemetryBroker"] = None
+
+    def __new__(cls) -> "TelemetryBroker":
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+            cls._instance._initialized = False
+        return cls._instance
+
+    def __init__(self) -> None:
+        if getattr(self, "_initialized", False):
+            return
+        self.queue: asyncio.Queue[TelemetryFrame | StateChangePayload] = asyncio.Queue(maxsize=100)
+        self.loop: asyncio.AbstractEventLoop | None = None
+        self._initialized = True
+
+    def initialize_loop(self, loop: asyncio.AbstractEventLoop) -> None:
+        """Called upon FastAPI application startup to bind the running loop."""
+        self.loop = loop
+
+    def publish(self, payload: TelemetryFrame | StateChangePayload) -> None:
+        """
+        Thread-safe method called by synchronous worker threads.
+        Implements drop-oldest backpressure to prevent memory leaks if frontend is slow.
+        """
+        if self.loop is None or not self.loop.is_running():
+            return
+
+        def _sync_put() -> None:
+            try:
+                self.queue.put_nowait(payload)
+            except asyncio.QueueFull:
+                with contextlib.suppress(asyncio.QueueEmpty):
+                    # Drop-oldest policy: Pop the oldest item
+                    self.queue.get_nowait()
+
+                # Retry putting the new payload
+                with contextlib.suppress(asyncio.QueueFull):
+                    self.queue.put_nowait(payload)
+
+        self.loop.call_soon_threadsafe(_sync_put)
+
+telemetry_broker = TelemetryBroker()
