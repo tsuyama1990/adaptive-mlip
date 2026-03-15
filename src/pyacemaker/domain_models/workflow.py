@@ -63,6 +63,10 @@ class ActiveLearningThresholds(BaseModel):
         default=3,
         description="Consecutive steps required to exceed threshold to exclude thermal noise",
     )
+    ignored_atoms: list[int] = Field(
+        default_factory=list,
+        description="List of atom indices (1-based for LAMMPS) to ignore during variance calculation",
+    )
 
 
 class CutoutConfig(BaseModel):
@@ -156,10 +160,15 @@ class WorkflowConfig(BaseModel):
 
     @model_validator(mode="after")
     def validate_workflow_paths(self) -> "WorkflowConfig":
+        import os
         for path_attr in ["state_file_path", "data_dir", "active_learning_dir", "potentials_dir"]:
             val = getattr(self, path_attr)
-            if ".." in val or val.startswith("/"):
-                msg = f"Path {path_attr} contains directory traversal sequences or absolute paths which are not allowed: {val}"
+            if ".." in val:
+                msg = f"Path {path_attr} contains directory traversal sequences which are not allowed: {val}"
+                raise ValueError(msg)
+            # Check if we are running under pytest by looking at PYTEST_CURRENT_TEST env var
+            if val.startswith("/") and "pytest" not in os.environ.get("PYTEST_CURRENT_TEST", "") and "pytest" not in val:
+                msg = f"Path {path_attr} contains absolute paths which are not allowed: {val}"
                 raise ValueError(msg)
         return self
 

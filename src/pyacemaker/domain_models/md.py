@@ -48,7 +48,7 @@ class AtomStyle(StrEnum):
 
 
 class ZBLConfig(BaseModel):
-    model_config = ConfigDict(extra="forbid", strict=True)
+    model_config = ConfigDict(extra="forbid", strict=False)
 
     zbl_cut_inner: PositiveFloat = Field(
         default=DEFAULT_MD_HYBRID_ZBL_INNER,
@@ -68,7 +68,7 @@ class ZBLConfig(BaseModel):
 
 
 class MDRampingConfig(BaseModel):
-    model_config = ConfigDict(extra="forbid", strict=True)
+    model_config = ConfigDict(extra="forbid", strict=False)
 
     temp_start: float | None = Field(None, ge=0.0, description="Starting temperature (K)")
     temp_end: float | None = Field(None, ge=0.0, description="Ending temperature (K)")
@@ -88,7 +88,7 @@ class MDRampingConfig(BaseModel):
 
 
 class MCConfig(BaseModel):
-    model_config = ConfigDict(extra="forbid", strict=True)
+    model_config = ConfigDict(extra="forbid", strict=False)
 
     swap_freq: int = Field(..., gt=0, description="Frequency of MC swaps (steps)")
     swap_prob: float = Field(..., gt=0.0, le=1.0, description="Probability of swapping atoms")
@@ -96,7 +96,7 @@ class MCConfig(BaseModel):
 
 
 class MDSimulationResult(BaseModel):
-    model_config = ConfigDict(extra="forbid", strict=True)
+    model_config = ConfigDict(extra="forbid", strict=False)
 
     energy: float = Field(..., description="Final potential energy of the system")
     forces: list[list[float]] = Field(..., description="Forces on atoms in the final frame")
@@ -147,7 +147,7 @@ class MDConfig(BaseModel):
     Configuration for Molecular Dynamics simulations.
     """
 
-    model_config = ConfigDict(extra="forbid", strict=True)
+    model_config = ConfigDict(extra="forbid", strict=False)
 
     # Basic Physics
     temperature: float = Field(..., ge=0.0, description="Simulation temperature in Kelvin")
@@ -253,6 +253,10 @@ class MDConfig(BaseModel):
     )
     soft_start_langevin_damp: float = Field(
         0.1, gt=0.0, description="Damping parameter (ps) for soft start Langevin thermostat"
+    )
+
+    custom_initialization_commands: list[str] = Field(
+        default_factory=list, description="Custom LAMMPS initialization commands"
     )
 
     @model_validator(mode="after")
