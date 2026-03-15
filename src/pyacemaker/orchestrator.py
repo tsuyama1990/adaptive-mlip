@@ -138,6 +138,7 @@ class Orchestrator:
         Returns:
             Total number of atoms written.
         """
+        import sys
         from itertools import islice
 
         count = 0
@@ -158,6 +159,12 @@ class Orchestrator:
                 chunk = list(islice(iterator, batch_size))
                 if not chunk:
                     break
+
+                # Memory usage check to prevent OOM on large atoms objects
+                mem_usage = sys.getsizeof(chunk)
+                if mem_usage > 50_000_000: # 50 MB threshold heuristic
+                    batch_size = max(1, batch_size // 2)
+                    self.logger.warning(f"Memory pressure detected. Reducing batch size to {batch_size}")
 
                 # Write the whole chunk at once to minimize I/O overhead
                 write(f, chunk, format="extxyz")

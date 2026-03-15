@@ -83,12 +83,11 @@ async def broadcast_loop() -> None:
 
             if isinstance(payload, (SystemTopology, TelemetryFrame, StateChangePayload)):
                 serialized = payload.model_dump_json()
+                workflow_id = getattr(payload, "workflow_id", "default_workflow")
             else:
                 continue
 
-            # Currently, telemetry_broker is global so we broadcast to a default workflow
-            # In a multi-tenant system, the payload would contain the workflow_id
-            await manager.broadcast(serialized, "default_workflow")
+            await manager.broadcast(serialized, workflow_id)
 
         except asyncio.CancelledError:
             break

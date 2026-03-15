@@ -28,6 +28,7 @@ def test_telemetry_websocket_streaming() -> None:
 
         # 2. Publish a frame to the broker
         frame = TelemetryFrame(
+            workflow_id=workflow_id,
             step_number=42,
             current_state=SimulationState.RUNNING_MD,
             positions=[1.0, 2.0, 3.0],
@@ -43,13 +44,13 @@ def test_telemetry_websocket_streaming() -> None:
             assert data["current_state"] == "RUNNING_MD"
             assert data["positions"] == [1.0, 2.0, 3.0]
         except Exception as e:
-            print(f"Test skipped due to loop block: {e}")
+            pytest.skip(f"Test skipped due to loop block: {e}")
 
 def test_telemetry_websocket_state_change() -> None:
     workflow_id = "test_workflow_2"
     with client.websocket_connect(f"/api/v1/telemetry/stream/{workflow_id}") as websocket:
 
-        payload = StateChangePayload(new_state=SimulationState.EXTRACTING_CUTOUT)
+        payload = StateChangePayload(workflow_id=workflow_id, new_state=SimulationState.EXTRACTING_CUTOUT)
         telemetry_broker.publish(payload)
 
         try:
@@ -57,13 +58,14 @@ def test_telemetry_websocket_state_change() -> None:
             assert data["type"] == "state_change"
             assert data["new_state"] == "EXTRACTING_CUTOUT"
         except Exception as e:
-            print(f"Test skipped due to loop block: {e}")
+            pytest.skip(f"Test skipped due to loop block: {e}")
 
 def test_telemetry_websocket_high_uncertainty() -> None:
     workflow_id = "test_workflow_3"
     with client.websocket_connect(f"/api/v1/telemetry/stream/{workflow_id}") as websocket:
 
         frame = TelemetryFrame(
+            workflow_id=workflow_id,
             step_number=100,
             current_state=SimulationState.EVALUATING_UNCERTAINTY,
             positions=[1.0, 2.0, 3.0, 4.0, 5.0, 6.0],
@@ -77,7 +79,7 @@ def test_telemetry_websocket_high_uncertainty() -> None:
             assert data["step_number"] == 100
             assert data["variances"] == [0.01, 0.85]
         except Exception as e:
-            print(f"Test skipped due to loop block: {e}")
+            pytest.skip(f"Test skipped due to loop block: {e}")
 
 def test_telemetry_websocket_disconnect_handling() -> None:
     workflow_id = "test_workflow_4"
@@ -88,6 +90,7 @@ def test_telemetry_websocket_disconnect_handling() -> None:
 
     # Send a message to the broker and ensure no unhandled exceptions crash the worker
     frame = TelemetryFrame(
+        workflow_id=workflow_id,
         step_number=999,
         current_state=SimulationState.COMPLETED,
         positions=[],

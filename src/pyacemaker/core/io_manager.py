@@ -37,6 +37,10 @@ class IoManager:
         # Disk I/O (append frame to file)
         try:
             write(str(filepath), atoms, format="extxyz", append=True)
+        except OSError as e:
+            msg = f"Failed to write trajectory frame to {filepath} due to disk or permission error: {e}"
+            logger.exception(msg)
+            raise RuntimeError(msg) from e
         except Exception:
             logger.exception(f"Failed to write trajectory frame to {filepath}")
 
@@ -46,15 +50,15 @@ class IoManager:
 
     def _publish_frame(self, atoms: Atoms, step: int, state: SimulationState) -> None:
         try:
-            positions = atoms.get_positions().flatten().tolist()
+            positions = atoms.get_positions().flatten().tolist() # type: ignore[no-untyped-call]
 
             forces = None
             if "forces" in atoms.arrays:
-                forces = atoms.get_forces().flatten().tolist()
+                forces = atoms.get_forces().flatten().tolist() # type: ignore[no-untyped-call]
 
             variances = None
             if "c_gamma" in atoms.arrays:
-                variances = atoms.get_array("c_gamma").flatten().tolist()
+                variances = atoms.get_array("c_gamma").flatten().tolist() # type: ignore[no-untyped-call]
 
             frame = TelemetryFrame(
                 step_number=step,
@@ -140,6 +144,10 @@ class LammpsFileManager:
     ) -> None:
         """Writes structure to disk using streaming writer if possible with atomic transactions."""
         import os
+
+        if not output_path.resolve().is_relative_to(Path.cwd()):
+            msg = f"Invalid output path, potential path traversal detected: {output_path}"
+            raise ValueError(msg)
 
         # Create a temporary file path next to the target output path
         temp_path = output_path.with_name(f".{output_path.name}.tmp")

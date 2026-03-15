@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Optional
 
 from pyacemaker.domain_models.logging import LoggingConfig
-from pyacemaker.domain_models.telemetry import StateChangePayload, TelemetryFrame
+from pyacemaker.domain_models.telemetry import StateChangePayload, SystemTopology, TelemetryFrame
 
 
 def setup_logger(config: LoggingConfig, project_name: str) -> logging.Logger:
@@ -69,7 +69,7 @@ class TelemetryBroker:
     def __init__(self) -> None:
         if getattr(self, "_initialized", False):
             return
-        self.queue: asyncio.Queue[TelemetryFrame | StateChangePayload] = asyncio.Queue(maxsize=100)
+        self.queue: asyncio.Queue[TelemetryFrame | StateChangePayload | SystemTopology] = asyncio.Queue(maxsize=100)
         self.loop: asyncio.AbstractEventLoop | None = None
         self._initialized = True
 
@@ -77,11 +77,16 @@ class TelemetryBroker:
         """Called upon FastAPI application startup to bind the running loop."""
         self.loop = loop
 
-    def publish(self, payload: TelemetryFrame | StateChangePayload) -> None:
+    def publish(self, payload: TelemetryFrame | StateChangePayload | SystemTopology) -> None:
         """
         Thread-safe method called by synchronous worker threads.
         Implements drop-oldest backpressure to prevent memory leaks if frontend is slow.
         """
+        MAX_PAYLOAD_SIZE = 5_000_000
+        if len(payload.model_dump_json()) > MAX_PAYLOAD_SIZE:
+            msg = "Payload too large"
+            raise ValueError(msg)
+
         if self.loop is None or not self.loop.is_running():
             return
 

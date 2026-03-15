@@ -31,6 +31,7 @@ def test_scenario_04_a_successful_streaming() -> None:
 
         # 1. Send the initial SystemTopology handshake payload
         topology = SystemTopology(
+            workflow_id=workflow_id,
             atomic_numbers=[78, 78, 12, 8],
             total_atoms=4,
             cell_dimensions=[10.0, 0.0, 0.0, 0.0, 10.0, 0.0, 0.0, 0.0, 10.0]
@@ -40,6 +41,7 @@ def test_scenario_04_a_successful_streaming() -> None:
         # 2. Simulate streaming 10 frames extremely quickly
         for i in range(10):
             frame = TelemetryFrame(
+                workflow_id=workflow_id,
                 step_number=i * 10,
                 current_state=SimulationState.RUNNING_MD,
                 positions=[1.0 * i, 2.0 * i, 3.0 * i, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0],
@@ -65,7 +67,7 @@ def test_scenario_04_a_successful_streaming() -> None:
             assert received_frame["current_state"] == "RUNNING_MD"
             assert len(received_frame["positions"]) == 12
         except Exception as e:
-            print(f"Skipped socket due to loop block: {e}")
+            pytest.skip(f"Skipped socket due to loop block: {e}")
 
 def test_scenario_04_b_high_uncertainty_heatmap() -> None:
     """
@@ -77,7 +79,7 @@ def test_scenario_04_b_high_uncertainty_heatmap() -> None:
 
         # Simulate active learning orchestrator detecting high uncertainty
         # and halting MD to extract cutout
-        halt_event = StateChangePayload(new_state=SimulationState.EXTRACTING_CUTOUT)
+        halt_event = StateChangePayload(workflow_id=workflow_id, new_state=SimulationState.EXTRACTING_CUTOUT)
         telemetry_broker.publish(halt_event)
 
         try:
@@ -87,10 +89,11 @@ def test_scenario_04_b_high_uncertainty_heatmap() -> None:
             assert received_halt["type"] == "state_change"
             assert received_halt["new_state"] == "EXTRACTING_CUTOUT"
         except Exception as e:
-            print(f"Skipped socket due to loop block: {e}")
+            pytest.skip(f"Skipped socket due to loop block: {e}")
 
         # Publish the specific frame carrying the variance array (bypassing downsampling)
         high_variance_frame = TelemetryFrame(
+            workflow_id=workflow_id,
             step_number=1255, # Exact halt timestep
             current_state=SimulationState.EXTRACTING_CUTOUT,
             positions=[0.0, 0.0, 0.0, 1.0, 1.0, 1.0],
@@ -105,7 +108,7 @@ def test_scenario_04_b_high_uncertainty_heatmap() -> None:
             assert received_frame["step_number"] == 1255
             assert received_frame["variances"] == [0.001, 0.999] # Heatmap data preserved
         except Exception as e:
-            print(f"Skipped socket due to loop block: {e}")
+            pytest.skip(f"Skipped socket due to loop block: {e}")
 
 def test_scenario_04_c_robustness_disconnect() -> None:
     """
@@ -116,6 +119,7 @@ def test_scenario_04_c_robustness_disconnect() -> None:
 
     with client.websocket_connect(f"/api/v1/telemetry/stream/{workflow_id}") as websocket:
         frame1 = TelemetryFrame(
+            workflow_id=workflow_id,
             step_number=1,
             current_state=SimulationState.RUNNING_MD,
             positions=[0.0, 0.0, 0.0],
@@ -128,7 +132,7 @@ def test_scenario_04_c_robustness_disconnect() -> None:
             time.sleep(0.01)
             assert websocket.receive_json()["step_number"] == 1
         except Exception as e:
-            print(f"Skipped socket due to loop block: {e}")
+            pytest.skip(f"Skipped socket due to loop block: {e}")
 
         # Simulates closing the tab
         websocket.close()
@@ -137,6 +141,7 @@ def test_scenario_04_c_robustness_disconnect() -> None:
     # isn't catching WebSocketDisconnect properly, the next await will raise
     # and crash the event loop, taking down the simulation.
     frame2 = TelemetryFrame(
+        workflow_id=workflow_id,
         step_number=2,
         current_state=SimulationState.RUNNING_MD,
         positions=[0.0, 0.0, 0.0],

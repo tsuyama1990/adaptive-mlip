@@ -24,6 +24,7 @@ async def test_telemetry_broker_drop_oldest(clean_broker: TelemetryBroker) -> No
     # Fill the queue up to maxsize (10)
     for i in range(10):
         frame = TelemetryFrame(
+            workflow_id="test",
             step_number=i,
             current_state=SimulationState.RUNNING_MD,
             positions=[],
@@ -40,6 +41,7 @@ async def test_telemetry_broker_drop_oldest(clean_broker: TelemetryBroker) -> No
 
     # Push 11th item
     frame_11 = TelemetryFrame(
+        workflow_id="test",
         step_number=10,
         current_state=SimulationState.RUNNING_MD,
         positions=[],
@@ -60,7 +62,7 @@ async def test_telemetry_broker_state_change(clean_broker: TelemetryBroker) -> N
     loop = asyncio.get_running_loop()
     clean_broker.initialize_loop(loop)
 
-    payload = StateChangePayload(new_state=SimulationState.RUNNING_DFT)
+    payload = StateChangePayload(workflow_id="test", new_state=SimulationState.RUNNING_DFT)
     clean_broker.publish(payload)
 
     await asyncio.sleep(0.01)
