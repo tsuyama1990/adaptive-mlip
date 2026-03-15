@@ -4,16 +4,13 @@ import ase
 import numpy as np
 import numpy.typing as npt
 
-from pyacemaker.domain_models.defaults import ACTION_PRIORITY
+from pyacemaker.domain_models.config import ACTION_PRIORITY
 from pyacemaker.domain_models.scenario import SpatialRegion
 
 logger = logging.getLogger(__name__)
 
 # Action priority for conflict resolution. Higher value = higher priority.
 # ACTION_PRIORITY moved to defaults
-
-
-
 
 
 def apply_spatial_tags(atoms: ase.Atoms, regions: list[SpatialRegion]) -> npt.NDArray[np.int_]:
@@ -29,7 +26,7 @@ def apply_spatial_tags(atoms: ase.Atoms, regions: list[SpatialRegion]) -> npt.ND
         A 1D numpy array of integers representing the tags. 0 means no tag.
         Tags are assigned sequentially starting from 1 for each unique action type.
     """
-    from pyacemaker.domain_models.defaults import DEFAULT_TAG_ASSIGNMENT_STRATEGY
+    from pyacemaker.domain_models.config import DEFAULT_TAG_ASSIGNMENT_STRATEGY
 
     num_atoms = len(atoms)
     tags = np.zeros(num_atoms, dtype=np.int_)

@@ -1,6 +1,6 @@
 from pydantic import BaseModel, ConfigDict, Field, PositiveFloat, field_validator, model_validator
 
-from pyacemaker.domain_models.defaults import (
+from pyacemaker.domain_models.config import (
     DEFAULT_DELTA_SPLINE_BINS,
     DEFAULT_DISPLAY_STEP,
     DEFAULT_EVALUATOR,

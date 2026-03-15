@@ -2,27 +2,21 @@ import tempfile
 from pathlib import Path
 from typing import Final
 
-from pyacemaker.domain_models.scenario import SpatialAction
-
 # Configuration Defaults
 DEFAULT_STATE_FILE = "state.json"
 DEFAULT_DATA_DIR = "data"
 DEFAULT_ACTIVE_LEARNING_DIR = "active_learning"
 DEFAULT_POTENTIALS_DIR = "potentials"
 DEFAULT_PRODUCTION_DIR = "production"
-DEFAULT_BATCH_SIZE = 5
-DEFAULT_N_CANDIDATES = 10
 DEFAULT_CHECKPOINT_INTERVAL = 1
 
 # EON Defaults
 DEFAULT_EON_EXECUTABLE = "eonclient"
 # Use environment variable for seed if available, otherwise None (to let random module decide or user override)
-DEFAULT_EON_SEED = 12345
 
 # File names
 FILENAME_CANDIDATES = "candidates.xyz"
 FILENAME_TRAINING = "training_data.xyz"
-FILENAME_POTENTIAL = "potential.yace"
 
 # Template strings
 TEMPLATE_ITER_DIR = "iter_{iteration:03d}"
@@ -57,9 +51,6 @@ ERR_YAML_PARSE = "Error parsing YAML file: {error}"
 ERR_YAML_NOT_DICT = "YAML file must contain a dictionary."
 
 # Pacemaker Defaults
-DEFAULT_DELTA_SPLINE_BINS = 100
-DEFAULT_EVALUATOR = "tensorpot"
-DEFAULT_DISPLAY_STEP = 50
 DEFAULT_MAX_FRAMES_ELEMENT_DETECTION = 10
 
 # DFT Defaults
@@ -71,21 +62,9 @@ DEFAULT_DFT_MIXING_BETA_FACTOR = 0.5
 DEFAULT_DFT_SMEARING_WIDTH_FACTOR = 2.0
 
 # Training Defaults
-DEFAULT_TRAINING_MAX_ITERATIONS = 1000
-DEFAULT_TRAINING_BATCH_SIZE = 10
 DEFAULT_TRAINING_CUTOFF_RADIUS = 5.0
 DEFAULT_TRAINING_MAX_BASIS_SIZE = 8
 DEFAULT_MACE_BATCH_SIZE = 8
-DEFAULT_PACEMAKER_NDENSITY = 2
-DEFAULT_PACEMAKER_MAX_DEG = 6
-DEFAULT_PACEMAKER_R0 = 1.5
-DEFAULT_PACEMAKER_LOSS_KAPPA = 0.3
-DEFAULT_PACEMAKER_LOSS_L1 = 1e-8
-DEFAULT_PACEMAKER_LOSS_L2 = 1e-8
-DEFAULT_PACEMAKER_REPULSION_SIGMA = 0.05
-DEFAULT_PACEMAKER_OPTIMIZER = "BFGS"
-DEFAULT_PACEMAKER_EMBEDDING_TYPE = "FinnisSinclair"
-DEFAULT_PACEMAKER_RAD_BASE = "Chebyshev"
 
 # OTF Defaults
 DEFAULT_OTF_UNCERTAINTY_THRESHOLD = 5.0
@@ -96,14 +75,12 @@ DEFAULT_OTF_MAX_RETRIES = 3
 # MD Defaults
 DEFAULT_LANGEVIN_TEMP = 300.0
 DEFAULT_LANGEVIN_DAMPING = 100.0
-DEFAULT_LANGEVIN_SEED = 12345
 DEFAULT_MD_THERMO_FREQ = 10
 DEFAULT_MD_DUMP_FREQ = 100
 DEFAULT_MD_NEIGHBOR_SKIN = 2.0
 DEFAULT_MD_ATOM_STYLE = "atomic"
 DEFAULT_MD_TDAMP_FACTOR = 100.0
 DEFAULT_MD_PDAMP_FACTOR = 1000.0
-DEFAULT_MD_BASE_ENERGY = -100.0
 DEFAULT_MD_CHECK_INTERVAL = 10
 DEFAULT_MD_HYBRID_ZBL_INNER = 2.0
 DEFAULT_MD_HYBRID_ZBL_OUTER = 2.5
@@ -120,7 +97,6 @@ MAX_EON_TEMPERATURE = 10000.0
 DEFAULT_DISTILLATION_SAMPLING_STRUCTURES = 1000
 
 # MC Defaults
-DEFAULT_MC_SEED = 12345
 
 # Validation Defaults
 DEFAULT_VALIDATION_PHONON_SUPERCELL = [2, 2, 2]
@@ -131,30 +107,7 @@ DEFAULT_VALIDATION_ELASTIC_STEPS = 5
 
 # Security constants
 # Audit fix: Expanded list of dangerous characters
-DANGEROUS_PATH_CHARS: Final[set[str]] = {
-    ";",
-    "&",
-    "|",
-    "`",
-    "$",
-    "(",
-    ")",
-    "<",
-    ">",
-    "\n",
-    "\r",
-    "\t",
-    "?",
-    "*",
-    "[",
-    "]",
-    "{",
-    "}",
-    "'",
-    '"',
-    "!",
-    "#",
-}
+
 
 # RAM Disk logic
 _ram_disk_candidate = "/dev/shm"  # noqa: S108
@@ -336,7 +289,6 @@ if __name__ == "__main__":
 """
 
 # Compiler Defaults
-DEFAULT_PROJECT_NAME = "intent_driven_project"
 DEFAULT_SUPERCELL_SIZE = [3, 3, 3]
 
 DEFAULT_TIMESTEP_BASE = 1.0
@@ -345,18 +297,9 @@ DEFAULT_TIMESTEP_LIGHT = 0.5
 DEFAULT_MASS_THRESHOLD_HEAVY = 50.0
 DEFAULT_MASS_THRESHOLD_LIGHT = 10.0
 
-DEFAULT_KPOINTS_DENSITY_BASE = 2.0
-DEFAULT_KPOINTS_DENSITY_FACTOR = 4.0
-DEFAULT_ENCUT_BASE = 40.0
-DEFAULT_ENCUT_FACTOR = 2.0
-DEFAULT_MAX_ITERATIONS = 10
 
 ENV_PREFIX_PYACEMAKER = "PYACEMAKER_"
 
-DEFAULT_SLIDER_MIN = 1
-DEFAULT_SLIDER_MAX = 10
-
-DEFAULT_TAG_ASSIGNMENT_STRATEGY = "priority"
 
 DEFAULT_MD_TEMPERATURE = 300.0
 DEFAULT_MD_PRESSURE = 1.0
@@ -366,36 +309,5 @@ DEFAULT_FIX_HALT = False
 DEFAULT_SOFT_START_STEPS = 0
 DEFAULT_SOFT_START_LANGEVIN_DAMP = 0.1
 
-DEFAULT_DFT_CODE = "quantum_espresso"
-DEFAULT_DFT_FUNCTIONAL = "pbe"
-DEFAULT_PSEUDOPOTENTIAL_MAPPING: dict[str, str] = {
-    "Al": "Al.pbe-n-kjpaw_psl.1.0.0.UPF",
-    "W": "W.pbe-n-kjpaw_psl.1.0.0.UPF",
-    "H": "H.pbe-rrkjus_psl.1.0.0.UPF",
-    "O": "O.pbe-n-kjpaw_psl.0.1.UPF",
-    "Pt": "Pt.pbe-n-kjpaw_psl.1.0.0.UPF",
-    "Fe": "Fe.pbe-n-kjpaw_psl.1.0.0.UPF",
-}
-
 
 # Heuristic Fallback Constants
-DEFAULT_SMEARING_TYPE = "gaussian"
-DEFAULT_SMEARING_WIDTH = 0.1
-ELEMENT_SMEARING_FALLBACKS = {"Pt": {"smearing_type": "mv", "smearing_width": 0.02}}
-
-# Active Learning Heuristic Configs
-DEFAULT_HEURISTIC_DFT_THRESHOLD = 0.05
-DEFAULT_HEURISTIC_MD_TIMESTEP = 0.001
-DEFAULT_HEURISTIC_CHECK_INTERVAL = 10
-DEFAULT_HEURISTIC_ENCUT = 40.0
-DEFAULT_HEURISTIC_LEARNING_RATE = 0.01
-
-
-# Action Priority
-
-
-ACTION_PRIORITY: dict[SpatialAction, int] = {
-    SpatialAction.ACTION_ACTIVE_LEARNING_ONLY: 1,
-    SpatialAction.ACTION_LANGEVIN_THERMOSTAT: 2,
-    SpatialAction.ACTION_FREEZE: 3,
-}

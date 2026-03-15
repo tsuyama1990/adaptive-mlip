@@ -80,7 +80,7 @@ class SemanticCompiler:
 
         from pydantic import ValidationError
 
-        from pyacemaker.domain_models.defaults import DEFAULT_PROJECT_NAME
+        from pyacemaker.domain_models.config import DEFAULT_PROJECT_NAME
         from pyacemaker.domain_models.heuristics import get_heuristics_for_slider
 
         try:
@@ -200,9 +200,9 @@ class SemanticCompiler:
                         f"fix freeze_fix_{tag_id} {group_name} setforce 0.0 0.0 0.0"
                     )
                 elif region.action == SpatialAction.ACTION_LANGEVIN_THERMOSTAT:
+                    from pyacemaker.domain_models.config import DEFAULT_LANGEVIN_SEED
                     from pyacemaker.domain_models.defaults import (
                         DEFAULT_LANGEVIN_DAMPING,
-                        DEFAULT_LANGEVIN_SEED,
                         DEFAULT_LANGEVIN_TEMP,
                     )
 
@@ -226,11 +226,11 @@ class SemanticCompiler:
         heuristics: "HeuristicConfigDict",
         overrides: dict[str, Any],
     ) -> TrainingConfig:
+        from pyacemaker.domain_models.config import DEFAULT_TRAINING_MAX_ITERATIONS
         from pyacemaker.domain_models.defaults import (
             DEFAULT_MACE_BATCH_SIZE,
             DEFAULT_TRAINING_CUTOFF_RADIUS,
             DEFAULT_TRAINING_MAX_BASIS_SIZE,
-            DEFAULT_TRAINING_MAX_ITERATIONS,
         )
 
         # Base defaults
@@ -302,15 +302,9 @@ class SemanticCompiler:
 
     @classmethod
     def _get_base_dft_kwargs(cls, slider: int, material: str) -> dict[str, Any]:
-        from pyacemaker.domain_models.defaults import (
+        from pyacemaker.domain_models.config import (
             DEFAULT_DFT_CODE,
-            DEFAULT_DFT_DIAGONALIZATION,
             DEFAULT_DFT_FUNCTIONAL,
-            DEFAULT_DFT_MIXING_BETA,
-            DEFAULT_DFT_MIXING_BETA_FACTOR,
-            DEFAULT_DFT_SMEARING_TYPE,
-            DEFAULT_DFT_SMEARING_WIDTH,
-            DEFAULT_DFT_SMEARING_WIDTH_FACTOR,
             DEFAULT_ENCUT_BASE,
             DEFAULT_ENCUT_FACTOR,
             DEFAULT_KPOINTS_DENSITY_BASE,
@@ -318,6 +312,18 @@ class SemanticCompiler:
             DEFAULT_PSEUDOPOTENTIAL_MAPPING,
             DEFAULT_SLIDER_MAX,
             DEFAULT_SLIDER_MIN,
+        )
+        from pyacemaker.domain_models.config import (
+            DEFAULT_SMEARING_TYPE as DEFAULT_DFT_SMEARING_TYPE,
+        )
+        from pyacemaker.domain_models.config import (
+            DEFAULT_SMEARING_WIDTH as DEFAULT_DFT_SMEARING_WIDTH,
+        )
+        from pyacemaker.domain_models.defaults import (
+            DEFAULT_DFT_DIAGONALIZATION,
+            DEFAULT_DFT_MIXING_BETA,
+            DEFAULT_DFT_MIXING_BETA_FACTOR,
+            DEFAULT_DFT_SMEARING_WIDTH_FACTOR,
         )
 
         safe_pseudo = DEFAULT_PSEUDOPOTENTIAL_MAPPING.get(material)
@@ -388,13 +394,16 @@ class SemanticCompiler:
         heuristics: "HeuristicConfigDict",
         overrides: dict[str, Any],
     ) -> tuple[MDConfig, DFTConfig, WorkflowConfig]:
+        from pyacemaker.domain_models.config import (
+            DEFAULT_PSEUDOPOTENTIAL_MAPPING,
+            DEFAULT_SLIDER_MAX,
+            DEFAULT_SLIDER_MIN,
+        )
         from pyacemaker.domain_models.defaults import (
             DEFAULT_FIX_HALT,
             DEFAULT_MD_PRESSURE,
             DEFAULT_MD_TEMPERATURE,
             DEFAULT_MD_UNITS,
-            DEFAULT_SLIDER_MAX,
-            DEFAULT_SLIDER_MIN,
             DEFAULT_SOFT_START_LANGEVIN_DAMP,
             DEFAULT_SOFT_START_STEPS,
         )
@@ -442,15 +451,12 @@ class SemanticCompiler:
 
         # Base DFT
         from pyacemaker.domain_models.defaults import (
-            DEFAULT_DFT_CODE,
             DEFAULT_DFT_DIAGONALIZATION,
-            DEFAULT_DFT_FUNCTIONAL,
             DEFAULT_DFT_MIXING_BETA,
             DEFAULT_DFT_MIXING_BETA_FACTOR,
             DEFAULT_DFT_SMEARING_TYPE,
             DEFAULT_DFT_SMEARING_WIDTH,
             DEFAULT_DFT_SMEARING_WIDTH_FACTOR,
-            DEFAULT_PSEUDOPOTENTIAL_MAPPING,
         )
 
         safe_pseudo = DEFAULT_PSEUDOPOTENTIAL_MAPPING.get(material)
@@ -458,11 +464,15 @@ class SemanticCompiler:
             msg = f"No verified pseudopotential mapping exists for material: {material}"
             raise CompilerError(msg)
 
-        from pyacemaker.domain_models.defaults import (
+        from pyacemaker.domain_models.config import (
+            DEFAULT_DFT_CODE,
+            DEFAULT_DFT_FUNCTIONAL,
             DEFAULT_ENCUT_BASE,
             DEFAULT_ENCUT_FACTOR,
             DEFAULT_KPOINTS_DENSITY_BASE,
             DEFAULT_KPOINTS_DENSITY_FACTOR,
+            DEFAULT_SLIDER_MAX,
+            DEFAULT_SLIDER_MIN,
         )
 
         slider_range = max(1, DEFAULT_SLIDER_MAX - DEFAULT_SLIDER_MIN)
@@ -485,7 +495,7 @@ class SemanticCompiler:
         }
 
         # Base Workflow
-        from pyacemaker.domain_models.defaults import DEFAULT_MAX_ITERATIONS
+        from pyacemaker.domain_models.config import DEFAULT_MAX_ITERATIONS
 
         workflow_kwargs: dict[str, Any] = {
             "max_iterations": DEFAULT_MAX_ITERATIONS,

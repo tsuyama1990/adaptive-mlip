@@ -4,7 +4,7 @@ import logging
 import tempfile
 import uuid
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from ase import Atoms
 from ase.io import write
@@ -126,7 +126,7 @@ class IoManager:
                 forces=forces,
                 variances=variances,
             )
-            telemetry_broker.publish(frame)
+            telemetry_broker.publish(cast("dict[str, Any]", frame))
         except Exception:
             logger.exception("Failed to publish telemetry frame")
 

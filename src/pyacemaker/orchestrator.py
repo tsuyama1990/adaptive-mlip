@@ -1,14 +1,18 @@
 import shutil
 from collections.abc import Iterable
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 from ase import Atoms
 from ase.io import iread, read, write
 
-from pyacemaker.core.active_set import ActiveSetSelector
-from pyacemaker.core.base import BaseEngine, BaseGenerator, BaseOracle, BaseTrainer
+from pyacemaker.core.base import (
+    BaseEngine,
+    BaseGenerator,
+    BaseOracle,
+    BaseTrainer,
+)
 from pyacemaker.core.directory_manager import DirectoryManager
 from pyacemaker.core.exceptions import OrchestratorError
 from pyacemaker.core.io_manager import IoManager
@@ -16,11 +20,11 @@ from pyacemaker.core.state_manager import StateManager
 from pyacemaker.core.trainer import FinetuneManager
 from pyacemaker.core.validator import Validator
 from pyacemaker.domain_models import PyAceConfig
+from pyacemaker.domain_models.config import FILENAME_POTENTIAL
 from pyacemaker.domain_models.defaults import (
     DEFAULT_PRODUCTION_DIR,
     DEFAULT_RESUME_N_STEPS,
     FILENAME_CANDIDATES,
-    FILENAME_POTENTIAL,
     FILENAME_TRAINING,
     LOG_COMPUTED_PROPERTIES,
     LOG_GENERATED_CANDIDATES,
@@ -73,7 +77,7 @@ class Orchestrator:
         self.oracle: BaseOracle | None = None
         self.trainer: BaseTrainer | None = None
         self.engine: BaseEngine | None = None
-        self.active_set_selector: ActiveSetSelector | None = None
+        self.active_set_selector: Any = None
         self.validator: Validator | None = None
 
         # Initialize State
@@ -84,7 +88,10 @@ class Orchestrator:
         """Publishes the orchestrator's state to the telemetry broker."""
         try:
             telemetry_broker.publish(
-                StateChangePayload(workflow_id="default_workflow", new_state=new_state)
+                cast(
+                    "dict[str, Any]",
+                    StateChangePayload(workflow_id="default_workflow", new_state=new_state),
+                )
             )
         except Exception:
             self.logger.warning("Failed to publish state change telemetry")

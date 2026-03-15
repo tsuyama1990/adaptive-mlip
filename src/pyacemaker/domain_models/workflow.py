@@ -1,12 +1,11 @@
 from pydantic import BaseModel, ConfigDict, Field, PositiveInt, model_validator
 
+from pyacemaker.domain_models.config import DEFAULT_BATCH_SIZE, DEFAULT_N_CANDIDATES
 from pyacemaker.domain_models.defaults import (
     DEFAULT_ACTIVE_LEARNING_DIR,
-    DEFAULT_BATCH_SIZE,
     DEFAULT_CHECKPOINT_INTERVAL,
     DEFAULT_DATA_DIR,
     DEFAULT_DISTILLATION_SAMPLING_STRUCTURES,
-    DEFAULT_N_CANDIDATES,
     DEFAULT_OTF_LOCAL_N_CANDIDATES,
     DEFAULT_OTF_LOCAL_N_SELECT,
     DEFAULT_OTF_MAX_RETRIES,
