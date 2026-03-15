@@ -7,12 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field, PositiveFloat, PositiveInt, m
 
 from pyacemaker.domain_models.constants import (
     DEFAULT_MC_SEED,
-    DEFAULT_MD_MINIMIZE_FTOL,
-    DEFAULT_MD_MINIMIZE_TOL,
     DEFAULT_RAM_DISK_PATH,
-    LAMMPS_MINIMIZE_MAX_ITER,
-    LAMMPS_MINIMIZE_STEPS,
-    LAMMPS_VELOCITY_SEED,
     MAX_MD_DURATION,
     MAX_MD_PRESSURE,
 )
@@ -27,6 +22,11 @@ from pyacemaker.domain_models.defaults import (
     DEFAULT_MD_PDAMP_FACTOR,
     DEFAULT_MD_TDAMP_FACTOR,
     DEFAULT_MD_THERMO_FREQ,
+    DEFAULT_MD_MINIMIZE_FTOL,
+    DEFAULT_MD_MINIMIZE_TOL,
+    DEFAULT_LAMMPS_MINIMIZE_MAX_ITER,
+    DEFAULT_LAMMPS_MINIMIZE_STEPS,
+    DEFAULT_LAMMPS_VELOCITY_SEED,
     DEFAULT_OTF_UNCERTAINTY_THRESHOLD,
     MAX_MD_STEPS,
 )
@@ -174,19 +174,19 @@ class MDConfig(BaseModel):
     # Configurable LAMMPS Parameters (No Hardcoding)
     velocity_seed: int = Field(
         default_factory=lambda: safe_env_int(
-            "PYACEMAKER_LAMMPS_VELOCITY_SEED", LAMMPS_VELOCITY_SEED
+            "PYACEMAKER_LAMMPS_VELOCITY_SEED", DEFAULT_LAMMPS_VELOCITY_SEED
         ),
         description="Random seed for velocity initialization",
     )
     minimize_steps: int = Field(
         default_factory=lambda: safe_env_int(
-            "PYACEMAKER_LAMMPS_MINIMIZE_STEPS", LAMMPS_MINIMIZE_STEPS
+            "PYACEMAKER_LAMMPS_MINIMIZE_STEPS", DEFAULT_LAMMPS_MINIMIZE_STEPS
         ),
         description="Max iterations for minimization (steps)",
     )
     minimize_max_iter: int = Field(
         default_factory=lambda: safe_env_int(
-            "PYACEMAKER_LAMMPS_MINIMIZE_MAX_ITER", LAMMPS_MINIMIZE_MAX_ITER
+            "PYACEMAKER_LAMMPS_MINIMIZE_MAX_ITER", DEFAULT_LAMMPS_MINIMIZE_MAX_ITER
         ),
         description="Max force evaluations for minimization",
     )

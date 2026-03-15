@@ -104,14 +104,8 @@ class SemanticCompiler:
             msg = "Cycle detected in DAG."
             raise CompilerError(msg)
 
-        try:
-            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-                future = executor.submit(lambda g: list(nx.topological_sort(g)), graph)
-                sorted_ids = future.result(timeout=10.0)
-            return [nodes_dict[nid] for nid in sorted_ids]
-        except concurrent.futures.TimeoutError as err:
-            msg = "DAG processing timeout"
-            raise CompilerError(msg) from err
+        sorted_ids = list(nx.topological_sort(graph))
+        return [nodes_dict[nid] for nid in sorted_ids]
 
     @classmethod
     def _validate_sequence(cls, sorted_nodes: list[DagNode]) -> None:
@@ -194,8 +188,14 @@ class SemanticCompiler:
                         f"fix freeze_fix_{tag_id} {group_name} setforce 0.0 0.0 0.0"
                     )
                 elif region.action == SpatialAction.ACTION_LANGEVIN_THERMOSTAT:
+                    from pyacemaker.domain_models.defaults import (
+                        DEFAULT_LANGEVIN_TEMP,
+                        DEFAULT_LANGEVIN_DAMPING,
+                        DEFAULT_LANGEVIN_SEED,
+                    )
+
                     spatial_commands.append(
-                        f"fix langevin_fix_{tag_id} {group_name} langevin 300.0 300.0 100.0 12345"
+                        f"fix langevin_fix_{tag_id} {group_name} langevin {DEFAULT_LANGEVIN_TEMP} {DEFAULT_LANGEVIN_TEMP} {DEFAULT_LANGEVIN_DAMPING} {DEFAULT_LANGEVIN_SEED}"
                     )
                 elif region.action == SpatialAction.ACTION_ACTIVE_LEARNING_ONLY:
                     # This might just define a group for later use
@@ -210,18 +210,25 @@ class SemanticCompiler:
         cls,
         material: str,
     ) -> TrainingConfig:
+        from pyacemaker.domain_models.defaults import (
+            DEFAULT_TRAINING_CUTOFF_RADIUS,
+            DEFAULT_TRAINING_MAX_BASIS_SIZE,
+            DEFAULT_TRAINING_MAX_ITERATIONS,
+            DEFAULT_MACE_BATCH_SIZE,
+        )
+
         # Intelligent defaults
         return TrainingConfig(
             potential_type="mace",
-            cutoff_radius=5.0,
-            max_basis_size=8,
+            cutoff_radius=DEFAULT_TRAINING_CUTOFF_RADIUS,
+            max_basis_size=DEFAULT_TRAINING_MAX_BASIS_SIZE,
             pacemaker=PacemakerConfig(),
             elements=[material],
             delta_learning=False,
             active_set_optimization=False,
             active_set_size=None,
-            max_iterations=1000,
-            batch_size=8,
+            max_iterations=DEFAULT_TRAINING_MAX_ITERATIONS,
+            batch_size=DEFAULT_MACE_BATCH_SIZE,
         )
 
     @classmethod
@@ -234,14 +241,12 @@ class SemanticCompiler:
         # Intelligent defaults mapping based on material and slider
 
         # 1. Determine base mass and timestep
-        import re
-
-        if not re.match(r"^[A-Z][a-z]?$", material) or material not in chemical_symbols:
+        if material not in chemical_symbols:
             msg = "Invalid chemical symbol"
             raise CompilerError(msg)
 
-        if not (1 <= slider <= 10):
-            msg = "Slider must be between 1 and 10"
+        if not isinstance(slider, int) or not (1 <= slider <= 10):
+            msg = "Slider must be an integer between 1 and 10"
             raise CompilerError(msg)
 
         z = chemical_symbols.index(material)
@@ -296,6 +301,12 @@ class SemanticCompiler:
             DEFAULT_DFT_CODE,
             DEFAULT_DFT_FUNCTIONAL,
             DEFAULT_PSEUDOPOTENTIAL_MAPPING,
+            DEFAULT_DFT_MIXING_BETA,
+            DEFAULT_DFT_SMEARING_TYPE,
+            DEFAULT_DFT_SMEARING_WIDTH,
+            DEFAULT_DFT_DIAGONALIZATION,
+            DEFAULT_DFT_MIXING_BETA_FACTOR,
+            DEFAULT_DFT_SMEARING_WIDTH_FACTOR,
         )
 
         safe_pseudo = DEFAULT_PSEUDOPOTENTIAL_MAPPING.get(material)
@@ -310,12 +321,12 @@ class SemanticCompiler:
             encut=40.0 + (slider * 2.0),  # e.g. slider 10 -> 60 eV
             pseudopotentials={material: safe_pseudo},
             embedding_buffer=None,
-            mixing_beta=0.7,
-            smearing_type="mv",
-            smearing_width=0.01,
-            diagonalization="david",
-            mixing_beta_factor=0.5,
-            smearing_width_factor=2.0,
+            mixing_beta=DEFAULT_DFT_MIXING_BETA,
+            smearing_type=DEFAULT_DFT_SMEARING_TYPE,
+            smearing_width=DEFAULT_DFT_SMEARING_WIDTH,
+            diagonalization=DEFAULT_DFT_DIAGONALIZATION,
+            mixing_beta_factor=DEFAULT_DFT_MIXING_BETA_FACTOR,
+            smearing_width_factor=DEFAULT_DFT_SMEARING_WIDTH_FACTOR,
         )
 
         workflow_config = WorkflowConfig(
