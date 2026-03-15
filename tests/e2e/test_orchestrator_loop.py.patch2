@@ -1,0 +1,17 @@
+--- tests/e2e/test_orchestrator_loop.py.old	2023-10-24 10:00:00.000000000 +0000
++++ tests/e2e/test_orchestrator_loop.py	2023-10-24 10:00:00.000000000 +0000
+@@ -71,10 +71,10 @@
+         },
+         "workflow": {
+             "max_iterations": 2,
+-            "state_file_path": str(tmp_path / "state.json"),
+-            "data_dir": str(tmp_path / "data"),
+-            "active_learning_dir": str(tmp_path / "active_learning"),
+-            "potentials_dir": str(tmp_path / "potentials"),
++            "state_file_path": "state.json",
++            "data_dir": "data",
++            "active_learning_dir": "active_learning",
++            "potentials_dir": "potentials",
+         },
+         "logging": {},
+     }

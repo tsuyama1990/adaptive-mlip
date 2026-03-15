@@ -174,12 +174,12 @@ def test_scenario_01_02_guardrails_check_temp(
 
     # We use Pydantic model directly validation
     config_dict = create_test_config_dict()
-    config_dict["md"]["temperature"] = -50.0
 
     # 2. Action & 3. Expectation
     # Pydantic raises ValidationError
     from pydantic import ValidationError
 
+    config_dict["md"]["temperature"] = -50.0
     with pytest.raises(ValidationError):
         PyAceConfig(**config_dict)
 
@@ -195,8 +195,8 @@ def test_scenario_01_02_guardrails_check_cutoff(
     (tmp_path / "Fe.UPF").touch()
 
     config_dict = create_test_config_dict()
-    config_dict["training"]["cutoff_radius"] = -1.0
     from pydantic import ValidationError
 
+    config_dict["training"]["cutoff_radius"] = -1.0
     with pytest.raises(ValidationError):
         PyAceConfig(**config_dict)

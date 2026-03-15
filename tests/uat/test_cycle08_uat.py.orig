@@ -31,8 +31,6 @@ def test_scenario_phase1_distillation() -> None:
     # 1. MACE evaluates structures
     import tempfile
 
-    with patch("pyacemaker.utils.process.run_command") as mock_run:
-        mock_run.return_value = MagicMock()
     with tempfile.TemporaryDirectory() as temp_dir:
         pot_dir = Path(temp_dir)
         model_file = pot_dir / "model"
@@ -89,8 +87,6 @@ def test_scenario_phase3_cutout() -> None:
     # 1. Thermal Noise Spike (handled by engine mock logic previously, here we test Oracle fallback)
     # The oracle evaluates a structure. MACE mock yields max_g around 0.1
     atoms = Atoms("FePt", positions=[[0, 0, 0], [1, 1, 1]], cell=[10, 10, 10])
-    with patch("pyacemaker.utils.process.run_command") as mock_run:
-        mock_run.return_value = MagicMock()
 
     import numpy as np
 

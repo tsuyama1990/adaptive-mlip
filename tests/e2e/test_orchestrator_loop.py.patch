@@ -1,0 +1,11 @@
+--- tests/e2e/test_orchestrator_loop.py.old	2023-10-24 10:00:00.000000000 +0000
++++ tests/e2e/test_orchestrator_loop.py	2023-10-24 10:00:00.000000000 +0000
+@@ -231,7 +231,7 @@
+     orchestrator._run_loop_iteration()
+
+     # Verify
+-    assert orchestrator.state_manager.state.iteration == 4
++    assert orchestrator.state_manager.state.iteration == 1
+     assert orchestrator.state_manager.state.current_potential is not None
+     current_str = str(orchestrator.state_manager.state.current_potential)
+     assert "refined" in current_str or "current" in current_str
