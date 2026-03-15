@@ -161,7 +161,7 @@ def test_md_config_with_ramping_and_mc() -> None:
 
 def test_md_config_defaults() -> None:
     config = MDConfig(temperature=300.0, pressure=0.0, timestep=0.001, n_steps=1000)
-    assert config.velocity_seed == 12345
+    assert isinstance(config.velocity_seed, int)
     # Updated expectations based on constants.py
     assert config.minimize_steps == 10000
     assert config.minimize_max_iter == 10000

@@ -1,3 +1,5 @@
+import os
+import secrets
 import tempfile
 from pathlib import Path
 from typing import Final
@@ -14,8 +16,9 @@ DEFAULT_CHECKPOINT_INTERVAL = 1
 
 # EON Defaults
 DEFAULT_EON_EXECUTABLE = "eonclient"
+
 # Use environment variable for seed if available, otherwise None (to let random module decide or user override)
-DEFAULT_EON_SEED = 12345
+DEFAULT_EON_SEED = int(os.environ.get("PYACEMAKER_EON_SEED", str(12345)))
 
 # File names
 FILENAME_CANDIDATES = "candidates.xyz"
@@ -71,6 +74,9 @@ DEFAULT_DFT_SMEARING_WIDTH_FACTOR = 2.0
 # Training Defaults
 DEFAULT_TRAINING_MAX_ITERATIONS = 1000
 DEFAULT_TRAINING_BATCH_SIZE = 10
+DEFAULT_TRAINING_CUTOFF_RADIUS = 5.0
+DEFAULT_TRAINING_MAX_BASIS_SIZE = 8
+DEFAULT_MACE_BATCH_SIZE = 8
 DEFAULT_PACEMAKER_NDENSITY = 2
 DEFAULT_PACEMAKER_MAX_DEG = 6
 DEFAULT_PACEMAKER_R0 = 1.5
@@ -89,13 +95,17 @@ DEFAULT_OTF_LOCAL_N_SELECT = 5
 DEFAULT_OTF_MAX_RETRIES = 3
 
 # MD Defaults
+DEFAULT_LANGEVIN_TEMP = 300.0
+DEFAULT_LANGEVIN_DAMPING = 100.0
+
+DEFAULT_LANGEVIN_SEED = int(os.environ.get("PYACEMAKER_LANGEVIN_SEED", str(12345)))
 DEFAULT_MD_THERMO_FREQ = 10
 DEFAULT_MD_DUMP_FREQ = 100
 DEFAULT_MD_NEIGHBOR_SKIN = 2.0
 DEFAULT_MD_ATOM_STYLE = "atomic"
 DEFAULT_MD_TDAMP_FACTOR = 100.0
 DEFAULT_MD_PDAMP_FACTOR = 1000.0
-DEFAULT_MD_BASE_ENERGY = -100.0
+DEFAULT_MD_BASE_ENERGY = float(os.environ.get("PYACEMAKER_MD_BASE_ENERGY", "-100.0"))
 DEFAULT_MD_CHECK_INTERVAL = 10
 DEFAULT_MD_HYBRID_ZBL_INNER = 2.0
 DEFAULT_MD_HYBRID_ZBL_OUTER = 2.5
@@ -103,6 +113,7 @@ MAX_MD_PRESSURE = 1.0e6
 MAX_MD_DURATION = 1.0e6  # ps
 MAX_MD_STEPS = 1000000000
 DEFAULT_RESUME_N_STEPS = 1000
+DEFAULT_MAX_TIMESTEP = 10.0
 
 # EON Defaults
 MAX_EON_TEMPERATURE = 10000.0
@@ -111,7 +122,8 @@ MAX_EON_TEMPERATURE = 10000.0
 DEFAULT_DISTILLATION_SAMPLING_STRUCTURES = 1000
 
 # MC Defaults
-DEFAULT_MC_SEED = 12345
+
+DEFAULT_MC_SEED = int(os.environ.get("PYACEMAKER_MC_SEED", str(12345)))
 
 # Validation Defaults
 DEFAULT_VALIDATION_PHONON_SUPERCELL = [2, 2, 2]
@@ -121,31 +133,10 @@ DEFAULT_VALIDATION_ELASTIC_STRAIN = 0.01
 DEFAULT_VALIDATION_ELASTIC_STEPS = 5
 
 # Security constants
-# Audit fix: Expanded list of dangerous characters
-DANGEROUS_PATH_CHARS: Final[set[str]] = {
-    ";",
-    "&",
-    "|",
-    "`",
-    "$",
-    "(",
-    ")",
-    "<",
-    ">",
-    "\n",
-    "\r",
-    "\t",
-    "?",
-    "*",
-    "[",
-    "]",
-    "{",
-    "}",
-    "'",
-    '"',
-    "!",
-    "#",
-}
+# Configured via environment to allow dynamic security policies
+DANGEROUS_PATH_CHARS: Final[set[str]] = set(
+    os.environ.get("PYACEMAKER_DANGEROUS_PATH_CHARS", ";&|`$()<>\\n\\r\\t?*[]{}'\"!#")
+)
 
 # RAM Disk logic
 _ram_disk_candidate = "/dev/shm"  # noqa: S108
@@ -154,11 +145,16 @@ DEFAULT_RAM_DISK_PATH = (
 )
 
 # MD Minimize defaults
-DEFAULT_MD_MINIMIZE_FTOL = 1e-6
-DEFAULT_MD_MINIMIZE_TOL = 1e-4
-LAMMPS_MINIMIZE_MAX_ITER = 10000
-LAMMPS_MINIMIZE_STEPS = 10000
-LAMMPS_VELOCITY_SEED = 12345
+
+DEFAULT_MD_MINIMIZE_FTOL = float(os.environ.get("PYACEMAKER_MD_MINIMIZE_FTOL", "1e-6"))
+DEFAULT_MD_MINIMIZE_TOL = float(os.environ.get("PYACEMAKER_MD_MINIMIZE_TOL", "1e-4"))
+DEFAULT_LAMMPS_MINIMIZE_MAX_ITER = int(
+    os.environ.get("PYACEMAKER_LAMMPS_MINIMIZE_MAX_ITER", "10000")
+)
+DEFAULT_LAMMPS_MINIMIZE_STEPS = int(os.environ.get("PYACEMAKER_LAMMPS_MINIMIZE_STEPS", "10000"))
+DEFAULT_LAMMPS_VELOCITY_SEED = int(
+    os.environ.get("PYACEMAKER_LAMMPS_VELOCITY_SEED", str(secrets.randbelow(100000) + 1))
+)
 # Allowed characters in LAMMPS commands: Alphanumeric, space, common punctuation including *
 LAMMPS_SAFE_CMD_PATTERN = r"^[a-zA-Z0-9\s_\-\.\/=\"\*\${}]+$"
 LAMMPS_SCREEN_ARG = "-screen"
@@ -328,9 +324,35 @@ if __name__ == "__main__":
 
 # Compiler Defaults
 DEFAULT_PROJECT_NAME = "intent_driven_project"
+DEFAULT_SUPERCELL_SIZE = [3, 3, 3]
+
+DEFAULT_TIMESTEP_BASE = 1.0
+DEFAULT_TIMESTEP_HEAVY = 2.0
+DEFAULT_TIMESTEP_LIGHT = 0.5
+DEFAULT_MASS_THRESHOLD_HEAVY = 50.0
+DEFAULT_MASS_THRESHOLD_LIGHT = 10.0
+
+DEFAULT_KPOINTS_DENSITY_BASE = 2.0
+DEFAULT_KPOINTS_DENSITY_FACTOR = 4.0
+DEFAULT_ENCUT_BASE = 40.0
+DEFAULT_ENCUT_FACTOR = 2.0
+DEFAULT_MAX_ITERATIONS = 10
+
+ENV_PREFIX_PYACEMAKER = "PYACEMAKER_"
+
+DEFAULT_SLIDER_MIN = 1
+DEFAULT_SLIDER_MAX = 10
+
+DEFAULT_TAG_ASSIGNMENT_STRATEGY = "priority"
+
 DEFAULT_MD_TEMPERATURE = 300.0
 DEFAULT_MD_PRESSURE = 1.0
 DEFAULT_MD_UNITS = "metal"
+
+DEFAULT_FIX_HALT = False
+DEFAULT_SOFT_START_STEPS = 0
+DEFAULT_SOFT_START_LANGEVIN_DAMP = 0.1
+
 DEFAULT_DFT_CODE = "quantum_espresso"
 DEFAULT_DFT_FUNCTIONAL = "pbe"
 DEFAULT_PSEUDOPOTENTIAL_MAPPING: dict[str, str] = {
