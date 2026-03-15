@@ -6,9 +6,6 @@ import tempfile
 from abc import ABC, abstractmethod
 from pathlib import Path
 
-import numpy as np
-from scipy.spatial.distance import pdist, squareform
-
 from pyacemaker.domain_models.config import PyAceConfig
 from pyacemaker.domain_models.preflight import DiagnosticMessage, DiagnosticReport, Severity
 
@@ -45,6 +42,9 @@ class StructuralValidator(BaseValidator):
                 )
             )
             return
+
+        import numpy as np
+        from scipy.spatial.distance import pdist, squareform
 
         positions = atoms.get_positions()  # type: ignore[no-untyped-call]
         if len(positions) < 2:
@@ -196,8 +196,9 @@ except Exception as e:
         safe_keys = ["PATH", "HOME", "USER", "LANG", "LC_ALL"]
         safe_env = {k: v for k, v in os.environ.items() if k in safe_keys}
 
+        import shlex
         proc = subprocess.run(  # noqa: S603
-            [sys.executable, str(runner_py)],
+            [sys.executable, shlex.quote(str(runner_py.resolve()))],
             capture_output=True,
             text=True,
             env=safe_env,

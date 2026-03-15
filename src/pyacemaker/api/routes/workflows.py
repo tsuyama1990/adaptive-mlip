@@ -22,8 +22,10 @@ async def compile_intent(intent: IntentRequest) -> Any:
     except CompilerError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:
-        import logging
-        logging.getLogger(__name__).exception("Compilation failed unexpectedly")
+        from pyacemaker.domain_models.logging import LoggingConfig
+        from pyacemaker.logger import setup_logger
+        logger = setup_logger(config=LoggingConfig(), project_name="api_gateway")
+        logger.exception("Compilation failed unexpectedly")
         raise HTTPException(status_code=500, detail="Internal compilation error.") from e
 
     try:
@@ -48,6 +50,8 @@ async def compile_intent(intent: IntentRequest) -> Any:
         return JSONResponse(status_code=200, content=resp_dict)
 
     except Exception as e:
-        import logging
-        logging.getLogger(__name__).exception("Preflight orchestration failed unexpectedly")
+        from pyacemaker.domain_models.logging import LoggingConfig
+        from pyacemaker.logger import setup_logger
+        logger = setup_logger(config=LoggingConfig(), project_name="api_gateway")
+        logger.exception("Preflight orchestration failed unexpectedly")
         raise HTTPException(status_code=500, detail="Internal preflight validation error.") from e

@@ -1,6 +1,6 @@
 from pydantic import BaseModel, ConfigDict, Field, PositiveFloat, field_validator, model_validator
 
-from pyacemaker.domain_models.config import (
+from pyacemaker.domain_models.constants import (
     DEFAULT_DELTA_SPLINE_BINS,
     DEFAULT_DISPLAY_STEP,
     DEFAULT_EVALUATOR,
@@ -117,6 +117,17 @@ class TrainingConfig(BaseModel):
         if "/" in v or "\\" in v:
             msg = "Filename cannot contain path separators"
             raise ValueError(msg)
+        return v
+
+    @field_validator("foundation_model_path")
+    @classmethod
+    def validate_foundation_model_path(cls, v: str | None) -> str | None:
+        """Ensures foundation_model_path is secure against traversal."""
+        if v is not None:
+            from pathlib import Path
+
+            from pyacemaker.utils.path import validate_path_safe
+            validate_path_safe(Path(v))
         return v
 
     # Spec Section 3.3
