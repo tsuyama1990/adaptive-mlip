@@ -82,9 +82,22 @@ class TelemetryBroker:
         Thread-safe method called by synchronous worker threads.
         Implements drop-oldest backpressure to prevent memory leaks if frontend is slow.
         """
-        MAX_PAYLOAD_SIZE = 5_000_000
-        if len(payload.model_dump_json()) > MAX_PAYLOAD_SIZE:
-            msg = "Payload too large"
+        # Pre-serialization memory check based on the heaviest field (positions/forces array length)
+        # Assuming ~25 chars per float in JSON string representation (e.g., "-123.4567890123456,")
+        MAX_PAYLOAD_SIZE_BYTES = 5_000_000
+        estimated_json_bytes = 100 # Base overhead
+
+        if isinstance(payload, TelemetryFrame):
+            estimated_json_bytes += len(payload.positions) * 25
+            if payload.forces:
+                estimated_json_bytes += len(payload.forces) * 25
+            if payload.variances:
+                estimated_json_bytes += len(payload.variances) * 25
+        elif isinstance(payload, SystemTopology):
+            estimated_json_bytes += len(payload.atomic_numbers) * 5
+
+        if estimated_json_bytes > MAX_PAYLOAD_SIZE_BYTES:
+            msg = f"Payload too large (estimated {estimated_json_bytes} bytes). Limit is {MAX_PAYLOAD_SIZE_BYTES}."
             raise ValueError(msg)
 
         if self.loop is None or not self.loop.is_running():

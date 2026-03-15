@@ -83,7 +83,7 @@ class Orchestrator:
     def _publish_state(self, new_state: SimulationState) -> None:
         """Publishes the orchestrator's state to the telemetry broker."""
         try:
-            telemetry_broker.publish(StateChangePayload(new_state=new_state))
+            telemetry_broker.publish(StateChangePayload(workflow_id="default_workflow", new_state=new_state))
         except Exception:
             self.logger.warning("Failed to publish state change telemetry")
 
@@ -138,7 +138,6 @@ class Orchestrator:
         Returns:
             Total number of atoms written.
         """
-        import sys
         from itertools import islice
 
         count = 0
@@ -160,11 +159,16 @@ class Orchestrator:
                 if not chunk:
                     break
 
-                # Memory usage check to prevent OOM on large atoms objects
-                mem_usage = sys.getsizeof(chunk)
-                if mem_usage > 50_000_000: # 50 MB threshold heuristic
+                # Robust memory usage check to prevent OOM on large atoms objects
+                # Float64 pos (3) + forces (3) + variances (1) + symbols (char) approx 128 bytes/atom
+                estimated_bytes_per_atom = 128
+                total_atoms_in_chunk = sum(len(atoms) for atoms in chunk)
+                mem_usage = total_atoms_in_chunk * estimated_bytes_per_atom
+
+                # Strict 50 MB threshold for the raw python object allocation
+                if mem_usage > 50_000_000:
                     batch_size = max(1, batch_size // 2)
-                    self.logger.warning(f"Memory pressure detected. Reducing batch size to {batch_size}")
+                    self.logger.warning(f"Memory pressure detected ({mem_usage / 1e6:.1f} MB). Next batch reduced to {batch_size}")
 
                 # Write the whole chunk at once to minimize I/O overhead
                 write(f, chunk, format="extxyz")

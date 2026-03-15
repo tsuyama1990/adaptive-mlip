@@ -35,7 +35,9 @@ class ConnectionManager:
             connections_to_remove = set()
             for connection in self.active_connections[workflow_id]:
                 try:
-                    send_tasks.append(connection.send_text(message))
+                    # Apply explicit backpressure/timeout to prevent hanging on slow clients
+                    task = asyncio.wait_for(connection.send_text(message), timeout=2.0)
+                    send_tasks.append(task)
                 except Exception:
                     # Client may have disconnected ungracefully between checks
                     connections_to_remove.add(connection)

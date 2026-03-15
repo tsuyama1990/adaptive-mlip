@@ -33,7 +33,20 @@ class IoManager:
         """
         Writes frame to disk and pushes it to telemetry queue based on interval.
         High-uncertainty events can use force_publish=True to bypass downsampling.
+        Implements basic file rotation if trajectory exceeds 500MB.
         """
+        # File Rotation Logic
+        MAX_FILE_SIZE_BYTES = 500_000_000  # 500MB
+        if filepath.exists() and filepath.stat().st_size > MAX_FILE_SIZE_BYTES:
+            import datetime
+            timestamp = datetime.datetime.now(datetime.UTC).strftime("%Y%m%d%H%M%S")
+            rotated_path = filepath.with_name(f"{filepath.stem}_{timestamp}{filepath.suffix}")
+            try:
+                filepath.rename(rotated_path)
+                logger.info(f"Rotated trajectory file: {filepath} -> {rotated_path}")
+            except OSError as e:
+                logger.warning(f"Failed to rotate trajectory file {filepath}: {e}")
+
         # Disk I/O (append frame to file)
         try:
             write(str(filepath), atoms, format="extxyz", append=True)
@@ -61,6 +74,7 @@ class IoManager:
                 variances = atoms.get_array("c_gamma").flatten().tolist() # type: ignore[no-untyped-call]
 
             frame = TelemetryFrame(
+                workflow_id="default_workflow",
                 step_number=step,
                 current_state=state,
                 positions=positions,
@@ -139,18 +153,29 @@ class LammpsFileManager:
         else:
             return temp_dir_ctx, data_file, dump_file, log_file, elements
 
+    def _validate_output_path(self, output_path: Path) -> Path:
+        import os
+        if output_path.is_symlink():
+            msg = f"Invalid output path, symlink detected: {output_path}"
+            raise ValueError(msg)
+
+        real_output_path = Path(os.path.realpath(output_path))
+        real_cwd = Path(os.path.realpath(Path.cwd()))
+        if not real_output_path.is_relative_to(real_cwd):
+            msg = f"Invalid output path, potential path traversal detected: {output_path}"
+            raise ValueError(msg)
+        return real_output_path
+
     def _write_structure_memory(
         self, structure: Atoms, output_path: Path, elements: list[str]
     ) -> None:
         """Writes structure to disk using streaming writer if possible with atomic transactions."""
         import os
 
-        if not output_path.resolve().is_relative_to(Path.cwd()):
-            msg = f"Invalid output path, potential path traversal detected: {output_path}"
-            raise ValueError(msg)
+        real_output_path = self._validate_output_path(output_path)
 
         # Create a temporary file path next to the target output path
-        temp_path = output_path.with_name(f".{output_path.name}.tmp")
+        temp_path = real_output_path.with_name(f".{real_output_path.name}.tmp")
 
         try:
             # Memory Safety Fix: Always attempt streaming first if atom_style allows
@@ -189,7 +214,7 @@ class LammpsFileManager:
             if not temp_path.exists() or temp_path.stat().st_size == 0:
                 _raise_error()
 
-            temp_path.replace(output_path)
+            temp_path.replace(real_output_path)
 
         except (ValueError, OSError, RuntimeError) as e:
             # Rollback
