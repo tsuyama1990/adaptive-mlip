@@ -18,13 +18,13 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
 from starlette.types import ASGIApp
 
+from pyacemaker.api.routes.workflows import router as workflows_router
 from pyacemaker.domain_models.config import PyAceConfig
 from pyacemaker.domain_models.defaults import (
     LOG_CONFIG_LOADED,
     LOG_DRY_RUN_COMPLETE,
     LOG_PROJECT_INIT,
 )
-from pyacemaker.domain_models.scenario import IntentRequest
 from pyacemaker.logger import setup_logger
 from pyacemaker.orchestrator import Orchestrator
 from pyacemaker.scenarios.base_scenario import BaseScenario
@@ -99,14 +99,9 @@ async def validation_exception_handler(
     return JSONResponse(status_code=422, content={"detail": formatted_errors})
 
 
-@app.post("/api/v1/intent/compile")
-@limiter.limit("60/minute")
-async def compile_intent(request: Request, payload: IntentRequest) -> dict[str, Any]:
-    return {
-        "status": "success",
-        "message": "Payload validated successfully",
-        "node_count": len(payload.nodes),
-    }
+
+
+app.include_router(workflows_router)
 
 
 def _run_gui_server(args: argparse.Namespace) -> None:
