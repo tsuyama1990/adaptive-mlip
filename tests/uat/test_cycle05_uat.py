@@ -16,14 +16,16 @@ def test_uat_05_01_soft_start_thermalization(tmp_path: Path) -> None:
     Scenario ID: UAT-05-01
     Objective: Verify soft start thermalization logic is correctly inserted.
     """
-    config = MDConfig(
-        n_steps=2000,
-        fix_halt=False,
-        temperature=300.0,
-        pressure=1.0,
-        timestep=0.001,
-        soft_start_steps=150,
-        soft_start_langevin_damp=0.2,
+    config = MDConfig.model_validate(
+        {
+            "n_steps": 2000,
+            "fix_halt": False,
+            "temperature": 300.0,
+            "pressure": 1.0,
+            "timestep": 0.001,
+            "soft_start_steps": 150,
+            "soft_start_langevin_damp": 0.2,
+        }
     )
     engine = LammpsEngine(config)
 
@@ -114,7 +116,7 @@ def test_uat_05_a_heuristics_translation_speed_priority() -> None:
         "edges": [{"source": "node1", "target": "node3"}, {"source": "node3", "target": "node2"}],
     }
 
-    intent = IntentRequest(**payload)
+    intent = IntentRequest.model_validate(payload)
     cfg = SemanticCompiler.compile(intent)
 
     assert cfg.md.uncertainty_threshold > 0.1
@@ -156,7 +158,7 @@ def test_uat_05_b_accurate_mathematical_slider_evaluation() -> None:
         "edges": [{"source": "node1", "target": "node3"}, {"source": "node3", "target": "node2"}],
     }
 
-    intent = IntentRequest(**payload)
+    intent = IntentRequest.model_validate(payload)
     cfg = SemanticCompiler.compile(intent)
 
     assert cfg.md.uncertainty_threshold < 0.05
@@ -197,7 +199,7 @@ def test_uat_05_c_preservation_of_manual_overrides() -> None:
         "edges": [{"source": "node1", "target": "node3"}, {"source": "node3", "target": "node2"}],
     }
 
-    intent = IntentRequest(**payload)
+    intent = IntentRequest.model_validate(payload)
     cfg = SemanticCompiler.compile(intent)
 
     # Overrides

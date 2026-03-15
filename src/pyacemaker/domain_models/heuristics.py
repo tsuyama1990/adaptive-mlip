@@ -112,12 +112,19 @@ def get_heuristics_for_slider(value: int, element_context: list[str]) -> Heurist
     encut = _scale_encut(value)
     learning_rate = _scale_learning_rate(value)
 
-    # Contextual fallbacks
-    smearing_type = "gaussian"
-    smearing_width = 0.1
-    if "Pt" in element_context:
-        smearing_type = "mv"
-        smearing_width = 0.02
+    from pyacemaker.domain_models.defaults import (
+        DEFAULT_SMEARING_TYPE,
+        DEFAULT_SMEARING_WIDTH,
+        ELEMENT_SMEARING_FALLBACKS,
+    )
+
+    smearing_type = DEFAULT_SMEARING_TYPE
+    smearing_width = DEFAULT_SMEARING_WIDTH
+    for el in element_context:
+        if el in ELEMENT_SMEARING_FALLBACKS:
+            smearing_type = ELEMENT_SMEARING_FALLBACKS[el]["smearing_type"]  # type: ignore[assignment]
+            smearing_width = ELEMENT_SMEARING_FALLBACKS[el]["smearing_width"]  # type: ignore[assignment]
+            break
 
     return {
         "md": {

@@ -4,16 +4,16 @@ import ase
 import numpy as np
 import numpy.typing as npt
 
-from pyacemaker.domain_models.scenario import SpatialAction, SpatialRegion
+from pyacemaker.domain_models.defaults import ACTION_PRIORITY
+from pyacemaker.domain_models.scenario import SpatialRegion
 
 logger = logging.getLogger(__name__)
 
 # Action priority for conflict resolution. Higher value = higher priority.
-ACTION_PRIORITY: dict[SpatialAction, int] = {
-    SpatialAction.ACTION_ACTIVE_LEARNING_ONLY: 1,
-    SpatialAction.ACTION_LANGEVIN_THERMOSTAT: 2,
-    SpatialAction.ACTION_FREEZE: 3,
-}
+# ACTION_PRIORITY moved to defaults
+
+
+
 
 
 def apply_spatial_tags(atoms: ase.Atoms, regions: list[SpatialRegion]) -> npt.NDArray[np.int_]:

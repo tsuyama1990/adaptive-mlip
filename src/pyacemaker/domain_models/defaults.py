@@ -2,6 +2,8 @@ import tempfile
 from pathlib import Path
 from typing import Final
 
+from pyacemaker.domain_models.scenario import SpatialAction
+
 # Configuration Defaults
 DEFAULT_STATE_FILE = "state.json"
 DEFAULT_DATA_DIR = "data"
@@ -373,4 +375,27 @@ DEFAULT_PSEUDOPOTENTIAL_MAPPING: dict[str, str] = {
     "O": "O.pbe-n-kjpaw_psl.0.1.UPF",
     "Pt": "Pt.pbe-n-kjpaw_psl.1.0.0.UPF",
     "Fe": "Fe.pbe-n-kjpaw_psl.1.0.0.UPF",
+}
+
+
+# Heuristic Fallback Constants
+DEFAULT_SMEARING_TYPE = "gaussian"
+DEFAULT_SMEARING_WIDTH = 0.1
+ELEMENT_SMEARING_FALLBACKS = {"Pt": {"smearing_type": "mv", "smearing_width": 0.02}}
+
+# Active Learning Heuristic Configs
+DEFAULT_HEURISTIC_DFT_THRESHOLD = 0.05
+DEFAULT_HEURISTIC_MD_TIMESTEP = 0.001
+DEFAULT_HEURISTIC_CHECK_INTERVAL = 10
+DEFAULT_HEURISTIC_ENCUT = 40.0
+DEFAULT_HEURISTIC_LEARNING_RATE = 0.01
+
+
+# Action Priority
+
+
+ACTION_PRIORITY: dict[SpatialAction, int] = {
+    SpatialAction.ACTION_ACTIVE_LEARNING_ONLY: 1,
+    SpatialAction.ACTION_LANGEVIN_THERMOSTAT: 2,
+    SpatialAction.ACTION_FREEZE: 3,
 }
