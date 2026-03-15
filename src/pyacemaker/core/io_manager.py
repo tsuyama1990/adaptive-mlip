@@ -1,3 +1,5 @@
+import concurrent.futures
+import contextlib
 import logging
 import tempfile
 import uuid
@@ -11,31 +13,14 @@ from pyacemaker.domain_models.md import MDConfig
 from pyacemaker.domain_models.telemetry import SimulationState, TelemetryFrame
 from pyacemaker.logger import telemetry_broker
 from pyacemaker.utils.io import write_lammps_streaming
+from pyacemaker.utils.path import validate_path_safe
 from pyacemaker.utils.structure import get_species_order
 
 logger = logging.getLogger(__name__)
 
-def _validate_output_path(output_path: Path) -> Path:
-    import os
-    # Need to convert output_path to string in case it's a Path object containing null bytes
-    # before the object resolves them out, but pathlib strictly forbids them during init.
-    # Check string first.
-    if "\0" in str(output_path):
-        msg = "Null byte detected in path"
-        raise ValueError(msg)
-
-    if output_path.is_symlink():
-        msg = f"Invalid output path, symlink detected: {output_path}"
-        raise ValueError(msg)
-
-    # Canonicalize to resolve any . or .. components strictly
-    real_output_path = Path(os.path.realpath(output_path)).resolve()
-    real_cwd = Path(os.path.realpath(Path.cwd())).resolve()
-
-    if not real_output_path.is_relative_to(real_cwd):
-        msg = f"Invalid output path, potential path traversal detected: {output_path}"
-        raise ValueError(msg)
-    return real_output_path
+# Global shared I/O executor to prevent thread spawning overhead and control max bounds across application
+# Utilizing defaults (min(32, os.cpu_count() + 4)) to scale dynamically with the container or server limits
+GLOBAL_IO_EXECUTOR = concurrent.futures.ThreadPoolExecutor(thread_name_prefix="io_manager_writer")
 
 
 class IoManager:
@@ -44,6 +29,31 @@ class IoManager:
     """
     def __init__(self, stream_interval: int = 10) -> None:
         self.stream_interval = stream_interval
+        self._executor = GLOBAL_IO_EXECUTOR
+
+    def _rotate_file_if_needed(self, filepath: Path) -> None:
+        import datetime
+        import fcntl
+
+        from pyacemaker.domain_models.constants import MAX_FILE_SIZE_BYTES
+
+        if filepath.exists() and filepath.stat().st_size > MAX_FILE_SIZE_BYTES:
+            timestamp = datetime.datetime.now(datetime.UTC).strftime("%Y%m%d%H%M%S")
+            rotated_path = filepath.with_name(f"{filepath.stem}_{timestamp}{filepath.suffix}")
+
+            try:
+                with filepath.open("a") as f:
+                    try:
+                        fcntl.flock(f.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                        filepath.replace(rotated_path)
+                        logger.info(f"Rotated trajectory file: {filepath} -> {rotated_path}")
+                    except (BlockingIOError, OSError) as e:
+                        logger.debug(f"Skipped file rotation for {filepath} (lock busy): {e}")
+                    finally:
+                        with contextlib.suppress(OSError):
+                            fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+            except Exception as e:
+                logger.warning(f"Failed to rotate trajectory file {filepath}: {e}")
 
     def write_trajectory(
         self,
@@ -58,42 +68,35 @@ class IoManager:
         High-uncertainty events can use force_publish=True to bypass downsampling.
         Implements basic file rotation if trajectory exceeds 500MB.
         """
-        # Validate filepath using established anti-traversal logic before any I/O check
-        real_filepath = _validate_output_path(filepath)
+        real_filepath = validate_path_safe(filepath)
+        self._rotate_file_if_needed(real_filepath)
 
-        # File Rotation Logic
-        from pyacemaker.domain_models.constants import MAX_FILE_SIZE_BYTES
-
-        if real_filepath.exists() and real_filepath.stat().st_size > MAX_FILE_SIZE_BYTES:
-            import datetime
-            timestamp = datetime.datetime.now(datetime.UTC).strftime("%Y%m%d%H%M%S")
-            rotated_path = real_filepath.with_name(f"{real_filepath.stem}_{timestamp}{real_filepath.suffix}")
-            try:
-                real_filepath.rename(rotated_path)
-                logger.info(f"Rotated trajectory file: {real_filepath} -> {rotated_path}")
-            except OSError as e:
-                logger.warning(f"Failed to rotate trajectory file {real_filepath}: {e}")
-
-        # Fast non-blocking Disk I/O dispatch via executor to prevent locking the orchestrator logic
-        # For an append format like extxyz, threadpool I/O avoids massive GIL locks
         def _write_task() -> None:
-            try:
-                write(str(real_filepath), atoms, format="extxyz", append=True)
-            except OSError as e:
-                msg = f"Failed to write trajectory frame to {real_filepath} due to disk or permission error: {e}"
-                logger.exception(msg)
-                raise RuntimeError(msg) from e
-            except Exception:
-                logger.exception(f"Failed to write trajectory frame to {real_filepath}")
+            import time
+            max_retries = 3
+            backoff_factor = 2.0
+            delay = 0.1
 
-        # The orchestrator is synchronous, but we can offload I/O to avoid blocking the physics
-        import concurrent.futures
-        # Using a fire-and-forget mechanism on a bounded executor
-        if not hasattr(self, "_executor"):
-            self._executor = concurrent.futures.ThreadPoolExecutor(max_workers=2)
+            for attempt in range(1, max_retries + 1):
+                try:
+                    write(str(real_filepath), atoms, format="extxyz", append=True)
+                except OSError as e:
+                    if attempt == max_retries:
+                        msg = f"Failed to write trajectory to {real_filepath} after {max_retries} attempts: {e}"
+                        logger.exception(msg)
+                        return
+
+                    logger.warning(f"I/O Error appending to {real_filepath}. Retrying in {delay}s (Attempt {attempt}/{max_retries})")
+                    time.sleep(delay)
+                    delay *= backoff_factor
+                except Exception:
+                    logger.exception(f"Unexpected error writing trajectory frame to {real_filepath}")
+                    return
+                else:
+                    return
+
         self._executor.submit(_write_task)
 
-        # Telemetry downsampling check
         if force_publish or (step % self.stream_interval == 0):
             self._publish_frame(atoms, step, state)
 
@@ -189,35 +192,13 @@ class LammpsFileManager:
         else:
             return temp_dir_ctx, data_file, dump_file, log_file, elements
 
-    def _validate_output_path(self, output_path: Path) -> Path:
-        import os
-        # Need to convert output_path to string in case it's a Path object containing null bytes
-        # before the object resolves them out, but pathlib strictly forbids them during init.
-        # Check string first.
-        if "\0" in str(output_path):
-            msg = "Null byte detected in path"
-            raise ValueError(msg)
-
-        if output_path.is_symlink():
-            msg = f"Invalid output path, symlink detected: {output_path}"
-            raise ValueError(msg)
-
-        # Canonicalize to resolve any . or .. components strictly
-        real_output_path = Path(os.path.realpath(output_path)).resolve()
-        real_cwd = Path(os.path.realpath(Path.cwd())).resolve()
-
-        if not real_output_path.is_relative_to(real_cwd):
-            msg = f"Invalid output path, potential path traversal detected: {output_path}"
-            raise ValueError(msg)
-        return real_output_path
-
     def _write_structure_memory(
         self, structure: Atoms, output_path: Path, elements: list[str]
     ) -> None:
         """Writes structure to disk using streaming writer if possible with atomic transactions."""
         import os
 
-        real_output_path = self._validate_output_path(output_path)
+        real_output_path = validate_path_safe(output_path)
 
         # Create a temporary file path next to the target output path
         temp_path = real_output_path.with_name(f".{real_output_path.name}.tmp")

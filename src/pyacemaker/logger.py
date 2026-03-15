@@ -77,15 +77,26 @@ class TelemetryBroker:
         """Called upon FastAPI application startup to bind the running loop."""
         self.loop = loop
 
-    def publish(self, payload: TelemetryFrame | StateChangePayload | SystemTopology) -> None:
-        """
-        Thread-safe method called by synchronous worker threads.
-        Implements drop-oldest backpressure to prevent memory leaks if frontend is slow.
-        """
-        # Perform actual JSON serialization size checking with error handling
-        # Using model_dump_json but wrapped to catch MemoryError for oversized payloads.
-        # This is more rigorous than estimation and ensures strict security limits.
+    def _validate_payload_size(self, payload: TelemetryFrame | StateChangePayload | SystemTopology) -> str:
+        # Pre-serialization strict length checks to avoid MemoryError during json dumping
+        # A Float64 generally serializes to ~24 bytes max, but we assume 32 for strict bounds
         from pyacemaker.domain_models.constants import MAX_PAYLOAD_SIZE_BYTES
+
+        estimated_bytes = 100 # Base JSON structural overhead
+        if isinstance(payload, TelemetryFrame):
+            estimated_bytes += len(payload.positions) * 32
+            if payload.forces:
+                estimated_bytes += len(payload.forces) * 32
+            if payload.variances:
+                estimated_bytes += len(payload.variances) * 32
+        elif isinstance(payload, SystemTopology):
+            estimated_bytes += len(payload.atomic_numbers) * 8
+            if payload.cell_dimensions:
+                estimated_bytes += len(payload.cell_dimensions) * 32
+
+        if estimated_bytes > MAX_PAYLOAD_SIZE_BYTES:
+            msg = f"Payload too large (estimated {estimated_bytes} bytes). Limit is {MAX_PAYLOAD_SIZE_BYTES} bytes."
+            raise ValueError(msg)
 
         try:
             serialized_payload = payload.model_dump_json()
@@ -97,6 +108,15 @@ class TelemetryBroker:
         if payload_size > MAX_PAYLOAD_SIZE_BYTES:
             msg = f"Payload too large ({payload_size} bytes). Limit is {MAX_PAYLOAD_SIZE_BYTES} bytes."
             raise ValueError(msg)
+
+        return serialized_payload
+
+    def publish(self, payload: TelemetryFrame | StateChangePayload | SystemTopology) -> None:
+        """
+        Thread-safe method called by synchronous worker threads.
+        Implements drop-oldest backpressure to prevent memory leaks if frontend is slow.
+        """
+        self._validate_payload_size(payload)
 
         if self.loop is None or not self.loop.is_running():
             return
