@@ -49,10 +49,10 @@ def uat_config(tmp_path: Path) -> PyAceConfig:
         },
         "workflow": {
             "max_iterations": 2,
-            "state_file_path": str(tmp_path / "state.json"),
-            "data_dir": str(tmp_path / "data"),
-            "active_learning_dir": str(tmp_path / "active_learning"),
-            "potentials_dir": str(tmp_path / "potentials"),
+            "state_file_path": "state.json",
+            "data_dir": "data",
+            "active_learning_dir": "active_learning",
+            "potentials_dir": "potentials",
         },
         "logging": {},
     }

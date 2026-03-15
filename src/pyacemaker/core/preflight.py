@@ -5,6 +5,7 @@ import sys
 import tempfile
 from abc import ABC, abstractmethod
 from pathlib import Path
+from typing import Any
 
 from pyacemaker.domain_models.config import PyAceConfig
 from pyacemaker.domain_models.preflight import DiagnosticMessage, DiagnosticReport, Severity
@@ -32,13 +33,33 @@ class StructuralValidator(BaseValidator):
             generator, _, _, _, _, _ = ModuleFactory.create_modules(config)
             atoms_iter = generator.generate(1)
             atoms = next(atoms_iter)
+        except (ValueError, TypeError, KeyError) as e:
+            report.errors.append(
+                DiagnosticMessage(
+                    node_id="INITIAL_STRUCTURE",
+                    severity=Severity.ERROR,
+                    description=f"Configuration error while generating initial structure: {e}",
+                    suggestion="Verify the chemical symbols and lattice parameters.",
+                )
+            )
+            return
+        except StopIteration:
+            report.errors.append(
+                DiagnosticMessage(
+                    node_id="INITIAL_STRUCTURE",
+                    severity=Severity.ERROR,
+                    description="Generator failed to produce an initial structure.",
+                    suggestion="Check exploration policy constraints.",
+                )
+            )
+            return
         except Exception as e:
             report.errors.append(
                 DiagnosticMessage(
                     node_id="INITIAL_STRUCTURE",
                     severity=Severity.ERROR,
-                    description=f"Failed to generate initial structure: {e}",
-                    suggestion="Verify the chemical symbols and lattice parameters.",
+                    description=f"Unexpected error generating initial structure: {e}",
+                    suggestion="Review generator configurations.",
                 )
             )
             return
@@ -129,7 +150,7 @@ class DependencyValidator(BaseValidator):
                                 suggestion="Ensure the UPF file exists in the correct directory.",
                             )
                         )
-                except Exception as e:
+                except ValueError as e:
                      report.errors.append(
                         DiagnosticMessage(
                             node_id="DFT_CONFIG",
@@ -155,7 +176,7 @@ class DependencyValidator(BaseValidator):
                             suggestion="Verify the path to the pre-trained MACE model.",
                         )
                     )
-            except Exception as e:
+            except ValueError as e:
                 report.errors.append(
                     DiagnosticMessage(
                         node_id="MACE_TRAINING",
@@ -224,58 +245,92 @@ except Exception as e:
                 )
             )
 
-    def validate(self, config: PyAceConfig, report: DiagnosticReport) -> None:
-        from pyacemaker.core.lammps_generator import LammpsScriptGenerator
-        from pyacemaker.factory import ModuleFactory
+    def _prepare_files(self, atoms: "Any", td_path: Path, config: PyAceConfig, report: DiagnosticReport) -> Path | None:
+        import stat
+        data_file = td_path / "structure.data"
+        try:
+            from ase.io import write
+        except ImportError as e:
+            report.errors.append(DiagnosticMessage(
+                node_id="SYSTEM", severity=Severity.ERROR,
+                description=f"Missing ASE dependency: {e}",
+                suggestion="Install ase via 'uv add ase'"
+            ))
+            return None
 
         try:
+            from pyacemaker.utils.validation import validate_structure
+            validate_structure(atoms)
+        except ImportError as e:
+            report.errors.append(DiagnosticMessage(
+                node_id="SYSTEM", severity=Severity.ERROR,
+                description=f"Missing internal dependency: {e}",
+                suggestion="Ensure pyacemaker is installed fully."
+            ))
+            return None
+        except Exception as e:
+             report.errors.append(DiagnosticMessage(
+                node_id="INITIAL_STRUCTURE", severity=Severity.ERROR,
+                description=f"Initial structure validation failed: {e}",
+                suggestion="Check atomic structure configuration."
+            ))
+             return None
+
+        style = getattr(config.md.atom_style, "value", config.md.atom_style) if config.md.atom_style else "atomic"
+        write(data_file, atoms, format="lammps-data", atom_style=style)
+        data_file.chmod(stat.S_IRUSR | stat.S_IWUSR)
+
+        potential_path = td_path / "potential.yace"
+        potential_path.touch()
+        potential_path.chmod(stat.S_IRUSR | stat.S_IWUSR)
+
+        from pyacemaker.core.lammps_generator import LammpsScriptGenerator
+        elements = list(set(atoms.get_chemical_symbols()))
+        lammps_gen = LammpsScriptGenerator(config.md)
+        dump_file = td_path / "dump.xyz"
+
+        import io
+        buffer = io.StringIO()
+        lammps_gen.write_script(buffer, potential_path, data_file, dump_file, elements)
+
+        script_content = buffer.getvalue()
+        lines = script_content.splitlines()
+        modified_lines = []
+        for line in lines:
+            if line.startswith("run "):
+                modified_lines.append("run 0")
+            elif line.startswith(("fix py_halt", "python eval_wrapper")):
+                pass
+            else:
+                modified_lines.append(line)
+
+        modified_script = "\n".join(modified_lines)
+        lammps_script_file = td_path / "script.in"
+        lammps_script_file.touch()
+        lammps_script_file.write_text(modified_script)
+        lammps_script_file.chmod(stat.S_IRUSR | stat.S_IWUSR)
+
+        return lammps_script_file
+
+    def validate(self, config: PyAceConfig, report: DiagnosticReport) -> None:
+        try:
+            from pyacemaker.factory import ModuleFactory
             generator, _, _, _, _, _ = ModuleFactory.create_modules(config)
             atoms = next(generator.generate(1))
         except Exception:
             return
 
-        elements = list(set(atoms.get_chemical_symbols()))  # type: ignore[no-untyped-call]
-        lammps_gen = LammpsScriptGenerator(config.md)
-
         import stat
         td = tempfile.mkdtemp()
         td_path = Path(td)
-        td_path.chmod(stat.S_IRUSR | stat.S_IWUSR | stat.S_IXUSR) # explicit 0o700
         try:
-            data_file = td_path / "structure.data"
-            from ase.io import write
-            # Handle atomic_style fallback for the test using the string directly
-            style = getattr(config.md.atom_style, "value", config.md.atom_style) if config.md.atom_style else "atomic"
-            write(data_file, atoms, format="lammps-data", atom_style=style)
-
-            potential_path = td_path / "potential.yace"
-            potential_path.touch()
-            dump_file = td_path / "dump.xyz"
-
-            import io
-            buffer = io.StringIO()
-            lammps_gen.write_script(buffer, potential_path, data_file, dump_file, elements)
-
-            script_content = buffer.getvalue()
-            lines = script_content.splitlines()
-            modified_lines = []
-            for line in lines:
-                if line.startswith("run "):
-                    modified_lines.append("run 0")
-                elif line.startswith(("fix py_halt", "python eval_wrapper")):
-                    pass
-                else:
-                    modified_lines.append(line)
-
-            modified_script = "\n".join(modified_lines)
-            lammps_script_file = td_path / "script.in"
-            lammps_script_file.write_text(modified_script)
+            lammps_script_file = self._prepare_files(atoms, td_path, config, report)
+            if not lammps_script_file:
+                return
 
             runner_py = td_path / "runner.py"
+            runner_py.touch()
             runner_py.chmod(stat.S_IRUSR | stat.S_IWUSR)
-            lammps_script_file.chmod(stat.S_IRUSR | stat.S_IWUSR)
-            data_file.chmod(stat.S_IRUSR | stat.S_IWUSR)
-            potential_path.chmod(stat.S_IRUSR | stat.S_IWUSR)
 
             self._execute_dry_run(lammps_script_file, runner_py, report)
         finally:
@@ -303,7 +358,29 @@ class PreflightManager:
         for validator in self.validators:
             try:
                 validator.validate(config, report)
+            except ImportError as e:
+                report.errors.append(
+                    DiagnosticMessage(
+                        node_id="PREFLIGHT",
+                        severity=Severity.ERROR,
+                        description=f"Dependency missing in {validator.__class__.__name__}: {e}",
+                        suggestion="Check your python environment dependencies.",
+                    )
+                )
+            except OSError as e:
+                report.errors.append(
+                    DiagnosticMessage(
+                        node_id="PREFLIGHT",
+                        severity=Severity.ERROR,
+                        description=f"File system error in {validator.__class__.__name__}: {e}",
+                        suggestion="Check permissions and disk space.",
+                    )
+                )
             except Exception as e:
+                from pyacemaker.domain_models.logging import LoggingConfig
+                from pyacemaker.logger import setup_logger
+                logger = setup_logger(config=LoggingConfig(), project_name="api_gateway")
+                logger.exception(f"Validator {validator.__class__.__name__} crashed unexpectedly.")
                 report.errors.append(
                     DiagnosticMessage(
                         node_id="PREFLIGHT",
