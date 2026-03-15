@@ -1,9 +1,13 @@
+import asyncio
+import contextlib
 import logging
 import sys
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
+from typing import Optional
 
 from pyacemaker.domain_models.logging import LoggingConfig
+from pyacemaker.domain_models.telemetry import StateChangePayload, SystemTopology, TelemetryFrame
 
 
 def setup_logger(config: LoggingConfig, project_name: str) -> logging.Logger:
@@ -48,3 +52,93 @@ def setup_logger(config: LoggingConfig, project_name: str) -> logging.Logger:
         logger.addHandler(file_handler)
 
     return logger
+
+class TelemetryBroker:
+    """
+    Singleton class managing the Pub/Sub architecture for the WebSockets.
+    Safely bridges synchronous producer threads (LAMMPS) to the async event loop.
+    """
+    _instance: Optional["TelemetryBroker"] = None
+
+    def __new__(cls) -> "TelemetryBroker":
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+            cls._instance._initialized = False
+        return cls._instance
+
+    def __init__(self) -> None:
+        from pyacemaker.domain_models.constants import TELEMETRY_QUEUE_MAXSIZE
+        if getattr(self, "_initialized", False):
+            return
+        self.queue: asyncio.Queue[TelemetryFrame | StateChangePayload | SystemTopology] = asyncio.Queue(maxsize=TELEMETRY_QUEUE_MAXSIZE)
+        self.loop: asyncio.AbstractEventLoop | None = None
+        self._initialized = True
+
+    def initialize_loop(self, loop: asyncio.AbstractEventLoop) -> None:
+        """Called upon FastAPI application startup to bind the running loop."""
+        self.loop = loop
+
+    def _validate_payload_size(self, payload: TelemetryFrame | StateChangePayload | SystemTopology) -> str:
+        # Pre-serialization strict length checks to avoid MemoryError during json dumping
+        # A Float64 generally serializes to ~24 bytes max, but we assume 32 for strict bounds
+        from pyacemaker.domain_models.constants import (
+            BYTES_PER_ATOMIC_NUMBER,
+            BYTES_PER_FLOAT64,
+            MAX_PAYLOAD_SIZE_BYTES,
+            PAYLOAD_BASE_OVERHEAD_BYTES,
+        )
+
+        estimated_bytes = PAYLOAD_BASE_OVERHEAD_BYTES # Base JSON structural overhead
+        if isinstance(payload, TelemetryFrame):
+            estimated_bytes += len(payload.positions) * BYTES_PER_FLOAT64
+            if payload.forces:
+                estimated_bytes += len(payload.forces) * BYTES_PER_FLOAT64
+            if payload.variances:
+                estimated_bytes += len(payload.variances) * BYTES_PER_FLOAT64
+        elif isinstance(payload, SystemTopology):
+            estimated_bytes += len(payload.atomic_numbers) * BYTES_PER_ATOMIC_NUMBER
+            if payload.cell_dimensions:
+                estimated_bytes += len(payload.cell_dimensions) * BYTES_PER_FLOAT64
+
+        if estimated_bytes > MAX_PAYLOAD_SIZE_BYTES:
+            msg = f"Payload too large (estimated {estimated_bytes} bytes). Limit is {MAX_PAYLOAD_SIZE_BYTES} bytes."
+            raise ValueError(msg)
+
+        try:
+            serialized_payload = payload.model_dump_json()
+            payload_size = len(serialized_payload.encode("utf-8"))
+        except MemoryError as e:
+            msg = "Payload serialization caused MemoryError. Payload rejected."
+            raise ValueError(msg) from e
+
+        if payload_size > MAX_PAYLOAD_SIZE_BYTES:
+            msg = f"Payload too large ({payload_size} bytes). Limit is {MAX_PAYLOAD_SIZE_BYTES} bytes."
+            raise ValueError(msg)
+
+        return serialized_payload
+
+    def publish(self, payload: TelemetryFrame | StateChangePayload | SystemTopology) -> None:
+        """
+        Thread-safe method called by synchronous worker threads.
+        Implements drop-oldest backpressure to prevent memory leaks if frontend is slow.
+        """
+        self._validate_payload_size(payload)
+
+        if self.loop is None or not self.loop.is_running():
+            return
+
+        def _sync_put() -> None:
+            try:
+                self.queue.put_nowait(payload)
+            except asyncio.QueueFull:
+                with contextlib.suppress(asyncio.QueueEmpty):
+                    # Drop-oldest policy: Pop the oldest item
+                    self.queue.get_nowait()
+
+                # Retry putting the new payload
+                with contextlib.suppress(asyncio.QueueFull):
+                    self.queue.put_nowait(payload)
+
+        self.loop.call_soon_threadsafe(_sync_put)
+
+telemetry_broker = TelemetryBroker()

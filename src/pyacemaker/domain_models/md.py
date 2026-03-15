@@ -12,21 +12,21 @@ from pyacemaker.domain_models.constants import (
     MAX_MD_PRESSURE,
 )
 from pyacemaker.domain_models.defaults import (
+    DEFAULT_LAMMPS_MINIMIZE_MAX_ITER,
+    DEFAULT_LAMMPS_MINIMIZE_STEPS,
+    DEFAULT_LAMMPS_VELOCITY_SEED,
     DEFAULT_MD_ATOM_STYLE,
     DEFAULT_MD_BASE_ENERGY,
     DEFAULT_MD_CHECK_INTERVAL,
     DEFAULT_MD_DUMP_FREQ,
     DEFAULT_MD_HYBRID_ZBL_INNER,
     DEFAULT_MD_HYBRID_ZBL_OUTER,
+    DEFAULT_MD_MINIMIZE_FTOL,
+    DEFAULT_MD_MINIMIZE_TOL,
     DEFAULT_MD_NEIGHBOR_SKIN,
     DEFAULT_MD_PDAMP_FACTOR,
     DEFAULT_MD_TDAMP_FACTOR,
     DEFAULT_MD_THERMO_FREQ,
-    DEFAULT_MD_MINIMIZE_FTOL,
-    DEFAULT_MD_MINIMIZE_TOL,
-    DEFAULT_LAMMPS_MINIMIZE_MAX_ITER,
-    DEFAULT_LAMMPS_MINIMIZE_STEPS,
-    DEFAULT_LAMMPS_VELOCITY_SEED,
     DEFAULT_OTF_UNCERTAINTY_THRESHOLD,
     MAX_MD_STEPS,
 )
@@ -289,6 +289,7 @@ class MDConfig(BaseModel):
     def validate_custom_initialization_commands(self) -> "MDConfig":
         if self.custom_initialization_commands:
             import re
+
             from pyacemaker.domain_models.constants import LAMMPS_SAFE_CMD_PATTERN
 
             pattern = re.compile(LAMMPS_SAFE_CMD_PATTERN)

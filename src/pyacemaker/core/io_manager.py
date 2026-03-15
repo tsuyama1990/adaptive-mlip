@@ -1,3 +1,5 @@
+import concurrent.futures
+import contextlib
 import logging
 import tempfile
 import uuid
@@ -8,11 +10,119 @@ from ase import Atoms
 from ase.io import write
 
 from pyacemaker.domain_models.md import MDConfig
+from pyacemaker.domain_models.telemetry import SimulationState, TelemetryFrame
+from pyacemaker.logger import telemetry_broker
 from pyacemaker.utils.io import write_lammps_streaming
+from pyacemaker.utils.path import validate_path_safe
 from pyacemaker.utils.structure import get_species_order
 
 logger = logging.getLogger(__name__)
 
+# Global shared I/O executor to prevent thread spawning overhead and control max bounds across application
+# Utilizing defaults (min(32, os.cpu_count() + 4)) to scale dynamically with the container or server limits
+GLOBAL_IO_EXECUTOR = concurrent.futures.ThreadPoolExecutor(thread_name_prefix="io_manager_writer")
+
+
+class IoManager:
+    """
+    Manages disk I/O and telemetry streaming for MD trajectories.
+    """
+    def __init__(self, stream_interval: int = 10) -> None:
+        self.stream_interval = stream_interval
+        self._executor = GLOBAL_IO_EXECUTOR
+
+    def _rotate_file_if_needed(self, filepath: Path) -> None:
+        import datetime
+        import fcntl
+
+        from pyacemaker.domain_models.constants import MAX_FILE_SIZE_BYTES
+
+        if filepath.exists() and filepath.stat().st_size > MAX_FILE_SIZE_BYTES:
+            timestamp = datetime.datetime.now(datetime.UTC).strftime("%Y%m%d%H%M%S")
+            rotated_path = filepath.with_name(f"{filepath.stem}_{timestamp}{filepath.suffix}")
+
+            try:
+                with filepath.open("a") as f:
+                    try:
+                        fcntl.flock(f.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                        filepath.replace(rotated_path)
+                        logger.info(f"Rotated trajectory file: {filepath} -> {rotated_path}")
+                    except (BlockingIOError, OSError) as e:
+                        logger.debug(f"Skipped file rotation for {filepath} (lock busy): {e}")
+                    finally:
+                        with contextlib.suppress(OSError):
+                            fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+            except Exception as e:
+                logger.warning(f"Failed to rotate trajectory file {filepath}: {e}")
+
+    def write_trajectory(
+        self,
+        atoms: Atoms,
+        filepath: Path,
+        step: int,
+        state: SimulationState,
+        force_publish: bool = False
+    ) -> None:
+        """
+        Writes frame to disk and pushes it to telemetry queue based on interval.
+        High-uncertainty events can use force_publish=True to bypass downsampling.
+        Implements basic file rotation if trajectory exceeds 500MB.
+        """
+        real_filepath = validate_path_safe(filepath)
+        self._rotate_file_if_needed(real_filepath)
+
+        def _write_task() -> None:
+            import time
+            max_retries = 3
+            backoff_factor = 2.0
+            delay = 0.1
+
+            for attempt in range(1, max_retries + 1):
+                try:
+                    write(str(real_filepath), atoms, format="extxyz", append=True)
+                except OSError as e:
+                    if attempt == max_retries:
+                        msg = f"Failed to write trajectory to {real_filepath} after {max_retries} attempts: {e}"
+                        logger.exception(msg)
+                        return
+
+                    logger.warning(f"I/O Error appending to {real_filepath}. Retrying in {delay}s (Attempt {attempt}/{max_retries})")
+                    time.sleep(delay)
+                    delay *= backoff_factor
+                except Exception:
+                    logger.exception(f"Unexpected error writing trajectory frame to {real_filepath}")
+                    return
+                else:
+                    return
+
+        self._executor.submit(_write_task)
+
+        if force_publish or (step % self.stream_interval == 0):
+            self._publish_frame(atoms, step, state)
+
+    def _publish_frame(self, atoms: Atoms, step: int, state: SimulationState) -> None:
+        try:
+            positions = atoms.get_positions().flatten().tolist() # type: ignore[no-untyped-call]
+
+            forces = None
+            if "forces" in atoms.arrays:
+                forces = atoms.get_forces().flatten().tolist() # type: ignore[no-untyped-call]
+
+            variances = None
+            if "c_gamma" in atoms.arrays:
+                variances = atoms.get_array("c_gamma").flatten().tolist() # type: ignore[no-untyped-call]
+
+            frame = TelemetryFrame(
+                workflow_id="default_workflow",
+                step_number=step,
+                current_state=state,
+                positions=positions,
+                forces=forces,
+                variances=variances
+            )
+            telemetry_broker.publish(frame)
+        except Exception:
+            logger.exception("Failed to publish telemetry frame")
 
 class LammpsFileManager:
     """
@@ -88,8 +198,10 @@ class LammpsFileManager:
         """Writes structure to disk using streaming writer if possible with atomic transactions."""
         import os
 
+        real_output_path = validate_path_safe(output_path)
+
         # Create a temporary file path next to the target output path
-        temp_path = output_path.with_name(f".{output_path.name}.tmp")
+        temp_path = real_output_path.with_name(f".{real_output_path.name}.tmp")
 
         try:
             # Memory Safety Fix: Always attempt streaming first if atom_style allows
@@ -124,11 +236,11 @@ class LammpsFileManager:
                 msg = f"Temporary file {temp_path} is missing or empty before finalizing."
                 raise ValueError(msg)  # noqa: TRY301
 
-            # Atomic rename validation
+            # Atomic rename validation guarantees no zero-byte files are committed
             if not temp_path.exists() or temp_path.stat().st_size == 0:
                 _raise_error()
 
-            temp_path.replace(output_path)
+            temp_path.replace(real_output_path)
 
         except (ValueError, OSError, RuntimeError) as e:
             # Rollback
