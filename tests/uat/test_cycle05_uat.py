@@ -6,7 +6,9 @@ import numpy as np
 from ase import Atoms
 
 from pyacemaker.core.engine import LammpsEngine
+from pyacemaker.domain_models.compiler import SemanticCompiler
 from pyacemaker.domain_models.md import MDConfig
+from pyacemaker.domain_models.scenario import IntentRequest
 
 
 def test_uat_05_01_soft_start_thermalization(tmp_path: Path) -> None:
@@ -49,6 +51,8 @@ def test_uat_05_01_soft_start_thermalization(tmp_path: Path) -> None:
             patch("pyacemaker.core.validator.Path.is_file", return_value=True),
             patch("pyacemaker.core.validator.validate_path_safe", return_value=pot_path),
             patch("pyacemaker.utils.path.validate_path_safe", return_value=pot_path),
+            patch("pyacemaker.core.io_manager.validate_path_safe", return_value=pot_path),
+            patch("pathlib.Path.is_symlink", return_value=False),
             patch("pyacemaker.core.lammps_generator.validate_path_safe", return_value=pot_path),
             patch("pyacemaker.core.engine.LammpsEngine._validate_script_content"),
             patch("pyacemaker.core.lammps_generator.Path.is_relative_to", return_value=True),
@@ -77,3 +81,128 @@ def test_uat_05_01_soft_start_thermalization(tmp_path: Path) -> None:
     assert "unfix soft_langevin" in script
     assert "fix main_ensemble all npt temp 300.0 300.0" in script
     assert "run 250" in script  # overridden steps (400) minus soft start steps (150)
+
+
+def test_uat_05_a_heuristics_translation_speed_priority() -> None:
+    """
+    SCENARIO-05-A [Priority: High] - Successful Heuristics Translation (Speed Priority)
+    """
+    payload = {
+        "accuracy_speed_slider": 2,
+        "target_material": "Pt",
+        "nodes": [
+            {
+                "id": "node1",
+                "type": "INITIAL_STRUCTURE",
+                "data": {
+                    "type": "INITIAL_STRUCTURE",
+                    "chemical_symbol": "Pt",
+                    "lattice_constant": 3.92,
+                },
+            },
+            {
+                "id": "node2",
+                "type": "ACTIVE_LEARNING_LOOP",
+                "data": {"type": "ACTIVE_LEARNING_LOOP"},
+            },
+            {
+                "id": "node3",
+                "type": "MACE_TRAINING",
+                "data": {"type": "MACE_TRAINING"},
+            },
+        ],
+        "edges": [{"source": "node1", "target": "node3"}, {"source": "node3", "target": "node2"}],
+    }
+
+    intent = IntentRequest(**payload)
+    cfg = SemanticCompiler.compile(intent)
+
+    assert cfg.md.uncertainty_threshold > 0.1
+    assert cfg.md.timestep > 0.0015
+    assert cfg.md.check_interval > 10
+
+    assert cfg.dft.smearing_type == "mv"
+    assert cfg.dft.smearing_width == 0.02
+
+
+def test_uat_05_b_accurate_mathematical_slider_evaluation() -> None:
+    """
+    SCENARIO-05-B [Priority: High] - Accurate Mathematical Slider Evaluation (Accuracy Priority)
+    """
+    payload = {
+        "accuracy_speed_slider": 9,
+        "target_material": "Fe",
+        "nodes": [
+            {
+                "id": "node1",
+                "type": "INITIAL_STRUCTURE",
+                "data": {
+                    "type": "INITIAL_STRUCTURE",
+                    "chemical_symbol": "Fe",
+                    "lattice_constant": 2.87,
+                },
+            },
+            {
+                "id": "node2",
+                "type": "ACTIVE_LEARNING_LOOP",
+                "data": {"type": "ACTIVE_LEARNING_LOOP"},
+            },
+            {
+                "id": "node3",
+                "type": "MACE_TRAINING",
+                "data": {"type": "MACE_TRAINING"},
+            },
+        ],
+        "edges": [{"source": "node1", "target": "node3"}, {"source": "node3", "target": "node2"}],
+    }
+
+    intent = IntentRequest(**payload)
+    cfg = SemanticCompiler.compile(intent)
+
+    assert cfg.md.uncertainty_threshold < 0.05
+    assert cfg.md.timestep <= 0.0006
+    assert cfg.md.check_interval <= 2
+    assert cfg.dft.encut > 60.0
+
+
+def test_uat_05_c_preservation_of_manual_overrides() -> None:
+    """
+    SCENARIO-05-C [Priority: Medium] - Preservation of Manual Overrides (Expert Mode)
+    """
+    payload = {
+        "accuracy_speed_slider": 5,
+        "target_material": "W",
+        "advanced_settings": {"ecutwfc": 60.0, "learning_rate": 0.0123},
+        "nodes": [
+            {
+                "id": "node1",
+                "type": "INITIAL_STRUCTURE",
+                "data": {
+                    "type": "INITIAL_STRUCTURE",
+                    "chemical_symbol": "W",
+                    "lattice_constant": 3.16,
+                },
+            },
+            {
+                "id": "node2",
+                "type": "ACTIVE_LEARNING_LOOP",
+                "data": {"type": "ACTIVE_LEARNING_LOOP"},
+            },
+            {
+                "id": "node3",
+                "type": "MACE_TRAINING",
+                "data": {"type": "MACE_TRAINING"},
+            },
+        ],
+        "edges": [{"source": "node1", "target": "node3"}, {"source": "node3", "target": "node2"}],
+    }
+
+    intent = IntentRequest(**payload)
+    cfg = SemanticCompiler.compile(intent)
+
+    # Overrides
+    assert cfg.dft.encut == 60.0
+    assert cfg.training.pacemaker.learning_rate == 0.0123
+
+    # Heuristics maintained for untouched
+    assert cfg.md.timestep > 0.0001

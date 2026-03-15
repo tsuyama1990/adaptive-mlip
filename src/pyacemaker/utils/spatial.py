@@ -36,7 +36,7 @@ def apply_spatial_tags(atoms: ase.Atoms, regions: list[SpatialRegion]) -> npt.ND
     if num_atoms == 0 or not regions:
         return tags
 
-    cell_lengths = atoms.get_cell().lengths() # type: ignore[no-untyped-call]
+    cell_lengths = atoms.get_cell().lengths()  # type: ignore[no-untyped-call]
     for i, region in enumerate(regions):
         # Validate region coordinates are within cell dimensions (using generous bounds for logic simplicity)
         if (

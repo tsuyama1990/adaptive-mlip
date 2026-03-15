@@ -27,6 +27,7 @@ class IoManager:
     """
     Manages disk I/O and telemetry streaming for MD trajectories.
     """
+
     def __init__(self, stream_interval: int = 10) -> None:
         self.stream_interval = stream_interval
         self._executor = GLOBAL_IO_EXECUTOR
@@ -61,7 +62,7 @@ class IoManager:
         filepath: Path,
         step: int,
         state: SimulationState,
-        force_publish: bool = False
+        force_publish: bool = False,
     ) -> None:
         """
         Writes frame to disk and pushes it to telemetry queue based on interval.
@@ -73,6 +74,7 @@ class IoManager:
 
         def _write_task() -> None:
             import time
+
             max_retries = 3
             backoff_factor = 2.0
             delay = 0.1
@@ -86,11 +88,15 @@ class IoManager:
                         logger.exception(msg)
                         return
 
-                    logger.warning(f"I/O Error appending to {real_filepath}. Retrying in {delay}s (Attempt {attempt}/{max_retries})")
+                    logger.warning(
+                        f"I/O Error appending to {real_filepath}. Retrying in {delay}s (Attempt {attempt}/{max_retries})"
+                    )
                     time.sleep(delay)
                     delay *= backoff_factor
                 except Exception:
-                    logger.exception(f"Unexpected error writing trajectory frame to {real_filepath}")
+                    logger.exception(
+                        f"Unexpected error writing trajectory frame to {real_filepath}"
+                    )
                     return
                 else:
                     return
@@ -102,15 +108,15 @@ class IoManager:
 
     def _publish_frame(self, atoms: Atoms, step: int, state: SimulationState) -> None:
         try:
-            positions = atoms.get_positions().flatten().tolist() # type: ignore[no-untyped-call]
+            positions = atoms.get_positions().flatten().tolist()  # type: ignore[no-untyped-call]
 
             forces = None
             if "forces" in atoms.arrays:
-                forces = atoms.get_forces().flatten().tolist() # type: ignore[no-untyped-call]
+                forces = atoms.get_forces().flatten().tolist()  # type: ignore[no-untyped-call]
 
             variances = None
             if "c_gamma" in atoms.arrays:
-                variances = atoms.get_array("c_gamma").flatten().tolist() # type: ignore[no-untyped-call]
+                variances = atoms.get_array("c_gamma").flatten().tolist()  # type: ignore[no-untyped-call]
 
             frame = TelemetryFrame(
                 workflow_id="default_workflow",
@@ -118,11 +124,12 @@ class IoManager:
                 current_state=state,
                 positions=positions,
                 forces=forces,
-                variances=variances
+                variances=variances,
             )
             telemetry_broker.publish(frame)
         except Exception:
             logger.exception("Failed to publish telemetry frame")
+
 
 class LammpsFileManager:
     """

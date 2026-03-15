@@ -65,6 +65,7 @@ class PacemakerConfig(BaseModel):
     )
 
     # Optimizer settings
+    learning_rate: float = Field(default=0.01, description="Learning rate for optimizer", gt=0)
     optimizer: str = Field(
         default=DEFAULT_PACEMAKER_OPTIMIZER, description="Optimization algorithm"
     )

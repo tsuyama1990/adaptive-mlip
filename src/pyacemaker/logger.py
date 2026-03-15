@@ -53,11 +53,13 @@ def setup_logger(config: LoggingConfig, project_name: str) -> logging.Logger:
 
     return logger
 
+
 class TelemetryBroker:
     """
     Singleton class managing the Pub/Sub architecture for the WebSockets.
     Safely bridges synchronous producer threads (LAMMPS) to the async event loop.
     """
+
     _instance: Optional["TelemetryBroker"] = None
 
     def __new__(cls) -> "TelemetryBroker":
@@ -68,9 +70,12 @@ class TelemetryBroker:
 
     def __init__(self) -> None:
         from pyacemaker.domain_models.constants import TELEMETRY_QUEUE_MAXSIZE
+
         if getattr(self, "_initialized", False):
             return
-        self.queue: asyncio.Queue[TelemetryFrame | StateChangePayload | SystemTopology] = asyncio.Queue(maxsize=TELEMETRY_QUEUE_MAXSIZE)
+        self.queue: asyncio.Queue[TelemetryFrame | StateChangePayload | SystemTopology] = (
+            asyncio.Queue(maxsize=TELEMETRY_QUEUE_MAXSIZE)
+        )
         self.loop: asyncio.AbstractEventLoop | None = None
         self._initialized = True
 
@@ -78,7 +83,9 @@ class TelemetryBroker:
         """Called upon FastAPI application startup to bind the running loop."""
         self.loop = loop
 
-    def _validate_payload_size(self, payload: TelemetryFrame | StateChangePayload | SystemTopology) -> str:
+    def _validate_payload_size(
+        self, payload: TelemetryFrame | StateChangePayload | SystemTopology
+    ) -> str:
         # Pre-serialization strict length checks to avoid MemoryError during json dumping
         # A Float64 generally serializes to ~24 bytes max, but we assume 32 for strict bounds
         from pyacemaker.domain_models.constants import (
@@ -88,7 +95,7 @@ class TelemetryBroker:
             PAYLOAD_BASE_OVERHEAD_BYTES,
         )
 
-        estimated_bytes = PAYLOAD_BASE_OVERHEAD_BYTES # Base JSON structural overhead
+        estimated_bytes = PAYLOAD_BASE_OVERHEAD_BYTES  # Base JSON structural overhead
         if isinstance(payload, TelemetryFrame):
             estimated_bytes += len(payload.positions) * BYTES_PER_FLOAT64
             if payload.forces:
@@ -140,5 +147,6 @@ class TelemetryBroker:
                     self.queue.put_nowait(payload)
 
         self.loop.call_soon_threadsafe(_sync_put)
+
 
 telemetry_broker = TelemetryBroker()

@@ -90,6 +90,7 @@ class LimitUploadSize(BaseHTTPMiddleware):
 app.add_middleware(LimitUploadSize, max_upload_size=5_000_000)
 app.include_router(telemetry.router)
 
+
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(
     request: Request, exc: RequestValidationError

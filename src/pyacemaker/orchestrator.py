@@ -83,7 +83,9 @@ class Orchestrator:
     def _publish_state(self, new_state: SimulationState) -> None:
         """Publishes the orchestrator's state to the telemetry broker."""
         try:
-            telemetry_broker.publish(StateChangePayload(workflow_id="default_workflow", new_state=new_state))
+            telemetry_broker.publish(
+                StateChangePayload(workflow_id="default_workflow", new_state=new_state)
+            )
         except Exception:
             self.logger.warning("Failed to publish state change telemetry")
 
@@ -151,7 +153,6 @@ class Orchestrator:
         # If not, convert it so we can use islice correctly
         iterator = iter(generator)
 
-
         with filepath.open(mode) as f:
             # We don't want to materialize chunks directly for millions of atoms.
             # To maintain `write` overhead efficiency, we slice lazily and
@@ -159,7 +160,7 @@ class Orchestrator:
             while True:
                 try:
                     chunk_iter = islice(iterator, batch_size)
-                    first_atom = next(chunk_iter) # Will raise StopIteration if empty
+                    first_atom = next(chunk_iter)  # Will raise StopIteration if empty
 
                     # We have at least one atom. Materialize this batch.
                     chunk = [first_atom, *list(chunk_iter)]
@@ -172,7 +173,9 @@ class Orchestrator:
                     # Strict 50 MB threshold for the raw python object allocation
                     if mem_usage > 50_000_000:
                         batch_size = max(1, batch_size // 2)
-                        self.logger.warning(f"Memory pressure detected ({mem_usage / 1e6:.1f} MB). Next batch reduced to {batch_size}")
+                        self.logger.warning(
+                            f"Memory pressure detected ({mem_usage / 1e6:.1f} MB). Next batch reduced to {batch_size}"
+                        )
 
                     write(f, chunk, format="extxyz")
                     count += len(chunk)
@@ -331,9 +334,9 @@ class Orchestrator:
                 io_manager.write_trajectory(
                     atoms=halt_structure,
                     filepath=Path(halt_structure_path).with_suffix(".extxyz"),
-                    step=-1, # arbitrary non-zero step just for telemetry publish
+                    step=-1,  # arbitrary non-zero step just for telemetry publish
                     state=SimulationState.EXTRACTING_CUTOUT,
-                    force_publish=True
+                    force_publish=True,
                 )
             except Exception:
                 self.logger.warning("Failed to force publish high-uncertainty frame")
