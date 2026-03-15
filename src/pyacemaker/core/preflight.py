@@ -68,8 +68,32 @@ class StructuralValidator(BaseValidator):
         from scipy.spatial.distance import pdist, squareform
 
         positions = atoms.get_positions()  # type: ignore[no-untyped-call]
-        if len(positions) < 2:
-            return  # No collisions possible with < 2 atoms
+
+        if len(positions) == 0:
+            report.errors.append(DiagnosticMessage(
+                node_id="INITIAL_STRUCTURE", severity=Severity.ERROR,
+                description="Initial structure contains 0 atoms.",
+                suggestion="Check the input coordinates or file parsing logic."
+            ))
+            return
+
+        if len(positions) == 1:
+            # Check edge case single atom logic
+            if not np.isfinite(positions).all():
+                report.errors.append(DiagnosticMessage(
+                    node_id="INITIAL_STRUCTURE", severity=Severity.ERROR,
+                    description="Single-atom structure contains invalid (NaN or Inf) coordinates.",
+                    suggestion="Check atomic coordinates."
+                ))
+            return  # No collisions possible
+
+        if not np.isfinite(positions).all():
+            report.errors.append(DiagnosticMessage(
+                node_id="INITIAL_STRUCTURE", severity=Severity.ERROR,
+                description="Structure contains invalid (NaN or Inf) coordinates.",
+                suggestion="Check atomic coordinates."
+            ))
+            return
 
         # Use pdist to calculate pairwise distances
         distances = pdist(positions)
@@ -97,8 +121,11 @@ class StructuralValidator(BaseValidator):
                     )
                 )
 
-        # Cell volume check (simple heuristic: density check)
-        volume = atoms.get_volume()  # type: ignore[no-untyped-call]
+        self._check_volume(atoms, report)
+
+    def _check_volume(self, atoms: "Any", report: DiagnosticReport) -> None:
+        """Helper to check cell volume density."""
+        volume = atoms.get_volume()
         if volume > 0.0 and len(atoms) / volume > 0.5:
              report.warnings.append(
                  DiagnosticMessage(
@@ -321,13 +348,38 @@ except Exception as e:
             else:
                 modified_lines.append(line)
 
-        modified_script = "\n".join(modified_lines)
         lammps_script_file = td_path / "script.in"
-        lammps_script_file.touch()
-        lammps_script_file.write_text(modified_script)
-        lammps_script_file.chmod(stat.S_IRUSR | stat.S_IWUSR)
+        if not self._validate_and_write_script(modified_lines, lammps_script_file, report):
+            return None
 
+        lammps_script_file.chmod(stat.S_IRUSR | stat.S_IWUSR)
         return lammps_script_file
+
+    def _validate_and_write_script(self, lines: list[str], path: Path, report: DiagnosticReport) -> bool:
+        """Validates and writes the script to disk."""
+        try:
+            from pyacemaker.utils.validation import validate_lammps_command
+            for line in lines:
+                if line.strip():
+                    validate_lammps_command(line.strip())
+        except ImportError as e:
+            report.errors.append(DiagnosticMessage(
+                node_id="SYSTEM", severity=Severity.ERROR,
+                description=f"Missing internal dependency: {e}",
+                suggestion="Ensure pyacemaker is installed fully."
+            ))
+            return False
+        except ValueError as e:
+            report.errors.append(DiagnosticMessage(
+                node_id="LAMMPS_SCRIPT", severity=Severity.ERROR,
+                description=f"LAMMPS command validation failed: {e}",
+                suggestion="Ensure the script does not contain shell injections or dangerous commands."
+            ))
+            return False
+
+        path.touch()
+        path.write_text("\n".join(lines))
+        return True
 
     def validate(self, config: PyAceConfig, report: DiagnosticReport) -> None:
         try:
@@ -354,10 +406,14 @@ except Exception as e:
             try:
                 shutil.rmtree(td_path)
             except Exception as e:
-                from pyacemaker.domain_models.logging import LoggingConfig
-                from pyacemaker.logger import setup_logger
-                logger = setup_logger(config=LoggingConfig(), project_name="api_gateway")
-                logger.warning(f"Failed to cleanup preflight temp directory {td_path}: {e}")
+                try:
+                    from pyacemaker.domain_models.logging import LoggingConfig
+                    from pyacemaker.logger import setup_logger
+                    logger = setup_logger(config=LoggingConfig(), project_name="api_gateway")
+                    logger.warning(f"Failed to cleanup preflight temp directory {td_path}: {e}")
+                except Exception as inner_e:
+                    import sys
+                    sys.stderr.write(f"Failed to cleanup temp directory and logger failed: {inner_e}\n")
 
 
 class PreflightManager:
