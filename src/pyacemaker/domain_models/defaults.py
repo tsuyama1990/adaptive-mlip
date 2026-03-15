@@ -325,3 +325,19 @@ def main():
 if __name__ == "__main__":
     main()
 """
+
+# Compiler Defaults
+DEFAULT_PROJECT_NAME = "intent_driven_project"
+DEFAULT_MD_TEMPERATURE = 300.0
+DEFAULT_MD_PRESSURE = 1.0
+DEFAULT_MD_UNITS = "metal"
+DEFAULT_DFT_CODE = "quantum_espresso"
+DEFAULT_DFT_FUNCTIONAL = "pbe"
+DEFAULT_PSEUDOPOTENTIAL_MAPPING: dict[str, str] = {
+    "Al": "Al.pbe-n-kjpaw_psl.1.0.0.UPF",
+    "W": "W.pbe-n-kjpaw_psl.1.0.0.UPF",
+    "H": "H.pbe-rrkjus_psl.1.0.0.UPF",
+    "O": "O.pbe-n-kjpaw_psl.0.1.UPF",
+    "Pt": "Pt.pbe-n-kjpaw_psl.1.0.0.UPF",
+    "Fe": "Fe.pbe-n-kjpaw_psl.1.0.0.UPF",
+}

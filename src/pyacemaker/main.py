@@ -110,23 +110,12 @@ async def compile_intent(request: Request, payload: IntentRequest) -> dict[str, 
 
 
 def _run_gui_server(args: argparse.Namespace) -> None:
-    import os
-
-    cors_origins = ["http://localhost:3000"]
-    if hasattr(args, "config") and args.config:
-        try:
-            conf = PyAceConfig(**load_config(Path(args.config)))
-            cors_origins = conf.api_cors_origins
-        except Exception as e:
-            logging.warning(f"Failed to load CORS from config, defaulting. Error: {e}")
-    elif "PYACEMAKER_CORS_ORIGINS" in os.environ:
-        cors_origins = os.environ["PYACEMAKER_CORS_ORIGINS"].split(",")
 
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=cors_origins,
+        allow_origins=["*"],
         allow_credentials=True,
-        allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        allow_methods=["*"],
         allow_headers=["*"],
     )
 
