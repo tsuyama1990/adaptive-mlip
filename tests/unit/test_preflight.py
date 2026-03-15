@@ -31,9 +31,7 @@ def mock_config() -> PyAceConfig:
     return PyAceConfig(
         project_name="TestProject",
         structure=StructureConfig(
-            elements=["Al"],
-            supercell_size=[1, 1, 1],
-            policy_name="cold_start"
+            elements=["Al"], supercell_size=[1, 1, 1], policy_name="cold_start"
         ),
         dft=DFTConfig.model_construct(
             code="qe",
@@ -47,7 +45,7 @@ def mock_config() -> PyAceConfig:
             diagonalization="david",
             embedding_buffer=1.0,
             mixing_beta_factor=1.0,
-            smearing_width_factor=1.0
+            smearing_width_factor=1.0,
         ),
         training=TrainingConfig(
             potential_type="mace",
@@ -60,7 +58,7 @@ def mock_config() -> PyAceConfig:
             max_iterations=10,
             batch_size=1,
             elements=["Al"],
-            active_set_size=None
+            active_set_size=None,
         ),
         md=MDConfig.model_construct(
             temperature=300.0,
@@ -68,22 +66,24 @@ def mock_config() -> PyAceConfig:
             timestep=0.001,
             n_steps=1000,
             uncertainty_threshold=0.1,
-            check_interval=10
+            check_interval=10,
         ),
         workflow=WorkflowConfig.model_construct(
             max_iterations=2,
             state_file_path="state.json",
             data_dir="data",
             active_learning_dir="al",
-            potentials_dir="pot"
+            potentials_dir="pot",
         ),
         logging=LoggingConfig(),
         eon=None,
-        scenario=None
+        scenario=None,
     )
 
 
-def test_structural_validator_clean(mock_config: PyAceConfig, clean_report: DiagnosticReport) -> None:
+def test_structural_validator_clean(
+    mock_config: PyAceConfig, clean_report: DiagnosticReport
+) -> None:
     validator = StructuralValidator()
 
     with patch("pyacemaker.factory.ModuleFactory.create_modules") as mock_create:
@@ -95,11 +95,13 @@ def test_structural_validator_clean(mock_config: PyAceConfig, clean_report: Diag
     assert len(clean_report.errors) == 0
 
 
-def test_structural_validator_collision(mock_config: PyAceConfig, clean_report: DiagnosticReport) -> None:
+def test_structural_validator_collision(
+    mock_config: PyAceConfig, clean_report: DiagnosticReport
+) -> None:
     validator = StructuralValidator()
 
     # Create structure with collision
-    atoms = Atoms("Al2", positions=[[0,0,0], [0.1, 0, 0]], cell=[5,5,5], pbc=True)
+    atoms = Atoms("Al2", positions=[[0, 0, 0], [0.1, 0, 0]], cell=[5, 5, 5], pbc=True)
 
     with patch("pyacemaker.factory.ModuleFactory.create_modules") as mock_create:
         mock_gen = MagicMock()
@@ -112,7 +114,9 @@ def test_structural_validator_collision(mock_config: PyAceConfig, clean_report: 
     assert clean_report.errors[0].severity == Severity.ERROR
 
 
-def test_dependency_validator_missing_files(mock_config: PyAceConfig, clean_report: DiagnosticReport) -> None:
+def test_dependency_validator_missing_files(
+    mock_config: PyAceConfig, clean_report: DiagnosticReport
+) -> None:
     validator = DependencyValidator()
 
     # pw.x missing, UPF missing, model missing
@@ -128,7 +132,9 @@ def test_dependency_validator_missing_files(mock_config: PyAceConfig, clean_repo
     assert any("fake.model" in t for t in err_texts)
 
 
-def test_lammps_syntax_validator_clean(mock_config: PyAceConfig, clean_report: DiagnosticReport) -> None:
+def test_lammps_syntax_validator_clean(
+    mock_config: PyAceConfig, clean_report: DiagnosticReport
+) -> None:
     validator = LammpsSyntaxValidator()
 
     atoms = bulk("Al", "fcc", a=4.0)
@@ -148,7 +154,9 @@ def test_lammps_syntax_validator_clean(mock_config: PyAceConfig, clean_report: D
     assert len(clean_report.errors) == 0
 
 
-def test_lammps_syntax_validator_error(mock_config: PyAceConfig, clean_report: DiagnosticReport) -> None:
+def test_lammps_syntax_validator_error(
+    mock_config: PyAceConfig, clean_report: DiagnosticReport
+) -> None:
     validator = LammpsSyntaxValidator()
 
     atoms = bulk("Al", "fcc", a=4.0)
@@ -173,10 +181,11 @@ def test_lammps_syntax_validator_error(mock_config: PyAceConfig, clean_report: D
 def test_preflight_manager_success(mock_config: PyAceConfig) -> None:
     manager = PreflightManager()
 
-    with patch.object(StructuralValidator, "validate") as m_str, \
-         patch.object(DependencyValidator, "validate") as m_dep, \
-         patch.object(LammpsSyntaxValidator, "validate") as m_lmp:
-
+    with (
+        patch.object(StructuralValidator, "validate") as m_str,
+        patch.object(DependencyValidator, "validate") as m_dep,
+        patch.object(LammpsSyntaxValidator, "validate") as m_lmp,
+    ):
         report = manager.run(mock_config)
 
         assert m_str.called

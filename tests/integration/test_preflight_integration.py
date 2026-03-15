@@ -7,6 +7,7 @@ from pyacemaker.main import app
 
 client = TestClient(app)
 
+
 def test_compile_intent_preflight_success() -> None:
     payload = {
         "accuracy_speed_slider": 5,
@@ -92,7 +93,7 @@ def test_compile_intent_preflight_failure() -> None:
                 node_id="INITIAL_STRUCTURE",
                 severity=Severity.ERROR,
                 description="Atomic collision detected.",
-                suggestion="Relax structure."
+                suggestion="Relax structure.",
             )
         )
         mock_run.return_value = mock_report

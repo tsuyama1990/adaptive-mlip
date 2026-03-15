@@ -1,0 +1,2 @@
+sed -i 's/from pyacemaker.interfaces.process import ProcessRunner/from pyacemaker.utils.process import ProcessRunner/' tests/unit/mock_process.py tests/unit/test_eon_driver.py
+sed -i 's/def run(self, commands: Any, cwd: Any = None, env: Any = None) -> Any:/def run(self, commands: list[str], cwd: Path | str | None = None, env: dict[str, str] | None = None) -> None:/g' tests/unit/mock_process.py tests/unit/test_eon_driver.py

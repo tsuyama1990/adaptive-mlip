@@ -70,29 +70,38 @@ class StructuralValidator(BaseValidator):
         positions = atoms.get_positions()  # type: ignore[no-untyped-call]
 
         if len(positions) == 0:
-            report.errors.append(DiagnosticMessage(
-                node_id="INITIAL_STRUCTURE", severity=Severity.ERROR,
-                description="Initial structure contains 0 atoms.",
-                suggestion="Check the input coordinates or file parsing logic."
-            ))
+            report.errors.append(
+                DiagnosticMessage(
+                    node_id="INITIAL_STRUCTURE",
+                    severity=Severity.ERROR,
+                    description="Initial structure contains 0 atoms.",
+                    suggestion="Check the input coordinates or file parsing logic.",
+                )
+            )
             return
 
         if len(positions) == 1:
             # Check edge case single atom logic
             if not np.isfinite(positions).all():
-                report.errors.append(DiagnosticMessage(
-                    node_id="INITIAL_STRUCTURE", severity=Severity.ERROR,
-                    description="Single-atom structure contains invalid (NaN or Inf) coordinates.",
-                    suggestion="Check atomic coordinates."
-                ))
+                report.errors.append(
+                    DiagnosticMessage(
+                        node_id="INITIAL_STRUCTURE",
+                        severity=Severity.ERROR,
+                        description="Single-atom structure contains invalid (NaN or Inf) coordinates.",
+                        suggestion="Check atomic coordinates.",
+                    )
+                )
             return  # No collisions possible
 
         if not np.isfinite(positions).all():
-            report.errors.append(DiagnosticMessage(
-                node_id="INITIAL_STRUCTURE", severity=Severity.ERROR,
-                description="Structure contains invalid (NaN or Inf) coordinates.",
-                suggestion="Check atomic coordinates."
-            ))
+            report.errors.append(
+                DiagnosticMessage(
+                    node_id="INITIAL_STRUCTURE",
+                    severity=Severity.ERROR,
+                    description="Structure contains invalid (NaN or Inf) coordinates.",
+                    suggestion="Check atomic coordinates.",
+                )
+            )
             return
 
         # Use pdist to calculate pairwise distances
@@ -127,14 +136,14 @@ class StructuralValidator(BaseValidator):
         """Helper to check cell volume density."""
         volume = atoms.get_volume()
         if volume > 0.0 and len(atoms) / volume > 0.5:
-             report.warnings.append(
-                 DiagnosticMessage(
+            report.warnings.append(
+                DiagnosticMessage(
                     node_id="INITIAL_STRUCTURE",
                     severity=Severity.WARNING,
-                    description=f"High atomic density detected: {len(atoms)/volume:.2f} atoms/A^3.",
+                    description=f"High atomic density detected: {len(atoms) / volume:.2f} atoms/A^3.",
                     suggestion="Verify that the simulation box volume is sufficient and lattice parameters are correct.",
-                 )
-             )
+                )
+            )
 
 
 class DependencyValidator(BaseValidator):
@@ -169,7 +178,7 @@ class DependencyValidator(BaseValidator):
                 try:
                     safe_filename = validate_path_safe(Path(str(filename)))
                     if not safe_filename.exists():
-                         report.errors.append(
+                        report.errors.append(
                             DiagnosticMessage(
                                 node_id="DFT_CONFIG",
                                 severity=Severity.ERROR,
@@ -178,7 +187,7 @@ class DependencyValidator(BaseValidator):
                             )
                         )
                 except ValueError as e:
-                     report.errors.append(
+                    report.errors.append(
                         DiagnosticMessage(
                             node_id="DFT_CONFIG",
                             severity=Severity.ERROR,
@@ -223,7 +232,10 @@ class LammpsSyntaxValidator(BaseValidator):
     """
     Validates LAMMPS script syntax by spinning up a lightweight isolated Python subprocess.
     """
-    def _execute_dry_run(self, lammps_script_file: Path, runner_py: Path, report: DiagnosticReport) -> None:
+
+    def _execute_dry_run(
+        self, lammps_script_file: Path, runner_py: Path, report: DiagnosticReport
+    ) -> None:
         runner_code = """
 from lammps import lammps
 import sys
@@ -248,22 +260,22 @@ except Exception as e:
 
         try:
             from pyacemaker.utils.path import validate_path_safe
+
             safe_runner_py = validate_path_safe(runner_py)
             safe_script_file = validate_path_safe(lammps_script_file)
         except ImportError as e:
-            report.errors.append(DiagnosticMessage(
-                node_id="SYSTEM", severity=Severity.ERROR,
-                description=f"Missing internal utility dependency: {e}",
-                suggestion="Ensure pyacemaker installation is complete."
-            ))
+            report.errors.append(
+                DiagnosticMessage(
+                    node_id="SYSTEM",
+                    severity=Severity.ERROR,
+                    description=f"Missing internal utility dependency: {e}",
+                    suggestion="Ensure pyacemaker installation is complete.",
+                )
+            )
             return
 
         proc = subprocess.run(  # noqa: S603
-            [
-                sys.executable,
-                str(safe_runner_py.resolve()),
-                str(safe_script_file.resolve())
-            ],
+            [sys.executable, str(safe_runner_py.resolve()), str(safe_script_file.resolve())],
             capture_output=True,
             text=True,
             env=safe_env,
@@ -289,38 +301,55 @@ except Exception as e:
                 )
             )
 
-    def _prepare_files(self, atoms: "Any", td_path: Path, config: PyAceConfig, report: DiagnosticReport) -> Path | None:
+    def _prepare_files(
+        self, atoms: "Any", td_path: Path, config: PyAceConfig, report: DiagnosticReport
+    ) -> Path | None:
         import stat
+
         data_file = td_path / "structure.data"
         try:
             from ase.io import write
         except ImportError as e:
-            report.errors.append(DiagnosticMessage(
-                node_id="SYSTEM", severity=Severity.ERROR,
-                description=f"Missing ASE dependency: {e}",
-                suggestion="Install ase via 'uv add ase'"
-            ))
+            report.errors.append(
+                DiagnosticMessage(
+                    node_id="SYSTEM",
+                    severity=Severity.ERROR,
+                    description=f"Missing ASE dependency: {e}",
+                    suggestion="Install ase via 'uv add ase'",
+                )
+            )
             return None
 
         try:
             from pyacemaker.utils.validation import validate_structure
+
             validate_structure(atoms)
         except ImportError as e:
-            report.errors.append(DiagnosticMessage(
-                node_id="SYSTEM", severity=Severity.ERROR,
-                description=f"Missing internal dependency: {e}",
-                suggestion="Ensure pyacemaker is installed fully."
-            ))
+            report.errors.append(
+                DiagnosticMessage(
+                    node_id="SYSTEM",
+                    severity=Severity.ERROR,
+                    description=f"Missing internal dependency: {e}",
+                    suggestion="Ensure pyacemaker is installed fully.",
+                )
+            )
             return None
         except Exception as e:
-             report.errors.append(DiagnosticMessage(
-                node_id="INITIAL_STRUCTURE", severity=Severity.ERROR,
-                description=f"Initial structure validation failed: {e}",
-                suggestion="Check atomic structure configuration."
-            ))
-             return None
+            report.errors.append(
+                DiagnosticMessage(
+                    node_id="INITIAL_STRUCTURE",
+                    severity=Severity.ERROR,
+                    description=f"Initial structure validation failed: {e}",
+                    suggestion="Check atomic structure configuration.",
+                )
+            )
+            return None
 
-        style = getattr(config.md.atom_style, "value", config.md.atom_style) if config.md.atom_style else "atomic"
+        style = (
+            getattr(config.md.atom_style, "value", config.md.atom_style)
+            if config.md.atom_style
+            else "atomic"
+        )
         write(data_file, atoms, format="lammps-data", atom_style=style)
         data_file.chmod(stat.S_IRUSR | stat.S_IWUSR)
 
@@ -329,11 +358,13 @@ except Exception as e:
         potential_path.chmod(stat.S_IRUSR | stat.S_IWUSR)
 
         from pyacemaker.core.lammps_generator import LammpsScriptGenerator
+
         elements = list(set(atoms.get_chemical_symbols()))
         lammps_gen = LammpsScriptGenerator(config.md)
         dump_file = td_path / "dump.xyz"
 
         import io
+
         buffer = io.StringIO()
         lammps_gen.write_script(buffer, potential_path, data_file, dump_file, elements)
 
@@ -355,26 +386,35 @@ except Exception as e:
         lammps_script_file.chmod(stat.S_IRUSR | stat.S_IWUSR)
         return lammps_script_file
 
-    def _validate_and_write_script(self, lines: list[str], path: Path, report: DiagnosticReport) -> bool:
+    def _validate_and_write_script(
+        self, lines: list[str], path: Path, report: DiagnosticReport
+    ) -> bool:
         """Validates and writes the script to disk."""
         try:
             from pyacemaker.utils.validation import validate_lammps_command
+
             for line in lines:
                 if line.strip():
                     validate_lammps_command(line.strip())
         except ImportError as e:
-            report.errors.append(DiagnosticMessage(
-                node_id="SYSTEM", severity=Severity.ERROR,
-                description=f"Missing internal dependency: {e}",
-                suggestion="Ensure pyacemaker is installed fully."
-            ))
+            report.errors.append(
+                DiagnosticMessage(
+                    node_id="SYSTEM",
+                    severity=Severity.ERROR,
+                    description=f"Missing internal dependency: {e}",
+                    suggestion="Ensure pyacemaker is installed fully.",
+                )
+            )
             return False
         except ValueError as e:
-            report.errors.append(DiagnosticMessage(
-                node_id="LAMMPS_SCRIPT", severity=Severity.ERROR,
-                description=f"LAMMPS command validation failed: {e}",
-                suggestion="Ensure the script does not contain shell injections or dangerous commands."
-            ))
+            report.errors.append(
+                DiagnosticMessage(
+                    node_id="LAMMPS_SCRIPT",
+                    severity=Severity.ERROR,
+                    description=f"LAMMPS command validation failed: {e}",
+                    suggestion="Ensure the script does not contain shell injections or dangerous commands.",
+                )
+            )
             return False
 
         path.touch()
@@ -384,12 +424,14 @@ except Exception as e:
     def validate(self, config: PyAceConfig, report: DiagnosticReport) -> None:
         try:
             from pyacemaker.factory import ModuleFactory
+
             generator, _, _, _, _, _ = ModuleFactory.create_modules(config)
             atoms = next(generator.generate(1))
         except Exception:
             return
 
         import stat
+
         td = tempfile.mkdtemp()
         td_path = Path(td)
         try:
@@ -409,11 +451,15 @@ except Exception as e:
                 try:
                     from pyacemaker.domain_models.logging import LoggingConfig
                     from pyacemaker.logger import setup_logger
+
                     logger = setup_logger(config=LoggingConfig(), project_name="api_gateway")
                     logger.warning(f"Failed to cleanup preflight temp directory {td_path}: {e}")
                 except Exception as inner_e:
                     import sys
-                    sys.stderr.write(f"Failed to cleanup temp directory and logger failed: {inner_e}\n")
+
+                    sys.stderr.write(
+                        f"Failed to cleanup temp directory and logger failed: {inner_e}\n"
+                    )
 
 
 class PreflightManager:
@@ -455,6 +501,7 @@ class PreflightManager:
             except Exception as e:
                 from pyacemaker.domain_models.logging import LoggingConfig
                 from pyacemaker.logger import setup_logger
+
                 logger = setup_logger(config=LoggingConfig(), project_name="api_gateway")
                 logger.exception(f"Validator {validator.__class__.__name__} crashed unexpectedly.")
                 report.errors.append(

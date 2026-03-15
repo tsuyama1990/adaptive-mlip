@@ -260,6 +260,7 @@ def test_run_large_structure_warning(
         patch("pyacemaker.core.io_manager.get_species_order", return_value=["H"]),
         patch("pyacemaker.utils.path.Path.lstat") as mock_lstat,
         patch("pyacemaker.utils.path.Path.stat") as mock_stat,
+        patch("pyacemaker.core.io_manager.validate_path_safe", side_effect=lambda x: x),
     ):
         mock_stat.return_value.st_size = 100
         mock_stat.return_value.st_mode = 33188

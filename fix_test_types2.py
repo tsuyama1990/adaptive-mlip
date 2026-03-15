@@ -1,15 +1,14 @@
-from pathlib import Path
+import re
+import sys
 
-content = Path("tests/integration/test_api_endpoints.py").read_text()
-# Ensure payload definitions are just typed as Any dicts
-content = content.replace("base_payload =", "base_payload: dict[str, Any] =")
-content = content.replace(
-    "from pyacemaker.main import app", "from typing import Any\nfrom pyacemaker.main import app"
-)
-content = content.replace(
-    "payload_speed = dict(base_payload)  # type: ignore", "payload_speed = dict(base_payload)"
-)
-content = content.replace(
-    "payload_acc = dict(base_payload)  # type: ignore", "payload_acc = dict(base_payload)"
-)
-Path("tests/integration/test_api_endpoints.py").write_text(content)
+def add_types(filepath):
+    with open(filepath, 'r') as f:
+        content = f.read()
+
+    # Find def test_xyz(args):
+    # and replace args with `mock: Any, tmp_path: Path` etc. It's complex. Let's just fix it manually if it fails MyPy.
+    # Actually, ruff or mypy --install-types might do it? No.
+    # I'll just manually fix them.
+
+import os
+os.system('uv run mypy tests/unit/test_process.py tests/unit/test_eon_driver.py tests/unit/test_domain_models_validation.py')

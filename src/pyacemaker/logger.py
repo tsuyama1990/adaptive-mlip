@@ -1,3 +1,4 @@
+from __future__ import annotations
 import asyncio
 import contextlib
 import json
@@ -5,7 +6,9 @@ import logging
 import sys
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
+
+from pydantic import BaseModel
 
 from pyacemaker.domain_models.logging import LoggingConfig
 
@@ -60,7 +63,7 @@ class TelemetryBroker:
     Safely bridges synchronous producer threads (LAMMPS) to the async event loop.
     """
 
-    _instance: Optional["TelemetryBroker"] = None
+    _instance: "TelemetryBroker" | None = None
 
     def __new__(cls) -> "TelemetryBroker":
         if cls._instance is None:
@@ -124,11 +127,13 @@ class TelemetryBroker:
 
         return serialized_payload
 
-    def publish(self, payload: dict[str, Any]) -> None:
+    def publish(self, payload: dict[str, Any] | BaseModel) -> None:
         """
         Thread-safe method called by synchronous worker threads.
         Implements drop-oldest backpressure to prevent memory leaks if frontend is slow.
         """
+        if isinstance(payload, BaseModel):
+            payload = payload.model_dump()
         self._validate_payload_size(payload)
 
         if self.loop is None or not self.loop.is_running():
