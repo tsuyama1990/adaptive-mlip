@@ -15,6 +15,7 @@ def clean_broker() -> TelemetryBroker:
     broker.loop = None
     return broker
 
+
 @pytest.mark.asyncio
 async def test_telemetry_broker_drop_oldest(clean_broker: TelemetryBroker) -> None:
     # We must explicitly set the loop for the sync publisher to work
@@ -29,7 +30,7 @@ async def test_telemetry_broker_drop_oldest(clean_broker: TelemetryBroker) -> No
             current_state=SimulationState.RUNNING_MD,
             positions=[],
             forces=None,
-            variances=None
+            variances=None,
         )
         clean_broker.publish(frame)
 
@@ -46,7 +47,7 @@ async def test_telemetry_broker_drop_oldest(clean_broker: TelemetryBroker) -> No
         current_state=SimulationState.RUNNING_MD,
         positions=[],
         forces=None,
-        variances=None
+        variances=None,
     )
     clean_broker.publish(frame_11)
 
@@ -56,6 +57,7 @@ async def test_telemetry_broker_drop_oldest(clean_broker: TelemetryBroker) -> No
     # The oldest item (step_number=0) should be dropped. First item should now be step_number=1
     first_item = await clean_broker.queue.get()
     assert getattr(first_item, "step_number", None) == 1
+
 
 @pytest.mark.asyncio
 async def test_telemetry_broker_state_change(clean_broker: TelemetryBroker) -> None:

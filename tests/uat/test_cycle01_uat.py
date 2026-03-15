@@ -181,7 +181,7 @@ def test_scenario_01_02_guardrails_check_temp(
     from pydantic import ValidationError
 
     with pytest.raises(ValidationError):
-        PyAceConfig(**config_dict)
+        PyAceConfig.model_validate(config_dict)
 
 
 def test_scenario_01_02_guardrails_check_cutoff(
@@ -199,4 +199,4 @@ def test_scenario_01_02_guardrails_check_cutoff(
     from pydantic import ValidationError
 
     with pytest.raises(ValidationError):
-        PyAceConfig(**config_dict)
+        PyAceConfig.model_validate(config_dict)

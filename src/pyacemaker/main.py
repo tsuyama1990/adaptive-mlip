@@ -90,6 +90,7 @@ class LimitUploadSize(BaseHTTPMiddleware):
 app.add_middleware(LimitUploadSize, max_upload_size=5_000_000)
 app.include_router(telemetry.router)
 
+
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(
     request: Request, exc: RequestValidationError
@@ -122,7 +123,7 @@ def _run_gui_server(args: argparse.Namespace) -> None:
 
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
+        allow_origins=os.getenv("PYACEMAKER_CORS_ORIGINS", "http://localhost:3000").split(","),
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],

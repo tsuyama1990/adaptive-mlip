@@ -1,13 +1,13 @@
 import asyncio
 import contextlib
+import json
 import logging
 import sys
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from pyacemaker.domain_models.logging import LoggingConfig
-from pyacemaker.domain_models.telemetry import StateChangePayload, SystemTopology, TelemetryFrame
 
 
 def setup_logger(config: LoggingConfig, project_name: str) -> logging.Logger:
@@ -53,11 +53,13 @@ def setup_logger(config: LoggingConfig, project_name: str) -> logging.Logger:
 
     return logger
 
+
 class TelemetryBroker:
     """
     Singleton class managing the Pub/Sub architecture for the WebSockets.
     Safely bridges synchronous producer threads (LAMMPS) to the async event loop.
     """
+
     _instance: Optional["TelemetryBroker"] = None
 
     def __new__(cls) -> "TelemetryBroker":
@@ -68,9 +70,10 @@ class TelemetryBroker:
 
     def __init__(self) -> None:
         from pyacemaker.domain_models.constants import TELEMETRY_QUEUE_MAXSIZE
+
         if getattr(self, "_initialized", False):
             return
-        self.queue: asyncio.Queue[TelemetryFrame | StateChangePayload | SystemTopology] = asyncio.Queue(maxsize=TELEMETRY_QUEUE_MAXSIZE)
+        self.queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue(maxsize=TELEMETRY_QUEUE_MAXSIZE)
         self.loop: asyncio.AbstractEventLoop | None = None
         self._initialized = True
 
@@ -78,7 +81,7 @@ class TelemetryBroker:
         """Called upon FastAPI application startup to bind the running loop."""
         self.loop = loop
 
-    def _validate_payload_size(self, payload: TelemetryFrame | StateChangePayload | SystemTopology) -> str:
+    def _validate_payload_size(self, payload: dict[str, Any]) -> str:
         # Pre-serialization strict length checks to avoid MemoryError during json dumping
         # A Float64 generally serializes to ~24 bytes max, but we assume 32 for strict bounds
         from pyacemaker.domain_models.constants import (
@@ -88,24 +91,28 @@ class TelemetryBroker:
             PAYLOAD_BASE_OVERHEAD_BYTES,
         )
 
-        estimated_bytes = PAYLOAD_BASE_OVERHEAD_BYTES # Base JSON structural overhead
-        if isinstance(payload, TelemetryFrame):
-            estimated_bytes += len(payload.positions) * BYTES_PER_FLOAT64
-            if payload.forces:
-                estimated_bytes += len(payload.forces) * BYTES_PER_FLOAT64
-            if payload.variances:
-                estimated_bytes += len(payload.variances) * BYTES_PER_FLOAT64
-        elif isinstance(payload, SystemTopology):
-            estimated_bytes += len(payload.atomic_numbers) * BYTES_PER_ATOMIC_NUMBER
-            if payload.cell_dimensions:
-                estimated_bytes += len(payload.cell_dimensions) * BYTES_PER_FLOAT64
+        estimated_bytes = PAYLOAD_BASE_OVERHEAD_BYTES  # Base JSON structural overhead
+        if payload.get("positions") is not None:
+            estimated_bytes += len(payload.get("positions", [])) * BYTES_PER_FLOAT64
+            if payload.get("forces", []):
+                estimated_bytes += len(payload.get("forces", [])) * BYTES_PER_FLOAT64
+            if payload.get("variances", []):
+                estimated_bytes += len(payload.get("variances", [])) * BYTES_PER_FLOAT64
+        elif payload.get("atomic_numbers") is not None:
+            estimated_bytes += len(payload.get("atomic_numbers", [])) * BYTES_PER_ATOMIC_NUMBER
+            if payload.get("cell_dimensions", []):
+                estimated_bytes += len(payload.get("cell_dimensions", [])) * BYTES_PER_FLOAT64
 
         if estimated_bytes > MAX_PAYLOAD_SIZE_BYTES:
             msg = f"Payload too large (estimated {estimated_bytes} bytes). Limit is {MAX_PAYLOAD_SIZE_BYTES} bytes."
             raise ValueError(msg)
 
         try:
-            serialized_payload = payload.model_dump_json()
+            serialized_payload = (
+                payload.model_dump_json()
+                if hasattr(payload, "model_dump_json")
+                else json.dumps(payload)
+            )
             payload_size = len(serialized_payload.encode("utf-8"))
         except MemoryError as e:
             msg = "Payload serialization caused MemoryError. Payload rejected."
@@ -117,7 +124,7 @@ class TelemetryBroker:
 
         return serialized_payload
 
-    def publish(self, payload: TelemetryFrame | StateChangePayload | SystemTopology) -> None:
+    def publish(self, payload: dict[str, Any]) -> None:
         """
         Thread-safe method called by synchronous worker threads.
         Implements drop-oldest backpressure to prevent memory leaks if frontend is slow.
@@ -140,5 +147,6 @@ class TelemetryBroker:
                     self.queue.put_nowait(payload)
 
         self.loop.call_soon_threadsafe(_sync_put)
+
 
 telemetry_broker = TelemetryBroker()

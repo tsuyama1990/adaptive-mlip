@@ -3,7 +3,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from pyacemaker.domain_models.constants import DEFAULT_EON_EXECUTABLE, DEFAULT_EON_SEED
+from pyacemaker.domain_models.config import DEFAULT_EON_EXECUTABLE, DEFAULT_EON_SEED
 from pyacemaker.domain_models.defaults import MAX_EON_TEMPERATURE
 from pyacemaker.utils.path import validate_path_safe
 

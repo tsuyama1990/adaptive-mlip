@@ -10,8 +10,10 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/telemetry", tags=["telemetry"])
 
+
 class ConnectionManager:
     """Manages active WebSocket connections for telemetry streams."""
+
     def __init__(self) -> None:
         # Maps workflow_id to a set of active connections
         self.active_connections: dict[str, set[WebSocket]] = {}
@@ -43,14 +45,15 @@ class ConnectionManager:
 
             # Execute all sends concurrently without blocking the main broadcast loop
             send_tasks = [
-                self._safe_send(conn, message, workflow_id)
-                for conn in current_connections
+                self._safe_send(conn, message, workflow_id) for conn in current_connections
             ]
 
             if send_tasks:
                 await asyncio.gather(*send_tasks, return_exceptions=True)
 
+
 manager = ConnectionManager()
+
 
 @router.websocket("/stream/{workflow_id}")
 async def telemetry_stream(websocket: WebSocket, workflow_id: str) -> None:
@@ -66,6 +69,7 @@ async def telemetry_stream(websocket: WebSocket, workflow_id: str) -> None:
             await websocket.receive_text()
     except WebSocketDisconnect:
         manager.disconnect(websocket, workflow_id)
+
 
 async def broadcast_loop() -> None:
     """

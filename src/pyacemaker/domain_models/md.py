@@ -5,6 +5,7 @@ from pathlib import Path
 import numpy as np
 from pydantic import BaseModel, ConfigDict, Field, PositiveFloat, PositiveInt, model_validator
 
+from pyacemaker.domain_models.config import DEFAULT_MD_BASE_ENERGY
 from pyacemaker.domain_models.constants import (
     DEFAULT_MC_SEED,
     DEFAULT_RAM_DISK_PATH,
@@ -15,8 +16,6 @@ from pyacemaker.domain_models.defaults import (
     DEFAULT_LAMMPS_MINIMIZE_MAX_ITER,
     DEFAULT_LAMMPS_MINIMIZE_STEPS,
     DEFAULT_LAMMPS_VELOCITY_SEED,
-    DEFAULT_MD_ATOM_STYLE,
-    DEFAULT_MD_BASE_ENERGY,
     DEFAULT_MD_CHECK_INTERVAL,
     DEFAULT_MD_DUMP_FREQ,
     DEFAULT_MD_HYBRID_ZBL_INNER,
@@ -173,7 +172,7 @@ class MDConfig(BaseModel):
         DEFAULT_MD_NEIGHBOR_SKIN, description="Neighbor list skin distance (Angstrom)"
     )
     units: str = Field("metal", description="LAMMPS unit style")
-    atom_style: AtomStyle = Field(AtomStyle(DEFAULT_MD_ATOM_STYLE), description="LAMMPS atom style")
+    atom_style: AtomStyle = Field(AtomStyle.ATOMIC, description="LAMMPS atom style")
 
     # Configurable LAMMPS Parameters (No Hardcoding)
     velocity_seed: int = Field(

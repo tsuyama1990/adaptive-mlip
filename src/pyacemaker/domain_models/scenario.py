@@ -104,6 +104,9 @@ class IntentRequest(BaseModel):
     target_material: str = Field(..., description="Target material for the intent")
     nodes: list[DagNode] = Field(..., description="List of nodes in the DAG")
     edges: list[Edge] = Field(..., description="List of edges in the DAG")
+    advanced_settings: dict[str, Any] | None = Field(
+        None, description="Expert mode parameter overrides"
+    )
 
     @field_validator("target_material")
     @classmethod
