@@ -1,14 +1,18 @@
 import shutil
 from collections.abc import Iterable
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 from ase import Atoms
 from ase.io import iread, read, write
 
-from pyacemaker.core.active_set import ActiveSetSelector
-from pyacemaker.core.base import BaseEngine, BaseGenerator, BaseOracle, BaseTrainer
+from pyacemaker.core.base import (
+    BaseEngine,
+    BaseGenerator,
+    BaseOracle,
+    BaseTrainer,
+)
 from pyacemaker.core.directory_manager import DirectoryManager
 from pyacemaker.core.exceptions import OrchestratorError
 from pyacemaker.core.io_manager import IoManager
@@ -16,11 +20,11 @@ from pyacemaker.core.state_manager import StateManager
 from pyacemaker.core.trainer import FinetuneManager
 from pyacemaker.core.validator import Validator
 from pyacemaker.domain_models import PyAceConfig
+from pyacemaker.domain_models.config import FILENAME_POTENTIAL
 from pyacemaker.domain_models.defaults import (
     DEFAULT_PRODUCTION_DIR,
     DEFAULT_RESUME_N_STEPS,
     FILENAME_CANDIDATES,
-    FILENAME_POTENTIAL,
     FILENAME_TRAINING,
     LOG_COMPUTED_PROPERTIES,
     LOG_GENERATED_CANDIDATES,
@@ -73,7 +77,7 @@ class Orchestrator:
         self.oracle: BaseOracle | None = None
         self.trainer: BaseTrainer | None = None
         self.engine: BaseEngine | None = None
-        self.active_set_selector: ActiveSetSelector | None = None
+        self.active_set_selector: Any = None
         self.validator: Validator | None = None
 
         # Initialize State
@@ -83,7 +87,12 @@ class Orchestrator:
     def _publish_state(self, new_state: SimulationState) -> None:
         """Publishes the orchestrator's state to the telemetry broker."""
         try:
-            telemetry_broker.publish(StateChangePayload(workflow_id="default_workflow", new_state=new_state))
+            telemetry_broker.publish(
+                cast(
+                    "dict[str, Any]",
+                    StateChangePayload(workflow_id="default_workflow", new_state=new_state),
+                )
+            )
         except Exception:
             self.logger.warning("Failed to publish state change telemetry")
 
@@ -151,7 +160,6 @@ class Orchestrator:
         # If not, convert it so we can use islice correctly
         iterator = iter(generator)
 
-
         with filepath.open(mode) as f:
             # We don't want to materialize chunks directly for millions of atoms.
             # To maintain `write` overhead efficiency, we slice lazily and
@@ -159,7 +167,7 @@ class Orchestrator:
             while True:
                 try:
                     chunk_iter = islice(iterator, batch_size)
-                    first_atom = next(chunk_iter) # Will raise StopIteration if empty
+                    first_atom = next(chunk_iter)  # Will raise StopIteration if empty
 
                     # We have at least one atom. Materialize this batch.
                     chunk = [first_atom, *list(chunk_iter)]
@@ -172,7 +180,9 @@ class Orchestrator:
                     # Strict 50 MB threshold for the raw python object allocation
                     if mem_usage > 50_000_000:
                         batch_size = max(1, batch_size // 2)
-                        self.logger.warning(f"Memory pressure detected ({mem_usage / 1e6:.1f} MB). Next batch reduced to {batch_size}")
+                        self.logger.warning(
+                            f"Memory pressure detected ({mem_usage / 1e6:.1f} MB). Next batch reduced to {batch_size}"
+                        )
 
                     write(f, chunk, format="extxyz")
                     count += len(chunk)
@@ -331,9 +341,9 @@ class Orchestrator:
                 io_manager.write_trajectory(
                     atoms=halt_structure,
                     filepath=Path(halt_structure_path).with_suffix(".extxyz"),
-                    step=-1, # arbitrary non-zero step just for telemetry publish
+                    step=-1,  # arbitrary non-zero step just for telemetry publish
                     state=SimulationState.EXTRACTING_CUTOUT,
-                    force_publish=True
+                    force_publish=True,
                 )
             except Exception:
                 self.logger.warning("Failed to force publish high-uncertainty frame")
