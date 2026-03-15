@@ -193,12 +193,12 @@ except Exception as e:
 """
         runner_py.write_text(runner_code)
 
-        safe_keys = ["PATH", "HOME", "USER", "LANG", "LC_ALL"]
-        safe_env = {k: v for k, v in os.environ.items() if k in safe_keys}
+        safe_env = os.environ.copy()
+        if "PYTHONPATH" in safe_env:
+            del safe_env["PYTHONPATH"]
 
-        import shlex
         proc = subprocess.run(  # noqa: S603
-            [sys.executable, shlex.quote(str(runner_py.resolve()))],
+            [sys.executable, str(runner_py.resolve())],
             capture_output=True,
             text=True,
             env=safe_env,
@@ -272,9 +272,20 @@ except Exception as e:
             lammps_script_file.write_text(modified_script)
 
             runner_py = td_path / "runner.py"
+            runner_py.chmod(stat.S_IRUSR | stat.S_IWUSR)
+            lammps_script_file.chmod(stat.S_IRUSR | stat.S_IWUSR)
+            data_file.chmod(stat.S_IRUSR | stat.S_IWUSR)
+            potential_path.chmod(stat.S_IRUSR | stat.S_IWUSR)
+
             self._execute_dry_run(lammps_script_file, runner_py, report)
         finally:
-            shutil.rmtree(td_path, ignore_errors=True)
+            try:
+                shutil.rmtree(td_path)
+            except Exception as e:
+                from pyacemaker.domain_models.logging import LoggingConfig
+                from pyacemaker.logger import setup_logger
+                logger = setup_logger(config=LoggingConfig(), project_name="api_gateway")
+                logger.warning(f"Failed to cleanup preflight temp directory {td_path}: {e}")
 
 
 class PreflightManager:

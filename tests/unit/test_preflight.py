@@ -62,7 +62,7 @@ def mock_config() -> PyAceConfig:
             elements=["Al"],
             active_set_size=None
         ),
-        md=MDConfig(
+        md=MDConfig.model_construct(
             temperature=300.0,
             pressure=0.0,
             timestep=0.001,
