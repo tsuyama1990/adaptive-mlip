@@ -14,7 +14,8 @@ async def compile_intent(intent: IntentRequest) -> PyAceConfig:
     Compiles a high-level visual IntentRequest into a full PyAceConfig payload.
     """
     try:
-        return SemanticCompiler.compile(intent)
+        compiled_config = SemanticCompiler.compile(intent)
+        return compiled_config
     except CompilerError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:

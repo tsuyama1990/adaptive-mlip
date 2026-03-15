@@ -6,6 +6,16 @@ from ase import Atoms
 
 from pyacemaker.core.oracle import DFTManager
 from pyacemaker.domain_models import DFTConfig
+from pyacemaker.domain_models.compiler import SemanticCompiler
+from pyacemaker.domain_models.scenario import (
+    ActiveLearningData,
+    DagNode,
+    Edge,
+    InitialStructureData,
+    IntentRequest,
+    MaceTrainingData,
+    NodeType,
+)
 from tests.conftest import MockCalculator
 from tests.constants import TEST_ENERGY_H2O
 
@@ -130,16 +140,6 @@ def test_uat_02_02_self_healing(
     final_config = args[1]
     assert final_config.mixing_beta < 0.7
     assert final_config.mixing_beta == 0.35
-from pyacemaker.domain_models.compiler import SemanticCompiler
-from pyacemaker.domain_models.scenario import (
-    ActiveLearningData,
-    DagNode,
-    Edge,
-    InitialStructureData,
-    IntentRequest,
-    MaceTrainingData,
-    NodeType,
-)
 
 def test_uat_02_a_successful_translation() -> None:
     """

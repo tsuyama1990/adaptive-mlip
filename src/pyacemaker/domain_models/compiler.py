@@ -2,6 +2,7 @@ import signal
 from typing import cast
 
 import networkx as nx
+import concurrent.futures
 from ase.data import atomic_masses, chemical_symbols
 
 from pyacemaker.core.exceptions import CompilerError
@@ -67,16 +68,20 @@ class SemanticCompiler:
 
         from pyacemaker.domain_models.defaults import DEFAULT_PROJECT_NAME
 
-        return PyAceConfig(
-            project_name=DEFAULT_PROJECT_NAME,
-            structure=structure_config,
-            dft=dft_config,
-            training=training_config,
-            md=md_config,
-            workflow=workflow_config,
-            eon=None,
-            scenario=None,
-        )
+        from pydantic import ValidationError
+
+        try:
+            return PyAceConfig(
+                project_name=DEFAULT_PROJECT_NAME,
+                structure=structure_config,
+                dft=dft_config,
+                training=training_config,
+                md=md_config,
+                workflow=workflow_config,
+            )
+        except ValidationError as e:
+            msg = f"Final compilation validation failed: {str(e)}"
+            raise CompilerError(msg) from e
 
     @classmethod
     def _topological_sort(cls, intent: IntentRequest) -> list[DagNode]:
@@ -94,14 +99,13 @@ class SemanticCompiler:
             raise CompilerError(msg)
 
         try:
-            signal.alarm(30)
-            sorted_ids = list(nx.topological_sort(graph))
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(lambda g: list(nx.topological_sort(g)), graph)
+                sorted_ids = future.result(timeout=10.0)
             return [nodes_dict[nid] for nid in sorted_ids]
-        except TimeoutError as err:
+        except concurrent.futures.TimeoutError as err:
             msg = "DAG processing timeout"
             raise CompilerError(msg) from err
-        finally:
-            signal.alarm(0)
 
     @classmethod
     def _validate_sequence(cls, sorted_nodes: list[DagNode]) -> None:
@@ -167,14 +171,17 @@ class SemanticCompiler:
         # Intelligent defaults mapping based on material and slider
 
         # 1. Determine base mass and timestep
-        if material not in chemical_symbols:
+        import re
+        if not re.match(r"^[A-Z][a-z]?$", material) or material not in chemical_symbols:
             msg = "Invalid chemical symbol"
             raise CompilerError(msg)
-        try:
-            z = chemical_symbols.index(material)
-            mass = atomic_masses[z]
-        except ValueError:
-            mass = 1.0  # default
+
+        if not (1 <= slider <= 10):
+            msg = "Slider must be between 1 and 10"
+            raise CompilerError(msg)
+
+        z = chemical_symbols.index(material)
+        mass = atomic_masses[z]
 
         # Lighter elements -> smaller timestep.
         timestep = 1.0
@@ -220,12 +227,23 @@ class SemanticCompiler:
             soft_start_langevin_damp=0.1,
         )
 
+        from pyacemaker.domain_models.defaults import (
+            DEFAULT_DFT_CODE,
+            DEFAULT_DFT_FUNCTIONAL,
+            DEFAULT_PSEUDOPOTENTIAL_MAPPING
+        )
+
+        safe_pseudo = DEFAULT_PSEUDOPOTENTIAL_MAPPING.get(material)
+        if not safe_pseudo:
+            msg = f"No verified pseudopotential mapping exists for material: {material}"
+            raise CompilerError(msg)
+
         dft_config = DFTConfig(
-            code="quantum_espresso",
-            functional="pbe",
+            code=DEFAULT_DFT_CODE,
+            functional=DEFAULT_DFT_FUNCTIONAL,
             kpoints_density=2.0 + 4.0 * (10 - slider) / 9.0,  # adjust density based on slider
             encut=40.0 + (slider * 2.0),  # e.g. slider 10 -> 60 eV
-            pseudopotentials={material: f"{material}.pbe-n-kjpaw_psl.1.0.0.UPF"},
+            pseudopotentials={material: safe_pseudo},
             embedding_buffer=None,
             mixing_beta=0.7,
             smearing_type="mv",
