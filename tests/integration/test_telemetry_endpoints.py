@@ -12,21 +12,14 @@ from pyacemaker.logger import telemetry_broker
 from pyacemaker.main import app
 
 # Using FastAPI's TestClient to test the WebSocket integration
-client = TestClient(app)
 
 
-@pytest.fixture(autouse=True)
-def _reset_broker() -> None:
-    # Reset queue for each test
-    telemetry_broker.queue = asyncio.Queue(maxsize=100)
-    loop = asyncio.get_event_loop()
-    telemetry_broker.initialize_loop(loop)
 
 
 def test_telemetry_websocket_streaming() -> None:
     # 1. Start the WebSocket connection
     workflow_id = "test_workflow"
-    with client.websocket_connect(f"/api/v1/telemetry/stream/{workflow_id}") as websocket:
+    with TestClient(app) as client, client.websocket_connect(f"/api/v1/telemetry/stream/{workflow_id}") as websocket:
         # 2. Publish a frame to the broker
         frame = TelemetryFrame(
             workflow_id=workflow_id,
@@ -50,7 +43,7 @@ def test_telemetry_websocket_streaming() -> None:
 
 def test_telemetry_websocket_state_change() -> None:
     workflow_id = "test_workflow_2"
-    with client.websocket_connect(f"/api/v1/telemetry/stream/{workflow_id}") as websocket:
+    with TestClient(app) as client, client.websocket_connect(f"/api/v1/telemetry/stream/{workflow_id}") as websocket:
         payload = StateChangePayload(
             workflow_id=workflow_id, new_state=SimulationState.EXTRACTING_CUTOUT
         )
@@ -66,7 +59,7 @@ def test_telemetry_websocket_state_change() -> None:
 
 def test_telemetry_websocket_high_uncertainty() -> None:
     workflow_id = "test_workflow_3"
-    with client.websocket_connect(f"/api/v1/telemetry/stream/{workflow_id}") as websocket:
+    with TestClient(app) as client, client.websocket_connect(f"/api/v1/telemetry/stream/{workflow_id}") as websocket:
         frame = TelemetryFrame(
             workflow_id=workflow_id,
             step_number=100,
@@ -88,7 +81,7 @@ def test_telemetry_websocket_high_uncertainty() -> None:
 def test_telemetry_websocket_disconnect_handling() -> None:
     workflow_id = "test_workflow_4"
 
-    with client.websocket_connect(f"/api/v1/telemetry/stream/{workflow_id}") as websocket:
+    with TestClient(app) as client, client.websocket_connect(f"/api/v1/telemetry/stream/{workflow_id}") as websocket:
         # Simulate abrupt client disconnect
         websocket.close()
 

@@ -1,31 +1,42 @@
-from pathlib import Path
+import re
 
-content = Path("src/pyacemaker/domain_models/compiler.py").read_text()
-# Ensure defaults imports point to config for the newly extracted variables
-replacements = {
-    "from pyacemaker.domain_models.defaults import DEFAULT_SLIDER_MAX, DEFAULT_SLIDER_MIN": "from pyacemaker.domain_models.config import DEFAULT_SLIDER_MAX, DEFAULT_SLIDER_MIN",
-    "from pyacemaker.domain_models.defaults import (\n            DEFAULT_DFT_CODE,\n            DEFAULT_DFT_FUNCTIONAL,\n            DEFAULT_PSEUDOPOTENTIAL_MAPPING,\n        )": "from pyacemaker.domain_models.config import (\n            DEFAULT_DFT_CODE,\n            DEFAULT_DFT_FUNCTIONAL,\n            DEFAULT_PSEUDOPOTENTIAL_MAPPING,\n        )",
-    "from pyacemaker.domain_models.defaults import (\n            DEFAULT_ENCUT_BASE,\n            DEFAULT_ENCUT_FACTOR,\n            DEFAULT_KPOINTS_DENSITY_BASE,\n            DEFAULT_KPOINTS_DENSITY_FACTOR,\n        )": "from pyacemaker.domain_models.config import (\n            DEFAULT_ENCUT_BASE,\n            DEFAULT_ENCUT_FACTOR,\n            DEFAULT_KPOINTS_DENSITY_BASE,\n            DEFAULT_KPOINTS_DENSITY_FACTOR,\n        )",
-}
+files_to_fix = [
+    "tests/unit/test_eon_driver.py",
+    "tests/unit/test_process.py",
+    "tests/unit/mock_process.py",
+    "tests/unit/test_report.py",
+    "tests/unit/test_telemetry_pubsub.py",
+    "tests/unit/test_path_validation.py"
+]
 
-for k, v in replacements.items():
-    content = content.replace(k, v)
+for file in files_to_fix:
+    try:
+        with open(file, "r") as f:
+            content = f.read()
 
-Path("src/pyacemaker/domain_models/compiler.py").write_text(content)
+        # Fix missing types in test function definitions
+        # Find def test_... (var1, var2): and append : Any to untyped vars
 
-content = Path("src/pyacemaker/orchestrator.py").read_text()
-content = content.replace(
-    "from pyacemaker.domain_models.defaults import FILENAME_POTENTIAL",
-    "from pyacemaker.domain_models.config import FILENAME_POTENTIAL",
-)
-Path("src/pyacemaker/orchestrator.py").write_text(content)
+        def repl(match):
+            args = match.group(2).split(',')
+            new_args = []
+            for arg in args:
+                arg = arg.strip()
+                if not arg:
+                    continue
+                if ':' not in arg:
+                    new_args.append(f"{arg}: Any")
+                else:
+                    new_args.append(arg)
+            return f"def {match.group(1)}({', '.join(new_args)}) -> None:"
 
-# IO manager logger ignores
-content = Path("src/pyacemaker/core/io_manager.py").read_text()
-content = content.replace(
-    "self.telemetry_broker.publish(", "self.telemetry_broker.publish(cast('Any', "
-)
-content = content.replace(
-    "variances)", "variances))"
-)  # rough fix since string replacement is tricky for nested parens. Let's use ignore instead.
-Path("src/pyacemaker/core/io_manager.py").write_text(content)
+        content = re.sub(r'def (test_[a-zA-Z0-9_]+)\((.*?)\)(?: -> None)?:', repl, content)
+
+        # Fix class definitions missing imports
+        content = content.replace('class MockProcessRunner(ProcessRunner):', 'from pyacemaker.interfaces.process import ProcessRunner\nclass MockProcessRunner(ProcessRunner):')
+
+        with open(file, "w") as f:
+            f.write(content)
+
+    except Exception as e:
+        print(e)

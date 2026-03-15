@@ -12,14 +12,8 @@ from pyacemaker.domain_models.telemetry import (
 from pyacemaker.logger import telemetry_broker
 from pyacemaker.main import app
 
-client = TestClient(app)
 
 
-@pytest.fixture(autouse=True)
-def _reset_broker() -> None:
-    telemetry_broker.queue = asyncio.Queue(maxsize=100)
-    loop = asyncio.get_event_loop()
-    telemetry_broker.initialize_loop(loop)
 
 
 def test_scenario_04_a_successful_streaming() -> None:
@@ -29,7 +23,7 @@ def test_scenario_04_a_successful_streaming() -> None:
     """
     workflow_id = "uat_workflow_A"
 
-    with client.websocket_connect(f"/api/v1/telemetry/stream/{workflow_id}") as websocket:
+    with TestClient(app) as client, client.websocket_connect(f"/api/v1/telemetry/stream/{workflow_id}") as websocket:
         # 1. Send the initial SystemTopology handshake payload
         topology = SystemTopology(
             workflow_id=workflow_id,
@@ -91,7 +85,7 @@ def test_scenario_04_b_high_uncertainty_heatmap() -> None:
     and publishing the specific `variances` array correctly mapped to indices.
     """
     workflow_id = "uat_workflow_B"
-    with client.websocket_connect(f"/api/v1/telemetry/stream/{workflow_id}") as websocket:
+    with TestClient(app) as client, client.websocket_connect(f"/api/v1/telemetry/stream/{workflow_id}") as websocket:
         # Simulate active learning orchestrator detecting high uncertainty
         # and halting MD to extract cutout
         halt_event = StateChangePayload(
@@ -136,7 +130,7 @@ def test_scenario_04_c_robustness_disconnect() -> None:
     """
     workflow_id = "uat_workflow_C"
 
-    with client.websocket_connect(f"/api/v1/telemetry/stream/{workflow_id}") as websocket:
+    with TestClient(app) as client, client.websocket_connect(f"/api/v1/telemetry/stream/{workflow_id}") as websocket:
         frame1 = TelemetryFrame(
             workflow_id=workflow_id,
             step_number=1,
